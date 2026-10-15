@@ -2,7 +2,7 @@ import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
-import { motionSpeed, setMotionSpeed } from 'glimmer-motion';
+import { setMotionSpeed } from 'glimmer-motion';
 
 const RATES = [1, 2, 5, 10] as const;
 
@@ -10,11 +10,40 @@ function label(rate: number) {
   return rate === 1 ? 'Full' : `÷${rate}`;
 }
 
-interface Signature {
-  Args: {
-    /** the demo the speed applies to; a choice made on one demo ends with it */
-    slug: string;
-  };
+/**
+ * The clock's rate, and which picker set it. Only a speed picker sets
+ * glimmer-motion's speed, so the rate here is the clock's.
+ */
+class Clock {
+  @tracked owner: SpeedPicker | null = null;
+  @tracked rate = 1;
+}
+
+const clock = new Clock();
+
+function release() {
+  clock.owner = null;
+  clock.rate = 1;
+  setMotionSpeed(1);
+}
+
+/**
+ * A demo page is opening: the clock goes back to full speed, so a demo never
+ * starts slowed by a speed picked on another page — including a demo with no
+ * speed picker to put it back. Every demo page calls this as it constructs.
+ */
+export function startPage(): void {
+  if (!clock.owner) {
+    return;
+  }
+  setMotionSpeed(1);
+  // the render that mounts the page may already have read the picker's
+  // state, so that state changes once the render is done
+  queueMicrotask(() => {
+    if (clock.owner) {
+      release();
+    }
+  });
 }
 
 /**
@@ -23,33 +52,27 @@ interface Signature {
  * fade — instead of going by in four frames.
  *
  * The clock is glimmer-motion's, and global to everything the host animates,
- * so a speed picked here lasts only while this picker is on screen.
+ * so a speed belongs to the demo page it was picked on: another demo page
+ * opening starts the clock at full speed again, and so does the page that
+ * picked it closing. Every picker on screen shows the clock as it runs.
  */
-export class SpeedPicker extends Component<Signature> {
-  @tracked private picked: { rate: number; slug: string } | null = null;
-
-  /**
-   * The rate picked for this demo. Moving to another demo resets the clock,
-   * and the same picker can stay on screen across that move, so a choice made
-   * for an earlier demo is not this one's.
-   */
+export class SpeedPicker extends Component {
   get rate() {
-    return this.picked?.slug === this.args.slug
-      ? this.picked.rate
-      : motionSpeed();
+    return clock.rate;
   }
 
   isOn = (rate: number) => rate === this.rate;
 
   pick = (rate: number) => {
-    this.picked = { rate, slug: this.args.slug };
+    clock.owner = this;
+    clock.rate = rate;
     setMotionSpeed(rate);
   };
 
   willDestroy() {
     super.willDestroy();
-    if (this.picked) {
-      setMotionSpeed(1);
+    if (clock.owner === this) {
+      release();
     }
   }
 

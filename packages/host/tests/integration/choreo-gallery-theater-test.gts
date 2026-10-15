@@ -5,9 +5,11 @@ import { getService } from '@universal-ember/test-support';
 import { animationsSettled } from 'glimmer-motion/test-support';
 import { module, test } from 'qunit';
 
+import { CardCrudFunctionsContextName } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
 import {
+  provideConsumeContext,
   testRealmURL,
   setupCardLogs,
   setupLocalIndexing,
@@ -22,10 +24,10 @@ import { setupRenderingTest } from '../helpers/setup';
 
 import type { CardDef as CardDefType } from '@cardstack/base/card-api';
 
-// Theater, the films' full-window mode: the way in and out from the gallery,
-// how the stage sizes itself against what the viewer can see of the card and
-// at phone, tablet and desktop viewports, and how it moves between the two
-// modes.
+// Theater, the films' full-window mode: the way in from a film's tile and the
+// way out, how the stage sizes itself against what the viewer can see of the
+// card and at phone, tablet and desktop viewports, and how it moves between
+// the two modes.
 
 const FILM_PAGE =
   '<!doctype html><html><head><title>Film</title></head><body></body></html>';
@@ -151,33 +153,53 @@ module('Integration | Choreo gallery | theater', function (hooks) {
     });
   }
 
-  test('a film opened from the gallery enters theater, and only the way out is on screen', async function (assert) {
+  test('a film’s tile opens its page in theater, and only the way out is on screen', async function (assert) {
+    let opened: string[] = [];
+    provideConsumeContext(CardCrudFunctionsContextName, {
+      createCard: () => {},
+      saveCard: () => {},
+      editCard: () => {},
+      deleteCard: async () => {},
+      viewCard: (card: { slug?: string }) => {
+        opened.push(card.slug ?? '');
+      },
+    });
     let { ChoreoGallery } = (await loader.import(`${testRealmURL}gallery`)) as {
       ChoreoGallery: CardClass;
     };
-    let gallery = new ChoreoGallery({
-      demos: [await film('towers', 'TowersDemo')],
-    });
-    await renderCard(loader, gallery, 'isolated');
-    await animationsSettled();
+    let towers = await film('towers', 'TowersDemo');
+    await renderCard(
+      loader,
+      new ChoreoGallery({ demos: [towers] }),
+      'isolated',
+    );
+    await waitFor('[data-gallery-tile="towers"] .ft-play');
 
-    await click('[data-test-gallery-tile-link="towers"]');
-    await waitFor('[data-test-film="towers"] [data-test-theater-enter]');
+    await click('[data-gallery-tile="towers"] .ft-play');
+    assert.deepEqual(opened, ['towers'], 'the door opens the film’s card');
+
+    // the host opens the card it was handed
+    await renderCard(loader, towers, 'isolated');
+    await waitFor('[data-test-film="towers"]');
     await animationsSettled();
     assert
       .dom('[data-test-choreo-site]')
-      .doesNotHaveAttribute('data-test-theater', 'the film opens on its page');
-
-    await click('[data-test-theater-enter]');
-    assert
-      .dom('[data-test-choreo-site]')
-      .hasAttribute('data-test-theater', '', 'the site is in theater');
+      .hasAttribute('data-test-theater', '', 'the page opens in theater');
     assert
       .dom('[data-test-theater-enter]')
       .doesNotExist('the way in does not overlap the way out');
     assert
       .dom('[data-test-theater-exit]')
       .isVisible('the way out stays on screen');
+
+    await renderCard(loader, towers, 'isolated');
+    await waitFor('[data-test-film="towers"] [data-test-theater-enter]');
+    assert
+      .dom('[data-test-choreo-site]')
+      .doesNotHaveAttribute(
+        'data-test-theater',
+        'opened again without the door, the film opens on its page',
+      );
   });
 
   test('switching theater on and off carries the stage between its two boxes', async function (assert) {

@@ -12,6 +12,7 @@ import {
   type Querier,
   type TransactionOptions,
   Deferred,
+  loggableBindings,
   query,
 } from '@cardstack/runtime-common';
 
@@ -225,7 +226,7 @@ export default class SQLiteAdapter implements DBAdapter {
     } catch (e: any) {
       console.error(
         `Error executing SQL ${e.result.message}:\n${sql}${
-          opts?.bind ? ' with bindings: ' + JSON.stringify(opts?.bind) : ''
+          opts?.bind ? ' with bindings: ' + loggableBindings(opts) : ''
         }`,
         e,
       );

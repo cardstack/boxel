@@ -26,6 +26,14 @@ import {
   DEFAULT_FALLBACK_MODELS,
 } from '@cardstack/runtime-common/matrix-constants';
 
+import {
+  generateImage,
+  IMAGE_EXTENSION_RE,
+  IMAGE_FILE_EXTENSIONS,
+  imageExtension,
+  sourceImageDataUrl,
+  type GeneratedImage,
+} from '../lib/generate-image';
 import HostBaseTool, { type ResultAttachment } from '../lib/host-base-tool';
 import { RealmCaptures, type CaptureURL } from '../lib/realm-runner/captures';
 import {
@@ -38,18 +46,23 @@ import {
   captureDeadline,
   captureForAgent,
   resolveViewTarget,
+  workspaceOf,
   uploadedImages,
   type ViewedImage,
   type ViewOptions,
 } from '../lib/visual-capture';
 import { createWorkspace, deleteWorkspace } from '../lib/workspaces';
-
 import { pruneEmptyQueryParts } from '../utils/search/prune-empty-query';
 
 import LintAndFixTool from './lint-and-fix';
 import OpenWorkspaceTool from './open-workspace';
 import PreviewFormatTool from './preview-format';
-import { composeSearchEntriesQuery } from './search-entries';
+import {
+  composeSearchEntriesQuery,
+  searchEntrySummaries,
+  type EntrySummary,
+  type SearchEntriesFn,
+} from './search-entries';
 import SetActiveLLMTool from './set-active-llm';
 import ShowCardTool from './show-card';
 import ShowFileTool from './show-file';
@@ -86,6 +99,15 @@ const MAX_BINARY_FILE_SIZE = 2_000_000;
 const MAX_BINARY_BYTES_PER_RUN = 5_000_000;
 const BASE64_RE = /^[A-Za-z0-9+/]*={0,2}$/;
 const DATA_URL_PREFIX_RE = /^data:[^,]*;base64,/i;
+// realm.fs.download limits. The bytes go from the host to the realm and never
+// into the sandbox, so they are wider than the writeBytes limits.
+const MAX_DOWNLOAD_FILE_SIZE = 10_000_000;
+const MAX_DOWNLOAD_BYTES_PER_RUN = 25_000_000;
+// One download may take this long. It counts toward the run's own time limit
+// too, so a slow download cannot hold the run past that.
+const DOWNLOAD_TIMEOUT_MS = 20_000;
+// The last part of a path, when it has a file extension.
+const FILE_EXTENSION_RE = /\.[A-Za-z0-9]+$/;
 // How many cards one `realm.cards.search` answers with when the query names no
 // page size, and the most it answers with whatever the query asks for.
 const DEFAULT_SEARCH_RESULTS = 50;
@@ -95,6 +117,15 @@ const MAX_SEARCH_RESULTS = 100;
 // with the page size that fits, rather than cut: a cut page's remaining cards
 // would be out of reach of every page number.
 const MAX_SEARCH_RESULT_SIZE = 1_000_000;
+// How many entries one `realm.entries.search` answers with when the options
+// name no limit, and the most it answers with whatever they ask for. A script
+// does not put each answer into the model's context, so these are wider than
+// the search-entries tool's.
+const DEFAULT_ENTRY_RESULTS = 20;
+const MAX_ENTRY_RESULTS = 50;
+// An answer is parsed inside the sandbox, within its memory limit, and each
+// entry carries its full readMe, so it is bounded by size as well as count.
+const MAX_ENTRY_RESULT_SIZE = 1_000_000;
 // Host calls run inside this budget, and each write lints and saves before it
 // returns, so it is much wider than a pure-CPU limit would need to be.
 const RUN_TIMEOUT_MS = 55_000;
@@ -103,6 +134,13 @@ const RUN_TIMEOUT_MS = 55_000;
 // timeout, so this tool always reports first, with every file it saved, and
 // nothing is saved after that report.
 const CALL_DEADLINE_MS = 100_000;
+// realm.images.generate limits. Each image spends the user's credit, so a
+// loop must not make many. One image takes 10-30 s, so image requests get
+// their own time budget: a run that names the call gets it on top of the
+// run's own limit, the call deadline and the tool service's execute timeout.
+const MAX_IMAGES = 4;
+const IMAGE_TIMEOUT_MS = 60_000;
+const IMAGE_TIME_BUDGET_MS = 120_000;
 // A file as the realm serves it. `content` is empty unless the file is UTF-8
 // text; `tooLarge` marks a text file whose body was not read.
 type ReadSource = (url: string) => Promise<{
@@ -124,6 +162,35 @@ type WriteFile = (
 
 // Saves one binary file that did not exist.
 type WriteBinaryFile = (url: string, bytes: Uint8Array) => Promise<void>;
+
+// Deletes one file. `expected` is the text the run last saved to it, or the
+// SHA-256 of the bytes it saved to a binary file; the delete refuses if the
+// realm no longer matches it.
+type DeleteFile = (
+  url: string,
+  expected: { content: string } | { sha256: string },
+) => Promise<void>;
+
+// Asks the image model for one image. `sourceImageUrl` is a data URL or the
+// full URL of a file in this run's realm. `signal` stops both the source
+// fetch and the image request.
+type GenerateImage = (input: {
+  prompt: string;
+  sourceImageUrl?: string;
+  llmModel?: string;
+  signal: AbortSignal;
+}) => Promise<GeneratedImage>;
+
+// Fetches the bytes at a URL, at most `maxBytes` of them, or stops when
+// `signal` aborts.
+type DownloadFile = (
+  sourceUrl: string,
+  maxBytes: number,
+  signal: AbortSignal,
+) => Promise<Uint8Array>;
+
+// What a DownloadFile throws for a body larger than `maxBytes`.
+class DownloadTooLarge extends Error {}
 
 // What `lookup` finds for a file that is not UTF-8 text.
 const BINARY = Symbol('binary');
@@ -171,12 +238,46 @@ type CreateWorkspace = (input: {
 // Deletes a workspace the current user owns and returns its URL.
 type DeleteWorkspace = (realmIdentifier: string) => Promise<{ url: string }>;
 
-// A script that may delete a workspace names the call in its code. Such a
-// run always waits for the user's click (`neverAutoExecutesFor`), the same as
-// the delete-workspace tool, and only such a run may delete: a script that
-// reaches the call another way is refused, so no delete runs without a click.
-export function scriptDeletesWorkspaces(code: unknown): boolean {
-  return typeof code === 'string' && code.includes('realm.workspaces.delete');
+// The index of the run's realm. Every call acts on the whole realm or on
+// paths already resolved inside it.
+interface IndexActions {
+  invalidate(urls: string[]): Promise<void>;
+  reindex(): Promise<void>;
+  fullReindex(): Promise<void>;
+  cancelJob(): Promise<void>;
+}
+
+const MAX_INVALIDATE_PATHS = 100;
+
+// Calls that cannot be undone, that spend the user's credit, that change
+// the state of a whole realm for a long time, or that fetch any URL with the
+// user's realm credentials (realm.fs.download). A script that may make one
+// names the call in its code. Such a run always waits for the user's click
+// (`neverAutoExecutesFor`), and only such a run may make the call: a script
+// that reaches it another way is refused, so none of them runs without a
+// click.
+const CLICK_REQUIRED_CALLS = [
+  'realm.workspaces.delete',
+  'realm.images.generate',
+  'realm.index.fullReindex',
+  'realm.index.cancelJob',
+  'realm.fs.download',
+] as const;
+type ClickRequiredCall = (typeof CLICK_REQUIRED_CALLS)[number];
+
+// The click-required calls a script names in its code.
+export function clickRequiredCallsIn(code: unknown): Set<ClickRequiredCall> {
+  return new Set(
+    typeof code === 'string'
+      ? CLICK_REQUIRED_CALLS.filter((name) => code.includes(name))
+      : [],
+  );
+}
+
+function notNamedError(name: ClickRequiredCall) {
+  return new Error(
+    `${name} must be called by that name in the script, so the user confirms the run before it starts`,
+  );
 }
 
 // Calls that need write access to the run's workspace. A Record over every
@@ -190,9 +291,13 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   'fs.writeText': true,
   'fs.copy': true,
   'fs.writeBytes': true,
+  'fs.download': true,
   'cards.search': false,
   'cards.get': false,
+  'entries.search': false,
+  'fs.delete': true,
   capture: false,
+  'images.generate': true,
   'workspaces.create': false,
   'workspaces.delete': false,
   'room.enableSkills': false,
@@ -202,6 +307,10 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   'ui.openFile': false,
   'ui.previewFormat': false,
   'ui.openWorkspace': false,
+  'index.invalidate': true,
+  'index.reindex': true,
+  'index.fullReindex': true,
+  'index.cancelJob': true,
 };
 
 // Runs one search in the run's realm and answers with the entry document.
@@ -237,8 +346,15 @@ class RealmFsSession {
   // url -> content as the realm now holds it, as far as this run knows;
   // undefined means the file does not exist.
   private known = new Map<string, string | undefined>();
-  // Files saved by this run, in the order of their first save.
+  // Files saved by this run, in the order of their first save. A file the
+  // run deleted is no longer here.
   readonly saved = new Set<string>();
+  // Files this run created that still exist: the only files realm.fs.delete
+  // may delete, so a script can undo its own mistake but cannot remove a file
+  // that was there before the run.
+  private created = new Set<string>();
+  // Files this run created and then deleted, in the order of their delete.
+  readonly deleted = new Set<string>();
   // Workspaces created by this run, in order.
   readonly createdWorkspaces: string[] = [];
   // Workspaces deleted by this run, in order.
@@ -246,11 +362,23 @@ class RealmFsSession {
   // Workspaces this run deleted that do not exist again: a later create at
   // the same URL takes the URL out.
   readonly goneWorkspaces = new Set<string>();
+  // `realm.index` calls this run made, in order. The realm server has started
+  // each one, so a retry must not start it again.
+  readonly indexActions: string[] = [];
   // Binary files this run knows exist: found by a lookup or saved by
   // realm.fs.writeBytes. They are not in `known`, since their content is not
   // text, but they count toward MAX_FILES.
   readonly binary = new Set<string>();
+  // The SHA-256 of the bytes realm.fs.writeBytes saved, for each binary file
+  // this run created, so a delete can tell the file is still the run's.
+  private binaryDigests = new Map<string, string>();
   private binaryBytes = 0;
+  // Images this run asked the model for, including ones that failed: each
+  // request spends credit.
+  private imagesRequested = 0;
+  // Image request time this run has used, in ms, of IMAGE_TIME_BUDGET_MS.
+  private imageTimeUsed = 0;
+  private downloadedBytes = 0;
   // What `realm.capture` takes in this run.
   readonly captures: RealmCaptures;
   // What `realm.ui` asked for, in the order the script asked.
@@ -258,8 +386,8 @@ class RealmFsSession {
   // Calls and saves refused because the run had already ended.
   private refused = 0;
   private queue: Promise<unknown> = Promise.resolve();
-  // Aborted when the run ends, so a workspace create still in flight stops
-  // holding up the report.
+  // Aborted when the run ends, so a workspace create or an image request
+  // still in flight stops holding up the report.
   private inFlight = new AbortController();
   // Set once the run has ended. A call that has not started yet is refused,
   // and a write still in flight is not saved, so nothing lands after the tool
@@ -271,14 +399,22 @@ class RealmFsSession {
     private readSource: ReadSource,
     private writeFile: WriteFile,
     private writeBinaryFile: WriteBinaryFile,
+    private deleteFile: DeleteFile,
+    private downloadFile: DownloadFile,
     private listDirectory: ListDirectory,
     private search: SearchCards,
     private resolveURL: ResolveURL,
     private readCard: ReadCard,
+    private searchEntries: SearchEntriesFn,
     captureURL: CaptureURL,
+    // Whether a URL or card id is held by this realm itself rather than by
+    // another workspace, including one nested under this realm's URL.
+    private heldByThisRealm: (reference: string) => boolean,
     private createWorkspace: CreateWorkspace,
     private deleteWorkspace: DeleteWorkspace,
-    private mayDeleteWorkspaces: boolean,
+    private generateImage: GenerateImage,
+    private namedCalls: Set<ClickRequiredCall>,
+    private index: IndexActions,
     private mayWrite: boolean,
     readonly room: RoomActions,
   ) {
@@ -452,10 +588,11 @@ class RealmFsSession {
         let bytes = decodeBase64(base64);
         await this.writeBinaryFile(url, bytes);
         this.binaryBytes += bytes.byteLength;
+        this.binaryDigests.set(url, await sha256(bytes));
         // The lookup above recorded the file as missing.
         this.known.delete(url);
         this.binary.add(url);
-        this.saved.add(url);
+        this.markCreated(url);
         return {
           path: this.relative(url),
           size: bytes.byteLength,
@@ -493,10 +630,97 @@ class RealmFsSession {
           relationships,
         };
       }
-      case 'capture': {
+      case 'entries.search':
+        return await this.searchEntriesFor(args[0], args[1]);
+      case 'fs.delete': {
         let url = this.resolve(method, args[0]);
-        return await this.captures.take(url, this.relative(url), args[1]);
+        if (!this.created.has(url)) {
+          throw new Error(
+            this.deleted.has(url)
+              ? `File not found; this run already deleted it: ${url}`
+              : `realm.fs.delete deletes only a file this run created: ${url}`,
+          );
+        }
+        if (this.closed) {
+          this.refused += 1;
+          throw new Error(`The run has ended; ${url} was not deleted`);
+        }
+        let digest = this.binaryDigests.get(url);
+        await this.deleteFile(
+          url,
+          digest !== undefined
+            ? { sha256: digest }
+            : { content: this.known.get(url) ?? '' },
+        );
+        this.created.delete(url);
+        this.saved.delete(url);
+        this.binary.delete(url);
+        this.binaryDigests.delete(url);
+        this.known.set(url, undefined);
+        this.deleted.add(url);
+        return { path: this.relative(url), deleted: true };
       }
+      // The host fetches the file and saves it; the bytes never enter the
+      // sandbox, which has no network access of its own.
+      case 'fs.download': {
+        if (!this.namedCalls.has('realm.fs.download')) {
+          throw notNamedError('realm.fs.download');
+        }
+        let sourceUrl = downloadSource(args[0]);
+        let url = this.resolve(method, args[1]);
+        // The realm infers the file type from the extension.
+        if (!FILE_EXTENSION_RE.test(url.slice(url.lastIndexOf('/') + 1))) {
+          throw new Error(
+            `realm.fs.download needs a path with a file extension, so the realm knows the file type: ${url}`,
+          );
+        }
+        // Only creates, the same as realm.fs.writeText.
+        if ((await this.lookup(url)) !== undefined) {
+          throw new Error(`File already exists: ${url}`);
+        }
+        let left = MAX_DOWNLOAD_BYTES_PER_RUN - this.downloadedBytes;
+        let maxBytes = Math.min(MAX_DOWNLOAD_FILE_SIZE, left);
+        let bytes: Uint8Array;
+        try {
+          bytes = await this.download(sourceUrl, maxBytes);
+        } catch (error) {
+          if (error instanceof DownloadTooLarge) {
+            throw new Error(
+              maxBytes < MAX_DOWNLOAD_FILE_SIZE
+                ? `realm.fs.download accepts at most ${MAX_DOWNLOAD_BYTES_PER_RUN} bytes per run: ${sourceUrl} is larger than the ${left} bytes left`
+                : `realm.fs.download accepts at most ${MAX_DOWNLOAD_FILE_SIZE} bytes per file: ${sourceUrl} is larger`,
+            );
+          }
+          throw error;
+        }
+        // Charged as soon as the bytes arrive, so a save that fails or is
+        // refused below cannot be retried past the per-run limit.
+        this.downloadedBytes += bytes.byteLength;
+        if (bytes.byteLength === 0) {
+          throw new Error(`${sourceUrl} returned an empty file`);
+        }
+        if (this.closed) {
+          this.refused += 1;
+          throw new Error(`The run has ended; ${url} was not saved`);
+        }
+        await this.writeBinaryFile(url, bytes);
+        this.binaryDigests.set(url, await sha256(bytes));
+        // The lookup above recorded the file as missing.
+        this.known.delete(url);
+        this.binary.add(url);
+        this.markCreated(url);
+        return {
+          path: this.relative(url),
+          size: bytes.byteLength,
+          saved: true,
+        };
+      }
+      case 'capture': {
+        let { url, path } = this.captureTarget(args[0]);
+        return await this.captures.take(url, path, args[1]);
+      }
+      case 'images.generate':
+        return await this.generateAndSaveImage(args[0]);
       // A new workspace is its own realm: this run cannot write to it. The
       // script gets its URL, to run more realm code in it.
       case 'workspaces.create': {
@@ -561,10 +785,8 @@ class RealmFsSession {
         return created;
       }
       case 'workspaces.delete': {
-        if (!this.mayDeleteWorkspaces) {
-          throw new Error(
-            'realm.workspaces.delete must be called by that name in the script, so the user confirms the run before it starts',
-          );
+        if (!this.namedCalls.has('realm.workspaces.delete')) {
+          throw notNamedError('realm.workspaces.delete');
         }
         let realmIdentifier = args[0];
         if (typeof realmIdentifier !== 'string' || !realmIdentifier) {
@@ -644,6 +866,43 @@ class RealmFsSession {
       }
       case 'ui.openWorkspace':
         return this.queueUiAction({ action: 'openWorkspace' });
+      // Indexing runs on the realm server after the call returns: each call
+      // starts the work, and the script does not wait for it to finish.
+      case 'index.invalidate': {
+        let paths = typeof args[0] === 'string' ? [args[0]] : args[0];
+        if (
+          !Array.isArray(paths) ||
+          paths.length === 0 ||
+          paths.length > MAX_INVALIDATE_PATHS
+        ) {
+          throw new TypeError(
+            `realm.index.invalidate expects a path or an array of 1 to ${MAX_INVALIDATE_PATHS} paths`,
+          );
+        }
+        let urls = paths.map((path) => this.resolve(method, path));
+        await this.index.invalidate(urls);
+        let invalidated = urls.map((url) => this.relative(url));
+        this.indexActions.push(`invalidate ${invalidated.join(', ')}`);
+        return { invalidated };
+      }
+      case 'index.reindex':
+        await this.index.reindex();
+        this.indexActions.push('reindex');
+        return { reindex: 'started' };
+      case 'index.fullReindex':
+        if (!this.namedCalls.has('realm.index.fullReindex')) {
+          throw notNamedError('realm.index.fullReindex');
+        }
+        await this.index.fullReindex();
+        this.indexActions.push('fullReindex');
+        return { fullReindex: 'started' };
+      case 'index.cancelJob':
+        if (!this.namedCalls.has('realm.index.cancelJob')) {
+          throw notNamedError('realm.index.cancelJob');
+        }
+        await this.index.cancelJob();
+        this.indexActions.push('cancelJob');
+        return { cancelled: true };
       default:
         throw new Error(`Unknown realm call: ${String(method)}`);
     }
@@ -676,6 +935,85 @@ class RealmFsSession {
     return url;
   }
 
+  // Finds cards, specs and files across realms, the catalog among them, and
+  // answers with a summary of each: no live card and no file content.
+  private async searchEntriesFor(
+    rawQuery: unknown,
+    rawOptions: unknown,
+  ): Promise<{
+    entries: EntrySummary[];
+    total: number;
+    truncated: boolean;
+    incomplete: boolean;
+  }> {
+    if (
+      rawQuery === null ||
+      typeof rawQuery !== 'object' ||
+      Array.isArray(rawQuery)
+    ) {
+      throw new TypeError('realm.entries.search expects a query object');
+    }
+    if ('page' in rawQuery) {
+      throw new Error(
+        'realm.entries.search does not page; pass { limit } in the options and narrow the query to see other entries',
+      );
+    }
+    let options = (rawOptions ?? {}) as Record<string, unknown>;
+    if (typeof options !== 'object' || Array.isArray(options)) {
+      throw new TypeError(
+        'realm.entries.search expects an options object: { realms, scope, limit }',
+      );
+    }
+    let { realms, scope, limit } = options;
+    if (
+      realms !== undefined &&
+      (!Array.isArray(realms) ||
+        realms.some((realm) => typeof realm !== 'string'))
+    ) {
+      throw new TypeError('realms must be an array of realm URLs');
+    }
+    if (scope !== undefined && typeof scope !== 'string') {
+      throw new TypeError("scope must be one of 'cards', 'files', 'all'");
+    }
+    if (
+      limit !== undefined &&
+      (typeof limit !== 'number' || !Number.isFinite(limit))
+    ) {
+      throw new TypeError('limit must be a number');
+    }
+    let size =
+      limit === undefined
+        ? DEFAULT_ENTRY_RESULTS
+        : Math.min(Math.max(Math.floor(limit), 1), MAX_ENTRY_RESULTS);
+    let query = pruneEmptyQueryParts(rawQuery as Query);
+    assertQuery(query);
+    let { rows, total, incomplete } = await searchEntrySummaries(
+      this.searchEntries,
+      query,
+      { scope, limit: size, realms: realms as string[] | undefined },
+    );
+    let resultSize = 0;
+    for (let [index, row] of rows.entries()) {
+      resultSize += JSON.stringify(row).length;
+      if (resultSize > MAX_ENTRY_RESULT_SIZE) {
+        throw new Error(
+          index > 0
+            ? `These entries are too large to return; search again with limit ${index} or less`
+            : `The entry ${row.url} is too large to return from a search`,
+        );
+      }
+    }
+    return {
+      entries: rows,
+      total,
+      // More entries match than this answer holds.
+      truncated: rows.length < total,
+      // A realm that failed to answer is reported here, not thrown: the realms
+      // that answered still count, and this keeps their answer marked partial.
+      incomplete,
+    };
+  }
+
   // A directory path takes the same forms as a file path, with or without a
   // trailing slash. No path, or an empty one, is the realm root; a missing
   // argument arrives as null, since the call's arguments cross as JSON.
@@ -706,11 +1044,127 @@ class RealmFsSession {
     return { action: action.action, runs: 'after the script finishes' };
   }
 
+  // Asks the model for one image and saves it as a new file. The image bytes
+  // never enter the sandbox: the script gets the saved path, to link it from
+  // a card.
+  private async generateAndSaveImage(options: unknown) {
+    if (!this.namedCalls.has('realm.images.generate')) {
+      throw notNamedError('realm.images.generate');
+    }
+    if (!options || typeof options !== 'object' || Array.isArray(options)) {
+      throw new TypeError(
+        'realm.images.generate expects an options object: { prompt, path, sourceImageUrl, llmModel }',
+      );
+    }
+    let { prompt, path, sourceImageUrl, llmModel } = options as Record<
+      string,
+      unknown
+    >;
+    if (typeof prompt !== 'string' || !prompt.trim()) {
+      throw new TypeError('realm.images.generate requires a prompt string');
+    }
+    for (let [key, value] of Object.entries({ sourceImageUrl, llmModel })) {
+      if (value !== undefined && value !== null && typeof value !== 'string') {
+        throw new TypeError(
+          `realm.images.generate expects ${key} to be a string`,
+        );
+      }
+    }
+    let url = this.resolve('images.generate', path);
+    // A source image is a data URL or a file in this realm, named by its path
+    // or full URL. It is read with the user's session, so it may not come
+    // from another realm the user can read.
+    let source =
+      typeof sourceImageUrl === 'string' && sourceImageUrl
+        ? /^data:/i.test(sourceImageUrl)
+          ? sourceImageUrl
+          : this.resolve('images.generate', sourceImageUrl)
+        : undefined;
+    if (this.imagesRequested >= MAX_IMAGES) {
+      throw new Error(`Realm code may generate at most ${MAX_IMAGES} images`);
+    }
+    let timeLeft = IMAGE_TIME_BUDGET_MS - this.imageTimeUsed;
+    if (timeLeft <= 0) {
+      throw new Error(
+        `Realm code may spend at most ${IMAGE_TIME_BUDGET_MS / 1000} s generating images`,
+      );
+    }
+    // The saved file takes one MAX_FILES slot.
+    if (this.known.size + this.binary.size >= MAX_FILES) {
+      throw new Error(`Realm code may touch at most ${MAX_FILES} files`);
+    }
+    // The file extension follows the type of image the model makes, so every
+    // name the image may be saved under is checked before the request, and no
+    // credit is spent on an image that cannot be saved. These checks read no
+    // file into the run, so they take no MAX_FILES slots.
+    let base = url.replace(IMAGE_EXTENSION_RE, '');
+    let destinations = [
+      url,
+      ...IMAGE_FILE_EXTENSIONS.map((extension) => `${base}.${extension}`),
+    ];
+    let taken = (
+      await Promise.all(
+        [...new Set(destinations)].map(async (destination) =>
+          (await this.exists(destination)) ? destination : undefined,
+        ),
+      )
+    ).filter((destination) => destination !== undefined);
+    if (taken.length > 0) {
+      throw new Error(`File already exists: ${taken.join(', ')}`);
+    }
+    this.imagesRequested += 1;
+    let limit = Math.min(IMAGE_TIMEOUT_MS, timeLeft);
+    let timeout = AbortSignal.timeout(limit);
+    let started = Date.now();
+    let image: GeneratedImage;
+    try {
+      image = await this.generateImage({
+        prompt: prompt.trim(),
+        sourceImageUrl: source,
+        llmModel: (llmModel as string | null) ?? undefined,
+        signal: AbortSignal.any([this.inFlight.signal, timeout]),
+      });
+    } catch (error) {
+      if (this.inFlight.signal.aborted) {
+        throw new Error('The run has ended; the image request was stopped');
+      }
+      if (timeout.aborted) {
+        throw new Error(
+          `realm.images.generate did not finish within ${Math.round(limit / 1000)} s`,
+        );
+      }
+      throw error;
+    } finally {
+      this.imageTimeUsed += Date.now() - started;
+    }
+    let savedURL = `${base}.${imageExtension(image.mimeType)}`;
+    if (this.closed) {
+      this.refused += 1;
+      throw new Error(`The run has ended; ${savedURL} was not saved`);
+    }
+    let bytes = decodeBase64(image.base64.replace(/\s+/g, ''));
+    await this.writeBinaryFile(savedURL, bytes);
+    this.binaryDigests.set(savedURL, await sha256(bytes));
+    // An earlier lookup may have recorded the file as missing.
+    this.known.delete(savedURL);
+    this.binary.add(savedURL);
+    this.markCreated(savedURL);
+    return {
+      path: this.relative(savedURL),
+      contentType: image.mimeType,
+      size: bytes.byteLength,
+      saved: true,
+    };
+  }
+
   // Unlike `load`, this reads no content into the run, so it neither counts
   // toward MAX_FILES nor refuses a large file.
   private async exists(url: string): Promise<boolean> {
     if (this.known.has(url)) {
       return this.known.get(url) !== undefined;
+    }
+    if (this.binary.has(url)) {
+      return true;
     }
     let source = await this.readSource(url);
     if (source.status !== 200 && source.status !== 404) {
@@ -726,6 +1180,32 @@ class RealmFsSession {
       throw new TypeError('`show` must be a card or file path string');
     }
     return this.resolve('show', path).replace(/\.json$/, '');
+  }
+
+  // What `realm.capture` captures. A relative path resolves inside this realm,
+  // as for every other call. A full URL or a prefixed card id (`@scope/...`)
+  // may name a card or file in any workspace: the capture itself refuses one
+  // the user cannot read. The result names a target this realm holds by its
+  // path, and any other — one in a workspace nested under this realm's URL
+  // too — by what the script gave.
+  private captureTarget(path: unknown): { url: string; path: string } {
+    if (
+      typeof path === 'string' &&
+      (/^[a-z][a-z0-9+.-]*:/i.test(path) || path.startsWith('@'))
+    ) {
+      let reference = path.trim();
+      return {
+        url: reference,
+        path:
+          reference.startsWith(this.realmURL) &&
+          reference !== this.realmURL &&
+          this.heldByThisRealm(reference)
+            ? this.relative(reference)
+            : reference,
+      };
+    }
+    let url = this.resolve('capture', path);
+    return { url, path: this.relative(url) };
   }
 
   private relative(url: string): string {
@@ -831,6 +1311,51 @@ class RealmFsSession {
     };
   }
 
+  // Downloads within DOWNLOAD_TIMEOUT_MS, and stops when the run ends.
+  private async download(
+    sourceUrl: string,
+    maxBytes: number,
+  ): Promise<Uint8Array> {
+    // The run can end while an unawaited call waits on its lookup. An abort
+    // listener added after that would never fire, so nothing is fetched.
+    if (this.inFlight.signal.aborted) {
+      this.refused += 1;
+      throw new Error(`The run has ended; ${sourceUrl} was not downloaded`);
+    }
+    let stop = new AbortController();
+    let timer = setTimeout(
+      () =>
+        stop.abort(
+          new Error(
+            `Downloading ${sourceUrl} took longer than ${DOWNLOAD_TIMEOUT_MS / 1000} s`,
+          ),
+        ),
+      DOWNLOAD_TIMEOUT_MS,
+    );
+    let onRunEnd = () =>
+      stop.abort(
+        new Error(`The run has ended; ${sourceUrl} was not downloaded`),
+      );
+    this.inFlight.signal.addEventListener('abort', onRunEnd, { once: true });
+    try {
+      // A fetch that ignores the signal still ends the call when it aborts.
+      return await new Promise<Uint8Array>((resolve, reject) => {
+        stop.signal.addEventListener(
+          'abort',
+          () => reject(stop.signal.reason),
+          { once: true },
+        );
+        this.downloadFile(sourceUrl, maxBytes, stop.signal).then(
+          resolve,
+          reject,
+        );
+      });
+    } finally {
+      clearTimeout(timer);
+      this.inFlight.signal.removeEventListener('abort', onRunEnd);
+    }
+  }
+
   private async load(url: string): Promise<string | undefined> {
     let content = await this.lookup(url);
     if (content === BINARY) {
@@ -890,11 +1415,52 @@ class RealmFsSession {
     }
     let saved = await this.writeFile(url, content, expected, options);
     this.known.set(url, saved);
+    if (expected === undefined) {
+      this.markCreated(url);
+    } else {
+      this.saved.add(url);
+    }
+  }
+
+  private markCreated(url: string) {
+    this.created.add(url);
     this.saved.add(url);
+    // A file created again after a delete is reported as saved.
+    this.deleted.delete(url);
   }
 }
 
 const UTF8 = new TextDecoder('utf-8', { fatal: true });
+
+async function sha256(bytes: Uint8Array): Promise<string> {
+  let digest = await crypto.subtle.digest('SHA-256', bytes as BufferSource);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
+
+// The URL a download reads from: an absolute http or https URL.
+function downloadSource(value: unknown): string {
+  if (typeof value !== 'string') {
+    throw new TypeError(
+      'realm.fs.download expects a source URL and a destination path',
+    );
+  }
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(
+      `realm.fs.download expects an absolute source URL: ${value}`,
+    );
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error(
+      `realm.fs.download downloads only http and https URLs: ${value}`,
+    );
+  }
+  return url.href;
+}
 
 // Accepts plain base64, with or without line breaks, or a base64 data URL.
 // The base64 content of a writeBytes call, without a `data:` URL prefix or
@@ -947,10 +1513,15 @@ export default class RunRealmCodeTool extends HostBaseTool<
   description =
     'Run safe Realm code that reads and edits realm source files, finds ' +
     'cards with realm.cards.search, reads cards as JSON data with ' +
-    'realm.cards.get, can look at what it made with realm.capture, can ' +
-    'create workspaces with realm.workspaces.create, and can change the ' +
-    'skills and model of this room with room.*. In a workspace the user ' +
-    'can only read, reads work and each write is refused. Return ' +
+    'realm.cards.get, finds cards, specs and files across realms with ' +
+    'realm.entries.search, can look at cards and files with realm.capture ' +
+    '(a path in the realm, or the URL of a card or file in any workspace ' +
+    'the user can read), can generate images into the realm with ' +
+    'realm.images.generate, can save a file from a URL with ' +
+    'realm.fs.download, can create workspaces with realm.workspaces.create, ' +
+    'can change the skills and model of this room with room.*, and can ' +
+    'refresh the index of the workspace with realm.index.*. In a workspace ' +
+    'the user can only read, reads work and each write is refused. Return ' +
     '{ show: "<card path>" } to open a card in the realm when the run ends.';
   static actionVerb = 'Run';
   // `room.*` changes the room the call came from. The tool service sets
@@ -961,7 +1532,17 @@ export default class RunRealmCodeTool extends HostBaseTool<
   static neverAutoExecutesFor(
     attributes: Record<string, unknown> | undefined,
   ): boolean {
-    return scriptDeletesWorkspaces(attributes?.code);
+    return clickRequiredCallsIn(attributes?.code).size > 0;
+  }
+
+  // A run that may generate images gets the image time budget on top of the
+  // tool service's execute timeout, as it does on its own limits.
+  static extraExecuteTimeMsFor(
+    attributes: Record<string, unknown> | undefined,
+  ): number {
+    return clickRequiredCallsIn(attributes?.code).has('realm.images.generate')
+      ? IMAGE_TIME_BUDGET_MS
+      : 0;
   }
 
   async getInputType() {
@@ -1005,12 +1586,20 @@ export default class RunRealmCodeTool extends HostBaseTool<
       throw new Error(`The current user cannot read or write ${realmInput}`);
     }
 
+    let namedCalls = clickRequiredCallsIn(input.code);
+    let imageTime = namedCalls.has('realm.images.generate')
+      ? IMAGE_TIME_BUDGET_MS
+      : 0;
+    let runTimeoutMs = RUN_TIMEOUT_MS + imageTime;
+    let callDeadlineMs = CALL_DEADLINE_MS + imageTime;
     let session = new RealmFsSession(
       this.realmRootURL(realmURL),
       (url) => this.readSource(url),
       (url, content, expected, options) =>
         this.writeFile(roomId, url, content, expected, options),
       (url, bytes) => this.writeBinaryFile(roomId, url, bytes),
+      (url, expected) => this.deleteFile(url, expected),
+      (url, maxBytes, signal) => this.downloadFile(url, maxBytes, signal),
       (url) => this.listDirectory(url),
       // The run reads only the rows' own data, so the linked cards' resources
       // are not asked for.
@@ -1019,8 +1608,12 @@ export default class RunRealmCodeTool extends HostBaseTool<
       (reference, base) =>
         this.network.virtualNetwork.resolveURL(reference, base).href,
       (id) => this.readCard(id),
+      (query, realms) => this.store.searchEntries(query, realms),
       (url, options, doneBy, signal) =>
         this.captureURL(url, options, doneBy, signal),
+      (reference) =>
+        workspaceOf(reference, { network: this.network, realm: this.realm })
+          ?.realmURL === this.realmRootURL(realmURL),
       (workspaceInput) =>
         createWorkspace(
           { matrixService: this.matrixService, realm: this.realm },
@@ -1037,7 +1630,14 @@ export default class RunRealmCodeTool extends HostBaseTool<
           },
           realmIdentifier,
         ),
-      scriptDeletesWorkspaces(input.code),
+      (imageInput) => this.generateImage(imageInput),
+      namedCalls,
+      {
+        invalidate: (urls) => this.realm.invalidateUrls(realmURL, urls),
+        reindex: () => this.realm.reindex(realmURL),
+        fullReindex: () => this.realm.fullReindex(realmURL),
+        cancelJob: () => this.realm.cancelIndexingJob(realmURL),
+      },
       this.realm.canWrite(realmURL),
       new RoomActions({
         checkSkill: (id) => this.checkSkill(id),
@@ -1050,21 +1650,21 @@ export default class RunRealmCodeTool extends HostBaseTool<
       () =>
         deadline.abort(
           new Error(
-            `Realm code did not finish within ${CALL_DEADLINE_MS / 1000} s`,
+            `Realm code did not finish within ${callDeadlineMs / 1000} s`,
           ),
         ),
-      CALL_DEADLINE_MS,
+      callDeadlineMs,
     );
-    // The worker allows the script `RUN_TIMEOUT_MS` once QuickJS is ready;
+    // The worker allows the script `runTimeoutMs` once QuickJS is ready;
     // measured from here it is a conservative end, since sandbox start only
     // pushes the real one later.
-    session.captures.runEndsAt = Date.now() + RUN_TIMEOUT_MS;
+    session.captures.runEndsAt = Date.now() + runTimeoutMs;
     try {
       runnerResult = await runRealmCode(
         {
           code: input.code,
           realmURL: this.realmRootURL(realmURL),
-          timeoutMs: RUN_TIMEOUT_MS,
+          timeoutMs: runTimeoutMs,
         },
         (method, args) => session.call(method, args),
         deadline.signal,
@@ -1090,6 +1690,9 @@ export default class RunRealmCodeTool extends HostBaseTool<
         saved.length > 0
           ? `${message}. Files already saved by this run: ${saved.join(', ')}`
           : `${message}. No file was saved.`;
+      if (session.deleted.size > 0) {
+        report += ` Files this run created and already deleted: ${[...session.deleted].join(', ')}`;
+      }
       // Workspaces stay created too. Name them, so a retry does not create
       // them again. The run failed, so none of them is opened.
       if (session.createdWorkspaces.length > 0) {
@@ -1098,6 +1701,11 @@ export default class RunRealmCodeTool extends HostBaseTool<
       // A delete cannot be undone, so the model must know it happened.
       if (session.deletedWorkspaces.length > 0) {
         report += ` Workspaces already deleted by this run: ${session.deletedWorkspaces.join(', ')}`;
+      }
+      // Index actions start on the realm server when the call returns, so
+      // name them, so a retry does not start a full reindex again.
+      if (session.indexActions.length > 0) {
+        report += ` Index actions already started by this run: ${session.indexActions.join('; ')}`;
       }
       // Room changes are made only after a run that finished, so a failed
       // run made none.
@@ -1134,16 +1742,26 @@ export default class RunRealmCodeTool extends HostBaseTool<
     return new commandModule.RunRealmCodeResult({
       uiActions,
       ...shown,
-      files: [...session.saved].map(
-        (fileUrl) =>
-          new commandModule.RealmCodeFileResult({
-            fileUrl,
-            status: 'saved',
-            detail: session.binary.has(fileUrl)
-              ? 'Binary file saved.'
-              : 'Source saved; correctness validation will run after this tool result.',
-          }),
-      ),
+      files: [
+        ...[...session.saved].map(
+          (fileUrl) =>
+            new commandModule.RealmCodeFileResult({
+              fileUrl,
+              status: 'saved',
+              detail: session.binary.has(fileUrl)
+                ? 'Binary file saved.'
+                : 'Source saved; correctness validation will run after this tool result.',
+            }),
+        ),
+        ...[...session.deleted].map(
+          (fileUrl) =>
+            new commandModule.RealmCodeFileResult({
+              fileUrl,
+              status: 'deleted',
+              detail: 'Created by this run and then deleted.',
+            }),
+        ),
+      ],
       scriptResult: runnerResult.scriptResult,
       captures: session.captures.taken.map(
         (viewed) =>
@@ -1160,6 +1778,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
       ),
       createdWorkspaces: [...session.createdWorkspaces],
       deletedWorkspaces: [...session.deletedWorkspaces],
+      indexActions: [...session.indexActions],
       roomChanges,
     });
   }
@@ -1549,6 +2168,124 @@ export default class RunRealmCodeTool extends HostBaseTool<
       useAbsoluteURL: true,
       includeComputeds: true,
     });
+  }
+
+  // Checks the realm still holds what the run saved, and deletes the file.
+  private async deleteFile(
+    url: string,
+    expected: { content: string } | { sha256: string },
+  ): Promise<void> {
+    let unchanged =
+      'sha256' in expected
+        ? (await this.readBinaryDigest(url)) === expected.sha256
+        : await this.readSource(url).then(
+            (current) =>
+              current.status === 200 &&
+              !current.binary &&
+              current.content === expected.content,
+          );
+    if (!unchanged) {
+      throw new Error(`File changed while the script ran: ${url}`);
+    }
+    await this.cardService.deleteSource(new URL(url));
+  }
+
+  // The SHA-256 of a binary file's bytes, or undefined for a file that does
+  // not exist or is larger than any file realm.fs.writeBytes saves.
+  private async readBinaryDigest(url: string): Promise<string | undefined> {
+    let response = await this.network.authedFetch(url, {
+      headers: { Accept: SupportedMimeType.CardSource },
+    });
+    if (
+      response.status !== 200 ||
+      Number(response.headers.get('content-length')) > MAX_BINARY_FILE_SIZE
+    ) {
+      await response.body?.cancel();
+      return undefined;
+    }
+    return await sha256(new Uint8Array(await response.arrayBuffer()));
+  }
+
+  private async generateImage({
+    prompt,
+    sourceImageUrl,
+    llmModel,
+    signal,
+  }: Parameters<GenerateImage>[0]): Promise<GeneratedImage> {
+    return await generateImage(
+      {
+        prompt,
+        sourceImageDataUrl: sourceImageUrl
+          ? await sourceImageDataUrl(sourceImageUrl, (url) =>
+              this.network.authedFetch(url, { signal }),
+            )
+          : undefined,
+        model: llmModel,
+      },
+      ({ url, requestBody }) =>
+        this.realmServer.requestForward({
+          url,
+          method: 'POST',
+          requestBody,
+          signal,
+        }),
+    );
+  }
+
+  // `authedFetch` adds the user's realm token when the URL is in a realm the
+  // user can read, the same as the download-file-to-realm tool, so a capture
+  // URL of a private realm downloads. Any other URL is a plain fetch.
+  private async downloadFile(
+    sourceUrl: string,
+    maxBytes: number,
+    signal: AbortSignal,
+  ): Promise<Uint8Array> {
+    let response = await this.network.authedFetch(sourceUrl, {
+      method: 'GET',
+      signal,
+    });
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new Error(
+        `Unable to download ${sourceUrl}: ${response.status} ${response.statusText}`,
+      );
+    }
+    let declared = Number(response.headers.get('content-length'));
+    if (declared > maxBytes) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new DownloadTooLarge();
+    }
+    if (!response.body) {
+      let bytes = new Uint8Array(await response.arrayBuffer());
+      if (bytes.byteLength > maxBytes) {
+        throw new DownloadTooLarge();
+      }
+      return bytes;
+    }
+    // Read in chunks, so a body without a declared length stops at the
+    // limit instead of after it has all arrived.
+    let reader = response.body.getReader();
+    let chunks: Uint8Array[] = [];
+    let total = 0;
+    for (;;) {
+      let { done, value } = await reader.read();
+      if (done || !value) {
+        break;
+      }
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        throw new DownloadTooLarge();
+      }
+      chunks.push(value);
+    }
+    let bytes = new Uint8Array(total);
+    let offset = 0;
+    for (let chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return bytes;
   }
 
   private async listDirectory(

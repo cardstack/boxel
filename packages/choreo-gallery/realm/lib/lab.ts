@@ -1,8 +1,10 @@
 import { tracked } from '@glimmer/tracking';
 import type { DialConfig, DialValue } from 'dialkit/vanilla';
 import { DialStore } from 'dialkit/vanilla';
+import { postRender, retime } from 'glimmer-motion';
 
 import { Dial, type DialTune } from './dial';
+import { announceRestartedAnimations } from './onstage';
 import { demoPresets } from './presets';
 import { demoTuning } from './tuning';
 
@@ -45,6 +47,37 @@ export class LabState {
 /** how many labs are open on each demo, by its slug */
 const openLabs = new Map<string, number>();
 
+/** the demos with a retime already waiting for the render to land */
+const retiming = new Set<string>();
+
+/**
+ * Retime the motion running on every stage showing a demo, once the render
+ * that delivers the demo's new values has landed. An edit reaches the stage
+ * as it renders, but motion already running reads its timing when it starts:
+ * this restarts what the edit retimed, keeping each loop's place in its
+ * cycle. A Choreo timeline needs nothing here, because an edited timeline
+ * replaces its run, and the new run carries its loops on.
+ *
+ * A dragged control edits many times a second; the edits that land in one
+ * render share one retime. A stage at rest offscreen is told, so it can rest
+ * the animations the retime started.
+ */
+function retimeStages(slug: string) {
+  if (retiming.has(slug)) {
+    return;
+  }
+  retiming.add(slug);
+  postRender(() => {
+    retiming.delete(slug);
+    for (let stage of document.querySelectorAll(
+      `[data-demo-tuning="${CSS.escape(slug)}"]`,
+    )) {
+      retime(stage);
+      announceRestartedAnimations(stage);
+    }
+  });
+}
+
 /**
  * A demo's tuning on a dialkit panel: the lab.
  *
@@ -54,6 +87,9 @@ const openLabs = new Map<string, number>();
  * demo reads it. Only the values that differ from the demo's own are written,
  * so an untouched spring comes back from `tuneMotion` as the same object and
  * never replays a scene.
+ *
+ * An edit retimes motion the stage already has running, so a loop changes
+ * speed where it is rather than on the next replay.
  *
  * Every lab open on one demo drives the same panel, so they show the same
  * values. The panel is neither persisted nor retained: closing the demo's
@@ -131,6 +167,7 @@ export class DemoLab {
       );
       if (JSON.stringify(this.state.values) !== JSON.stringify(changed)) {
         this.state.values = changed;
+        retimeStages(this.slug);
       }
     });
   };
@@ -146,7 +183,10 @@ export class DemoLab {
       openLabs.set(this.slug, open);
     } else {
       openLabs.delete(this.slug);
-      this.state.values = {};
+      if (Object.keys(this.state.values).length) {
+        this.state.values = {};
+        retimeStages(this.slug);
+      }
     }
   }
 }

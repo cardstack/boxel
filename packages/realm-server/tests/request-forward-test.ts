@@ -45,8 +45,14 @@ import {
   startSentryCapture,
   type SentryCapture,
 } from './helpers/sentry-capture.ts';
-import { logLinesDuring } from './helpers/log-capture.ts';
+import { logLinesDuring, withLogDefinition } from './helpers/log-capture.ts';
 import { leaksCredential } from './helpers/credential-leaks.ts';
+import {
+  installSecretsKeyring,
+  LocalKeyProvider,
+  resetSecretsAtRest,
+} from '../lib/secrets-at-rest/index.ts';
+import { sealProxyEndpointKeys } from '../lib/proxy-endpoint-keys.ts';
 
 module(basename(import.meta.filename), function () {
   module('Realm-specific Endpoints | _request-forward', function (hooks) {
@@ -1984,6 +1990,90 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(vendor.requests[0].body, '{"hello":"vendor"}');
       });
 
+      test('a credential slot in a forward is sent as the text it is, never filled', async function (assert) {
+        let response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt()}`)
+          .send({
+            url: `${vendor.url}/echo`,
+            method: 'POST',
+            requestBody: JSON.stringify({ token: '{{apiKey}}' }),
+            headers: { 'X-Vendor-Key': '{{userKey}}' },
+          });
+
+        assert.strictEqual(response.status, 200);
+        assert.strictEqual(
+          vendor.requests[0].headers['x-vendor-key'],
+          '{{userKey}}',
+          'the header carries the slot as written',
+        );
+        assert.strictEqual(
+          vendor.requests[0].body,
+          '{"token":"{{apiKey}}"}',
+          'the body carries the slot as written',
+        );
+      });
+
+      // The same forward with the endpoint's key sealed into its sealed
+      // columns, as the startup backfill leaves it.
+      module('with the key sealed', function (hooks) {
+        hooks.beforeEach(async function () {
+          installSecretsKeyring(await new LocalKeyProvider().loadDataKeys());
+          await sealProxyEndpointKeys(dbAdapter);
+          AllowedProxyDestinations.reset();
+        });
+        hooks.afterEach(function () {
+          resetSecretsAtRest();
+        });
+
+        function forwardToEcho() {
+          return request
+            .post('/_request-forward')
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${jwt()}`)
+            .send({
+              url: `${vendor.url}/echo`,
+              method: 'POST',
+              requestBody: JSON.stringify({ hello: 'vendor' }),
+            });
+        }
+
+        test('the vendor receives the sealed key', async function (assert) {
+          let [row] = await dbAdapter.execute(
+            `SELECT api_key_ciphertext IS NOT NULL AS sealed FROM proxy_endpoints WHERE url = $1`,
+            { bind: [`${vendor.url}/`] },
+          );
+          assert.true(row.sealed, 'the endpoint key is sealed');
+
+          let response = await forwardToEcho();
+
+          assert.strictEqual(response.status, 200);
+          assert.strictEqual(
+            vendor.requests[0].headers.authorization,
+            'Bearer stub-vendor-key',
+          );
+        });
+
+        test('a key edited by hand reaches the vendor before the backfill seals it again', async function (assert) {
+          await dbAdapter.execute(
+            `UPDATE proxy_endpoints SET api_key = 'stub-vendor-key-edited' WHERE url = $1`,
+            { bind: [`${vendor.url}/`] },
+          );
+          AllowedProxyDestinations.reset();
+
+          let response = await forwardToEcho();
+
+          assert.strictEqual(response.status, 200);
+          assert.strictEqual(
+            vendor.requests[0].headers.authorization,
+            'Bearer stub-vendor-key-edited',
+          );
+        });
+      });
+
       test('an X-Boxel header in the forwarded headers is refused', async function (assert) {
         let response = await request
           .post('/_request-forward')
@@ -2800,6 +2890,197 @@ module(basename(import.meta.filename), function () {
           );
           assert.false(carries(sent), 'no Sentry event or breadcrumb does');
           assert.false(carries(response!.text), 'the response does not');
+        });
+      });
+
+      // What a Sentry event raised during a forward carries of the incoming
+      // request: the caller's URL, headers and body are theirs, and the
+      // Authorization header is their session token.
+      module('the incoming request in a Sentry event', function (hooks) {
+        let sentry: SentryCapture | undefined;
+        const destinationPath = '/respond';
+
+        hooks.beforeEach(async function () {
+          configureOutbound({ devAllowlist: ['127.0.0.1', 'localhost'] });
+          await dbAdapter.execute(
+            `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, auth_method, auth_parameter_name, created_at, updated_at)
+             VALUES (gen_random_uuid(), '${vendor.alternateUrl}${destinationPath}', 'telemetry-vendor-key', 'no-credit', false, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+          );
+          AllowedProxyDestinations.reset();
+        });
+        hooks.afterEach(async function () {
+          await sentry?.stop();
+          sentry = undefined;
+        });
+
+        // A forward whose vendor answers with a body that is not JSON, so
+        // the handler fails and reports the error to Sentry.
+        async function failingForward(markers: {
+          token: string;
+          urlToken: string;
+          bodyMarker: string;
+          cookie: string;
+          query: string;
+        }) {
+          return await request
+            .post(`/_request-forward?caller=${markers.query}`)
+            .set('Accept', 'application/json')
+            .set('Content-Type', 'application/json')
+            .set('Authorization', `Bearer ${markers.token}`)
+            .set('Cookie', `session=${markers.cookie}`)
+            .send({
+              url: `${vendor.alternateUrl}${destinationPath}?token=${markers.urlToken}`,
+              method: 'POST',
+              requestBody: JSON.stringify({
+                status: 401,
+                headers: { 'content-type': 'text/plain' },
+                chunks: ['not a JSON document'],
+                marker: markers.bodyMarker,
+              }),
+            });
+        }
+
+        function markers() {
+          return {
+            token: jwt(),
+            urlToken: 'url-query-token-5c1e09',
+            bodyMarker: 'request-body-marker-7f3a2d',
+            cookie: 'cookie-marker-b84e61',
+            query: 'incoming-query-marker-2d9c40',
+          };
+        }
+
+        test('keeps only the method and path of a failed forward', async function (assert) {
+          sentry = startSentryCapture({
+            tracing: false,
+            incomingRequests: true,
+          });
+          let planted = markers();
+          // With the request log on, Sentry keeps its line, which names the
+          // incoming URL, as a breadcrumb.
+          let response: Awaited<ReturnType<typeof failingForward>> | undefined;
+          let lines = await withLogDefinition('realm:requests', 'info', () =>
+            logLinesDuring(['realm:requests'], async () => {
+              response = await failingForward(planted);
+            }),
+          );
+          let sent = await sentry.flushed();
+          let events = await sentry.flushedEvents();
+
+          assert.true(
+            lines.some((line) => line.message.includes(planted.query)),
+            'precondition: the request log line names the incoming query',
+          );
+          assert.strictEqual(response!.status, 500, 'the forward failed');
+          assert.strictEqual(events.length, 1, 'the failure reached Sentry');
+          let recorded = events[0].request as
+            | { method?: string; url?: string }
+            | undefined;
+          assert.deepEqual(
+            Object.keys(recorded ?? {}).sort(),
+            ['method', 'url'],
+            'the event has the request, and only its method and URL',
+          );
+          assert.strictEqual(recorded?.method, 'POST');
+          assert.strictEqual(
+            new URL(recorded!.url!).pathname,
+            '/_request-forward',
+          );
+          assert.strictEqual(
+            new URL(recorded!.url!).search,
+            '',
+            'the URL has no query string',
+          );
+          for (let [name, value] of Object.entries(planted)) {
+            assert.false(
+              sent.includes(value),
+              `no envelope carries the ${name}`,
+            );
+          }
+        });
+
+        test("a forward's transaction keeps its route, method and status and none of its query strings", async function (assert) {
+          sentry = startSentryCapture({
+            tracing: true,
+            incomingRequests: true,
+          });
+          let planted = markers();
+          let response = await failingForward(planted);
+          let sent = await sentry.flushed();
+          let transactions = await sentry.flushedTransactions();
+
+          assert.strictEqual(response.status, 500, 'the forward failed');
+          let transaction = transactions.find(
+            (t) => t.transaction === 'POST /_request-forward',
+          );
+          assert.ok(transaction, 'the forward was recorded as a transaction');
+          let contexts = transaction!.contexts as {
+            trace: { data: Record<string, unknown> };
+            response?: { status_code?: number };
+          };
+          let data = contexts.trace.data;
+          assert.strictEqual(data['http.method'], 'POST', 'the method is kept');
+          assert.strictEqual(
+            data['http.target'],
+            '/_request-forward',
+            'the target keeps its path and no query string',
+          );
+          assert.strictEqual(
+            new URL(data['http.url'] as string).pathname,
+            '/_request-forward',
+            'the URL keeps its path',
+          );
+          assert.strictEqual(
+            new URL(data['http.url'] as string).search,
+            '',
+            'the URL has no query string',
+          );
+          assert.false('http.query' in data, 'the query string is dropped');
+          assert.strictEqual(
+            contexts.response?.status_code,
+            500,
+            'the status is kept',
+          );
+          assert.strictEqual(typeof transaction!.start_timestamp, 'number');
+          assert.strictEqual(typeof transaction!.timestamp, 'number');
+          let spanURLs = JSON.stringify(transaction!.spans ?? []);
+          assert.false(
+            spanURLs.includes(vendor.alternateUrl),
+            'the guarded call to the vendor records no span',
+          );
+          for (let [name, value] of Object.entries(planted)) {
+            assert.false(
+              sent.includes(value),
+              `no envelope carries the ${name}`,
+            );
+          }
+        });
+
+        // Sentry copies a body only from `data` listeners. The forward reads
+        // its body through the stream's async iterator, so a multi-megabyte
+        // body is never buffered for Sentry at all.
+        test("the forward's body is not buffered for Sentry", async function (assert) {
+          // Without the hook, to see what the instrumentation itself recorded.
+          sentry = startSentryCapture({
+            tracing: false,
+            incomingRequests: true,
+            scrub: false,
+          });
+          let planted = markers();
+          let response = await failingForward(planted);
+          let events = await sentry.flushedEvents();
+
+          assert.strictEqual(response.status, 500, 'the forward failed');
+          assert.strictEqual(events.length, 1, 'the failure reached Sentry');
+          let recorded = events[0].request as
+            | { headers?: Record<string, string>; data?: unknown }
+            | undefined;
+          assert.strictEqual(
+            recorded?.headers?.authorization,
+            `Bearer ${planted.token}`,
+            'precondition: the instrumentation recorded the incoming request',
+          );
+          assert.false('data' in (recorded ?? {}), 'it recorded no body');
         });
       });
     });

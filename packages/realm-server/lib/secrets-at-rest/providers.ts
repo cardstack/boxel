@@ -53,61 +53,113 @@ function defaultKmsDecrypter(keyArn: string): KmsDecrypter {
   };
 }
 
-// Unwraps the data key KMS wrapped, once, at startup. After that every seal and
-// open is local, so a KMS outage doesn't stop a running process. A worker
-// manager unwraps once for all of its workers, so a respawned worker never
-// calls KMS either.
+// Names a data key by a hash of its wrapped form, which is public, stable for
+// the life of the data key, and different for every data key.
+export function wrappedDataKeyId(wrappedDataKey: Buffer): string {
+  return `kms-${createHash('sha256')
+    .update(wrappedDataKey)
+    .digest('hex')
+    .slice(0, 16)}`;
+}
+
+function decodeWrappedDataKey(wrappedDataKey: string, setting: string): Buffer {
+  let blob = Buffer.from(wrappedDataKey.trim(), 'base64');
+  if (blob.length === 0) {
+    throw new Error(`${setting} is not a base64 ciphertext`);
+  }
+  return blob;
+}
+
+// Unwraps the data keys KMS wrapped, once each, at startup. After that every
+// seal and open is local, so a KMS outage doesn't stop a running process. A
+// worker manager unwraps once for all of its workers, so a respawned worker
+// never calls KMS either.
+//
+// The wrapped data key is the current one, which every seal uses. Additional
+// wrapped data keys are loaded only to open values sealed under them: the
+// data key a rotation is moving away from, and the one it is about to move
+// to, so every process can open rows sealed under either while a deploy rolls
+// out.
 export class KmsKeyProvider implements SecretsKeyProvider {
   readonly name = 'kms';
   #keyArn: string;
   #wrappedDataKey: Buffer;
+  #additionalWrappedDataKeys: Buffer[];
   #kms: KmsDecrypter;
 
   constructor({
     keyArn,
     wrappedDataKey,
+    additionalWrappedDataKeys = [],
     kms,
   }: {
     keyArn: string;
     // The base64 CiphertextBlob, as stored in SSM.
     wrappedDataKey: string;
+    // More base64 CiphertextBlobs, loaded to open and never to seal.
+    additionalWrappedDataKeys?: string[];
     kms?: KmsDecrypter;
   }) {
     this.#keyArn = keyArn;
-    this.#wrappedDataKey = Buffer.from(wrappedDataKey.trim(), 'base64');
-    if (this.#wrappedDataKey.length === 0) {
-      throw new Error('SECRETS_WRAPPED_DATA_KEY is not a base64 ciphertext');
-    }
+    this.#wrappedDataKey = decodeWrappedDataKey(
+      wrappedDataKey,
+      'SECRETS_WRAPPED_DATA_KEY',
+    );
+    this.#additionalWrappedDataKeys = additionalWrappedDataKeys.map((blob) =>
+      decodeWrappedDataKey(blob, 'SECRETS_ADDITIONAL_WRAPPED_DATA_KEYS'),
+    );
     this.#kms = kms ?? defaultKmsDecrypter(keyArn);
   }
 
-  // Names the data key by a hash of its wrapped form, which is public, stable
-  // for the life of the data key, and different for every data key.
+  // The id of the current data key.
   get keyId(): string {
-    return `kms-${createHash('sha256')
-      .update(this.#wrappedDataKey)
-      .digest('hex')
-      .slice(0, 16)}`;
+    return wrappedDataKeyId(this.#wrappedDataKey);
   }
 
   async loadDataKeys(): Promise<LoadedDataKeys> {
+    let blobs = [this.#wrappedDataKey, ...this.#additionalWrappedDataKeys];
+    let keyIds = blobs.map(wrappedDataKeyId);
+    let repeated = keyIds.find((keyId, i) => keyIds.indexOf(keyId) !== i);
+    if (repeated) {
+      throw new Error(
+        `Data key ${repeated} is listed more than once across SECRETS_WRAPPED_DATA_KEY and SECRETS_ADDITIONAL_WRAPPED_DATA_KEYS`,
+      );
+    }
+    let keys: DataKey[] = [];
+    try {
+      for (let [i, blob] of blobs.entries()) {
+        keys.push({ keyId: keyIds[i], key: await this.#unwrap(blob) });
+      }
+    } catch (e) {
+      // Leave no unwrapped key behind when a later one fails to unwrap.
+      for (let { key } of keys) {
+        key.fill(0);
+      }
+      throw e;
+    }
+    return { keys, currentKeyId: this.keyId };
+  }
+
+  async #unwrap(blob: Buffer): Promise<Buffer> {
     let { Plaintext } = await this.#kms.decrypt({
       KeyId: this.#keyArn,
-      CiphertextBlob: this.#wrappedDataKey,
+      CiphertextBlob: blob,
       EncryptionContext: DATA_KEY_ENCRYPTION_CONTEXT,
     });
     if (!Plaintext) {
-      throw new Error('KMS returned no plaintext for the wrapped data key');
+      throw new Error(
+        `KMS returned no plaintext for the wrapped data key ${wrappedDataKeyId(blob)}`,
+      );
     }
     let key = Buffer.from(Plaintext);
     Plaintext.fill(0);
-    return { keys: [{ keyId: this.keyId, key }], currentKeyId: this.keyId };
+    return key;
   }
 }
 
 // A fixed development data key. It is public, so nothing sealed under it is
 // secret; a deployed server refuses to start with this provider.
-const LOCAL_DATA_KEY_ID = 'local-development';
+export const LOCAL_DATA_KEY_ID = 'local-development';
 const LOCAL_DATA_KEY = createHash('sha256')
   .update('boxel local development secrets data key', 'utf8')
   .digest();
@@ -125,21 +177,39 @@ export class LocalKeyProvider implements SecretsKeyProvider {
 
 // Picks the provider the environment configures: KMS when both of its
 // settings are present, the local provider when neither is. Exactly one of
-// them is a misconfiguration and throws.
+// them is a misconfiguration and throws. SECRETS_ADDITIONAL_WRAPPED_DATA_KEYS,
+// a comma-separated list of wrapped data keys loaded only to open, belongs to
+// the KMS provider and is a misconfiguration without it.
 export function secretsKeyProviderFromEnv(
   env: NodeJS.ProcessEnv = process.env,
   { kms }: { kms?: KmsDecrypter } = {},
 ): SecretsKeyProvider {
   let keyArn = env.SECRETS_KMS_KEY_ARN?.trim();
   let wrappedDataKey = env.SECRETS_WRAPPED_DATA_KEY?.trim();
+  let additionalWrappedDataKeys = (
+    env.SECRETS_ADDITIONAL_WRAPPED_DATA_KEYS ?? ''
+  )
+    .split(',')
+    .map((blob) => blob.trim())
+    .filter(Boolean);
   if (keyArn && wrappedDataKey) {
-    return new KmsKeyProvider({ keyArn, wrappedDataKey, kms });
+    return new KmsKeyProvider({
+      keyArn,
+      wrappedDataKey,
+      additionalWrappedDataKeys,
+      kms,
+    });
   }
   if (keyArn || wrappedDataKey) {
     throw new Error(
       `SECRETS_KMS_KEY_ARN and SECRETS_WRAPPED_DATA_KEY must be set together, but only ${
         keyArn ? 'SECRETS_KMS_KEY_ARN' : 'SECRETS_WRAPPED_DATA_KEY'
       } is set`,
+    );
+  }
+  if (additionalWrappedDataKeys.length > 0) {
+    throw new Error(
+      'SECRETS_ADDITIONAL_WRAPPED_DATA_KEYS is set, but SECRETS_KMS_KEY_ARN and SECRETS_WRAPPED_DATA_KEY are not',
     );
   }
   return new LocalKeyProvider();

@@ -3,7 +3,7 @@ import { waitUntil } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import type { CommandContext } from '@cardstack/runtime-common';
+import type { CommandContext, Realm } from '@cardstack/runtime-common';
 
 import CheckCorrectnessTool from '@cardstack/host/tools/check-correctness';
 import PatchCardInstanceTool from '@cardstack/host/tools/patch-card-instance';
@@ -26,6 +26,37 @@ function petDocument(name: string, hasError: boolean) {
         type: 'card',
         attributes: { name, hasError },
         meta: { adoptsFrom: { module: '../pet', name: 'Pet' } },
+      },
+    },
+    null,
+    2,
+  );
+}
+
+// A Ticket document whose defaults are fully valid; a test replaces the
+// attributes or relationships bucket wholesale to introduce one mistake.
+function ticketDocument(
+  overrides: {
+    attributes?: Record<string, any>;
+    relationships?: Record<string, any>;
+    metaFields?: Record<string, any>;
+  } = {},
+) {
+  return JSON.stringify(
+    {
+      data: {
+        type: 'card',
+        attributes: overrides.attributes ?? {
+          status: 'New',
+          timers: [{ label: 'First response', hours: 4 }],
+        },
+        relationships: overrides.relationships ?? {
+          customer: { links: { self: '../Pet/billy' } },
+        },
+        meta: {
+          adoptsFrom: { module: '../ticket', name: 'Ticket' },
+          ...(overrides.metaFields ? { fields: overrides.metaFields } : {}),
+        },
       },
     },
     null,
@@ -60,9 +91,11 @@ module('Integration | tools | check-correctness', function (hooks) {
 
   setupRealmCacheTeardown(hooks);
 
+  let testRealm: Realm;
+
   hooks.beforeEach(async function () {
-    await withCachedRealmSetup(async () =>
-      setupIntegrationTestRealm({
+    await withCachedRealmSetup(async () => {
+      ({ realm: testRealm } = await setupIntegrationTestRealm({
         mockMatrixUtils,
         contents: {
           'pet.gts': `
@@ -83,6 +116,66 @@ module('Integration | tools | check-correctness', function (hooks) {
             });
           }
         `,
+          'ticket.gts': `
+          import { contains, containsMany, field, linksTo, linksToMany, CardDef, FieldDef } from "@cardstack/base/card-api";
+          import { FileDef } from "@cardstack/base/file-api";
+          import StringField from "@cardstack/base/string";
+          import NumberField from "@cardstack/base/number";
+          import enumField from "@cardstack/base/enum";
+          import { Pet } from "./pet";
+          const StatusField = enumField(StringField, {
+            options: ['New', 'Open', 'Pending', 'Resolved'],
+          });
+          export class SlaTimerField extends FieldDef {
+            static displayName = 'SlaTimer';
+            @field label = contains(StringField);
+            @field hours = contains(NumberField);
+          }
+          export class TicketItemField extends FieldDef {
+            static displayName = 'TicketItem';
+            @field label = contains(StringField);
+          }
+          export class AssignedItemField extends TicketItemField {
+            static displayName = 'AssignedItem';
+            @field assignee = linksTo(Pet);
+          }
+          export class Ticket extends CardDef {
+            static displayName = 'Ticket';
+            @field status = contains(StatusField);
+            @field customer = linksTo(Pet);
+            @field reference = linksTo(CardDef);
+            @field attachment = linksTo(FileDef);
+            @field watchers = linksToMany(Pet);
+            @field timers = containsMany(SlaTimerField);
+            @field items = containsMany(TicketItemField);
+          }
+        `,
+          'Ticket/t1.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                status: 'New',
+                timers: [{ label: 'First response', hours: 4 }],
+              },
+              relationships: {
+                customer: { links: { self: '../Pet/billy' } },
+              },
+              meta: {
+                adoptsFrom: {
+                  module: '../ticket',
+                  name: 'Ticket',
+                },
+              },
+            },
+          },
+          'ticket-notes.txt': 'Ticket notes',
+          'Pet/gone.json': {
+            data: {
+              type: 'card',
+              attributes: { name: 'Gone', hasError: false },
+              meta: { adoptsFrom: { module: '../pet', name: 'Pet' } },
+            },
+          },
           'settings.json': {
             type: 'module',
             meta: { version: 1 },
@@ -104,8 +197,8 @@ module('Integration | tools | check-correctness', function (hooks) {
             },
           },
         },
-      }),
-    );
+      }));
+    });
     let realmService = getService('realm');
     let messageService = getService('message-service');
     messageService.register();
@@ -135,6 +228,11 @@ module('Integration | tools | check-correctness', function (hooks) {
     });
 
     assert.true(firstResult.correct, 'initial run reports no errors');
+    assert.deepEqual(
+      firstResult.warnings,
+      [],
+      'initial run reports no warnings',
+    );
 
     let patchCommand = new PatchCardInstanceTool(toolService.toolContext, {
       cardType: Pet,
@@ -188,6 +286,7 @@ module('Integration | tools | check-correctness', function (hooks) {
     });
 
     assert.true(thirdResult.correct, 'third run reports no errors');
+    assert.deepEqual(thirdResult.warnings, [], 'third run reports no warnings');
   });
 
   test('reports card instance correctness when RunRealmCodeTool is used', async function (assert) {
@@ -387,5 +486,359 @@ module('Integration | tools | check-correctness', function (hooks) {
     } finally {
       environmentService.cardSizeLimitBytes = originalMaxSize;
     }
+  });
+
+  // Writes Ticket/t1.json (when overrides are given) and runs the correctness
+  // check against it through the inferred-card file path.
+  async function checkTicket(overrides?: Parameters<typeof ticketDocument>[0]) {
+    let toolService = getService('tool-service') as {
+      toolContext: CommandContext;
+    };
+    let command = new CheckCorrectnessTool(toolService.toolContext);
+    let roomId = '!room:example.com';
+    if (overrides) {
+      let runRealmCodeCommand = new RunRealmCodeTool(toolService.toolContext);
+      await runRealmCodeCommand.execute({
+        realm: testRealmURL,
+        roomId,
+        code: overwriteScript('Ticket/t1.json', ticketDocument(overrides)),
+      });
+    }
+    return command.execute({
+      targetType: 'file',
+      targetRef: `${testRealmURL}Ticket/t1.json`,
+      roomId,
+    });
+  }
+
+  test('a valid instance passes with no warnings', async function (assert) {
+    let result = await checkTicket();
+
+    assert.true(result.correct, 'valid instance is correct');
+    assert.deepEqual(result.errors, [], 'no errors are reported');
+    assert.deepEqual(result.warnings, [], 'no warnings are reported');
+  });
+
+  test('warns about attributes and relationships the card type does not declare', async function (assert) {
+    let result = await checkTicket({
+      attributes: {
+        status: 'New',
+        responseTimer: { hours: 4 },
+        resolutionTimer: { hours: 24 },
+      },
+      relationships: {
+        requester: { links: { self: '../Pet/billy' } },
+      },
+    });
+
+    assert.true(result.correct, 'undeclared fields do not fail the check');
+    assert.deepEqual(result.errors, [], 'no errors are reported');
+    assert.strictEqual(result.warnings.length, 3, 'three warnings');
+    assert.ok(
+      result.warnings.some((w: string) =>
+        w.includes('"responseTimer" is not a field of Ticket'),
+      ),
+      'warns about the undeclared responseTimer attribute',
+    );
+    assert.ok(
+      result.warnings.some((w: string) =>
+        w.includes('"resolutionTimer" is not a field of Ticket'),
+      ),
+      'warns about the undeclared resolutionTimer attribute',
+    );
+    assert.ok(
+      result.warnings.some(
+        (w: string) =>
+          w.includes('relationships.requester') &&
+          w.includes('"requester" is not a field of Ticket'),
+      ),
+      'warns about the undeclared requester relationship',
+    );
+  });
+
+  test('warns about an enum value outside the allowed options (card target)', async function (assert) {
+    let toolService = getService('tool-service') as {
+      toolContext: CommandContext;
+    };
+    let runRealmCodeCommand = new RunRealmCodeTool(toolService.toolContext);
+    let command = new CheckCorrectnessTool(toolService.toolContext);
+    let roomId = '!room:example.com';
+    let cardId = `${testRealmURL}Ticket/t1`;
+
+    await runRealmCodeCommand.execute({
+      realm: testRealmURL,
+      roomId,
+      code: overwriteScript(
+        'Ticket/t1.json',
+        ticketDocument({ attributes: { status: 'open' } }),
+      ),
+    });
+
+    let result = await command.execute({
+      targetType: 'card',
+      targetRef: cardId,
+      roomId,
+    });
+
+    assert.true(
+      result.correct,
+      'an out-of-range enum value does not fail the check',
+    );
+    assert.deepEqual(result.errors, [], 'no errors are reported');
+    assert.strictEqual(result.warnings.length, 1, 'one warning');
+    assert.ok(
+      result.warnings[0].includes(
+        '"status" value "open" is not one of the allowed options',
+      ),
+      'warning names the field and the rejected value',
+    );
+    assert.ok(
+      result.warnings[0].includes('"New", "Open", "Pending", "Resolved"'),
+      'warning lists the allowed options',
+    );
+  });
+
+  test('warns about values written in the wrong bucket', async function (assert) {
+    let result = await checkTicket({
+      attributes: {
+        customer: { links: { self: '../Pet/billy' } },
+        watchers: [{ links: { self: '../Pet/billy' } }],
+      },
+      relationships: {
+        status: { links: { self: null } },
+      },
+    });
+
+    assert.true(result.correct, 'bucket mismatches do not fail the check');
+    assert.deepEqual(result.errors, [], 'no errors are reported');
+    assert.ok(
+      result.warnings.some((w: string) =>
+        w.includes(
+          '"customer" is a linksTo relationship of Ticket but was written under "attributes"',
+        ),
+      ),
+      'warns about the relationship written under attributes',
+    );
+    assert.ok(
+      result.warnings.some((w: string) =>
+        w.includes(
+          '"status" is a contains attribute of Ticket but was written under "relationships"',
+        ),
+      ),
+      'warns about the attribute written under relationships',
+    );
+    assert.ok(
+      result.warnings.some(
+        (w: string) =>
+          w.includes(
+            '"watchers" is a linksToMany relationship of Ticket but was written under "attributes"',
+          ) && w.includes('"watchers.0": { "links"'),
+      ),
+      'tells the AI to move a linksToMany as indexed keys',
+    );
+  });
+
+  test('warns about a relationship link whose target does not exist', async function (assert) {
+    let result = await checkTicket({
+      relationships: {
+        customer: { links: { self: '../Pet/missing' } },
+      },
+    });
+
+    assert.true(result.correct, 'a dangling link does not fail the check');
+    assert.deepEqual(result.errors, [], 'no errors are reported');
+    assert.strictEqual(result.warnings.length, 1, 'one warning');
+    assert.ok(
+      result.warnings[0].includes(
+        `"customer" links to ${testRealmURL}Pet/missing, which does not exist`,
+      ),
+      'warning names the field and the resolved target',
+    );
+  });
+
+  test('does not flag a prefix-form link to a card that exists', async function (assert) {
+    let result = await checkTicket({
+      relationships: {
+        customer: { links: { self: '../Pet/billy' } },
+        reference: {
+          links: { self: '@cardstack/base/cards/welcome-to-boxel' },
+        },
+      },
+    });
+
+    assert.true(result.correct, 'the instance is correct');
+    assert.deepEqual(result.errors, [], 'no errors are reported');
+    assert.deepEqual(
+      result.warnings,
+      [],
+      'the prefix-form link resolves to an existing card',
+    );
+  });
+
+  test('checks a link to a file as a file', async function (assert) {
+    let result = await checkTicket({
+      relationships: {
+        customer: { links: { self: '../Pet/billy' } },
+        attachment: { links: { self: '../ticket-notes.txt' } },
+      },
+    });
+    assert.true(result.correct, 'the instance is correct');
+    assert.deepEqual(
+      result.warnings,
+      [],
+      'an existing file target is not reported as missing',
+    );
+
+    result = await checkTicket({
+      relationships: {
+        customer: { links: { self: '../Pet/billy' } },
+        attachment: { links: { self: '../missing.txt' } },
+      },
+    });
+    assert.deepEqual(
+      result.warnings.map((w: string) => w.replace(/^.*?: /, '')),
+      [
+        `"attachment" links to ${testRealmURL}missing.txt, which does not exist; create it or correct the link`,
+      ],
+      'a missing file target is reported',
+    );
+  });
+
+  test('warns about a link to a card deleted after it was loaded', async function (assert) {
+    let goneId = `${testRealmURL}Pet/gone`;
+    await getService('store').get(goneId);
+    await testRealm.delete('Pet/gone.json');
+
+    let result = await checkTicket({
+      relationships: {
+        customer: { links: { self: '../Pet/gone' } },
+      },
+    });
+
+    assert.true(result.correct, 'a dangling link does not fail the check');
+    assert.strictEqual(result.warnings.length, 1, 'one warning');
+    assert.ok(
+      result.warnings[0].includes(
+        `"customer" links to ${goneId}, which does not exist`,
+      ),
+      'the deleted target is reported even though the store loaded it',
+    );
+  });
+
+  test('follows links given as relationship data', async function (assert) {
+    let result = await checkTicket({
+      relationships: {
+        customer: { data: { type: 'card', id: '../Pet/missing' } },
+        watchers: {
+          data: [
+            { type: 'card', id: '../Pet/billy' },
+            { type: 'card', id: '../Pet/nobody' },
+          ],
+        },
+      },
+    });
+
+    assert.true(result.correct, 'dangling links do not fail the check');
+    assert.deepEqual(
+      result.warnings.map((w: string) => w.replace(/^.*?: /, '')),
+      [
+        `"customer" links to ${testRealmURL}Pet/missing, which does not exist; create it or correct the link`,
+        `"watchers.1" links to ${testRealmURL}Pet/nobody, which does not exist; create it or correct the link`,
+      ],
+      'targets named by data.id and by a data array are checked',
+    );
+  });
+
+  test('does not judge a relationship inside a polymorphic element', async function (assert) {
+    let result = await checkTicket({
+      attributes: {
+        status: 'New',
+        items: [{ label: 'Escalation' }],
+      },
+      relationships: {
+        customer: { links: { self: '../Pet/billy' } },
+        'items.0.assignee': { links: { self: '../Pet/billy' } },
+      },
+      metaFields: {
+        items: [
+          { adoptsFrom: { module: '../ticket', name: 'AssignedItemField' } },
+        ],
+      },
+    });
+
+    assert.true(result.correct, 'the instance is correct');
+    assert.deepEqual(result.errors, [], 'no errors are reported');
+    assert.deepEqual(
+      result.warnings,
+      [],
+      'a field declared only on the element subtype is not reported',
+    );
+  });
+
+  test('warns about an undeclared key inside a compound containsMany field', async function (assert) {
+    let result = await checkTicket({
+      attributes: {
+        status: 'New',
+        timers: [{ label: 'First response', minutes: 5 }],
+      },
+    });
+
+    assert.true(
+      result.correct,
+      'the undeclared nested key does not fail the check',
+    );
+    assert.deepEqual(result.errors, [], 'no errors are reported');
+    assert.strictEqual(result.warnings.length, 1, 'one warning');
+    assert.ok(
+      result.warnings[0].includes(
+        '"timers.0.minutes" is not a field of SlaTimer',
+      ),
+      'warning names the nested path and the field type',
+    );
+  });
+
+  test('warns about a value written to a computed field', async function (assert) {
+    let toolService = getService('tool-service') as {
+      toolContext: CommandContext;
+    };
+    let runRealmCodeCommand = new RunRealmCodeTool(toolService.toolContext);
+    let command = new CheckCorrectnessTool(toolService.toolContext);
+    let roomId = '!room:example.com';
+
+    await runRealmCodeCommand.execute({
+      realm: testRealmURL,
+      roomId,
+      code: overwriteScript(
+        'Pet/billy.json',
+        JSON.stringify(
+          {
+            data: {
+              type: 'card',
+              attributes: { name: 'Billy', hasError: false, boom: 'written' },
+              meta: { adoptsFrom: { module: '../pet', name: 'Pet' } },
+            },
+          },
+          null,
+          2,
+        ),
+      ),
+    });
+
+    let result = await command.execute({
+      targetType: 'file',
+      targetRef: `${testRealmURL}Pet/billy.json`,
+      roomId,
+    });
+
+    assert.true(
+      result.correct,
+      'a computed-field write does not fail the check',
+    );
+    assert.deepEqual(result.errors, [], 'no errors are reported');
+    assert.strictEqual(result.warnings.length, 1, 'one warning');
+    assert.ok(
+      result.warnings[0].includes('"boom" is a computed field of Pet'),
+      'warning names the computed field',
+    );
   });
 });

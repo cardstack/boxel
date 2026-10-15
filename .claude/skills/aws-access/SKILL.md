@@ -700,7 +700,27 @@ aws --profile $P cloudtrail lookup-events \
 - `date -d` is GNU. On macOS use `date -u -v-1d +%Y-%m-%dT%H:%M:%SZ`.
 - The history covers the whole account's management events, not just KMS. Use it to answer a question about the key, not to browse.
 
-`kms decrypt`, `encrypt` and `generate-data-key` are denied to the role, and so is reading `/<env>/boxel/SECRETS_WRAPPED_DATA_KEY`. A denied `Decrypt` attempt is itself a CloudTrail event, recorded under the role's session ARN (`assumed-role/boxel-claude-readonly/...`) with an access-denied `errorCode`.
+`kms decrypt`, `encrypt` and `generate-data-key` are denied to the role, and so is reading `/<env>/boxel/SECRETS_WRAPPED_DATA_KEY`.
+
+A denied call on the key is a CloudTrail event too, but it carries no resource and no key id, so the lookup by the key's ARN above never returns it. Look denied cryptographic calls up by event name instead, one call per action. The record's `errorCode` is `AccessDenied`, its caller is the session ARN of whoever tried (`assumed-role/boxel-claude-readonly/...` for this role), and its `errorMessage` names the key (`... not authorized to perform: kms:Encrypt on resource: arn:aws:kms:...:key/<id> because ...`). Keep the records that match both:
+
+```sh
+for action in Decrypt Encrypt ReEncrypt GenerateDataKey GenerateDataKeyWithoutPlaintext \
+              GenerateDataKeyPair GenerateDataKeyPairWithoutPlaintext; do
+  aws --profile $P cloudtrail lookup-events \
+    --lookup-attributes AttributeKey=EventName,AttributeValue=$action \
+    --start-time "$(date -u -d '-6 hours' +%Y-%m-%dT%H:%M:%SZ)" \
+    --query 'Events[].CloudTrailEvent' --output json \
+    | jq -r --arg key "$KEY_ARN" '.[] | fromjson
+        | select(.errorCode == "AccessDenied" and ((.errorMessage // "") | contains($key)))
+        | [.eventTime, .eventName, (.userIdentity.arn // .userIdentity.invokedBy), .errorCode] | @tsv'
+done
+```
+
+- Each event-name lookup covers every KMS key in the account, including the AWS-managed keys behind S3, SSM and Lambda, so the `Decrypt` one is large: a day of it can run to tens of thousands of events and many minutes of paging. Keep the window to hours and widen it only if you need to. The CLI retries when it's throttled, so the loop needs no pacing of its own.
+- The key match reads AWS's error-message wording. If a lookup that should find something returns nothing, drop the `contains` test and read the messages.
+- KMS logs a denied request from another AWS account only in that account, so these lookups see same-account denials only.
+- This covers cryptographic calls. Key-administration calls (`PutKeyPolicy`, `CreateGrant`, `DisableKey`, `ScheduleKeyDeletion`) that succeed show up in the lookup by the key's ARN above.
 
 ## Future skill / scripting room
 

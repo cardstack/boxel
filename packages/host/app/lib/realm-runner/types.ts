@@ -10,9 +10,13 @@ export type RealmRunnerCallMethod =
   | 'fs.writeText'
   | 'fs.copy'
   | 'fs.writeBytes'
+  | 'fs.download'
   | 'cards.search'
   | 'cards.get'
+  | 'entries.search'
+  | 'fs.delete'
   | 'capture'
+  | 'images.generate'
   | 'workspaces.create'
   | 'workspaces.delete'
   | 'room.enableSkills'
@@ -21,7 +25,11 @@ export type RealmRunnerCallMethod =
   | 'ui.switchSubmode'
   | 'ui.openFile'
   | 'ui.previewFormat'
-  | 'ui.openWorkspace';
+  | 'ui.openWorkspace'
+  | 'index.invalidate'
+  | 'index.reindex'
+  | 'index.fullReindex'
+  | 'index.cancelJob';
 
 export type RealmRunnerCallHandler = (
   method: RealmRunnerCallMethod,
