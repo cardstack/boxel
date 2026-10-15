@@ -1550,31 +1550,42 @@ export class PagePool {
       return this.#ensuringStandbys;
     }
     let generation = this.#closeGeneration;
-    let refill = (async () => {
-      do {
-        this.#refillRequestedDuringRefill = false;
-        await this.#ensureStandbyPoolInternal();
-      } while (
-        this.#refillRequestedDuringRefill &&
-        this.#closeGeneration === generation
-      );
-    })().finally(() => {
-      this.#ensuringStandbys = null;
-      // Parked callers re-select when the settle changed something they can
-      // act on: a standby to take, or free budget meaning the refill failed
-      // (they then throw). A settle that found the budget still spent
-      // changed nothing, and waking on it would livelock. A woken caller's
-      // re-select starts a fresh refill that settles at once with no budget,
-      // which would wake the next parked caller, and so on — a microtask
-      // cycle that never yields to the release or landing close that would
-      // end it. Those events wake waiters themselves.
-      if (
-        this.#standbys.size > 0 ||
-        this.#totalContextCount() < this.#maxPages + 1
-      ) {
-        this.#wakeTabWaiters();
+    let refill: Promise<void> = (async () => {
+      try {
+        do {
+          this.#refillRequestedDuringRefill = false;
+          await this.#ensureStandbyPoolInternal();
+        } while (
+          this.#refillRequestedDuringRefill &&
+          this.#closeGeneration === generation
+        );
+      } finally {
+        // Cleared in the same synchronous step as the loop's last check, so
+        // no request can land between the two and be lost: it either buys
+        // another pass or finds no refill running and starts one. Parked
+        // callers rely on that when they read "no refill running and free
+        // budget" as a refill that failed. A close may already have
+        // cleared it and a new refill taken its place, which stays.
+        if (this.#ensuringStandbys === refill) {
+          this.#ensuringStandbys = null;
+        }
+        // Parked callers re-select when the settle changed something they
+        // can act on: a standby to take, or free budget meaning the refill
+        // failed (they then steal or throw). A settle that found the budget
+        // still spent changed nothing, and waking on it would livelock. A
+        // woken caller's re-select starts a fresh refill that settles at
+        // once with no budget, which would wake the next parked caller, and
+        // so on — a microtask cycle that never yields to the release or
+        // landing close that would end it. Those events wake waiters
+        // themselves.
+        if (
+          this.#standbys.size > 0 ||
+          this.#totalContextCount() < this.#maxPages + 1
+        ) {
+          this.#wakeTabWaiters();
+        }
       }
-    });
+    })();
     // A refill nobody awaits — e.g. one kicked while the browser is
     // unreachable — must not surface as an unhandled rejection, which
     // crashes the process under Node's `--unhandled-rejections=strict`.
