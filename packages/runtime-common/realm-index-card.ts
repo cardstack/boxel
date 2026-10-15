@@ -15,7 +15,8 @@ import type { VirtualNetwork } from './virtual-network.ts';
 // Without a VirtualNetwork the comparison is same-form: the id and the realm
 // must both be URLs or both be in prefix form (`@scope/name/`). A caller that
 // holds the realm as a URL and the id as a prefix-form RRI passes the network,
-// which brings both to URL form before the path is compared.
+// which folds both onto the real served URL (a prefix id, a virtual alias and
+// the real URL all land on the same href) before the path is compared.
 export function isRealmIndexCardId(
   cardId: RealmResourceIdentifier | undefined,
   realm: RealmIdentifier | URL | undefined,
@@ -28,8 +29,8 @@ export function isRealmIndexCardId(
     let realmId: string = realm instanceof URL ? realm.href : realm;
     let id: string = cardId;
     if (virtualNetwork) {
-      realmId = virtualNetwork.toURLHref(realmId);
-      id = virtualNetwork.toURLHref(id);
+      realmId = virtualNetwork.toRealURLHref(realmId);
+      id = virtualNetwork.toRealURLHref(id);
     }
     let realmPaths = new RealmPaths(ri(realmId));
     return realmPaths.inRealm(rri(id)) && realmPaths.local(rri(id)) === 'index';
