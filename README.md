@@ -597,7 +597,7 @@ boxel realm-server keys add --realm-server https://localhost:4201 \
   --note "local OpenRouter key for <your name>"
 ```
 
-It prompts for the key value (each character shows as `*`, and only the last few are shown after Enter). Without a terminal, pipe the value in with `--stdin` or point at a file with `--key-file <path>`. The server seals the value at rest and records the change and the note, never the value, in the key's history.
+It prompts for the key value (each character shows as `*`, and only the last few are shown after Enter). Without a terminal, pipe the value in with `--stdin` or point at a file with `--key-file <path>`. The server seals the value at rest and records the change and the note, never the value, in the key's history, along with the caller's address and when the operator token was signed. A name in the note is recorded as typed, not verified. `--realm-server` must be `https:` except on this machine, and its origin must be the one the realm server knows itself by, since the token is signed for that origin alone.
 
 `boxel realm-server keys list | show | replace | delete` list the keys, show one with its history, replace a key's value, and delete a key. No command ever prints a value.
 

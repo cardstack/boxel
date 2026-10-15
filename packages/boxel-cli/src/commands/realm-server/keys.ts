@@ -1,6 +1,5 @@
 import type { Command } from 'commander';
 import { readFile } from 'fs/promises';
-import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { cliLog } from '../../lib/cli-log.ts';
 import { FG_GREEN, RESET } from '../../lib/colors.ts';
 import {
@@ -8,14 +7,16 @@ import {
   promptPassword,
   resolveRealmSecretSeed,
 } from '../../lib/prompt.ts';
-import { mintOperatorToken } from '../../lib/seed-auth.ts';
+import { operatorRequest } from '../../lib/seed-auth.ts';
 
 // `boxel realm-server keys`: the realm server's system keys, the platform's
 // own vendor keys that `_request-forward` attaches. Authorized with the realm
 // secret seed. A value is typed at a masked prompt or read from stdin or a
 // file, never taken as an argument, and no command prints one: the server
 // never answers with a value. Every change carries an operator note, which
-// the server records in the key's history.
+// the server records in the key's history next to what it observed itself: the
+// caller's address and when the operator token was signed. A name in a note is
+// as the operator typed it; nothing verifies it.
 
 export type SystemKeyAuthMethod = 'header' | 'url-parameter';
 export type SystemKeyCreditStrategy = 'openrouter' | 'none';
@@ -39,6 +40,8 @@ export interface SystemKeyChange {
   note: string;
   keyId: string | null;
   changedAt: string;
+  clientAddress: string | null;
+  tokenIssuedAt: string | null;
 }
 
 export interface SystemKeysOptions {
@@ -58,25 +61,18 @@ export interface NewSystemKey {
 }
 
 async function operatorFetch(
-  {
-    realmServerUrl,
-    realmSecretSeed,
-    fetch = globalThis.fetch,
-  }: SystemKeysOptions,
+  options: SystemKeysOptions,
   path: string,
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
   body?: unknown,
 ): Promise<any> {
-  let url = new URL(path, ensureTrailingSlash(realmServerUrl)).href;
-  let response = await fetch(url, {
+  let { url, response } = await operatorRequest(
+    options,
+    'system-keys',
+    path,
     method,
-    headers: {
-      Accept: 'application/json',
-      Authorization: `Bearer ${mintOperatorToken(realmSecretSeed, 'system-keys')}`,
-      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-    },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-  });
+    body,
+  );
   if (!response.ok) {
     let text = await response.text().catch(() => '');
     let message = text.slice(0, 300);
@@ -247,10 +243,12 @@ export async function readNote(
   }
   if (stdinUsed || !process.stdin.isTTY) {
     throw new Error(
-      'Pass --note: the operator note, recorded in the key history, says who made the change and why',
+      'Pass --note: the operator note, recorded in the key history, says who made the change and why. A name in it is recorded as given, not verified',
     );
   }
-  let answer = await prompt('Operator note (who and why): ');
+  let answer = await prompt(
+    'Operator note (who and why; a name here is recorded as given, not verified): ',
+  );
   if (!answer) {
     throw new Error('The operator note is empty');
   }
@@ -279,6 +277,9 @@ function printHistory(history: SystemKeyChange[]): void {
   console.log('  history:');
   for (let change of history) {
     console.log(`    ${change.changedAt} ${change.action}: ${change.note}`);
+    console.log(
+      `      from ${change.clientAddress ?? 'an unknown address'}, token signed ${change.tokenIssuedAt ?? 'at an unknown time'}`,
+    );
   }
 }
 
@@ -334,7 +335,7 @@ function valueOptions(command: Command): Command {
     .option('--key-file <path>', 'Read the key value from a file')
     .option(
       '--note <text>',
-      'The operator note recorded with the change: who made it and why (prompted for when omitted)',
+      'The operator note recorded with the change: who made it and why (prompted for when omitted). A name in it is recorded as given, not verified',
     );
 }
 
@@ -476,7 +477,7 @@ export function registerKeysCommand(realmServer: Command): void {
     .option('--destination <url>', SELECT_HELP.destination)
     .option(
       '--note <text>',
-      'The operator note recorded with the change: who made it and why (prompted for when omitted)',
+      'The operator note recorded with the change: who made it and why (prompted for when omitted). A name in it is recorded as given, not verified',
     )
     .option('--json', 'Output JSON')
     .action(async (options: KeysCliOptions) =>

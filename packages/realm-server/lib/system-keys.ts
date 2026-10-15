@@ -4,6 +4,7 @@ import {
   AllowedProxyDestinations,
   destinationsOverlap,
 } from './allowed-proxy-destinations.ts';
+import { isOutboundDevAllowlisted } from './outbound/client.ts';
 import {
   PROXY_ENDPOINT_KEY_COLUMNS,
   proxyEndpointKeyBinding,
@@ -22,6 +23,12 @@ import {
 // change writes its row and a `proxy_endpoint_history` entry in one statement,
 // and logs a line on the `system-keys` channel. Neither the history, the log
 // nor anything this module returns carries a key's value.
+//
+// The operator token carries no identity, so the operator's note is the only
+// account of who made a change, and nothing verifies a name written in it.
+// Next to the note, each entry records what the server itself observed: the
+// caller's address, as the load balancer reports it, and when the token was
+// signed.
 
 const log = logger('system-keys');
 
@@ -72,7 +79,23 @@ export interface SystemKeyChange {
   note: string;
   keyId: string | null;
   changedAt: string;
+  // The caller's address and the time its operator token was signed, as the
+  // server observed them; null where it couldn't tell.
+  clientAddress: string | null;
+  tokenIssuedAt: string | null;
 }
+
+// What the server observed about the caller making a change.
+export interface SystemKeyCaller {
+  clientAddress: string | null;
+  // The operator token's `iat`, in seconds since the epoch.
+  tokenIssuedAt: number | null;
+}
+
+const UNKNOWN_CALLER: SystemKeyCaller = {
+  clientAddress: null,
+  tokenIssuedAt: null,
+};
 
 export interface NewSystemKey {
   destination: string;
@@ -82,6 +105,7 @@ export interface NewSystemKey {
   supportsStreaming: boolean;
   value: string;
   note: string;
+  caller?: SystemKeyCaller;
 }
 
 // A refusal the endpoints answer with its status; its message names no value.
@@ -96,9 +120,12 @@ export class SystemKeyError extends Error {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-// A destination is an http(s) URL with no credentials, query or fragment: the
-// proxy matches a request against its origin and path alone. It is stored as
-// the URL parser spells it, which is also what the value is bound to.
+// A destination is an https URL with no credentials, query or fragment: the
+// proxy matches a request against its origin and path alone. Plain http is
+// accepted only for a host the outbound client's local development allowlist
+// names, the one case where the client sends a credential over http. It is
+// stored as the URL parser spells it, which is also what the value is bound
+// to.
 export function normalizeDestination(destination: string): string {
   let url: URL;
   try {
@@ -106,8 +133,11 @@ export function normalizeDestination(destination: string): string {
   } catch {
     throw new SystemKeyError(400, 'the destination is not a URL');
   }
-  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
-    throw new SystemKeyError(400, 'the destination must be an http(s) URL');
+  if (
+    url.protocol !== 'https:' &&
+    !(url.protocol === 'http:' && isOutboundDevAllowlisted(url.hostname))
+  ) {
+    throw new SystemKeyError(400, 'the destination must be an https URL');
   }
   if (url.username || url.password || url.search || url.hash) {
     throw new SystemKeyError(
@@ -143,6 +173,9 @@ export function validateValueAndNote(value: unknown, note: unknown): void {
   }
 }
 
+// A note is printed as it is by `boxel realm-server keys show`, so it may not
+// carry control characters (C0, DEL or C1): a line break would print a fake
+// history entry, and an escape sequence would run in the reader's terminal.
 export function validateNote(note: unknown): void {
   if (typeof note !== 'string' || note.trim().length === 0) {
     throw new SystemKeyError(400, 'an operator note is required');
@@ -151,6 +184,13 @@ export function validateNote(note: unknown): void {
     throw new SystemKeyError(
       400,
       `the note is longer than ${MAX_SYSTEM_KEY_NOTE_LENGTH} characters`,
+    );
+  }
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f-\u009f]/.test(note)) {
+    throw new SystemKeyError(
+      400,
+      'the note must not contain control characters or line breaks',
     );
   }
 }
@@ -205,7 +245,9 @@ async function history(
   id: string,
 ): Promise<SystemKeyChange[]> {
   let rows = await dbAdapter.execute(
-    `SELECT action, url, note, key_id, changed_at FROM proxy_endpoint_history
+    `SELECT action, url, note, key_id, changed_at, client_address,
+       token_issued_at
+     FROM proxy_endpoint_history
      WHERE endpoint_id = $1 ORDER BY changed_at DESC, id DESC LIMIT ${HISTORY_SHOWN}`,
     { bind: [id] },
   );
@@ -215,6 +257,11 @@ async function history(
     note: String(row.note),
     keyId: (row.key_id as string | null) ?? null,
     changedAt: new Date(row.changed_at as string).toISOString(),
+    clientAddress: (row.client_address as string | null) ?? null,
+    tokenIssuedAt:
+      row.token_issued_at == null
+        ? null
+        : new Date(Number(row.token_issued_at) * 1000).toISOString(),
   }));
 }
 
@@ -255,11 +302,20 @@ function recordChange(
   destination: string,
   keyId: string | null,
   note: string,
+  caller: SystemKeyCaller,
 ): void {
   AllowedProxyDestinations.invalidate();
+  let signed =
+    caller.tokenIssuedAt == null
+      ? 'unknown'
+      : new Date(caller.tokenIssuedAt * 1000).toISOString();
   log.info(
-    `system key ${action}: ${destination} (id ${id}${keyId ? `, data key ${keyId}` : ''}). Note: ${JSON.stringify(note)}`,
+    `system key ${action}: ${destination} (id ${id}${keyId ? `, data key ${keyId}` : ''}) from ${caller.clientAddress ?? 'an unknown address'}, token signed ${signed}. Note: ${JSON.stringify(note)}`,
   );
+}
+
+function callerBindings(caller: SystemKeyCaller) {
+  return [caller.clientAddress, caller.tokenIssuedAt];
 }
 
 // Adds a system key for a destination that has none. The value is sealed
@@ -272,6 +328,7 @@ export async function addSystemKey(
 ): Promise<SystemKey> {
   let destination = normalizeDestination(key.destination);
   validateValueAndNote(key.value, key.note);
+  let caller = key.caller ?? UNKNOWN_CALLER;
   if (!SYSTEM_KEY_AUTH_METHODS.includes(key.authMethod)) {
     throw new SystemKeyError(
       400,
@@ -325,8 +382,11 @@ export async function addSystemKey(
        ON CONFLICT (url) DO NOTHING
        RETURNING id, url, api_key_key_id
      ), recorded AS (
-       INSERT INTO proxy_endpoint_history (endpoint_id, url, action, note, key_id)
-       SELECT id, url, 'add', $12, api_key_key_id FROM added
+       INSERT INTO proxy_endpoint_history (
+         endpoint_id, url, action, note, key_id, client_address,
+         token_issued_at
+       )
+       SELECT id, url, 'add', $12, api_key_key_id, $13, $14 FROM added
      )
      SELECT id FROM added`,
     {
@@ -340,6 +400,7 @@ export async function addSystemKey(
         key.paramName,
         ...sealedBindings(sealed),
         key.note,
+        ...callerBindings(caller),
       ],
       redactBindings: true,
     },
@@ -350,7 +411,7 @@ export async function addSystemKey(
       `a system key for ${destination} already exists; replace it instead`,
     );
   }
-  recordChange('add', id, destination, sealed.keyId, key.note);
+  recordChange('add', id, destination, sealed.keyId, key.note, caller);
   return (await getSystemKey(dbAdapter, id)).key;
 }
 
@@ -358,7 +419,11 @@ export async function addSystemKey(
 export async function replaceSystemKey(
   dbAdapter: DBAdapter,
   id: string,
-  { value, note }: { value: string; note: string },
+  {
+    value,
+    note,
+    caller = UNKNOWN_CALLER,
+  }: { value: string; note: string; caller?: SystemKeyCaller },
   keyring: SecretsKeyring = secretsKeyring(),
 ): Promise<SystemKey> {
   validateValueAndNote(value, note);
@@ -382,12 +447,22 @@ export async function replaceSystemKey(
        WHERE id = $1 AND url = $2
        RETURNING id, url, api_key_key_id
      ), recorded AS (
-       INSERT INTO proxy_endpoint_history (endpoint_id, url, action, note, key_id)
-       SELECT id, url, 'replace', $8, api_key_key_id FROM replaced
+       INSERT INTO proxy_endpoint_history (
+         endpoint_id, url, action, note, key_id, client_address,
+         token_issued_at
+       )
+       SELECT id, url, 'replace', $8, api_key_key_id, $9, $10 FROM replaced
      )
      SELECT id FROM replaced`,
     {
-      bind: [id, existing.destination, value, ...sealedBindings(sealed), note],
+      bind: [
+        id,
+        existing.destination,
+        value,
+        ...sealedBindings(sealed),
+        note,
+        ...callerBindings(caller),
+      ],
       redactBindings: true,
     },
   );
@@ -397,14 +472,14 @@ export async function replaceSystemKey(
       'the system key changed while it was being replaced; try again',
     );
   }
-  recordChange('replace', id, existing.destination, sealed.keyId, note);
+  recordChange('replace', id, existing.destination, sealed.keyId, note, caller);
   return (await getSystemKey(dbAdapter, id)).key;
 }
 
 export async function deleteSystemKey(
   dbAdapter: DBAdapter,
   id: string,
-  { note }: { note: string },
+  { note, caller = UNKNOWN_CALLER }: { note: string; caller?: SystemKeyCaller },
 ): Promise<SystemKey> {
   validateNote(note);
   let { key: existing } = await getSystemKey(dbAdapter, id);
@@ -414,15 +489,18 @@ export async function deleteSystemKey(
        DELETE FROM proxy_endpoints WHERE id = $1
        RETURNING id, url, api_key_key_id
      ), recorded AS (
-       INSERT INTO proxy_endpoint_history (endpoint_id, url, action, note, key_id)
-       SELECT id, url, 'delete', $2, api_key_key_id FROM deleted
+       INSERT INTO proxy_endpoint_history (
+         endpoint_id, url, action, note, key_id, client_address,
+         token_issued_at
+       )
+       SELECT id, url, 'delete', $2, api_key_key_id, $3, $4 FROM deleted
      )
      SELECT id FROM deleted`,
-    { bind: [id, note] },
+    { bind: [id, note, ...callerBindings(caller)] },
   );
   if (!row) {
     throw new SystemKeyError(404, 'no system key has that id');
   }
-  recordChange('delete', id, existing.destination, null, note);
+  recordChange('delete', id, existing.destination, null, note, caller);
   return existing;
 }

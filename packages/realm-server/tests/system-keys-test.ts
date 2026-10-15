@@ -44,6 +44,7 @@ import { startStubVendor, type StubVendor } from './helpers/stub-vendor.ts';
 const SEEDED_KEY = 'sk-seeded-system-key';
 const ADDED_KEY = 'sk-added-system-key-0001';
 const REPLACED_KEY = 'sk-replaced-system-key-0002';
+const SERVER_ORIGIN = 'http://127.0.0.1:4445';
 
 module(basename(import.meta.filename), function () {
   module('the system-keys operator endpoints', function (hooks) {
@@ -69,7 +70,7 @@ module(basename(import.meta.filename), function () {
         virtualNetwork,
         testRealmDir,
         realmsRootPath: join(dir.name, 'realm_server_1'),
-        realmURL: new URL('http://127.0.0.1:4445/test/'),
+        realmURL: new URL(`${SERVER_ORIGIN}/test/`),
         dbAdapter,
         publisher,
         runner,
@@ -140,11 +141,16 @@ module(basename(import.meta.filename), function () {
       },
     });
 
+    // Signed for the test realm server's origin, as the CLI signs one for
+    // the server it calls.
     function operatorToken(
       claims: Record<string, unknown> = { operator: 'system-keys' },
       expiresIn: jsonwebtoken.SignOptions['expiresIn'] = '5m',
     ): string {
-      return jsonwebtoken.sign(claims, realmSecretSeed, { expiresIn });
+      return jsonwebtoken.sign(claims, realmSecretSeed, {
+        expiresIn,
+        ...('aud' in claims ? {} : { audience: SERVER_ORIGIN }),
+      });
     }
 
     function userSession(): string {
@@ -246,6 +252,49 @@ module(basename(import.meta.filename), function () {
           key_id: 'local-development',
         },
       ]);
+    });
+
+    test('each change records the caller the server observed next to the note', async function (assert) {
+      let iat = Math.floor(Date.now() / 1000) - 30;
+      let token = jsonwebtoken.sign(
+        { operator: 'system-keys', iat, exp: iat + 5 * 60 },
+        realmSecretSeed,
+        { audience: SERVER_ORIGIN },
+      );
+      let added = await request
+        .post('/_system-keys')
+        .set('Authorization', `Bearer ${token}`)
+        .set('Content-Type', 'application/json')
+        .send({
+          destination: addedDestination(),
+          creditStrategy: 'none',
+          value: ADDED_KEY,
+          note: 'Pat adding the vendor key',
+        });
+      assert.strictEqual(added.status, 201);
+      let [recorded] = await dbAdapter.execute(
+        `SELECT client_address, token_issued_at FROM proxy_endpoint_history`,
+      );
+      assert.true(
+        /127\.0\.0\.1|::1/.test(String(recorded.client_address)),
+        `the caller's address is recorded (${recorded.client_address})`,
+      );
+      assert.strictEqual(
+        Number(recorded.token_issued_at),
+        iat,
+        'the time the token was signed is recorded',
+      );
+
+      let shown = await request
+        .get(`/_system-keys/${added.body.key.id}`)
+        .set('Authorization', `Bearer ${operatorToken()}`);
+      let [change] = shown.body.history;
+      assert.strictEqual(change.note, 'Pat adding the vendor key');
+      assert.strictEqual(change.clientAddress, recorded.client_address);
+      assert.strictEqual(
+        change.tokenIssuedAt,
+        new Date(iat * 1000).toISOString(),
+      );
     });
 
     test('a key replaced through the endpoint is attached by the proxy in place of the old one', async function (assert) {
@@ -380,6 +429,13 @@ module(basename(import.meta.filename), function () {
         ['no note', { note: undefined }, 400],
         ['a blank note', { note: '   ' }, 400],
         ['a note that repeats the value', { note: `key is ${ADDED_KEY}` }, 400],
+        [
+          'a note with a line break',
+          { note: 'added\n2026-01-01T00:00:00.000Z delete: forged' },
+          400,
+        ],
+        ['a note with an escape sequence', { note: 'added \u001b[2K' }, 400],
+        ['a note with a C1 control', { note: 'added \u009b2K' }, 400],
         ['no value', { value: undefined }, 400],
         ['a value with a newline', { value: `${ADDED_KEY}\n` }, 400],
         [
@@ -390,6 +446,11 @@ module(basename(import.meta.filename), function () {
         [
           'a destination that is not http(s)',
           { destination: 'ftp://vendor.example/' },
+          400,
+        ],
+        [
+          'a plain http destination off the development allowlist',
+          { destination: 'http://vendor.example/' },
           400,
         ],
         ['an unknown credit strategy', { creditStrategy: 'free' }, 400],
@@ -538,6 +599,20 @@ module(basename(import.meta.filename), function () {
         [
           'an operator token signed with another seed',
           jsonwebtoken.sign({ operator: 'system-keys' }, 'another seed', {
+            audience: SERVER_ORIGIN,
+            expiresIn: '5m',
+          }),
+        ],
+        [
+          'an operator token for another realm server',
+          operatorToken({
+            operator: 'system-keys',
+            aud: 'https://realms.another.example',
+          }),
+        ],
+        [
+          'an operator token that names no realm server',
+          jsonwebtoken.sign({ operator: 'system-keys' }, realmSecretSeed, {
             expiresIn: '5m',
           }),
         ],

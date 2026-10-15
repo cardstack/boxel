@@ -1,7 +1,9 @@
 // The audit trail of changes to system keys (`proxy_endpoints` rows): one row
-// per add, replace or delete, with the endpoint it touched and the operator's
-// note. It never holds a key value. `endpoint_id` has no foreign key, so a
-// deleted endpoint keeps its history.
+// per add, replace or delete, with the endpoint it touched, the operator's
+// note, and what the server observed of the caller: its address and when its
+// operator token was signed (`token_issued_at`, seconds since the epoch). It
+// never holds a key value. `endpoint_id` has no foreign key, so a deleted
+// endpoint keeps its history.
 
 exports.up = (pgm) => {
   pgm.createTable(
@@ -17,6 +19,8 @@ exports.up = (pgm) => {
       },
       note: { type: 'text', notNull: true },
       key_id: { type: 'varchar' },
+      client_address: { type: 'varchar' },
+      token_issued_at: { type: 'bigint' },
       changed_at: {
         type: 'timestamp',
         notNull: true,

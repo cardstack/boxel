@@ -43,6 +43,7 @@ function fakeServer(answers: { status?: number; body: unknown }[]) {
     url: string;
     authorization: string;
     body: string | undefined;
+    redirect: RequestRedirect | undefined;
   }[] = [];
   let fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     let headers = new Headers(init?.headers);
@@ -51,6 +52,7 @@ function fakeServer(answers: { status?: number; body: unknown }[]) {
       url: String(input),
       authorization: headers.get('Authorization') ?? '',
       body: init?.body as string | undefined,
+      redirect: init?.redirect,
     });
     let { status = 200, body } = answers.shift()!;
     return new Response(JSON.stringify(body), {
@@ -102,11 +104,58 @@ describe('boxel realm-server keys', () => {
     let token = requests[0].authorization.replace(/^Bearer /, '');
     let claims = jwt.verify(token, SEED) as Record<string, unknown>;
     expect(claims.operator).toBe('system-keys');
+    expect(claims.aud).toBe('https://realms.example.test');
     expect(claims).not.toHaveProperty('user');
     expect((claims.exp as number) - (claims.iat as number)).toBeLessThanOrEqual(
       15 * 60,
     );
     expect(requests[0].authorization).not.toContain(SEED);
+  });
+
+  it('refuses redirects, so a body is never sent on to another origin', async () => {
+    let { fetch, requests } = fakeServer([
+      { status: 201, body: { key: systemKey() } },
+    ]);
+    await addSystemKey(options(fetch), {
+      destination: 'https://openrouter.ai/api/v1/chat/completions',
+      creditStrategy: 'openrouter',
+      value: VALUE,
+      note: 'adding the OpenRouter key',
+    });
+    expect(requests[0].redirect).toBe('error');
+  });
+
+  it('sends nothing to a realm server over plain http, except on this machine', async () => {
+    for (let realmServerUrl of [
+      'http://realms.example.test',
+      'http://10.0.0.5:4201',
+    ]) {
+      let { fetch, requests } = fakeServer([]);
+      await expect(
+        addSystemKey(
+          { realmServerUrl, realmSecretSeed: SEED, fetch },
+          {
+            destination: 'https://openrouter.ai/api/v1/chat/completions',
+            creditStrategy: 'openrouter',
+            value: VALUE,
+            note: 'adding the OpenRouter key',
+          },
+        ),
+      ).rejects.toThrow(/is not https/);
+      expect(requests).toHaveLength(0);
+    }
+    for (let realmServerUrl of [
+      'http://localhost:4201',
+      'http://127.0.0.1:4201/',
+      'http://[::1]:4201',
+    ]) {
+      let { fetch, requests } = fakeServer([{ body: { keys: [] } }]);
+      await listSystemKeys({ realmServerUrl, realmSecretSeed: SEED, fetch });
+      let token = requests[0].authorization.replace(/^Bearer /, '');
+      expect((jwt.verify(token, SEED) as Record<string, unknown>).aud).toBe(
+        new URL(realmServerUrl).origin,
+      );
+    }
   });
 
   it('adds, replaces and deletes a key with its note, sending the value only in the body', async () => {

@@ -384,12 +384,12 @@ export function createRoutes(args: CreateRoutesArgs) {
   // signed with the realm secret seed reaches these.
   router.get(
     '/_data-keys',
-    operatorAuthorization(args.realmSecretSeed, 'data-keys'),
+    operatorAuthorization(args.realmSecretSeed, 'data-keys', args.serverURL),
     handleDataKeyStatus(args),
   );
   router.post(
     '/_data-keys/reseal',
-    operatorAuthorization(args.realmSecretSeed, 'data-keys'),
+    operatorAuthorization(args.realmSecretSeed, 'data-keys', args.serverURL),
     handleDataKeyReseal(args),
   );
 
@@ -399,6 +399,7 @@ export function createRoutes(args: CreateRoutesArgs) {
   let systemKeysAuthorization = operatorAuthorization(
     args.realmSecretSeed,
     'system-keys',
+    args.serverURL,
   );
   router.get(
     '/_system-keys',
