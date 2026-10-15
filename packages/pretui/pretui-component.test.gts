@@ -129,16 +129,31 @@ module('Pretui | PretUISpec', function (hooks) {
   });
 
   test('the fitted view hides its subtitle and chip rows when they are empty', async function (assert) {
+    // the CardsGrid tile size (170×250), where both rows are shown when filled
     let model = specModel('Button', {
       category: undefined,
       implementationStatus: undefined,
     });
-    await render(<template><Fitted @model={{model}} /></template>);
+    await render(
+      <template>
+        {{! template-lint-disable no-inline-styles }}
+        <div style='width: 170px; height: 250px'>
+          <Fitted @model={{model}} />
+        </div>
+      </template>,
+    );
     assert.dom('[data-test-pretui-fit-sub]').isNotVisible();
     assert.dom('[data-test-pretui-fit-extra]').isNotVisible();
 
     let filled = specModel('Button', { adoptionStatus: 'in-use' });
-    await render(<template><Fitted @model={{filled}} /></template>);
+    await render(
+      <template>
+        {{! template-lint-disable no-inline-styles }}
+        <div style='width: 170px; height: 250px'>
+          <Fitted @model={{filled}} />
+        </div>
+      </template>,
+    );
     assert.dom('[data-test-pretui-fit-sub]').isVisible();
     assert.dom('[data-test-pretui-fit-extra]').isVisible();
   });
