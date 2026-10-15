@@ -154,6 +154,7 @@ module('Integration | choreo | delivery', function (hooks) {
     await splitAndHoldTail();
     const run = ctx!.run!;
     await framesUntil(() => run.time > 0.2);
+    assert.ok(run.time > 0.12, "the clock is past the delivery's cue");
     assert.notOk(run.isDone(), 'the run is still playing its hold');
     run.pause();
     run.play();
