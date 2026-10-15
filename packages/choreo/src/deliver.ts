@@ -269,6 +269,9 @@ export interface Delivery {
    *  the cue's end must not leave paused spans standing in for the sprite */
   complete(): void;
   finished: Promise<void>;
+  /** the stand-in spans are up and playing toward their landing — motion a
+   *  settle waits for. A delivery held paused is a still, and is not */
+  readonly inFlight: boolean;
   pause(): void;
   play(): void;
   /** place the whole delivery at `ms` past its cue start (unscaled) */
@@ -316,6 +319,7 @@ export function deliver(cue: Cue, speed: number): Delivery {
     );
   }
   let done = false;
+  let held = false;
   const land = () => {
     if (done) {
       return;
@@ -353,10 +357,15 @@ export function deliver(cue: Cue, speed: number): Delivery {
       land();
     },
     finished,
+    get inFlight() {
+      return !done && !held;
+    },
     pause() {
+      held = true;
       animations.forEach((a) => a.pause());
     },
     play() {
+      held = false;
       animations.forEach((a) => a.play());
     },
     seek(ms: number) {

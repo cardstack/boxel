@@ -27,6 +27,7 @@ import type { SerializedError } from '@cardstack/runtime-common/error';
 import type { ConsoleErrorEntry, PagePool } from './page-pool.ts';
 import { renderSessionOf, toAffinityKey } from './affinity.ts';
 import { batchStaleAfterMs } from './prerender-constants.ts';
+import type { UnresponsiveTabReport } from './unresponsive-tab-tracker.ts';
 import {
   abortable,
   PrerenderCancelledError,
@@ -228,9 +229,19 @@ export class RenderRunner {
   // `batchStaleAfterMs` and another job opens a slot on the affinity.
   #iconMemosByAffinity = new Map<string, Map<string, IconMemo>>();
 
-  constructor(options: { pagePool: PagePool; boxelHostURL: string }) {
+  // Told about every render that timed out on a tab that had stopped
+  // answering, so the owner can decide whether the browser itself needs
+  // recycling. The tab itself is retired by the eviction either way.
+  #onUnresponsiveTab: ((report: UnresponsiveTabReport) => void) | undefined;
+
+  constructor(options: {
+    pagePool: PagePool;
+    boxelHostURL: string;
+    onUnresponsiveTab?: (report: UnresponsiveTabReport) => void;
+  }) {
     this.#pagePool = options.pagePool;
     this.#boxelHostURL = options.boxelHostURL;
+    this.#onUnresponsiveTab = options.onUnresponsiveTab;
   }
 
   async #getPageForAffinity(
@@ -2540,7 +2551,13 @@ export class RenderRunner {
         poolInfo,
       );
     } finally {
-      if (didStashFileRenderData || didStashCardRenderData) {
+      // An evicted tab never renders again, so its stash goes with it. Skip
+      // the evaluate there: eviction is how a render timeout ends, and a tab
+      // that timed out is exactly the one whose renderer may not answer it.
+      if (
+        (didStashFileRenderData || didStashCardRenderData) &&
+        !poolInfo.evicted
+      ) {
         // The stash only matters to a page that will render again, and
         // against a wedged page this evaluate can hang until the
         // protocol timeout — so race it against the signal and swallow
@@ -2951,7 +2968,26 @@ export class RenderRunner {
       return false;
     }
     await this.#evictAffinity(affinityKey, step, reason);
+    if (reason === 'timeout') {
+      this.#reportUnresponsiveTab(affinityKey, err);
+    }
     return true;
+  }
+
+  // A timeout's diagnostics say whether the tab was still answering when the
+  // render timer fired. Only a tab that wasn't is worth reporting: a render
+  // that timed out waiting on a fetch left a healthy renderer behind.
+  #reportUnresponsiveTab(affinityKey: string, err: RenderError) {
+    let diagnostics = err.diagnostics;
+    let browserUnresponsive = diagnostics?.cdpSessionAttachTimedOut === true;
+    if (diagnostics?.mainThreadResponsive !== false && !browserUnresponsive) {
+      return;
+    }
+    try {
+      this.#onUnresponsiveTab?.({ affinityKey, browserUnresponsive });
+    } catch (e) {
+      log.warn(`onUnresponsiveTab subscriber threw for ${affinityKey}:`, e);
+    }
   }
 
   async #evictAffinity(

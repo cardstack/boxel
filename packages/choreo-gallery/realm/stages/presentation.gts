@@ -290,11 +290,13 @@ class InnerScene extends Component<{
  *
  * Click the plate to open the next gate on this slide. Mash mid-build and the
  * segment completes rather than skipping. When the slide is done, the same
- * click turns the page. The arrows in the imprint change slides outright; they
- * do not play builds. Back shows the previous slide already built.
+ * click turns the page. ‹ › in the imprint step one build back or forward,
+ * turning the page past a slide's last build; the segments change slides
+ * outright. Back shows the previous slide already built.
  *
- * Keys (once the deck is focused — the copper hairline): Space is a click,
- * < / > (and the arrow keys) turn the page.
+ * Keys (once the deck itself is focused — the copper hairline): Space is a
+ * click, < / > and the arrow keys step a build. Every control in the imprint
+ * is a tab stop, and a key on one is that control's own.
  *
  * Slides crossfade through Presence (sync — leaver and newcomer together).
  * The fade kind is a control on the imprint. Slides 02 and 04 keep a nested
@@ -441,9 +443,8 @@ export class Presentation extends Component {
       : `pres-slide ${ground}`;
   };
 
-  tap = () => {
-    this.setHot(true);
-    this.deck?.focus({ preventScroll: true });
+  tap = (event?: Event) => {
+    this.take(event);
     if (!this.live) {
       this.live = true;
       return;
@@ -465,7 +466,7 @@ export class Presentation extends Component {
   /** `>` — the same verb the plate has: open the next gate, or turn the page */
   stepFwd = (event?: Event) => {
     event?.stopPropagation();
-    this.tap();
+    this.tap(event);
   };
 
   /**
@@ -475,8 +476,7 @@ export class Presentation extends Component {
    */
   stepBack = (event?: Event) => {
     event?.stopPropagation();
-    this.setHot(true);
-    this.deck?.focus({ preventScroll: true });
+    this.take(event);
     const plate = this.plate();
     const inner = plate?.innerCtx?.run ?? this.inner?.run ?? null;
     // retreat() is the engine's Keynote rule: land parked at the previous
@@ -496,10 +496,12 @@ export class Presentation extends Component {
     this.back(event);
   };
 
-  // `{{on}}` types every handler in a realm as taking a plain `Event`
+  // The deck's keys are the deck's own: a control in the bar keeps its
+  // Space and arrows, so a select still opens and a button still presses.
+  // `{{on}}` types every handler in a realm as taking a plain `Event`.
   keys = (e: Event) => {
     const event = e as KeyboardEvent;
-    if (event.repeat) {
+    if (event.repeat || event.target !== event.currentTarget) {
       return;
     }
     switch (event.key) {
@@ -528,13 +530,26 @@ export class Presentation extends Component {
     this.deck?.classList.toggle('is-hot', on);
   }
 
+  /** A press hands focus to the deck, where Space and the arrows work. A bar
+   *  control activated from the keyboard (a click with no pointer count)
+   *  keeps focus, so Tab carries on from where the visitor is. */
+  private take(event?: Event) {
+    if (event instanceof MouseEvent && event.detail === 0) {
+      return;
+    }
+    this.setHot(true);
+    this.deck?.focus({ preventScroll: true });
+  }
+
   grab = (event: Event) => {
     this.setHot(true);
     (event.currentTarget as HTMLElement).focus({ preventScroll: true });
   };
 
-  onFocus = () => {
-    this.setHot(true);
+  /** the key cue lights only while the deck itself holds focus: a bar
+   *  control keeps its keys, so focus on one leaves the cue dark */
+  onFocus = (event: Event) => {
+    this.setHot(event.target === event.currentTarget);
   };
 
   onBlur = (e: Event) => {
@@ -566,8 +581,7 @@ export class Presentation extends Component {
 
   go = (n: number, event?: Event) => {
     event?.stopPropagation();
-    this.setHot(true);
-    this.deck?.focus({ preventScroll: true });
+    this.take(event);
     if (n === this.slide || n < 0 || n > LAST) {
       return;
     }
@@ -582,8 +596,7 @@ export class Presentation extends Component {
   /** back to slide 01, unbuilt — a new pass through the same deck */
   restart = (event?: Event) => {
     event?.stopPropagation();
-    this.setHot(true);
-    this.deck?.focus({ preventScroll: true });
+    this.take(event);
     this.arrive = 'fwd';
     this.inner = null;
     this.slide = 0;
@@ -612,7 +625,7 @@ export class Presentation extends Component {
         class='pres'
         tabindex='0'
         role='region'
-        aria-label='Presentation. Space advances a build. Less-than and greater-than change slides.'
+        aria-label='Presentation. Space advances a build; the arrow keys step a build back or forward.'
         data-test-pres
         {{this.boot}}
         {{on 'keydown' this.keys}}
@@ -649,7 +662,6 @@ export class Presentation extends Component {
                     data-arrive={{this.arrive}}
                     data-slide={{page.id}}
                     data-test-pres-slide
-                    aria-label='Advance the presentation'
                     {{on 'click' this.tap}}
                     as |c|
                   >
@@ -1447,7 +1459,6 @@ export class Presentation extends Component {
                 aria-label={{this.segLabel n}}
                 aria-current={{if (this.is n) 'true'}}
                 data-test-pres-seg={{n}}
-                tabindex='-1'
                 {{on 'click' (fn this.go n)}}
               ></button>
             {{/each}}
@@ -1464,7 +1475,6 @@ export class Presentation extends Component {
               <span class='pres-xfade-tag'>Transition</span>
               <select
                 data-test-pres-xfade
-                tabindex='-1'
                 {{on 'click' this.stop}}
                 {{on 'change' this.pickFade}}
               >
@@ -1489,7 +1499,6 @@ export class Presentation extends Component {
               class='pres-restart'
               aria-label='Start over'
               data-test-pres-restart
-              tabindex='-1'
               {{on 'click' this.restart}}
             >Start over</button>
             <button
@@ -1497,7 +1506,6 @@ export class Presentation extends Component {
               class='pres-arr'
               aria-label='Previous build'
               data-test-pres-back
-              tabindex='-1'
               {{on 'click' this.stepBack}}
             >‹</button>
             <button
@@ -1505,7 +1513,6 @@ export class Presentation extends Component {
               class='pres-arr'
               aria-label='Next build'
               data-test-pres-fwd
-              tabindex='-1'
               {{on 'click' this.stepFwd}}
             >›</button>
           </div>

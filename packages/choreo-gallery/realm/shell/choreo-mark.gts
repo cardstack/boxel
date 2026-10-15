@@ -74,8 +74,6 @@ export const ChoreoMark = <template>
   </svg>
   <style scoped>
     .choreo-mark {
-      --mark-tail: rgba(255, 59, 31, 0.35);
-      --mark-orbit: rgba(139, 150, 156, 0.75);
       width: 34px;
       height: 34px;
       display: block;

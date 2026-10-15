@@ -247,6 +247,9 @@ export class DemoPage extends Component<Signature> {
         letter-spacing: 0.14em;
         text-transform: uppercase;
         color: var(--ink-dim);
+        text-decoration: underline;
+        text-decoration-color: var(--line-strong);
+        text-underline-offset: 3px;
       }
 
       @media (hover: hover) {
@@ -286,8 +289,7 @@ export class DemoPage extends Component<Signature> {
         font-size: 11px;
         letter-spacing: 0.18em;
         text-transform: uppercase;
-        /* ember-hot, as the tile's group line is */
-        color: var(--ember-hot);
+        color: var(--eyebrow);
       }
 
       .kicker::before {
@@ -306,10 +308,9 @@ export class DemoPage extends Component<Signature> {
         font-family: var(--font-mono);
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        color: var(--ember);
-        border: 1px solid var(--ember);
+        color: var(--ember-ink);
+        border: 1px solid color-mix(in srgb, var(--ember-ink) 55%, transparent);
         border-radius: 3px;
-        opacity: 0.7;
         vertical-align: middle;
       }
 
@@ -338,7 +339,7 @@ export class DemoPage extends Component<Signature> {
       .api {
         font-family: var(--font-mono);
         font-size: 11px;
-        color: var(--iris);
+        color: var(--iris-ink);
         background: rgba(150, 103, 247, 0.1);
         border: 1px solid rgba(150, 103, 247, 0.3);
         border-radius: 6px;
@@ -504,6 +505,14 @@ export class DemoPage extends Component<Signature> {
         border-radius: 999px;
         border: 1px solid rgba(255, 255, 255, 0.16);
         background: rgba(14, 12, 10, 0.55);
+        /* the pill is dark in either theme, so the mark wears its dark
+           colors on it, and the type and its button's ring are light: the
+           one color that clears 3:1 on the pill over any frame from black
+           to white */
+        --mark-tail: var(--mark-tail-dark);
+        --mark-orbit: var(--mark-orbit-dark);
+        --pill-ink: rgba(255, 250, 242, 0.96);
+        --ring: var(--pill-ink);
         backdrop-filter: blur(10px);
         -webkit-backdrop-filter: blur(10px);
         opacity: 0.9;
@@ -527,8 +536,7 @@ export class DemoPage extends Component<Signature> {
         padding: 0;
         border: 0;
         background: none;
-        /* the pill is dark in either theme, so the type on it is light */
-        color: rgba(255, 250, 242, 0.96);
+        color: var(--pill-ink);
         font-family: var(--font-mono);
         font-size: 10px;
         letter-spacing: 0.16em;
@@ -570,7 +578,7 @@ export class DemoPage extends Component<Signature> {
         font-size: 10px;
         letter-spacing: 0.18em;
         text-transform: uppercase;
-        color: var(--ember);
+        color: var(--eyebrow);
       }
 
       .demo-body :deep(.dive-head h2) {
@@ -581,14 +589,14 @@ export class DemoPage extends Component<Signature> {
         line-height: 1.14;
         letter-spacing: -0.01em;
         text-wrap: balance;
-        color: color-mix(in srgb, var(--ink) 82%, var(--bg-page));
+        color: var(--ink-soft);
       }
 
       .demo-body :deep(.dive-lede) {
         margin: 0;
         font-size: 15px;
         line-height: 1.65;
-        color: color-mix(in srgb, var(--ink) 68%, var(--bg-page));
+        color: var(--ink-dim);
       }
 
       .demo-body :deep(.dd) {
@@ -606,7 +614,7 @@ export class DemoPage extends Component<Signature> {
         font-family: var(--font-mono);
         font-size: 11px;
         letter-spacing: 0.06em;
-        color: var(--ember);
+        color: var(--eyebrow);
       }
 
       .demo-body :deep(.dd-fn::after) {
@@ -628,7 +636,7 @@ export class DemoPage extends Component<Signature> {
         font-weight: 700;
         line-height: 1.22;
         text-wrap: balance;
-        color: color-mix(in srgb, var(--ink) 80%, var(--bg-page));
+        color: var(--ink-soft);
       }
 
       /* prose keeps a reading measure */
@@ -641,12 +649,12 @@ export class DemoPage extends Component<Signature> {
 
       .demo-body :deep(.dd-col p) {
         margin: 0;
-        color: color-mix(in srgb, var(--ink) 68%, var(--bg-page));
+        color: var(--ink-dim);
       }
 
       .demo-body :deep(.dd-col strong) {
         font-weight: 600;
-        color: color-mix(in srgb, var(--ink) 82%, var(--bg-page));
+        color: var(--ink-soft);
       }
 
       .demo-body :deep(.dd-col em) {
@@ -664,22 +672,6 @@ export class DemoPage extends Component<Signature> {
          dive; only its spacing changes, because the column owns the gaps */
       .demo-body :deep(.dd .sample) {
         margin-top: 0;
-      }
-
-      /* the notes' type, lifted a step in the dark palette, where the
-         page-mixed greys above sit too far back */
-      .choreo-site:not([data-theme='light']) .demo-body :deep(.dive-head h2),
-      .choreo-site:not([data-theme='light']) .demo-body :deep(.dd-col strong) {
-        color: #e6dfd6;
-      }
-
-      .choreo-site:not([data-theme='light']) .demo-body :deep(.dive-lede),
-      .choreo-site:not([data-theme='light']) .demo-body :deep(.dd-col p) {
-        color: #d2c9bf;
-      }
-
-      .choreo-site:not([data-theme='light']) .demo-body :deep(.dd h3) {
-        color: #d4cbc2;
       }
 
       /* The notes' diagrams: a shared vocabulary of plates, boxes, rules and
@@ -813,8 +805,9 @@ export class DemoPage extends Component<Signature> {
         fill: var(--ink);
       }
 
+      /* a hot label most often sits in a .dg-hot box */
       .demo-body :deep(.dg-t.is-hot) {
-        fill: var(--ember-hot);
+        fill: var(--hot-ink);
       }
 
       .demo-body :deep(.dg-t.is-dim) {
@@ -826,7 +819,7 @@ export class DemoPage extends Component<Signature> {
       }
 
       .demo-body :deep(.dg-t.is-cop) {
-        fill: var(--copper);
+        fill: var(--copper-ink);
       }
 
       .demo-body :deep(.dg-eb) {
@@ -844,7 +837,7 @@ export class DemoPage extends Component<Signature> {
       }
 
       .demo-body :deep(.dg-h.is-hot) {
-        fill: var(--ember-hot);
+        fill: var(--hot-ink);
       }
 
       .walk {
@@ -877,6 +870,9 @@ export class DemoPage extends Component<Signature> {
       }
 
       .pager > :deep(a) {
+        text-decoration: underline;
+        text-decoration-color: var(--line-strong);
+        text-underline-offset: 3px;
         min-width: 0;
         max-width: 48%;
         overflow: hidden;

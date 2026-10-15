@@ -58,6 +58,14 @@ export default class HostModeContent extends Component<Signature> {
     return this.args.stackItemCardIds.length > 0;
   }
 
+  // An open stack item covers the primary card, behind the scrim. The card
+  // stays rendered, and `inert` keeps focus, the find bar and assistive tech
+  // out of it, and tells the card itself that nobody is working with it, so a
+  // card that animates can rest until the stack closes.
+  get isPrimaryCovered() {
+    return this.args.stackItemCardIds.length > 0;
+  }
+
   get isWideCard() {
     let primaryCard = this.primaryCard;
     if (!primaryCard || !isCardInstance(primaryCard)) {
@@ -113,6 +121,7 @@ export default class HostModeContent extends Component<Signature> {
         @isPrimary={{true}}
         @openInteractSubmode={{@openInteractSubmode}}
         class='current-card'
+        inert={{this.isPrimaryCovered}}
       />
       {{#if (gt @stackItemCardIds.length 0)}}
         <HostModeStack

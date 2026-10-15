@@ -649,6 +649,16 @@ export class ChoreoRun implements Run {
   isDone(): boolean {
     return this.ended || this.cancelled;
   }
+  /**
+   * A text delivery is still standing in for its sprite's text. The clock
+   * can end first: a delivery lands on its own platform animations, and the
+   * run leaves it to finish its tail rather than cutting it short.
+   */
+  get delivering(): boolean {
+    return (
+      !this.cancelled && this.tracks.some((t) => t.delivery?.inFlight === true)
+    );
+  }
 
   loopPhases(): LoopPhases {
     const out: LoopPhases = new Map();
@@ -960,7 +970,14 @@ export class ChoreoRun implements Run {
         }
       });
       if (t.delivery) {
-        (run ? t.delivery.play : t.delivery.pause)();
+        if (paused && now >= t.end) {
+          // a tail still playing behind the clock: a still past the cue's
+          // window is one in which it has landed, and nothing would resume
+          // a held tail, which would leave its stand-in spans up for good
+          t.delivery.complete();
+        } else {
+          (run ? t.delivery.play : t.delivery.pause)();
+        }
       }
       if (t.loopAnimation) {
         if (run) {

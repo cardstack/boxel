@@ -59,7 +59,97 @@ function roomOwner(el: Element): HTMLElement | null {
   }
 }
 
-/** Room focus overrides viewport visibility; the ordinary 2D gallery is unchanged. */
+/** The element, then each frame element it renders inside, outward. */
+function* outward(el: Element): Generator<Element> {
+  let node: Element | null = el;
+  while (node) {
+    yield node;
+    try {
+      node = node.ownerDocument.defaultView?.frameElement ?? null;
+    } catch {
+      node = null;
+    }
+  }
+}
+
+/**
+ * Whether something the stage cannot see past covers it.
+ *
+ * An intersection observer answers "is it in the scrolled-to part of the
+ * page", which is not "can anyone see it": on a published site, a card opened
+ * from the gallery is a stack item over it, and the grid stays rendered
+ * underneath, in view, behind the scrim. The host makes a card it covers
+ * `inert`. That is the platform's word for "not part of what the user is
+ * working with", it reaches every engine, and it changes nothing about the
+ * box, so it is read directly rather than inferred from geometry. (The
+ * occlusion test that `IntersectionObserver`'s `trackVisibility` offers is
+ * Chromium's alone, and it also calls a stage hidden for any transform or
+ * opacity on the way up, which the 3D room is made of.)
+ */
+function covered(el: Element): boolean {
+  for (const node of outward(el)) {
+    if (node.closest('[inert]')) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * One watcher per document for `inert` coming and going, shared by every
+ * stage in it: a page of forty-odd stages is otherwise forty-odd observers
+ * on the same subtree, each consulted on every attribute any of them writes.
+ */
+const inertWatchers = new Map<
+  Document,
+  { listeners: Set<() => void>; observer: MutationObserver }
+>();
+
+function watchCover(el: Element, listener: () => void): () => void {
+  const docs = [...outward(el)].map((node) => node.ownerDocument);
+  for (const doc of docs) {
+    let watcher = inertWatchers.get(doc);
+    if (!watcher) {
+      const listeners = new Set<() => void>();
+      const observer = new MutationObserver(() => {
+        for (const fn of [...listeners]) {
+          fn();
+        }
+      });
+      observer.observe(doc.documentElement, {
+        attributes: true,
+        attributeFilter: ['inert'],
+        subtree: true,
+      });
+      watcher = { observer, listeners };
+      inertWatchers.set(doc, watcher);
+    }
+    watcher.listeners.add(listener);
+  }
+  return () => {
+    for (const doc of docs) {
+      const watcher = inertWatchers.get(doc);
+      if (!watcher) {
+        continue;
+      }
+      watcher.listeners.delete(listener);
+      if (watcher.listeners.size === 0) {
+        watcher.observer.disconnect();
+        inertWatchers.delete(doc);
+      }
+    }
+  };
+}
+
+/**
+ * Room focus overrides viewport visibility; the ordinary 2D gallery is
+ * unchanged. Either way, a covered stage is off.
+ *
+ * Inside the 3D room, cover is asked of the room's tile rather than of the
+ * stage: the room makes a tile's own content `inert` while it is not ready
+ * for input, and some stages must run to become ready (the guided Mockup
+ * stop waits for its model to enter 3D).
+ */
 export function observeStage(
   el: Element,
   tell: (visible: boolean) => void,
@@ -69,9 +159,9 @@ export function observeStage(
   let intersecting = false;
   let previous: boolean | undefined;
   const update = () => {
-    const visible = owner
-      ? owner.dataset.widgetActive === 'true'
-      : intersecting;
+    const visible =
+      !covered(owner ?? el) &&
+      (owner ? owner.dataset.widgetActive === 'true' : intersecting);
     if (visible !== previous) {
       previous = visible;
       tell(visible);
@@ -91,6 +181,7 @@ export function observeStage(
       attributeFilter: ['data-widget-active'],
     });
   }
+  const unwatchCover = watchCover(el, update);
   let connected = true;
   io.observe(el);
   // Visibility may update tracked demo state; run after Glimmer's render pass.
@@ -104,6 +195,7 @@ export function observeStage(
       connected = false;
       io.disconnect();
       changes.disconnect();
+      unwatchCover();
     },
   };
 }
@@ -187,6 +279,40 @@ export function announceRestartedAnimations(el: Element) {
   el.dispatchEvent(new CustomEvent(RESTARTED, { bubbles: true }));
 }
 
+/**
+ * Resting stages look again, every so often, for animations that started
+ * since they last looked.
+ *
+ * A subtree change, a CSS animation starting and a retime the lab announces
+ * each make a resting stage look again. A Web Animation started by script is
+ * not announced: every pass of a Choreo score starts its effects that way, and
+ * a pass can run while its stage rests: a tile below the fold whose score
+ * starts after it first looked, or a tile under a demo page whose score passes
+ * again as the page opens over it. An endless effect that starts like that
+ * would play on where nobody can see it. One timer serves every resting stage,
+ * and runs only while one does.
+ */
+const RECHECK_MS = 1000;
+const resting = new Set<() => void>();
+let recheck: ReturnType<typeof setInterval> | undefined;
+function rest(settle: () => void, on: boolean) {
+  if (on) {
+    resting.add(settle);
+  } else {
+    resting.delete(settle);
+  }
+  if (resting.size && !recheck) {
+    recheck = setInterval(() => {
+      for (const again of resting) {
+        again();
+      }
+    }, RECHECK_MS);
+  } else if (!resting.size && recheck) {
+    clearInterval(recheck);
+    recheck = undefined;
+  }
+}
+
 export const restWhenOff = modifier((el: HTMLElement) => {
   const room = !!roomOwner(el);
   let active = false;
@@ -218,6 +344,7 @@ export const restWhenOff = modifier((el: HTMLElement) => {
   const settle = () => scheduleRest(el, apply);
   const observer = observeStage(el, (visible) => {
     active = visible;
+    rest(settle, !visible);
     settle();
   });
   // Catch animations created by a pending render while this card is frozen.
@@ -240,6 +367,7 @@ export const restWhenOff = modifier((el: HTMLElement) => {
     changes.disconnect();
     el.removeEventListener('animationstart', settle);
     el.removeEventListener(RESTARTED, settle);
+    rest(settle, false);
     pendingRest.delete(el);
     active = true;
     apply([]);

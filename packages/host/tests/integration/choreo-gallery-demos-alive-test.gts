@@ -12,6 +12,10 @@ function rest() {
  * too. In a gallery whose cards are whole demos that means the demos mount
  * already finished: rows that should wait for the scroll arrive in place, and
  * a looping keyframe animation is seeded at its last frame instead of running.
+ *
+ * The whileInView rows are what catch that: they animate from mount. A looping
+ * stage starts its loop when its stage first comes on, after mount, so the
+ * keyframes test asks only that the loop runs where it can be seen.
  */
 module(
   'Integration | Choreo gallery | gallery demos stay alive',
@@ -38,12 +42,14 @@ module(
       );
     });
 
-    test('a looping keyframe animation is running', async function (assert) {
+    test('a looping keyframe animation runs once its tile is on stage', async function (assert) {
       await gallery.renderGallery();
       await rest();
 
       const morph = document.querySelector('.morph');
       assert.ok(morph, 'the keyframes demo rendered');
+      morph!.scrollIntoView({ block: 'center' });
+      await rest();
       const running = morph!
         .getAnimations()
         .concat([...(morph!.parentElement?.getAnimations() ?? [])]);
