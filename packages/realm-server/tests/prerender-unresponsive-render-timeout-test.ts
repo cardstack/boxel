@@ -328,7 +328,7 @@ module(basename(import.meta.filename), function (hooks) {
   module('UnresponsiveTabTracker', function () {
     function trackerAt(clock: { now: number }) {
       return new UnresponsiveTabTracker({
-        affinityThreshold: 3,
+        realmThreshold: 3,
         attachThreshold: 2,
         windowMs: 1000,
         minRecycleIntervalMs: 5000,
@@ -336,7 +336,7 @@ module(basename(import.meta.filename), function (hooks) {
       });
     }
 
-    test('one affinity timing out repeatedly never recycles the browser', function (assert) {
+    test('one realm timing out repeatedly never recycles the browser', function (assert) {
       let clock = { now: 0 };
       let tracker = trackerAt(clock);
       for (let i = 0; i < 10; i++) {
@@ -344,12 +344,12 @@ module(basename(import.meta.filename), function (hooks) {
         assert.strictEqual(
           tracker.record({ affinityKey: 'A', browserUnresponsive: false }),
           null,
-          `timeout ${i + 1} on the same affinity`,
+          `timeout ${i + 1} in the same realm`,
         );
       }
     });
 
-    test('distinct affinities going unresponsive within the window recycle the browser', function (assert) {
+    test('distinct realms going unresponsive within the window recycle the browser', function (assert) {
       let clock = { now: 0 };
       let tracker = trackerAt(clock);
       assert.strictEqual(
@@ -366,12 +366,12 @@ module(basename(import.meta.filename), function (hooks) {
         affinityKey: 'C',
         browserUnresponsive: false,
       });
-      assert.ok(reason, 'the third distinct affinity recycles the browser');
-      assert.ok(reason?.includes('A, B, C'), `names the affinities: ${reason}`);
+      assert.ok(reason, 'the third distinct realm recycles the browser');
+      assert.ok(reason?.includes('A, B, C'), `names the realms: ${reason}`);
       assert.strictEqual(tracker.recycleCount, 1, 'the recycle is counted');
     });
 
-    test('affinities seen outside the window do not count', function (assert) {
+    test('realms seen outside the window do not count', function (assert) {
       let clock = { now: 0 };
       let tracker = trackerAt(clock);
       tracker.record({ affinityKey: 'A', browserUnresponsive: false });
@@ -385,7 +385,28 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
-    test('one timed-out attach is not enough; a second within the window recycles', function (assert) {
+    // One realm's affinities, one per render session: the indexer's
+    // realm-authority session, a signed-in user and an anonymous visitor.
+    const REALM_SESSIONS = [
+      'realm:https://pegged.example/realm/#authority:@indexer:localhost',
+      'realm:https://pegged.example/realm/#@someone:localhost',
+      'realm:https://pegged.example/realm/#anonymous',
+    ];
+
+    test('every session of one realm going unresponsive counts as one realm', function (assert) {
+      let clock = { now: 0 };
+      let tracker = trackerAt(clock);
+      for (let affinityKey of REALM_SESSIONS) {
+        clock.now += 10;
+        assert.strictEqual(
+          tracker.record({ affinityKey, browserUnresponsive: false }),
+          null,
+          `timeout on ${affinityKey}`,
+        );
+      }
+    });
+
+    test('one timed-out attach is not enough; one in a second realm within the window recycles', function (assert) {
       let clock = { now: 0 };
       let tracker = trackerAt(clock);
       assert.strictEqual(
@@ -395,11 +416,26 @@ module(basename(import.meta.filename), function (hooks) {
       );
       clock.now = 500;
       let reason = tracker.record({
-        affinityKey: 'A',
+        affinityKey: 'B',
         browserUnresponsive: true,
       });
-      assert.ok(reason, 'the second one does');
+      assert.ok(reason, 'a second realm does');
       assert.ok(reason?.includes('CDP session attach'), `says why: ${reason}`);
+    });
+
+    test('timed-out attaches in one realm never recycle, across its sessions', function (assert) {
+      let clock = { now: 0 };
+      let tracker = trackerAt(clock);
+      for (let i = 0; i < 3; i++) {
+        for (let affinityKey of REALM_SESSIONS) {
+          clock.now += 10;
+          assert.strictEqual(
+            tracker.record({ affinityKey, browserUnresponsive: true }),
+            null,
+            `timed-out attach ${i + 1} on ${affinityKey}`,
+          );
+        }
+      }
     });
 
     test('recycles are spaced at least the minimum interval apart', function (assert) {
@@ -427,7 +463,7 @@ module(basename(import.meta.filename), function (hooks) {
       assert.strictEqual(tracker.recycleCount, 2, 'two recycles counted');
     });
 
-    test('reset forgets the affinities counted so far', function (assert) {
+    test('reset forgets the realms counted so far', function (assert) {
       let clock = { now: 0 };
       let tracker = trackerAt(clock);
       tracker.record({ affinityKey: 'A', browserUnresponsive: false });
