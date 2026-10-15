@@ -1337,7 +1337,7 @@ return errors;`,
       );
     });
 
-    test('a download the script did not await is not fetched after the run ends', async function (assert) {
+    test('a download the script did not await fails the run and is not fetched', async function (assert) {
       // Holds the destination lookup until the run has ended.
       getService('network').virtualNetwork.mount(
         async (req: Request) => {
