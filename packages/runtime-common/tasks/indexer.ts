@@ -44,14 +44,6 @@ export const FROM_SCRATCH_JOB_TIMEOUT_SEC =
     ? envTimeoutSec
     : DEFAULT_FROM_SCRATCH_JOB_TIMEOUT_SEC;
 
-// A change may also carry `contested: true`, on a removal the job absorbed
-// together with a write of the same url, in either order. Which of the two is
-// current is what the realm holds when the pass runs, not which publish arrived
-// first: a file removed and then written again while the job sat unclaimed is
-// on disk, and its row must stay. The pass reads the file to decide (see
-// `IndexRunner.incremental`). It rides the index signature rather than being
-// declared, as a job's args hold JSON values and an optional member would not
-// be one.
 export interface IncrementalChange extends JSONTypes.Object {
   url: string;
   operation: 'update' | 'delete';
@@ -249,19 +241,11 @@ export function mergeIncrementalChanges(
       byUrl.set(change.url, change);
       continue;
     }
-    // A removal stays a removal as the job absorbs more publishes of its url,
-    // but one that met a write of the url is marked contested: the pass, not
-    // the order the publishes arrived in, decides which one stands.
-    let contested =
-      previous.contested === true ||
-      change.contested === true ||
-      previous.operation !== change.operation;
-    if (previous.operation === 'delete' || change.operation === 'delete') {
-      byUrl.set(change.url, {
-        url: change.url,
-        operation: 'delete',
-        ...(contested ? { contested: true } : {}),
-      });
+    if (previous.operation === 'delete') {
+      continue;
+    }
+    if (change.operation === 'delete') {
+      byUrl.set(change.url, { ...change, operation: 'delete' });
     }
   }
   return [...byUrl.values()];
@@ -888,10 +872,9 @@ const incrementalIndex: Task<IncrementalArgs, IncrementalResult> = ({
       baseGeneration,
       phaseTimings,
     } = await IndexRunner.incremental(currentRun, {
-      changes: changes.map(({ operation, url, contested }) => ({
+      changes: changes.map(({ operation, url }) => ({
         operation,
         url: new URL(url),
-        ...(contested === true ? { contested: true } : {}),
       })),
     });
 

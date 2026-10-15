@@ -581,11 +581,7 @@ export class IndexRunner {
     {
       changes,
     }: {
-      changes: {
-        url: URL;
-        operation: 'update' | 'delete';
-        contested?: boolean;
-      }[];
+      changes: { url: URL; operation: 'update' | 'delete' }[];
     },
   ): Promise<IncrementalResult> {
     current.#dependencyResolver.reset();
@@ -597,30 +593,35 @@ export class IndexRunner {
     let swapMs: number | undefined;
     let swapCommit: Omit<BatchDoneResult, 'totalIndexEntries'> | undefined;
     let operations = new Map<string, 'update' | 'delete'>();
-    let contested = new Set<string>();
-    for (let { url, operation, contested: isContested } of changes) {
+    for (let { url, operation } of changes) {
       if (operation === 'delete') {
         operations.set(url.href, 'delete');
       } else if (!operations.has(url.href)) {
         operations.set(url.href, 'update');
       }
-      if (isContested) {
-        contested.add(url.href);
-      }
     }
-    // A removal the queue merged with a write of the same url is decided by
-    // what the realm holds now: a file written again after its removal is on
-    // disk, and indexing it as removed would drop the row of a card that
-    // exists. So a writer recreating a path never has to wait for the
-    // removal's pass, and a removal releases its locks once its bytes are gone.
-    for (let href of contested) {
-      if (operations.get(href) !== 'delete') {
-        continue;
-      }
-      if (await current.#reader.readFile(new URL(href))) {
+    // A removal is decided by what the realm holds when the pass runs, not by
+    // the change that asked for it. Every removal is published after its file
+    // is gone, so a file that is on disk now was written again since, and
+    // indexing it as removed would drop the row of a card that exists. The
+    // writer that put it back may be the same one, whose publish the queue
+    // merged into this job, or another one, whose own pass in its own lane may
+    // already have run. Either way this pass indexes the file. So a writer
+    // recreating a path never has to wait for the removal's pass, and a removal
+    // releases its locks once its bytes are gone.
+    let removals = [...operations]
+      .filter(([, operation]) => operation === 'delete')
+      .map(([href]) => href);
+    let onDisk = await Promise.all(
+      removals.map(
+        async (href) => (await current.#reader.readFile(new URL(href))) != null,
+      ),
+    );
+    removals.forEach((href, index) => {
+      if (onDisk[index]) {
         operations.set(href, 'update');
       }
-    }
+    });
     let urls = [...operations.keys()].map((href) => new URL(href));
     current.#log.debug(
       `${jobIdentity(current.#jobInfo)} starting from incremental indexing for ${urls.map((u) => u.href).join()}`,

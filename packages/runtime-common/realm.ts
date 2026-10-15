@@ -5397,11 +5397,11 @@ export class Realm {
     // below indexes whatever the last write left — which is what the realm
     // should hold however the writers interleaved.
     //
-    // That holds for a removal too. A writer that recreates a removed path
-    // while the removal's pass is still pending is absorbed into that pass,
-    // and the queue marks the url contested (`mergeIncrementalChanges`); the
-    // pass then indexes it by whether the file is on disk, rather than by
-    // which publish reached the queue first.
+    // That holds for a removal too. A removal's pass indexes its url by whether
+    // the file is on disk when the pass runs (`IndexRunner.incremental`), so a
+    // writer that recreates the path while that pass is still pending keeps
+    // its card, whichever pass runs first and whether or not the queue merged
+    // the two.
     options?.onDurable?.();
     // What each file this commit wrote now holds, named the way the event's
     // `invalidations` names a card. That spelling is not a second opinion about

@@ -15,11 +15,10 @@ import {
 // The write locks order the read-merge-write of the files a write touches.
 // That ordering is settled once the bytes are durable — everything after it is
 // indexing, which reads the files back off disk and is correct whatever
-// another writer does meanwhile. A removal is no exception: a writer that
-// recreates the path while the removal's pass is still pending is merged into
-// that pass, and the queue marks the url contested so the pass indexes it by
-// whether the file is on disk (covered in queue-test and the operations
-// endpoint's index-wait tests).
+// another writer does meanwhile. A removal is no exception: its pass indexes
+// the url by whether the file is on disk when the pass runs, so a writer that
+// recreates the path while the removal's pass is still pending keeps its card
+// (covered through the routes in the operations endpoint's index-wait tests).
 //
 // Each pass is held open below so that no pass is ever in flight from the
 // pre-staging drain's point of view. That is deliberate: the drain waits on

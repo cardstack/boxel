@@ -726,77 +726,11 @@ module(basename(import.meta.filename), function () {
         'changes are unioned and delete dominates update for duplicate URL',
       );
       assert.deepEqual(
-        row.args.changes
-          .filter((change) => (change as { contested?: boolean }).contested)
-          .map((change) => change.url),
-        [`${realmURL}b`],
-        'a removal merged with a write of the same URL is marked contested, ' +
-          'so the pass decides it by what is on disk',
-      );
-      assert.deepEqual(
         row.args.coalescedCallers
           .map((caller) => caller.clientRequestId)
           .sort(),
         ['request-1', 'request-2'],
         'canonical job args persist coalesced per-caller request metadata',
-      );
-    });
-
-    test('a write that follows a pending removal of its URL makes the removal contested', async function (assert) {
-      // The order a writer recreating a removed path needs the pass to honor:
-      // the removal reached the queue first, and the write after it is what
-      // the realm now holds.
-      await runner.destroy();
-
-      let realmURL = 'http://example.com/contested/';
-      let first = await publishIncrementalIndexJob({
-        clientRequestId: 'removal',
-        args: {
-          realmURL,
-          realmUsername: 'owner',
-          ignoreData: {},
-          changes: [
-            { url: `${realmURL}a`, operation: 'delete' },
-            { url: `${realmURL}b`, operation: 'delete' },
-          ],
-        },
-      });
-      let second = await publishIncrementalIndexJob({
-        clientRequestId: 'recreate',
-        args: {
-          realmURL,
-          realmUsername: 'owner',
-          ignoreData: {},
-          changes: [{ url: `${realmURL}a`, operation: 'update' }],
-        },
-      });
-      assert.strictEqual(first.id, second.id, 'the write joins the removal');
-
-      let [row] = (await adapter.execute(
-        `SELECT args FROM jobs WHERE id = $1`,
-        { bind: [first.id] },
-      )) as {
-        args: {
-          changes: {
-            url: string;
-            operation: 'update' | 'delete';
-            contested?: boolean;
-          }[];
-        };
-      }[];
-      assert.deepEqual(
-        row.args.changes
-          .map(({ url, operation, contested }) => ({
-            url,
-            operation,
-            contested: contested === true,
-          }))
-          .sort((a, b) => a.url.localeCompare(b.url)),
-        [
-          { url: `${realmURL}a`, operation: 'delete', contested: true },
-          { url: `${realmURL}b`, operation: 'delete', contested: false },
-        ],
-        'only the URL both a removal and a write named is contested',
       );
     });
 
