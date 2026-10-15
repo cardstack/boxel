@@ -1,6 +1,6 @@
 ---
 name: call-api
-description: How a `callApi` card operation — a request to a service outside the realm, declared as data on a card — is lowered when its module is indexed and carried out by the realm server without loading card code. Covers the declaration shape and the credential slot grammar (`{{userKey}}`, `{{apiKey}}`, `{{apiKey:name}}`, `|basic`), every lowering check and the issue code it records, how an invocation on an instance or on a type builds the request, how slots become tokens that the outbound client fills only after its destination check, the refusals (`binding-not-approved`, `not-during-render`, `actor-required`, `guard-refused`, `upstream-timeout`, `response-too-large`, `invalid-operation`), why a vendor's error status is an answer rather than a refusal, and the `boxel:key-use` log channel. Use when changing or reviewing `card-operations/call-api.ts`, the `callApi` arms of lowering and dispatch, `lib/outbound/call-api-sender.ts` or the outbound client's substitutions; when a `callApi` is refused and you need to know which stage refused it; or when adding the binding that fills a slot.
+description: How a `callApi` card operation — a request to a service outside the realm, declared as data on a card — is lowered when its module is indexed and carried out by the realm server without loading card code. Covers the declaration shape and the credential slot grammar (`{{userKey}}`, `{{apiKey}}`, `{{apiKey:name}}`, `|basic`), every lowering check and the issue code it records, the lowered destination (normalized origin and path prefix) and the `destinationCovers` rule approval and sending share, why `http:` lowers and is refused when sent, how an invocation on an instance or on a type builds the request, how slots become tokens that the outbound client fills only after its destination check, the refusals (`binding-not-approved`, `not-during-render`, `actor-required`, `guard-refused`, `upstream-timeout`, `response-too-large`, `invalid-operation`), why a vendor's error status is an answer rather than a refusal, and the `boxel:key-use` log channel. Use when changing or reviewing `card-operations/call-api.ts`, the `callApi` arms of lowering and dispatch, `lib/outbound/call-api-sender.ts` or the outbound client's substitutions; when a `callApi` is refused and you need to know which stage refused it; or when adding the binding that fills a slot.
 ---
 
 # callApi — lowering and dispatch
@@ -77,19 +77,56 @@ All in `lowerCallApi`. Each records an issue, so the entry is stored
 known, one body, no body on GET); everything below is lowering's, so it holds
 for a stored entry whatever produced it.
 
-| Code                       | Raised for                                                                                                                                                                                          |
-| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `slot-placed-twice`        | the same slot name, same key, in two places                                                                                                                                                         |
-| `slot-name-reused`         | one name used for a `userKey` slot and an `apiKey` slot                                                                                                                                             |
-| `slot-out-of-place`        | a slot in the URL as written, a header or query _name_, or a GraphQL document                                                                                                                       |
-| `unencoded-path-parameter` | a `{name}` that isn't a whole path segment (in the host, part of a segment, `{+name}`), a `{name}` that `path` doesn't fill, or a typed reference spliced into URL or path text (`[object Object]`) |
-| `string-built-graphql`     | a document that is a marker or program, or has a reference spliced into it                                                                                                                          |
-| `invalid-slot`             | a malformed slot or an unknown transform                                                                                                                                                            |
-| `invalid-request`          | not an absolute http(s) URL, userinfo in the URL, a `path` key no segment takes, an `X-Boxel-*` or non-token header name, an object or list where text is sent, two bodies, a body on GET           |
+| Code                       | Raised for                                                                                                                                                                                                                         |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `slot-placed-twice`        | the same slot name, same key, in two places                                                                                                                                                                                        |
+| `slot-name-reused`         | one name used for a `userKey` slot and an `apiKey` slot                                                                                                                                                                            |
+| `slot-out-of-place`        | a slot in the URL as written, a header or query _name_, or a GraphQL document                                                                                                                                                      |
+| `unencoded-path-parameter` | a `{name}` that isn't a whole path segment (in the host, part of a segment, `{+name}`), a `{name}` that `path` doesn't fill, or a typed reference spliced into URL or path text (`[object Object]`)                                |
+| `string-built-graphql`     | a document that is a marker or program, or has a reference spliced into it                                                                                                                                                         |
+| `invalid-slot`             | a malformed slot or an unknown transform                                                                                                                                                                                           |
+| `invalid-request`          | not an absolute http(s) URL, userinfo in the URL, a `*` in the host (written or as `%2A`), a `path` key no segment takes, an `X-Boxel-*` or non-token header name, an object or list where text is sent, two bodies, a body on GET |
 
 The lowered entry keeps every value as a marker and every slot as the text the
 author wrote, plus `slots: CallApiSlot[]` — `{name, key, transform?,
 placement, at}` — so dispatch knows what a request needs without walking it.
+
+## The destination
+
+Lowering (`lowerUrlTemplate`) parses the URL with each `{name}` segment
+stood in for by a plain one and stores two things on `OperationCallApi`:
+
+- **`url`** — the parser's `href`, each `{name}` segment put back as written.
+  The host is lower-cased, a default port dropped and dot segments resolved, so
+  two spellings of one place lower alike: `https://API.openai.com:443/v1/../chat/{id}`
+  lowers to `https://api.openai.com/chat/{id}`.
+- **`destination`** — where the request goes: the origin plus the path up to
+  and including the last `/` before the first `{name}` segment, or the path's
+  last `/` when it has none, as the parser's `href`. The URL above has the
+  destination `https://api.openai.com/chat/`;
+  `https://api.example.com/v1/chat/completions` has
+  `https://api.example.com/v1/chat/`. The query string and fragment are never
+  part of it. The prefix is set as the `pathname` of a copy of the parsed URL,
+  never resolved against the origin, because a path opening with `//` would
+  resolve as another host.
+
+The definition cache holds both, and a key's approval names the destination
+as lowered.
+
+**`destinationCovers(destination, url)`** is the one rule for whether a request
+goes where a destination says, shared by approval and the send-time check. Both
+sides are compared as parsed `href`s, and a destination whose path doesn't end
+in `/` (or that carries userinfo, a query or a fragment) covers nothing, so a
+match always ends at a `/`: `https://api.openai.com/` doesn't cover
+`https://api.openai.com.evil.net/`, and `https://api.example.com/v1/` doesn't
+cover `https://api.example.com/v1beta`.
+
+**`http:` lowers; it is refused when sent.** Lowering can't see the server's
+outbound guard, so it accepts `http:`. The guard's `checkDestination` refuses
+an `http:` request before connecting unless its host is on the development
+allowlist (`OUTBOUND_DEV_ALLOWLIST`, which a deployed server refuses to start
+with), and the sender answers `guard-refused` with `meta.reason: 'scheme'`.
+Local development and the stub vendor in tests send over `http:` that way.
 
 ## Invocation
 
@@ -115,7 +152,11 @@ refusal also writes a key-use line.
    refused 400 because a URL would resolve them away. Query values are
    appended with `URLSearchParams`. A JSON body gets `content-type:
 application/json` unless the declaration set one.
-5. **Send** through `core.callApi`, the `CallApiSender` the realm server
+5. **`guard-refused`** (502, `meta.reason: 'destination'`) — the built URL
+   is not covered by the lowered `destination`. Every value is encoded into a
+   segment or the query string, so a request can't leave it; this is the
+   send-time check that what goes out is what was declared.
+6. **Send** through `core.callApi`, the `CallApiSender` the realm server
    passes to `new Realm({ callApi })`. A realm without one (the host's
    in-browser test realm) answers 501.
 
@@ -170,12 +211,12 @@ with every registered credential removed by the scrubber.
 
 Only these refuse the operation:
 
-| Code                 | Status                           | When                                                                                                                                                              |
-| -------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `guard-refused`      | 502 (400 for a forbidden header) | the guard refused the destination or a redirect hop: not https, a non-public address, too many redirects                                                          |
-| `upstream-timeout`   | 504                              | no connection within the connect timeout, or not finished within the total                                                                                        |
-| `response-too-large` | —                                | reserved for the enforced `call-api` response cap. The cap is in observe mode (see the `outbound-guard` skill), so a large response is logged and still delivered |
-| `internal-error`     | 502                              | the connection broke before any response arrived                                                                                                                  |
+| Code                 | Status                           | When                                                                                                                                                                                            |
+| -------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `guard-refused`      | 502 (400 for a forbidden header) | the guard refused the destination or a redirect hop: not https (and not an allowlisted local host), a non-public address, too many redirects; or the built request left its lowered destination |
+| `upstream-timeout`   | 504                              | no connection within the connect timeout, or not finished within the total                                                                                                                      |
+| `response-too-large` | —                                | reserved for the enforced `call-api` response cap. The cap is in observe mode (see the `outbound-guard` skill), so a large response is logged and still delivered                               |
+| `internal-error`     | 502                              | the connection broke before any response arrived                                                                                                                                                |
 
 ## The key-use channel
 
@@ -202,7 +243,9 @@ null when the refusal came before a request was built. Tests capture it with
 ## Tests
 
 - `packages/host/tests/unit/operation-lowering-test.ts`, the callApi section:
-  one test per lowering check, lowered from plain data.
+  one test per lowering check, lowered from plain data, and the normalized URL
+  and destination.
+- `packages/host/tests/unit/call-api-destination-test.ts`: `destinationCovers`.
 - `packages/realm-server/tests/realm-endpoints/call-api-test.ts`: end to end
   through `_operations` against the stub vendor on a fixed port, because the
   vendor URL is written into the card module.

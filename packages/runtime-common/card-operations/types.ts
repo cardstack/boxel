@@ -1475,8 +1475,15 @@ export type CallApiBodyTemplate =
 
 export interface OperationCallApi {
   method: CallApiMethod;
-  // Absolute, with each segment `path` fills still written `{name}`.
+  // Absolute and serialized as the URL parser does, with each segment `path`
+  // fills still written `{name}`.
   url: string;
+  // Where the request goes: the origin and the path up to and including the
+  // last `/` before the first `{name}` segment, or the path's last `/` when it
+  // has none, serialized as the URL parser does. What a key's approval names,
+  // and what every request this declaration builds must stay under
+  // (`destinationCovers`).
+  destination: string;
   path?: Record<string, OperationTemplate>;
   headers?: Record<string, OperationTemplate>;
   query?: Record<string, OperationTemplate>;

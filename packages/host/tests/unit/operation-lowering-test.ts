@@ -2345,6 +2345,7 @@ module('Unit | operation lowering', function (hooks) {
       callApi: {
         method: 'GET',
         url: 'https://api.example.com/repos/{owner}/{repo}/issues',
+        destination: 'https://api.example.com/repos/',
         path: { owner: ownerParam, repo: { $ref: 'instance', key: 'owner' } },
         headers: { accept: 'application/json' },
         query: { state: 'open' },
@@ -2352,6 +2353,102 @@ module('Unit | operation lowering', function (hooks) {
       },
       deterministic: true,
     });
+  });
+
+  test('the URL lowers to its normalized form and its destination', async function (assert) {
+    let result = await lowerRequest(
+      { url: 'https://API.openai.com:443/v1/../chat/{id}', path: { id: '7' } },
+      {},
+    );
+    assert.deepEqual(codes(result), []);
+    assert.strictEqual(
+      result.operations.fetch.callApi?.url,
+      'https://api.openai.com/chat/{id}',
+      'the host is lower-cased, the default port dropped and the dot segment resolved, the `{name}` segment kept',
+    );
+    assert.strictEqual(
+      result.operations.fetch.callApi?.destination,
+      'https://api.openai.com/chat/',
+      'the destination ends at the last `/` before the first `{name}` segment',
+    );
+
+    let twoSpellings = await Promise.all(
+      [
+        'https://API.example.com:443/v1/../x/',
+        'https://api.example.com/x/',
+      ].map((url) => lowerRequest({ url })),
+    );
+    assert.deepEqual(
+      twoSpellings.map(({ operations }) => [
+        operations.fetch.callApi?.url,
+        operations.fetch.callApi?.destination,
+      ]),
+      [
+        ['https://api.example.com/x/', 'https://api.example.com/x/'],
+        ['https://api.example.com/x/', 'https://api.example.com/x/'],
+      ],
+      'two spellings of one place lower alike',
+    );
+  });
+
+  test('a URL with no `{name}` segment has the destination its path has up to the last `/`', async function (assert) {
+    let cases: [string, string][] = [
+      [
+        'https://api.example.com/v1/chat/completions',
+        'https://api.example.com/v1/chat/',
+      ],
+      [
+        'https://api.example.com/v1/models/',
+        'https://api.example.com/v1/models/',
+      ],
+      ['https://api.example.com', 'https://api.example.com/'],
+      ['https://api.example.com/items?page=2#top', 'https://api.example.com/'],
+      [
+        'https://api.example.com//evil.net/x',
+        'https://api.example.com//evil.net/',
+      ],
+      ['http://localhost:4519/echo', 'http://localhost:4519/'],
+    ];
+    for (let [url, destination] of cases) {
+      let result = await lowerRequest({ url });
+      assert.deepEqual(codes(result), [], url);
+      assert.strictEqual(
+        result.operations.fetch.callApi?.destination,
+        destination,
+        url,
+      );
+    }
+
+    let laterParameter = await lowerRequest({
+      url: 'https://api.example.com/repos/{owner}/issues/{n}',
+      path: { owner: 'o', n: '1' },
+    });
+    assert.strictEqual(
+      laterParameter.operations.fetch.callApi?.destination,
+      'https://api.example.com/repos/',
+      'the first `{name}` segment ends it, whatever follows',
+    );
+  });
+
+  test('a wildcard host is refused', async function (assert) {
+    for (let url of [
+      'https://*.example.com/items',
+      'https://%2A.example.com/items',
+      'https://api.*/items',
+    ]) {
+      let result = await lowerRequest({ url });
+      assert.deepEqual(codes(result), ['invalid-request'], url);
+      assert.strictEqual(result.operations.fetch.callApi, undefined, url);
+    }
+  });
+
+  test('an http URL lowers, for the outbound guard to judge when it is sent', async function (assert) {
+    let result = await lowerRequest({ url: 'http://api.example.com/items' });
+    assert.deepEqual(codes(result), []);
+    assert.strictEqual(
+      result.operations.fetch.callApi?.destination,
+      'http://api.example.com/',
+    );
   });
 
   test('a request with a body defaults to POST, and a GraphQL document travels with its variables', async function (assert) {
