@@ -19,6 +19,13 @@ export interface ResultAttachment {
   contentSize?: number;
 }
 
+// A call in a tool's input that makes the tool wait for the user's click, and
+// the reason the approval panel shows for it.
+export interface ClickReason {
+  call: string;
+  reason: string;
+}
+
 export default abstract class HostBaseTool<
   CardInputType extends CardDefConstructor | undefined,
   CardResultType extends CardDefConstructor | undefined = undefined,
@@ -43,6 +50,15 @@ export default abstract class HostBaseTool<
     _attributes: Record<string, unknown> | undefined,
   ): boolean {
     return false;
+  }
+
+  // Why `neverAutoExecutesFor` holds this call for the user's click, one
+  // entry for each call in its input that needs the click. The approval panel
+  // shows them, so the user knows what the click allows.
+  static clickReasonsFor(
+    _attributes: Record<string, unknown> | undefined,
+  ): ClickReason[] {
+    return [];
   }
 
   // Time this call may take beyond the tool service's execute timeout, for a

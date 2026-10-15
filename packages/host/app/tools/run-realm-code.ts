@@ -34,7 +34,10 @@ import {
   sourceImageDataUrl,
   type GeneratedImage,
 } from '../lib/generate-image';
-import HostBaseTool, { type ResultAttachment } from '../lib/host-base-tool';
+import HostBaseTool, {
+  type ClickReason,
+  type ResultAttachment,
+} from '../lib/host-base-tool';
 import { RealmCaptures, type CaptureURL } from '../lib/realm-runner/captures';
 import {
   RoomActions,
@@ -267,21 +270,26 @@ const MAX_INVALIDATE_PATHS = 100;
 // names the call in its code. Such a run always waits for the user's click
 // (`neverAutoExecutesFor`), and only such a run may make the call: a script
 // that reaches it another way is refused, so none of them runs without a
-// click.
-const CLICK_REQUIRED_CALLS = [
-  'realm.workspaces.delete',
-  'realm.images.generate',
-  'realm.index.fullReindex',
-  'realm.index.cancelJob',
-  'realm.fs.download',
-] as const;
-type ClickRequiredCall = (typeof CLICK_REQUIRED_CALLS)[number];
+// click. Each call has the reason the approval panel shows the user for it,
+// so the panel and the click rule read the same list.
+const CLICK_REQUIRED_CALLS = {
+  'realm.workspaces.delete': 'Deletes a workspace. This cannot be undone.',
+  'realm.images.generate': 'Generates images, which uses your credit.',
+  'realm.index.fullReindex':
+    'Indexes the whole workspace again from the start, which can take a long time.',
+  'realm.index.cancelJob': "Cancels the workspace's running index job.",
+  'realm.fs.download':
+    'Downloads a file from an outside URL into the workspace.',
+} as const;
+type ClickRequiredCall = keyof typeof CLICK_REQUIRED_CALLS;
 
 // The click-required calls a script names in its code.
 export function clickRequiredCallsIn(code: unknown): Set<ClickRequiredCall> {
   return new Set(
     typeof code === 'string'
-      ? CLICK_REQUIRED_CALLS.filter((name) => code.includes(name))
+      ? (Object.keys(CLICK_REQUIRED_CALLS) as ClickRequiredCall[]).filter(
+          (name) => code.includes(name),
+        )
       : [],
   );
 }
@@ -1748,6 +1756,15 @@ export default class RunRealmCodeTool extends HostBaseTool<
     attributes: Record<string, unknown> | undefined,
   ): boolean {
     return clickRequiredCallsIn(attributes?.code).size > 0;
+  }
+
+  static clickReasonsFor(
+    attributes: Record<string, unknown> | undefined,
+  ): ClickReason[] {
+    return [...clickRequiredCallsIn(attributes?.code)].map((call) => ({
+      call,
+      reason: CLICK_REQUIRED_CALLS[call],
+    }));
   }
 
   // A run that may generate images gets the image time budget on top of the

@@ -354,6 +354,16 @@ export default class RoomMessageTool extends Component<Signature> {
     return typeof reason === 'string' && reason.trim() ? reason.trim() : '';
   }
 
+  // The calls that hold this call for the user's click, shown above the
+  // code while it waits, so the user knows what the click allows.
+  private get clickReasons() {
+    let { status } = this.args.messageTool;
+    if (status !== 'ready' && status !== undefined) {
+      return [];
+    }
+    return this.args.messageTool.clickReasons;
+  }
+
   // Until its command is resolved a call can't say how it will run (its
   // action verb, whether it waits for approval), so it shows as preparing, the
   // same as while its request streams in. A call already answered shows its
@@ -420,6 +430,21 @@ export default class RoomMessageTool extends Component<Signature> {
           {{/if}}
         </CodeBlock>
       {{else}}
+        {{#if this.clickReasons.length}}
+          <div class='click-reasons' data-test-tool-call-click-reasons>
+            <p class='click-reasons-intro'>This waits for your click because the
+              script calls:</p>
+            <ul class='click-reasons-list'>
+              {{#each this.clickReasons as |clickReason|}}
+                <li data-test-tool-call-click-reason={{clickReason.call}}>
+                  <code>{{clickReason.call}}</code>
+                  —
+                  {{clickReason.reason}}
+                </li>
+              {{/each}}
+            </ul>
+          </div>
+        {{/if}}
         <CodeBlock
           class={{cn 'tool-code-block' compact=@isCompact}}
           {{this.scrollBottomIntoView}}
@@ -521,6 +546,21 @@ export default class RoomMessageTool extends Component<Signature> {
         padding: 0 var(--boxel-sp-xxs);
         font: var(--boxel-font-xs);
         color: var(--boxel-450);
+      }
+      .click-reasons {
+        padding: 0 var(--boxel-sp-xxs);
+        font: var(--boxel-font-xs);
+        color: var(--boxel-light);
+      }
+      .click-reasons-intro {
+        margin: 0;
+      }
+      .click-reasons-list {
+        margin: var(--boxel-sp-xxxs) 0 0;
+        padding-left: var(--boxel-sp);
+      }
+      .click-reasons-list code {
+        font-family: var(--boxel-monospace-font-family);
       }
       .tool-result-card-header {
         --boxel-label-color: var(--boxel-450);
