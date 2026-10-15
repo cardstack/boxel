@@ -34,8 +34,8 @@ import {
 import {
   addUserKey,
   mintKeyWriteTicket,
-  setUserKeyDestination,
   USER_KEY_VALUE_FIELD,
+  type KeyWriteAction,
 } from '../lib/user-keys.ts';
 
 const require = createRequire(import.meta.url);
@@ -49,18 +49,19 @@ const OWNER = '@key-owner:localhost';
 const OTHER_USER = '@other-user:localhost';
 const VALUE = 'sk-user-key-value-5b0e7c21d9';
 const NEW_VALUE = 'sk-user-key-replacement-a41f93';
-const DESTINATION = 'https://api.example.com/v1/';
+const ADD_TICKET = {
+  data: { type: 'key-write-ticket', attributes: { action: 'add' } },
+};
 
 async function sealedRow(
   dbAdapter: PgAdapter,
   id: string,
 ): Promise<{
   owner: string;
-  destination: string | null;
   sealed: SealedSecret;
 }> {
   let [row] = await dbAdapter.execute(
-    `SELECT owner, destination,
+    `SELECT owner,
             encode(value_ciphertext, 'base64') AS ciphertext,
             encode(value_nonce, 'base64') AS nonce,
             encode(value_tag, 'base64') AS tag,
@@ -70,7 +71,6 @@ async function sealedRow(
   );
   return {
     owner: row.owner as string,
-    destination: (row.destination as string | null) ?? null,
     sealed: {
       keyId: row.value_key_id as string,
       ciphertext: Buffer.from(row.ciphertext as string, 'base64'),
@@ -80,17 +80,8 @@ async function sealedRow(
   };
 }
 
-function bindingFor(
-  owner: string,
-  id: string,
-  destination?: string,
-): SecretBinding {
-  return {
-    field: USER_KEY_VALUE_FIELD,
-    owner,
-    id,
-    ...(destination !== undefined ? { destination } : {}),
-  };
+function bindingFor(owner: string, id: string): SecretBinding {
+  return { field: USER_KEY_VALUE_FIELD, owner, id };
 }
 
 // Every row of both tables, as text, to check no value or ticket is stored in
@@ -146,14 +137,35 @@ module(basename(import.meta.filename), function () {
       )}`;
     }
 
-    async function ticketFor(user = OWNER): Promise<string> {
-      let response = await request
+    function mint(attributes: Record<string, unknown>, user = OWNER) {
+      return request
         .post('/_key-write-tickets')
-        .set('Authorization', auth(user));
+        .set('Authorization', auth(user))
+        .set('Content-Type', 'application/json')
+        .send({ data: { type: 'key-write-ticket', attributes } });
+    }
+
+    // A ticket for an add, or for a replace or delete of `keyId`.
+    async function ticketFor(
+      action: KeyWriteAction = 'add',
+      keyId?: string,
+      user = OWNER,
+    ): Promise<string> {
+      let response = await mint({ action, keyId }, user);
       if (response.status !== 201) {
-        throw new Error(`could not mint a ticket: ${response.status}`);
+        throw new Error(
+          `could not mint a ticket: ${response.status} ${response.text}`,
+        );
       }
       return response.body.data.attributes.ticket;
+    }
+
+    async function remove(id: string, ticket: string, user = OWNER) {
+      return await request
+        .delete(`/_user-keys/${id}`)
+        .set('Authorization', auth(user))
+        .set('Content-Type', 'application/json')
+        .send({ meta: { ticket } });
     }
 
     async function add(
@@ -187,7 +199,7 @@ module(basename(import.meta.filename), function () {
     async function addKey(name = 'weather', user = OWNER, value = VALUE) {
       let response = await add(
         { name, value },
-        { ticket: await ticketFor(user) },
+        { ticket: await ticketFor('add', undefined, user) },
         user,
       );
       if (response.status !== 201) {
@@ -211,21 +223,12 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(added.body.data.type, 'user-key');
       assert.deepEqual(
         Object.keys(added.body.data.attributes).sort(),
-        [
-          'createdAt',
-          'destination',
-          'kind',
-          'name',
-          'placementHints',
-          'state',
-          'updatedAt',
-        ],
+        ['createdAt', 'kind', 'name', 'state', 'updatedAt'],
         'the response carries metadata only',
       );
       assert.strictEqual(added.body.data.attributes.name, 'weather');
       assert.strictEqual(added.body.data.attributes.kind, 'static');
       assert.strictEqual(added.body.data.attributes.state, 'active');
-      assert.strictEqual(added.body.data.attributes.destination, null);
 
       let listed = await request
         .get('/_user-keys')
@@ -252,7 +255,11 @@ module(basename(import.meta.filename), function () {
         'the stored value opens to what was added',
       );
 
-      let replaced = await replace(id, NEW_VALUE, await ticketFor());
+      let replaced = await replace(
+        id,
+        NEW_VALUE,
+        await ticketFor('replace', id),
+      );
       responses.push(replaced.text);
       assert.strictEqual(replaced.status, 200, 'the value is replaced');
       assert.strictEqual(replaced.body.data.attributes.name, 'weather');
@@ -267,11 +274,7 @@ module(basename(import.meta.filename), function () {
       assert.false(stored.includes(VALUE), 'no value is stored in the clear');
       assert.false(stored.includes(NEW_VALUE), 'nor its replacement');
 
-      let deleted = await request
-        .delete(`/_user-keys/${id}`)
-        .set('Authorization', auth())
-        .set('Content-Type', 'application/json')
-        .send({ meta: { ticket: await ticketFor() } });
+      let deleted = await remove(id, await ticketFor('delete', id));
       responses.push(deleted.text);
       assert.strictEqual(deleted.status, 204, 'the key is deleted');
       let gone = await request
@@ -302,20 +305,21 @@ module(basename(import.meta.filename), function () {
         .set('Authorization', auth(OTHER_USER));
       assert.strictEqual(shown.status, 404, 'show answers as for no key');
 
-      let replaced = await replace(
-        id,
-        NEW_VALUE,
-        await ticketFor(OTHER_USER),
-        OTHER_USER,
-      );
-      assert.strictEqual(replaced.status, 404, 'replace answers as for no key');
+      for (let action of ['replace', 'delete']) {
+        let minted = await mint({ action, keyId: id }, OTHER_USER);
+        assert.strictEqual(
+          minted.status,
+          404,
+          `a ticket to ${action} it answers as for no key`,
+        );
+      }
 
-      let deleted = await request
-        .delete(`/_user-keys/${id}`)
-        .set('Authorization', auth(OTHER_USER))
-        .set('Content-Type', 'application/json')
-        .send({ meta: { ticket: await ticketFor(OTHER_USER) } });
-      assert.strictEqual(deleted.status, 404, 'delete answers as for no key');
+      // Their own ticket names no key of theirs, so it spends on nothing here.
+      let theirTicket = await ticketFor('add', undefined, OTHER_USER);
+      let replaced = await replace(id, NEW_VALUE, theirTicket, OTHER_USER);
+      assert.strictEqual(replaced.status, 403, 'replace is refused');
+      let deleted = await remove(id, theirTicket, OTHER_USER);
+      assert.strictEqual(deleted.status, 403, 'delete is refused');
 
       let row = await sealedRow(dbAdapter, id);
       assert.strictEqual(
@@ -389,7 +393,7 @@ module(basename(import.meta.filename), function () {
       let late = await add({ name: 'news', value: VALUE }, { ticket: expired });
       assert.strictEqual(late.status, 403, 'an expired ticket is refused');
 
-      let theirs = await ticketFor(OTHER_USER);
+      let theirs = await ticketFor('add', undefined, OTHER_USER);
       let borrowed = await add(
         { name: 'news', value: VALUE },
         { ticket: theirs },
@@ -450,6 +454,95 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(shown.status, 200, 'the key is still there');
     });
 
+    test('a ticket spends only on the change it was minted for', async function (assert) {
+      let weather = await addKey('weather');
+      let news = await addKey('news', OWNER, NEW_VALUE);
+
+      let addTicket = await ticketFor('add');
+      assert.strictEqual(
+        (await replace(weather, NEW_VALUE, addTicket)).status,
+        403,
+        'a ticket to add a key replaces none',
+      );
+      assert.strictEqual(
+        (await remove(weather, addTicket)).status,
+        403,
+        'nor deletes one',
+      );
+
+      let replaceWeather = await ticketFor('replace', weather);
+      assert.strictEqual(
+        (await replace(news, VALUE, replaceWeather)).status,
+        403,
+        'a ticket to replace one key replaces no other',
+      );
+      assert.strictEqual(
+        (await remove(weather, replaceWeather)).status,
+        403,
+        'nor deletes the key it names',
+      );
+      assert.strictEqual(
+        (await add({ name: 'maps', value: VALUE }, { ticket: replaceWeather }))
+          .status,
+        403,
+        'nor adds a key',
+      );
+
+      let deleteWeather = await ticketFor('delete', weather);
+      assert.strictEqual(
+        (await remove(news, deleteWeather)).status,
+        403,
+        'a ticket to delete one key deletes no other',
+      );
+      assert.strictEqual(
+        (await replace(weather, NEW_VALUE, deleteWeather)).status,
+        403,
+        'nor replaces the key it names',
+      );
+
+      let row = await sealedRow(dbAdapter, news);
+      assert.strictEqual(
+        keyring.open(row.sealed, bindingFor(OWNER, news)),
+        NEW_VALUE,
+        'the refused changes changed nothing',
+      );
+
+      assert.strictEqual(
+        (await add({ name: 'maps', value: VALUE }, { ticket: addTicket }))
+          .status,
+        201,
+        'a refused use leaves each ticket good for its own change',
+      );
+      assert.strictEqual(
+        (await replace(weather, NEW_VALUE, replaceWeather)).status,
+        200,
+      );
+      assert.strictEqual((await remove(weather, deleteWeather)).status, 204);
+    });
+
+    test('a ticket names its change', async function (assert) {
+      let id = await addKey();
+      for (let [attributes, why] of [
+        [{}, 'no action'],
+        [{ action: 'rotate' }, 'an unknown action'],
+        [{ action: 'add', keyId: id }, 'an add that names a key'],
+        [{ action: 'replace' }, 'a replace that names no key'],
+        [{ action: 'delete' }, 'a delete that names no key'],
+      ] as const) {
+        let response = await mint(attributes);
+        assert.strictEqual(response.status, 400, `${why} is refused`);
+      }
+      let unknownKey = await mint({
+        action: 'delete',
+        keyId: '00000000-0000-4000-8000-000000000001',
+      });
+      assert.strictEqual(unknownKey.status, 404, 'a key that does not exist');
+      let tickets = await dbAdapter.execute(
+        `SELECT COUNT(*)::int AS count FROM key_write_tickets`,
+      );
+      assert.strictEqual(tickets[0].count, 0, 'no ticket was minted');
+    });
+
     test('of two concurrent uses of one ticket, exactly one succeeds', async function (assert) {
       let ticket = await ticketFor();
       let responses = await Promise.all([
@@ -479,7 +572,9 @@ module(basename(import.meta.filename), function () {
       let fromApp = await request
         .post('/_key-write-tickets')
         .set('Authorization', auth())
-        .set('Origin', 'https://app.keys.test');
+        .set('Origin', 'https://app.keys.test')
+        .set('Content-Type', 'application/json')
+        .send(ADD_TICKET);
       assert.strictEqual(fromApp.status, 403, 'the app page is refused');
       assert.strictEqual(
         fromApp.body.data,
@@ -490,13 +585,17 @@ module(basename(import.meta.filename), function () {
       let opaque = await request
         .post('/_key-write-tickets')
         .set('Authorization', auth())
-        .set('Origin', 'null');
+        .set('Origin', 'null')
+        .set('Content-Type', 'application/json')
+        .send(ADD_TICKET);
       assert.strictEqual(opaque.status, 403, 'an opaque origin is refused');
 
       let fromSecureOrigin = await request
         .post('/_key-write-tickets')
         .set('Authorization', auth())
-        .set('Origin', secureOriginURL.origin);
+        .set('Origin', secureOriginURL.origin)
+        .set('Content-Type', 'application/json')
+        .send(ADD_TICKET);
       assert.strictEqual(
         fromSecureOrigin.status,
         201,
@@ -512,9 +611,7 @@ module(basename(import.meta.filename), function () {
         'it expires in the future',
       );
 
-      let fromCLI = await request
-        .post('/_key-write-tickets')
-        .set('Authorization', auth());
+      let fromCLI = await mint({ action: 'add' });
       assert.strictEqual(
         fromCLI.status,
         201,
@@ -527,7 +624,10 @@ module(basename(import.meta.filename), function () {
         'a ticket is not stored in the clear',
       );
 
-      let anonymous = await request.post('/_key-write-tickets');
+      let anonymous = await request
+        .post('/_key-write-tickets')
+        .set('Content-Type', 'application/json')
+        .send(ADD_TICKET);
       assert.strictEqual(
         anonymous.status,
         401,
@@ -546,7 +646,9 @@ module(basename(import.meta.filename), function () {
       ] as const) {
         let minted = await request
           .post('/_key-write-tickets')
-          .set('Authorization', auth(OWNER, claims));
+          .set('Authorization', auth(OWNER, claims))
+          .set('Content-Type', 'application/json')
+          .send(ADD_TICKET);
         assert.strictEqual(minted.status, status, `${kind} mints no ticket`);
         let listed = await request
           .get('/_user-keys')
@@ -555,46 +657,14 @@ module(basename(import.meta.filename), function () {
       }
     });
 
-    test('a destination is never typed', async function (assert) {
-      let typed = await add(
-        { name: 'weather', value: VALUE, destination: DESTINATION },
-        { ticket: await ticketFor() },
-      );
-      assert.strictEqual(
-        typed.status,
-        400,
-        'a destination attribute is refused',
-      );
-      assert.true(typed.text.includes('destination'), 'the refusal says why');
-
-      let forOperation = await add(
-        { name: 'weather', value: VALUE },
-        {
-          ticket: await ticketFor(),
-          operation: {
-            realmURL: 'http://127.0.0.1:4444/test/',
-            definitionURL: 'http://127.0.0.1:4444/test/weather',
-            exportName: 'Weather',
-            operationName: 'forecast',
-          },
-        },
-      );
-      assert.strictEqual(
-        forOperation.status,
-        422,
-        'an operation that declares no destination is refused',
-      );
-
-      let malformed = await add(
-        { name: 'weather', value: VALUE },
-        { ticket: await ticketFor(), operation: { realmURL: 'x' } },
-      );
-      assert.strictEqual(
-        malformed.status,
-        400,
-        'a partial reference is refused',
-      );
-
+    test('an add sets only a name, a kind and a value', async function (assert) {
+      for (let attribute of ['destination', 'state', 'id']) {
+        let response = await add(
+          { name: 'weather', value: VALUE, [attribute]: 'x' },
+          { ticket: await ticketFor() },
+        );
+        assert.strictEqual(response.status, 400, `'${attribute}' is refused`);
+      }
       let keys = await request.get('/_user-keys').set('Authorization', auth());
       assert.deepEqual(keys.body.data, [], 'nothing was stored');
     });
@@ -639,156 +709,52 @@ module(basename(import.meta.filename), function () {
       },
     });
 
-    async function addWithoutDestination() {
-      let { ticket } = await mintKeyWriteTicket(dbAdapter, OWNER);
-      return await addUserKey(dbAdapter, keyring, {
+    async function addDirectly(name = 'weather', sealWith = keyring) {
+      let { ticket } = await mintKeyWriteTicket(dbAdapter, OWNER, {
+        action: 'add',
+        keyId: null,
+      });
+      return await addUserKey(dbAdapter, sealWith, {
         owner: OWNER,
-        name: 'weather',
+        name,
         value: VALUE,
         ticket,
       });
     }
 
-    test('a key added without a destination stores none, and setting one re-seals it', async function (assert) {
-      let key = await addWithoutDestination();
-      assert.strictEqual(key.destination, null, 'no destination is stored');
+    test('a value opens only for its own owner and row', async function (assert) {
+      let key = await addDirectly();
+      let other = await addDirectly('news');
       let row = await sealedRow(dbAdapter, key.id);
-      assert.strictEqual(row.destination, null);
       assert.strictEqual(
         keyring.open(row.sealed, bindingFor(OWNER, key.id)),
         VALUE,
-        'it opens bound to field, owner and id alone',
-      );
-
-      let updated = await setUserKeyDestination(dbAdapter, keyring, {
-        owner: OWNER,
-        id: key.id,
-        destination: DESTINATION,
-        placementHints: { placement: 'header', name: 'Authorization' },
-      });
-      assert.strictEqual(updated.destination, DESTINATION);
-      assert.deepEqual(updated.placementHints, {
-        placement: 'header',
-        name: 'Authorization',
-      });
-
-      row = await sealedRow(dbAdapter, key.id);
-      assert.strictEqual(row.destination, DESTINATION);
-      assert.strictEqual(
-        keyring.open(row.sealed, bindingFor(OWNER, key.id, DESTINATION)),
-        VALUE,
-        'it opens with its destination',
+        'it opens bound to field, owner and id',
       );
       assert.throws(
-        () => keyring.open(row.sealed, bindingFor(OWNER, key.id)),
+        () => keyring.open(row.sealed, bindingFor(OTHER_USER, key.id)),
         SecretDecryptionError,
-        'it no longer opens without one',
+        'not for another owner',
       );
       assert.throws(
-        () =>
-          keyring.open(
-            row.sealed,
-            bindingFor(OWNER, key.id, 'https://elsewhere.example.com/'),
-          ),
+        () => keyring.open(row.sealed, bindingFor(OWNER, other.id)),
         SecretDecryptionError,
-        'nor with another destination',
-      );
-      assert.throws(
-        () =>
-          keyring.open(row.sealed, bindingFor(OTHER_USER, key.id, DESTINATION)),
-        SecretDecryptionError,
-        'nor for another owner',
+        'nor as another row',
       );
     });
 
-    test("a key's destination can't change once set", async function (assert) {
-      let key = await addWithoutDestination();
-      await setUserKeyDestination(dbAdapter, keyring, {
-        owner: OWNER,
-        id: key.id,
-        destination: DESTINATION,
-      });
-      let again = await setUserKeyDestination(dbAdapter, keyring, {
-        owner: OWNER,
-        id: key.id,
-        destination: DESTINATION,
-      });
-      assert.strictEqual(
-        again.destination,
-        DESTINATION,
-        'setting it again changes nothing',
-      );
-
-      await assert.rejects(
-        setUserKeyDestination(dbAdapter, keyring, {
-          owner: OWNER,
-          id: key.id,
-          destination: 'https://elsewhere.example.com/',
-        }),
-        /can't change/,
-      );
-      await assert.rejects(
-        setUserKeyDestination(dbAdapter, keyring, {
-          owner: OTHER_USER,
-          id: key.id,
-          destination: DESTINATION,
-        }),
-        /no such key/,
-        "another user can't set it",
-      );
-      let row = await sealedRow(dbAdapter, key.id);
-      assert.strictEqual(
-        keyring.open(row.sealed, bindingFor(OWNER, key.id, DESTINATION)),
-        VALUE,
-      );
-    });
-
-    test('a key added for an operation is sealed with its destination', async function (assert) {
-      let { ticket } = await mintKeyWriteTicket(dbAdapter, OWNER);
-      let key = await addUserKey(dbAdapter, keyring, {
-        owner: OWNER,
-        name: 'weather',
-        value: VALUE,
-        ticket,
-        destination: DESTINATION,
-      });
-      assert.strictEqual(key.destination, DESTINATION);
-      let row = await sealedRow(dbAdapter, key.id);
-      assert.strictEqual(
-        keyring.open(row.sealed, bindingFor(OWNER, key.id, DESTINATION)),
-        VALUE,
-      );
-      assert.throws(
-        () => keyring.open(row.sealed, bindingFor(OWNER, key.id)),
-        SecretDecryptionError,
-      );
-    });
-
-    test('rotating the data key re-seals keys with and without a destination', async function (assert) {
+    test('rotating the data key re-seals every key', async function (assert) {
       let oldBytes = randomBytes(32);
       let oldKey = new Keyring(
         [{ keyId: 'rotation-old', key: Buffer.from(oldBytes) }],
         'rotation-old',
       );
-      let { ticket: first } = await mintKeyWriteTicket(dbAdapter, OWNER);
-      let bare = await addUserKey(dbAdapter, oldKey, {
-        owner: OWNER,
-        name: 'bare',
-        value: VALUE,
-        ticket: first,
-      });
-      let { ticket: second } = await mintKeyWriteTicket(dbAdapter, OWNER);
-      let bound = await addUserKey(dbAdapter, oldKey, {
-        owner: OWNER,
-        name: 'bound',
-        value: NEW_VALUE,
-        ticket: second,
-        destination: DESTINATION,
-      });
+      let first = await addDirectly('weather', oldKey);
+      let second = await addDirectly('news', oldKey);
 
       // The old data key stays loaded; a new one becomes current.
       assert.strictEqual(
-        (await sealedRow(dbAdapter, bare.id)).sealed.keyId,
+        (await sealedRow(dbAdapter, first.id)).sealed.keyId,
         'rotation-old',
       );
       let during = new Keyring(
@@ -813,24 +779,19 @@ module(basename(import.meta.filename), function () {
         'both keys are re-sealed',
       );
 
-      let bareRow = await sealedRow(dbAdapter, bare.id);
-      assert.strictEqual(bareRow.sealed.keyId, 'rotation-new');
-      assert.strictEqual(
-        during.open(bareRow.sealed, bindingFor(OWNER, bare.id)),
-        VALUE,
-        'a key with no destination still opens without one',
-      );
-      let boundRow = await sealedRow(dbAdapter, bound.id);
-      assert.strictEqual(boundRow.sealed.keyId, 'rotation-new');
-      assert.strictEqual(
-        during.open(boundRow.sealed, bindingFor(OWNER, bound.id, DESTINATION)),
-        NEW_VALUE,
-        'a key with a destination opens only with it',
-      );
-      assert.throws(
-        () => during.open(boundRow.sealed, bindingFor(OWNER, bound.id)),
-        SecretDecryptionError,
-      );
+      for (let key of [first, second]) {
+        let row = await sealedRow(dbAdapter, key.id);
+        assert.strictEqual(row.sealed.keyId, 'rotation-new');
+        assert.strictEqual(
+          during.open(row.sealed, bindingFor(OWNER, key.id)),
+          VALUE,
+          'it opens under its own binding',
+        );
+        assert.throws(
+          () => during.open(row.sealed, bindingFor(OTHER_USER, key.id)),
+          SecretDecryptionError,
+        );
+      }
     });
 
     test("the read-only role can't select either table", async function (assert) {
@@ -870,8 +831,11 @@ module(basename(import.meta.filename), function () {
       for (let statement of statements) {
         await dbAdapter.execute(statement);
       }
-      await addWithoutDestination();
-      await mintKeyWriteTicket(dbAdapter, OWNER);
+      await addDirectly();
+      await mintKeyWriteTicket(dbAdapter, OWNER, {
+        action: 'add',
+        keyId: null,
+      });
 
       async function selectAs(role: string, sql: string) {
         return await dbAdapter.withTransaction(async (query: any) => {

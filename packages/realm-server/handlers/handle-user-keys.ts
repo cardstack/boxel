@@ -14,15 +14,15 @@ import {
   listUserKeys,
   mintKeyWriteTicket,
   replaceUserKeyValue,
-  resolveKeyDestination,
   UserKeyError,
-  type OperationReference,
+  validateKeyWriteTarget,
   type UserKeyMetadata,
 } from '../lib/user-keys.ts';
 
 // The management API for the signed-in user's own keys. Every route answers
 // for the token's user alone, and no route returns a key's value. Adding,
-// replacing and deleting a key each take a key write ticket. A request body
+// replacing and deleting a key each take a key write ticket minted for that
+// change. A request body
 // here can carry a value or a ticket, so nothing here logs a body, and the
 // request log and telemetry keep only the method and path of these routes.
 
@@ -41,9 +41,7 @@ interface KeyRequestBody {
   meta?: Record<string, unknown>;
 }
 
-// The keys a request may set. A destination is never among them: it comes
-// from the operation a key is added for, or is set later by
-// `setUserKeyDestination`.
+// The attributes a request may set.
 const ADD_ATTRIBUTES = new Set(['name', 'kind', 'value']);
 const REPLACE_ATTRIBUTES = new Set(['value']);
 
@@ -150,39 +148,10 @@ function attributesOf(
   }
   for (let name of Object.keys(attributes)) {
     if (!allowed.has(name)) {
-      throw new UserKeyError(
-        400,
-        name === 'destination'
-          ? `a key's destination is never given: it comes from the operation the key is added for`
-          : `'${name}' can't be set here`,
-      );
+      throw new UserKeyError(400, `'${name}' can't be set here`);
     }
   }
   return attributes;
-}
-
-function operationOf(body: KeyRequestBody): OperationReference | undefined {
-  let operation = body.meta?.operation;
-  if (operation === undefined) {
-    return undefined;
-  }
-  let fields = ['realmURL', 'definitionURL', 'exportName', 'operationName'];
-  if (
-    !operation ||
-    typeof operation !== 'object' ||
-    fields.some(
-      (field) =>
-        typeof (operation as Record<string, unknown>)[field] !== 'string',
-    )
-  ) {
-    throw new UserKeyError(
-      400,
-      `an operation reference names its ${fields.join(', ')}`,
-    );
-  }
-  let { realmURL, definitionURL, exportName, operationName } =
-    operation as Record<string, string>;
-  return { realmURL, definitionURL, exportName, operationName };
 }
 
 // Runs a handler, answering a `UserKeyError` with its status and message and
@@ -222,7 +191,6 @@ function statusText(status: UserKeyError['status']): string {
     404: 'Not Found',
     409: 'Conflict',
     413: 'Payload Too Large',
-    422: 'Unprocessable Entity',
   }[status];
 }
 
@@ -261,7 +229,22 @@ export function handleMintKeyWriteTicket({
         'key write tickets are issued only to the secure window and the CLI',
       );
     }
-    let { ticket, expiresAt } = await mintKeyWriteTicket(dbAdapter, owner);
+    let body = await readJSON(ctxt);
+    let data = body.data as
+      | { type?: unknown; attributes?: Record<string, unknown> }
+      | undefined;
+    if (!data || typeof data !== 'object' || data.type !== 'key-write-ticket') {
+      throw new UserKeyError(400, `the resource type is 'key-write-ticket'`);
+    }
+    let target = validateKeyWriteTarget(
+      data.attributes?.action,
+      data.attributes?.keyId,
+    );
+    let { ticket, expiresAt } = await mintKeyWriteTicket(
+      dbAdapter,
+      owner,
+      target,
+    );
     await sendJSON(ctxt, 201, {
       data: {
         type: 'key-write-ticket',
@@ -292,18 +275,12 @@ export function handleAddUserKey({ dbAdapter }: CreateRoutesArgs): Handler {
     let owner = ownerOf(ctxt);
     let body = await readBody(ctxt);
     let attributes = attributesOf(body, ADD_ATTRIBUTES);
-    let operation = operationOf(body);
-    let resolved = operation
-      ? await resolveKeyDestination(operation, { owner })
-      : undefined;
     let key = await addUserKey(dbAdapter, secretsKeyring(), {
       owner,
       name: attributes.name,
       kind: attributes.kind,
       value: attributes.value,
       ticket: ticketOf(body),
-      destination: resolved?.destination ?? null,
-      placementHints: resolved?.placementHints ?? null,
     });
     await sendJSON(ctxt, 201, { data: serialize(key) });
   });

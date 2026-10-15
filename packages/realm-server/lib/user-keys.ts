@@ -12,12 +12,15 @@ import type {
 // is sealed by the secrets-at-rest helper before it reaches the database and
 // is never returned by anything here: what callers get back is metadata.
 //
+// A key is only its secret. It records no destination: nothing here says
+// where a key may be sent, and the value is sealed to the key alone.
+//
 // A key is added, replaced or deleted only with a key write ticket:
-// short-lived, single-use, minted for the signed-in user, and consumed in the
-// same transaction as the change it authorizes. The routes mint tickets only
-// for requests from the secure origin and for clients that send no `Origin`,
-// as the CLI does, so card code in the app page can't change a key from inside
-// the browser.
+// short-lived, single-use, minted for the signed-in user and for one change
+// (an add, or a replace or delete of one key), and consumed in the same
+// transaction as that change. The routes mint tickets only for requests from
+// the secure origin and for clients that send no `Origin`, as the CLI does, so
+// card code in the app page can't change a key from inside the browser.
 
 export const USER_KEY_VALUE_FIELD = 'user_keys.value';
 
@@ -26,64 +29,29 @@ export type UserKeyKind = (typeof USER_KEY_KINDS)[number];
 
 export type UserKeyState = 'active';
 
+export const KEY_WRITE_ACTIONS = ['add', 'replace', 'delete'] as const;
+export type KeyWriteAction = (typeof KEY_WRITE_ACTIONS)[number];
+
 export const KEY_WRITE_TICKET_TTL_MS = 10 * 60 * 1000;
 
 export const MAX_USER_KEY_NAME_LENGTH = 100;
 export const MAX_USER_KEY_VALUE_LENGTH = 16 * 1024;
 
-// Where a key goes in a request, as the operation it was added for declares
-// it (for example `{ placement: 'header', name: 'Authorization' }`).
-export type PlacementHints = Record<string, string>;
-
 export interface UserKeyMetadata {
   id: string;
   name: string;
   kind: UserKeyKind;
-  // Where the key may be sent; null until the key has one.
-  destination: string | null;
-  placementHints: PlacementHints | null;
   state: UserKeyState;
   createdAt: string;
   updatedAt: string;
 }
 
-// Which `callApi` operation a key is added for: the key takes its destination
-// from what the operation declares, never from what the caller types.
-export interface OperationReference {
-  realmURL: string;
-  definitionURL: string;
-  exportName: string;
-  operationName: string;
-}
-
-export interface ResolvedKeyDestination {
-  destination: string;
-  placementHints?: PlacementHints;
-}
-
-// Looks up the destination an operation declares, on behalf of `owner`.
-// Throws a `UserKeyError` when the operation can't supply one.
-export type KeyDestinationResolver = (
-  operation: OperationReference,
-  context: { owner: string },
-) => Promise<ResolvedKeyDestination>;
-
-// The realm server's resolver. A destination is declared only by an operation
-// that sends a key; no operation base on this server does, so every reference
-// is refused.
-export const resolveKeyDestination: KeyDestinationResolver = async () => {
-  throw new UserKeyError(
-    422,
-    'the operation declares no destination a key can be sent to',
-  );
-};
-
 // A refusal the caller can act on. `status` is the HTTP status the routes
 // answer with; `message` never carries a key's value or a ticket.
 export class UserKeyError extends Error {
-  readonly status: 400 | 403 | 404 | 409 | 413 | 422;
+  readonly status: 400 | 403 | 404 | 409 | 413;
 
-  constructor(status: 400 | 403 | 404 | 409 | 413 | 422, message: string) {
+  constructor(status: 400 | 403 | 404 | 409 | 413, message: string) {
     super(message);
     this.name = 'UserKeyError';
     this.status = status;
@@ -91,29 +59,69 @@ export class UserKeyError extends Error {
 }
 
 const INVALID_TICKET_MESSAGE =
-  'a valid key write ticket is required: tickets are single-use, expire, and are minted for one user';
+  'a valid key write ticket is required: tickets are single-use, expire, and are minted for one user and one change';
 
 function sha256(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
-// Mints a ticket for `owner`. Only its SHA-256 is stored, so the ticket itself
-// exists only in the response that carries it to the caller. Expired tickets
-// are swept on the way.
+// The change a key write ticket is minted for: an add, or a replace or delete
+// of one key.
+export interface KeyWriteTarget {
+  action: KeyWriteAction;
+  // The key a replace or delete changes; an add names none.
+  keyId: string | null;
+}
+
+export function validateKeyWriteTarget(
+  action: unknown,
+  keyId: unknown,
+): KeyWriteTarget {
+  if (!KEY_WRITE_ACTIONS.includes(action as KeyWriteAction)) {
+    throw new UserKeyError(
+      400,
+      `a ticket's action is one of: ${KEY_WRITE_ACTIONS.join(', ')}`,
+    );
+  }
+  if (action === 'add') {
+    if (keyId !== undefined && keyId !== null) {
+      throw new UserKeyError(400, 'a ticket to add a key names no key');
+    }
+    return { action, keyId: null };
+  }
+  if (typeof keyId !== 'string') {
+    throw new UserKeyError(400, `a ticket to ${action} a key names the key`);
+  }
+  return { action: action as KeyWriteAction, keyId };
+}
+
+// Mints a ticket for `owner` and one change. A ticket to replace or delete a
+// key is minted only for a key the owner has; another user's key answers as
+// one that doesn't exist. Only the ticket's SHA-256 is stored, so the ticket
+// itself exists only in the response that carries it to the caller. Expired
+// tickets are swept on the way.
 export async function mintKeyWriteTicket(
   dbAdapter: DBAdapter,
   owner: string,
+  { action, keyId }: KeyWriteTarget,
 ): Promise<{ ticket: string; expiresAt: string }> {
+  if (keyId !== null) {
+    await getUserKey(dbAdapter, owner, keyId);
+  }
   let ticket = randomBytes(32).toString('base64url');
   let expiresAt = new Date(Date.now() + KEY_WRITE_TICKET_TTL_MS);
   await query(dbAdapter, [
     `DELETE FROM key_write_tickets WHERE expires_at <= NOW()`,
   ]);
   await query(dbAdapter, [
-    `INSERT INTO key_write_tickets (ticket_sha256, owner, expires_at) VALUES (`,
+    `INSERT INTO key_write_tickets (ticket_sha256, owner, action, key_id, expires_at) VALUES (`,
     param(sha256(ticket)),
     `, `,
     param(owner),
+    `, `,
+    param(action),
+    `, `,
+    param(keyId),
     `, `,
     param(expiresAt.toISOString()),
     `)`,
@@ -122,13 +130,15 @@ export async function mintKeyWriteTicket(
 }
 
 // Consumes `ticket` inside the caller's transaction, so a write that fails
-// afterwards leaves the ticket unused. Deleting the row is what makes a ticket
-// single-use: a concurrent second use waits on the row and then finds it
-// gone.
+// afterwards leaves the ticket unused. A ticket spends only on the change it
+// was minted for: its owner, its action and, for a replace or delete, its key.
+// Deleting the row is what makes a ticket single-use: a concurrent second use
+// waits on the row and then finds it gone.
 async function consumeKeyWriteTicket(
   txQuery: Querier,
   owner: string,
   ticket: unknown,
+  { action, keyId }: KeyWriteTarget,
 ): Promise<void> {
   if (typeof ticket !== 'string' || ticket.length === 0) {
     throw new UserKeyError(403, INVALID_TICKET_MESSAGE);
@@ -138,6 +148,11 @@ async function consumeKeyWriteTicket(
     param(sha256(ticket)),
     ` AND owner = `,
     param(owner),
+    ` AND action = `,
+    param(action),
+    ...(keyId === null
+      ? [` AND key_id IS NULL`]
+      : [` AND key_id = `, param(keyId)]),
     ` AND expires_at > NOW() RETURNING ticket_sha256`,
   ]);
   if (rows.length === 0) {
@@ -195,53 +210,19 @@ function validateUserKeyValue(value: unknown): string {
   return value;
 }
 
-// A destination is an absolute http(s) URL naming an origin and a path
-// prefix: no credentials, query or fragment. It is stored, and bound into the
-// sealed value, exactly as given.
-export function validateKeyDestination(destination: unknown): string {
-  if (typeof destination !== 'string') {
-    throw new UserKeyError(422, 'a destination is an absolute URL');
-  }
-  let parsed: URL;
-  try {
-    parsed = new URL(destination);
-  } catch {
-    throw new UserKeyError(422, 'a destination is an absolute URL');
-  }
-  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-    throw new UserKeyError(422, 'a destination is an http or https URL');
-  }
-  if (parsed.username || parsed.password || parsed.search || parsed.hash) {
-    throw new UserKeyError(
-      422,
-      'a destination is an origin and a path, with no credentials, query or fragment',
-    );
-  }
-  return destination;
+// A value is bound to its field, its owner and its row, so a value moved to
+// another row or owner doesn't open.
+function binding(owner: string, id: string): SecretBinding {
+  return { field: USER_KEY_VALUE_FIELD, owner, id };
 }
 
-function binding(
-  owner: string,
-  id: string,
-  destination: string | null,
-): SecretBinding {
-  return {
-    field: USER_KEY_VALUE_FIELD,
-    owner,
-    id,
-    ...(destination !== null ? { destination } : {}),
-  };
-}
-
-const METADATA_COLUMNS = `id, name, kind, destination, placement_hints, state, created_at, updated_at`;
+const METADATA_COLUMNS = `id, name, kind, state, created_at, updated_at`;
 
 function toMetadata(row: Record<string, unknown>): UserKeyMetadata {
   return {
     id: row.id as string,
     name: row.name as string,
     kind: row.kind as UserKeyKind,
-    destination: (row.destination as string | null) ?? null,
-    placementHints: (row.placement_hints as PlacementHints | null) ?? null,
     state: row.state as UserKeyState,
     createdAt: new Date(row.created_at as string).toISOString(),
     updatedAt: new Date(row.updated_at as string).toISOString(),
@@ -312,29 +293,26 @@ export async function addUserKey(
     kind,
     value,
     ticket,
-    destination = null,
-    placementHints = null,
   }: {
     owner: string;
     name: unknown;
     kind?: unknown;
     value: unknown;
     ticket: unknown;
-    destination?: string | null;
-    placementHints?: PlacementHints | null;
   },
 ): Promise<UserKeyMetadata> {
   let validName = validateUserKeyName(name);
   let validKind = validateUserKeyKind(kind);
   let validValue = validateUserKeyValue(value);
-  let validDestination =
-    destination === null ? null : validateKeyDestination(destination);
   let id = randomUUID();
   return await dbAdapter.withTransaction(async (txQuery) => {
-    await consumeKeyWriteTicket(txQuery, owner, ticket);
-    let sealed = keyring.seal(validValue, binding(owner, id, validDestination));
+    await consumeKeyWriteTicket(txQuery, owner, ticket, {
+      action: 'add',
+      keyId: null,
+    });
+    let sealed = keyring.seal(validValue, binding(owner, id));
     let rows = await txQuery([
-      `INSERT INTO user_keys (id, owner, name, kind, destination, placement_hints, state, value_ciphertext, value_nonce, value_tag, value_key_id) VALUES (`,
+      `INSERT INTO user_keys (id, owner, name, kind, state, value_ciphertext, value_nonce, value_tag, value_key_id) VALUES (`,
       param(id),
       `, `,
       param(owner),
@@ -342,10 +320,6 @@ export async function addUserKey(
       param(validName),
       `, `,
       param(validKind),
-      `, `,
-      param(validDestination),
-      `, `,
-      param(placementHints),
       `, 'active', `,
       ...SEALED_COLUMN_VALUES(sealed),
       `) ON CONFLICT (owner, name) DO NOTHING RETURNING ${METADATA_COLUMNS}`,
@@ -357,7 +331,7 @@ export async function addUserKey(
   });
 }
 
-// Replaces a key's value, keeping its name, kind and destination.
+// Replaces a key's value, keeping its name and kind.
 export async function replaceUserKeyValue(
   dbAdapter: DBAdapter,
   keyring: SecretsKeyring,
@@ -371,91 +345,23 @@ export async function replaceUserKeyValue(
   assertKeyId(id);
   let validValue = validateUserKeyValue(value);
   return await dbAdapter.withTransaction(async (txQuery) => {
-    await consumeKeyWriteTicket(txQuery, owner, ticket);
-    let [row] = await txQuery([
-      `SELECT destination FROM user_keys WHERE id = `,
-      param(id),
-      ` AND owner = `,
-      param(owner),
-      ` FOR UPDATE`,
-    ]);
-    if (!row) {
-      throw notFound();
-    }
-    let sealed = keyring.seal(
-      validValue,
-      binding(owner, id, (row.destination as string | null) ?? null),
-    );
+    await consumeKeyWriteTicket(txQuery, owner, ticket, {
+      action: 'replace',
+      keyId: id,
+    });
+    let sealed = keyring.seal(validValue, binding(owner, id));
     let [updated] = await txQuery([
       `UPDATE user_keys SET (value_ciphertext, value_nonce, value_tag, value_key_id, updated_at) = (`,
       ...SEALED_COLUMN_VALUES(sealed),
       `, NOW()) WHERE id = `,
       param(id),
-      ` RETURNING ${METADATA_COLUMNS}`,
-    ]);
-    return toMetadata(updated);
-  });
-}
-
-// Gives a key that has no destination its destination, re-sealing the value
-// so that from then on it opens only with that destination. Setting the
-// destination a key already has changes nothing; a key's destination never
-// changes once set.
-export async function setUserKeyDestination(
-  dbAdapter: DBAdapter,
-  keyring: SecretsKeyring,
-  {
-    owner,
-    id,
-    destination,
-    placementHints = null,
-  }: {
-    owner: string;
-    id: string;
-    destination: string;
-    placementHints?: PlacementHints | null;
-  },
-): Promise<UserKeyMetadata> {
-  assertKeyId(id);
-  let validDestination = validateKeyDestination(destination);
-  return await dbAdapter.withTransaction(async (txQuery) => {
-    let [row] = await txQuery([
-      `SELECT ${METADATA_COLUMNS}, encode(value_ciphertext, 'base64') AS value_ciphertext, encode(value_nonce, 'base64') AS value_nonce, encode(value_tag, 'base64') AS value_tag, value_key_id FROM user_keys WHERE id = `,
-      param(id),
       ` AND owner = `,
       param(owner),
-      ` FOR UPDATE`,
-    ]);
-    if (!row) {
-      throw notFound();
-    }
-    if (row.destination === validDestination) {
-      return toMetadata(row);
-    }
-    if (row.destination != null) {
-      throw new UserKeyError(409, `a key's destination can't change`);
-    }
-    let resealed = keyring.reseal(
-      {
-        keyId: row.value_key_id as string,
-        ciphertext: Buffer.from(row.value_ciphertext as string, 'base64'),
-        nonce: Buffer.from(row.value_nonce as string, 'base64'),
-        tag: Buffer.from(row.value_tag as string, 'base64'),
-      },
-      binding(owner, id, null),
-      binding(owner, id, validDestination),
-    );
-    let [updated] = await txQuery([
-      `UPDATE user_keys SET (destination, placement_hints, value_ciphertext, value_nonce, value_tag, value_key_id, updated_at) = (`,
-      param(validDestination),
-      `, `,
-      param(placementHints),
-      `, `,
-      ...SEALED_COLUMN_VALUES(resealed),
-      `, NOW()) WHERE id = `,
-      param(id),
       ` RETURNING ${METADATA_COLUMNS}`,
     ]);
+    if (!updated) {
+      throw notFound();
+    }
     return toMetadata(updated);
   });
 }
@@ -468,7 +374,10 @@ export async function deleteUserKey(
 ): Promise<void> {
   assertKeyId(id);
   await dbAdapter.withTransaction(async (txQuery) => {
-    await consumeKeyWriteTicket(txQuery, owner, ticket);
+    await consumeKeyWriteTicket(txQuery, owner, ticket, {
+      action: 'delete',
+      keyId: id,
+    });
     let rows = await txQuery([
       `DELETE FROM user_keys WHERE id = `,
       param(id),

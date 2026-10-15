@@ -4,13 +4,14 @@
 // `user_keys` holds one row per key. The value is sealed by the realm server's
 // secrets-at-rest helper (AES-256-GCM: ciphertext, nonce, tag and the id of
 // the data key that sealed it), bound to the field `user_keys.value`, the
-// owner, the row's id and, once it has one, the destination. No plain-text
-// value is ever stored. `destination` is null for a key added with no
-// operation in hand; setting it later re-seals the value.
+// owner and the row's id. No plain-text value is ever stored. A key records no
+// destination.
 //
 // `key_write_tickets` holds the short-lived, single-use tickets that adding,
-// replacing or deleting a key must present. Only a ticket's SHA-256 is stored;
-// a change consumes its ticket by deleting the row.
+// replacing or deleting a key must present. Each is minted for one change:
+// `action` is `add`, `replace` or `delete`, and `key_id` names the key a
+// replace or delete changes (null for an add). Only a ticket's SHA-256 is
+// stored; a change consumes its ticket by deleting the row.
 //
 // Both tables are withheld from the read-only role used by dashboards and
 // read-only database access, and from every role that is a member of it, in
@@ -28,8 +29,6 @@ exports.up = (pgm) => {
       -- A label for people, unique among the owner's keys.
       name varchar NOT NULL,
       kind varchar NOT NULL,
-      destination varchar,
-      placement_hints jsonb,
       state varchar NOT NULL,
       value_ciphertext bytea NOT NULL,
       value_nonce bytea NOT NULL,
@@ -44,7 +43,13 @@ exports.up = (pgm) => {
     CREATE TABLE IF NOT EXISTS key_write_tickets (
       ticket_sha256 varchar PRIMARY KEY,
       owner varchar NOT NULL,
-      expires_at timestamptz NOT NULL
+      action varchar NOT NULL,
+      key_id uuid,
+      expires_at timestamptz NOT NULL,
+      CONSTRAINT key_write_tickets_action_key_id_check CHECK (
+        (action = 'add' AND key_id IS NULL)
+        OR (action IN ('replace', 'delete') AND key_id IS NOT NULL)
+      )
     )
   `);
   pgm.sql(`

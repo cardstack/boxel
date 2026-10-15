@@ -56,8 +56,8 @@ export const SEALED_COLUMNS: SealedColumn[] = [
       destination: String(row.url),
     }),
   },
-  // Keys that belong to people, bound to their row, their owner and, once it
-  // has one, their destination (`lib/user-keys.ts` seals them the same way).
+  // Keys that belong to people, bound to their row and their owner
+  // (`lib/user-keys.ts` seals them the same way).
   {
     field: 'user_keys.value',
     table: 'user_keys',
@@ -66,14 +66,11 @@ export const SEALED_COLUMNS: SealedColumn[] = [
     nonceColumn: 'value_nonce',
     ciphertextColumn: 'value_ciphertext',
     tagColumn: 'value_tag',
-    bindingColumns: ['owner', 'destination'],
+    bindingColumns: ['owner'],
     binding: (row) => ({
       field: 'user_keys.value',
       owner: String(row.owner),
       id: String(row.id),
-      ...(row.destination != null
-        ? { destination: String(row.destination) }
-        : {}),
     }),
   },
 ];
