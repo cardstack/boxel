@@ -1,6 +1,6 @@
 ---
 name: aws-access
-description: Provision an AWS STS session for Claude to use against staging or prod, and reach the deployed environment's data plane from there. Covers (1) the first-time setup walkthrough for a teammate who has never let Claude reach AWS, (2) refreshing an expired session, (3) running read-only queries against the private staging/prod boxel Postgres via SSM port-forwarding through the realm-server ECS task, authenticated as `claude_readonly_user` (a dedicated DB user, member of `readonly_role`), (4) browsing the realm-server's EFS filesystem read-only via a dedicated `boxel-claude-fs-readonly` Fargate task (Caddy file-server, port-forwarded over SSM), (5) tailing CloudWatch logs for the four boxel ECS services, (6) tailing Loki logs via `tail-logs.sh` (the role can read the Loki auth params), and (7) reading the realm-server ALB access logs from S3 to attribute 5xx / latency spikes to specific URL paths. It also covers finding the secure origin's (`secure.boxel.ai` / `secure.stack.cards`) access logs and app log lines. Claude operates as the dedicated `boxel-claude-readonly` IAM role — its effective AWS permissions are exactly that role's policy, regardless of which IAM groups the user is in. Use whenever Claude needs to call AWS APIs against the cardstack accounts, read/inspect the boxel_index database, browse `/persistent/` files, or read service logs in a deployed environment, or whenever the user asks "how do I connect Claude to AWS / staging / prod" or any of the deployed-env triage questions ("why is this realm indexing slowly", "show me the realm-server logs from last night", "is this file actually on disk in staging").
+description: Provision an AWS STS session for Claude to use against staging or prod, and reach the deployed environment's data plane from there. Covers (1) the first-time setup walkthrough for a teammate who has never let Claude reach AWS, (2) refreshing an expired session, (3) running read-only queries against the private staging/prod boxel Postgres via SSM port-forwarding through the realm-server ECS task, authenticated as `claude_readonly_user` (a dedicated DB user, member of `readonly_role`), (4) browsing the realm-server's EFS filesystem read-only via a dedicated `boxel-claude-fs-readonly` Fargate task (Caddy file-server, port-forwarded over SSM), (5) tailing CloudWatch logs for the four boxel ECS services, (6) tailing Loki logs via `tail-logs.sh` (the role can read the Loki auth params), and (7) reading the realm-server ALB access logs from S3 to attribute 5xx / latency spikes to specific URL paths. It also covers finding the secure origin's (`secure.boxel.ai` / `secure.stack.cards`) access logs and app log lines. It also covers auditing the secrets-at-rest KMS key (`alias/<env>-boxel-secrets`): its metadata, key policy and rotation, and every use of it recorded in CloudTrail. Claude operates as the dedicated `boxel-claude-readonly` IAM role — its effective AWS permissions are exactly that role's policy, regardless of which IAM groups the user is in. Use whenever Claude needs to call AWS APIs against the cardstack accounts, read/inspect the boxel_index database, browse `/persistent/` files, or read service logs in a deployed environment, or whenever the user asks "how do I connect Claude to AWS / staging / prod" or any of the deployed-env triage questions ("why is this realm indexing slowly", "show me the realm-server logs from last night", "is this file actually on disk in staging").
 allowed-tools: Read, Grep, Glob, Bash
 ---
 
@@ -643,6 +643,84 @@ The secure origin, where credentials are typed, has no service of its own. It is
   ```
 
 - **No client telemetry.** The shell loads none of the host app, so nothing on that origin beacons to `/_client-telemetry`. Sentry events from a secure-origin request carry only the method and path, so look for those, not bodies.
+
+## Auditing the secrets-at-rest KMS key
+
+The realm server seals the secrets it stores for users (API keys, OAuth tokens, webhook signing secrets) under a data key that one customer-managed KMS key wraps, `alias/<env>-boxel-secrets`. Its key policy names the realm-server and worker task roles as the only principals that can `Decrypt`, and nobody can `Encrypt`. Key administration and minting a new wrapped data key (`GenerateDataKeyWithoutPlaintext`) are delegated to IAM through the account root, so an admin-capable operator can make those calls. The role can read that key's metadata and the account's CloudTrail event history, so those claims can be checked in a deployed environment. It can't use the key, and it can't read the wrapped data key's SSM parameter.
+
+```sh
+P=claude-staging ENV=staging   # claude-prod / production for prod
+
+# GetKeyPolicy and GetKeyRotationStatus don't accept an alias, so resolve the key ARN first.
+KEY_ARN=$(aws --profile $P kms describe-key --key-id alias/$ENV-boxel-secrets \
+  --query KeyMetadata.Arn --output text)
+
+# State, usage and origin.
+aws --profile $P kms describe-key --key-id "$KEY_ARN" \
+  --query 'KeyMetadata.{state:KeyState,usage:KeyUsage,spec:KeySpec,origin:Origin,created:CreationDate}'
+
+# Which principals each statement allows to do what. The policy is a JSON string inside the response.
+aws --profile $P kms get-key-policy --key-id "$KEY_ARN" --policy-name default \
+  --query Policy --output text | jq '.Statement[] | {Sid, Principal, Action, Condition}'
+
+aws --profile $P kms get-key-rotation-status --key-id "$KEY_ARN"
+
+# Which alias points at a key id seen in a CloudTrail event.
+aws --profile $P kms list-aliases --query "Aliases[?TargetKeyId=='<key-id>'].AliasName"
+```
+
+Every use of the key is a CloudTrail management event, kept in event history for 90 days. Look them up by the key's ARN and summarise who called what. Each record names the caller (a task role's session name is the task id; events KMS makes itself, such as scheduled rotation, show `kms.amazonaws.com`) and the encryption context, never key material or a plaintext:
+
+```sh
+aws --profile $P cloudtrail lookup-events \
+  --lookup-attributes AttributeKey=ResourceName,AttributeValue="$KEY_ARN" \
+  --start-time "$(date -u -d '-1 day' +%Y-%m-%dT%H:%M:%SZ)" \
+  --query 'Events[].CloudTrailEvent' --output json \
+  | jq -r '.[] | fromjson | [.eventTime, .eventName, (.userIdentity.arn // .userIdentity.invokedBy), (.requestParameters.encryptionContext // {} | tojson), (.errorCode // "ok")] | @tsv'
+```
+
+What to expect, and what to treat as alarming:
+
+- **Expected:** a task-role `Decrypt` when a realm-server or worker task starts (the app unwraps the data key once, at startup); an operator's `GenerateDataKeyWithoutPlaintext` when a wrapped data key is minted; KMS's own scheduled `RotateKey`; and the reads this role makes.
+- **Alarming:** `PutKeyPolicy`, which can undo every claim above; alias changes (`CreateAlias`, `UpdateAlias`, `DeleteAlias`); `DisableKey` or `ScheduleKeyDeletion`; any `Decrypt` by a principal other than the two task roles; and a task-role `Decrypt` that isn't at task start.
+
+Both services run with ECS Exec enabled, so a shell in a task has the task role's credentials, and a `Decrypt` made from it looks the same as the startup unwrap: same role, same session name. What tells them apart is timing, and an `ExecuteCommand` event under a person's identity on that task:
+
+```sh
+aws --profile $P cloudtrail lookup-events \
+  --lookup-attributes AttributeKey=EventName,AttributeValue=ExecuteCommand \
+  --start-time "$(date -u -d '-1 day' +%Y-%m-%dT%H:%M:%SZ)" \
+  --query 'Events[].CloudTrailEvent' --output json \
+  | jq -r '.[] | fromjson | [.eventTime, .userIdentity.arn, .requestParameters.task] | @tsv'
+```
+
+- Events take a few minutes, sometimes up to fifteen, to appear after the call.
+- The CLI follows every page. Narrow `--start-time` to limit the output rather than passing `--max-items`: that caps the number of events (newest first), and the `--query` drops the `NextToken` that would show the list was cut, so a truncated audit looks complete.
+- `lookup-events` accepts one lookup attribute per call and is throttled to two requests a second per account, so don't fan it out.
+- `date -d` is GNU. On macOS use `date -u -v-1d +%Y-%m-%dT%H:%M:%SZ`.
+- The history covers the whole account's management events, not just KMS. Use it to answer a question about the key, not to browse.
+
+`kms decrypt`, `encrypt` and `generate-data-key` are denied to the role, and so is reading `/<env>/boxel/SECRETS_WRAPPED_DATA_KEY`.
+
+A denied call on the key is a CloudTrail event too, but it carries no resource and no key id, so the lookup by the key's ARN above never returns it. Look denied cryptographic calls up by event name instead, one call per action. The record's `errorCode` is `AccessDenied`, its caller is the session ARN of whoever tried (`assumed-role/boxel-claude-readonly/...` for this role), and its `errorMessage` names the key (`... not authorized to perform: kms:Encrypt on resource: arn:aws:kms:...:key/<id> because ...`). Keep the records that match both:
+
+```sh
+for action in Decrypt Encrypt ReEncrypt GenerateDataKey GenerateDataKeyWithoutPlaintext \
+              GenerateDataKeyPair GenerateDataKeyPairWithoutPlaintext; do
+  aws --profile $P cloudtrail lookup-events \
+    --lookup-attributes AttributeKey=EventName,AttributeValue=$action \
+    --start-time "$(date -u -d '-6 hours' +%Y-%m-%dT%H:%M:%SZ)" \
+    --query 'Events[].CloudTrailEvent' --output json \
+    | jq -r --arg key "$KEY_ARN" '.[] | fromjson
+        | select(.errorCode == "AccessDenied" and ((.errorMessage // "") | contains($key)))
+        | [.eventTime, .eventName, (.userIdentity.arn // .userIdentity.invokedBy), .errorCode] | @tsv'
+done
+```
+
+- Each event-name lookup covers every KMS key in the account, including the AWS-managed keys behind S3, SSM and Lambda, so the `Decrypt` one is large: a day of it can run to tens of thousands of events and many minutes of paging. Keep the window to hours and widen it only if you need to. The CLI retries when it's throttled, so the loop needs no pacing of its own.
+- The key match reads AWS's error-message wording. If a lookup that should find something returns nothing, drop the `contains` test and read the messages.
+- KMS logs a denied request from another AWS account only in that account, so these lookups see same-account denials only.
+- This covers cryptographic calls. Key-administration calls (`PutKeyPolicy`, `CreateGrant`, `DisableKey`, `ScheduleKeyDeletion`) that succeed show up in the lookup by the key's ARN above.
 
 ## Future skill / scripting room
 

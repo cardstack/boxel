@@ -2,7 +2,10 @@ import { downloadFile } from '@cardstack/runtime-common/ai';
 import type { SerializedFileDef } from '@cardstack/base/file-api';
 import type { BotTool } from '../types.ts';
 import { READ_REALM_FILE_TOOL_NAME } from '../read-realm-file/read.ts';
-import { fulfillReadUrlCalls } from './fulfillment.ts';
+import {
+  fulfillReadUrlCall,
+  type ReadUrlResponseReads,
+} from './fulfillment.ts';
 import {
   carriesEncodedData,
   collectPreapprovedUrls,
@@ -44,21 +47,26 @@ export const readUrlBotTool: BotTool = {
     let realmFileReadingAllowed = room.offeredToolNames.has(
       READ_REALM_FILE_TOOL_NAME,
     );
+    // A turn is one response, so the per-response read cap is counted here,
+    // across the calls fulfilled one at a time.
+    let reads: ReadUrlResponseReads = { count: 0 };
     return {
       // A call without a url runs, so its failure is published.
       needsApproval(argumentsJson) {
         let url = urlFromReadUrlArguments(argumentsJson);
         return url !== undefined && needsApproval(url);
       },
-      async fulfill(calls, target) {
-        return await fulfillReadUrlCalls(calls, {
+      async fulfill(call, target) {
+        let { commandRequestId, published } = await fulfillReadUrlCall(call, {
           ...target,
+          reads,
           refusal: (url) =>
             !preapproved.has(url) && carriesEncodedData(url)
               ? encodedDataRefusal(url)
               : undefined,
           readOptions: { realmOrigins, realmFileReadingAllowed },
         });
+        return { commandRequestId, published };
       },
     };
   },

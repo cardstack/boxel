@@ -8,6 +8,7 @@ import {
   type DBAdapter,
 } from '@cardstack/runtime-common';
 import jsonwebtoken from 'jsonwebtoken';
+import { isOperatorToken } from './operator-token.ts';
 const { JsonWebTokenError, sign, TokenExpiredError, verify } = jsonwebtoken;
 
 export interface RealmServerTokenClaim {
@@ -38,10 +39,15 @@ export function retrieveTokenClaim(
 ): RealmServerTokenClaim & { iat: number; exp: number } {
   let tokenString = authorizationString.replace('Bearer ', '');
   try {
-    return verify(tokenString, secretSeed) as RealmServerTokenClaim & {
+    let claims = verify(tokenString, secretSeed) as RealmServerTokenClaim & {
       iat: number;
       exp: number;
     };
+    // An operator token authorizes its operator endpoints and nothing else.
+    if (isOperatorToken(claims)) {
+      throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
+    }
+    return claims;
   } catch (e) {
     if (e instanceof TokenExpiredError) {
       throw new AuthenticationError(AuthenticationErrorMessages.TokenExpired);

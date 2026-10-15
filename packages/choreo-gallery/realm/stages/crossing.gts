@@ -8,7 +8,6 @@ import { motion, styles, to } from 'glimmer-motion';
 
 import { GalleryDemo } from '../demo';
 import { realmFile } from '../lib/realm-url';
-import { factor } from '../lib/tempo';
 import { tuneMotion, tuneNumber } from '../lib/tuning';
 import { liveScroll, playClip } from '../lib/xstress-live';
 import { CrossingNotes } from '../notes/crossing';
@@ -20,15 +19,14 @@ type Mode = 'manual' | 'auto' | 'stress';
 const labels = ['01  Tide', '02  Ember', '03  Violet'] as const;
 
 /**
- * Same morph as the gallery ⇄ demo crossing: one duration, one ease. A
- * spring lands before you can read the skins swap.
+ * One morph: one duration, one ease. A spring lands before you can read the
+ * skins swap.
  */
 const BASE = 0.9;
 const EASE = [0.2, 0, 0, 1] as const;
 
 function t() {
-  const m =
-    tuneNumber('crossing', BASE, 'Crossing duration', 0.05, 3, 0.01) * factor();
+  const m = tuneNumber('crossing', BASE, 'Crossing duration', 0.05, 3, 0.01);
   return {
     arrive: tuneNumber('crossing', 0.55, 'Arrival fraction', 0.05, 1, 0.01) * m,
     leave:

@@ -1,20 +1,26 @@
 /**
  * The gallery site, whole: the gallery card as the realm serves it — every
  * demo its index links, in that order — rendered isolated, with the palette,
- * the theme switch, and a trip to a demo page and back.
+ * the theme switch, and each tile handing its demo card to the host to open.
  */
-import { click, waitFor } from '@ember/test-helpers';
+import { htmlSafe } from '@ember/template';
+import { click, render, waitFor } from '@ember/test-helpers';
 
 import { live, liveAll } from '@cardstack/choreo/test-support';
+import { modifier } from 'ember-modifier';
 import { module, test } from 'qunit';
+
+import { CardContextName } from '@cardstack/runtime-common';
 
 import {
   GALLERY_DEMOS,
   setupChoreoGalleryTest,
 } from '../helpers/choreo-gallery-stage';
+import { provideConsumeContext, testRealmURL } from '../helpers/index';
 
-import type * as TempoModule from '../../../choreo-gallery/realm/lib/tempo';
 import type * as ThemeModule from '../../../choreo-gallery/realm/lib/theme';
+import type * as CardAPI from '@cardstack/base/card-api';
+import type { CardContext } from '@cardstack/base/card-api';
 
 const THEME_KEY = 'choreo-theme';
 
@@ -37,13 +43,9 @@ module('Integration | Choreo gallery | site', function (hooks) {
     } catch {
       storedTheme = null;
     }
-    let { setTempo } = await gallery.import<typeof TempoModule>('lib/tempo');
-    setTempo('instant');
   });
 
   hooks.afterEach(async function () {
-    let { setTempo } = await gallery.import<typeof TempoModule>('lib/tempo');
-    setTempo('smooth');
     let { setThemeMode } =
       await gallery.import<typeof ThemeModule>('lib/theme');
     setThemeMode('dark');
@@ -102,30 +104,127 @@ module('Integration | Choreo gallery | site', function (hooks) {
     assert.strictEqual(site().dataset['theme'], 'dark', 'and dark again');
   });
 
-  test('a tile opens its demo page in place, and the topbar brings it back', async function (assert) {
+  test('a tile hands its demo card to the host, which opens it', async function (assert) {
+    let opened = gallery.provideViewCard();
     await gallery.renderGallery();
+    // the stage boots once the tile has measured room for it
+    await waitFor("[data-gallery-tile='keyframes'] .tile-stage");
 
-    await click(live("[data-gallery-tile='keyframes'] .card-meta")!);
-    await waitFor('[data-demo="keyframes"]');
+    await click(live("[data-gallery-tile='keyframes'] .tile-title")!);
+    assert.deepEqual(opened, ['keyframes'], 'a click on the tile opens it');
 
-    assert.deepEqual(tiles(), [], 'the grid has left');
+    await click(live("[data-gallery-tile='keyframes'] .tile-stage")!);
+    assert.deepEqual(
+      opened,
+      ['keyframes', 'keyframes'],
+      'and so does a click on the picture: the whole tile is the link',
+    );
+
+    let guide = live<HTMLAnchorElement>(
+      "[data-gallery-tile='keyframes'] .guide-link",
+    )!;
+    guide.addEventListener('click', (event) => event.preventDefault());
+    await click(guide);
+    assert.strictEqual(opened.length, 2, 'the guide link keeps its click');
+
+    // the title is the tile's link: a real one, for the keyboard, whose
+    // activation is a click the host takes like any other
+    let link = live<HTMLAnchorElement>(
+      "[data-gallery-tile='enter'] a.tile-title",
+    )!;
+    assert.strictEqual(link.textContent?.trim(), 'Enter', 'named for its demo');
+    assert.strictEqual(
+      link.getAttribute('href'),
+      `${testRealmURL}demos/enter`,
+      'and pointing at its card',
+    );
+    let navigated: boolean | undefined;
+    link.addEventListener('click', (event) => {
+      navigated = !event.defaultPrevented;
+    });
+    await click(link);
+    assert.deepEqual(
+      opened,
+      ['keyframes', 'keyframes', 'enter'],
+      'following the link opens the card through the host',
+    );
+    assert.false(navigated, 'and the link does not navigate the page itself');
     assert
-      .dom('.demo-head h1')
-      .hasText('Keyframes', 'the keyframes demo page renders in its place');
-    let code = live('.sample code');
-    assert.ok(code, 'the page shows its usage example');
-    assert.ok(
-      code!.querySelector('[class^="syn-"]'),
-      'the example is highlighted',
-    );
-    assert.true(
-      code!.textContent?.includes('motion'),
-      'and it is the GTS that uses motion',
+      .dom(
+        '[data-gallery-tile] [role="link"], [data-gallery-tile][role="link"]',
+      )
+      .doesNotExist(
+        'the tile holds its links side by side, none inside another',
+      );
+    assert
+      .dom('[data-gallery-tile][tabindex]')
+      .doesNotExist('and the tile is one stop, its link, not a second');
+    assert
+      .dom('.demo-head')
+      .doesNotExist('the gallery never shows a demo page itself');
+  });
+
+  test('a tap the stage uses for itself stays with the stage', async function (assert) {
+    let opened = gallery.provideViewCard();
+    await gallery.renderGallery();
+    await waitFor("[data-gallery-tile='slides'] .slide");
+    await waitFor("[data-gallery-tile='drift'] .drift-view");
+
+    await click(live("[data-gallery-tile='slides'] .slide")!);
+    await click(live("[data-gallery-tile='drift'] .drift-view")!);
+    assert.deepEqual(
+      opened,
+      [],
+      'a tap that advances the slide or steers the car opens nothing',
     );
 
-    await click(live('.topbar [data-gallery-brand]')!);
-    await waitFor('[data-gallery-tile]');
-    assert.deepEqual(tiles(), GALLERY_DEMOS, 'back on the index, every tile');
-    assert.dom('.demo-head').doesNotExist('the demo page has gone');
+    await click(live("[data-gallery-tile='slides'] .tile-title")!);
+    assert.deepEqual(opened, ['slides'], 'the rest of the tile still opens it');
+  });
+
+  test('a tile with no room for a stage is just the demo’s name', async function (assert) {
+    let [keyframes] = await gallery.demos(['keyframes']);
+    let { getComponent } = (await gallery.loader.import(
+      '@cardstack/base/card-api',
+    )) as typeof CardAPI;
+    let Fitted = getComponent(keyframes!);
+    let small = htmlSafe('position: relative; width: 260px; height: 80px;');
+    let roomy = htmlSafe('position: relative; width: 420px; height: 540px;');
+    await render(
+      <template>
+        <div class='small' style={{small}}><Fitted @format='fitted' /></div>
+        <div class='roomy' style={{roomy}}><Fitted @format='fitted' /></div>
+      </template>,
+    );
+    await waitFor('.roomy .tile-stage');
+
+    assert.dom('.small .tile-title').hasText('Keyframes', 'the name');
+    assert.dom('.small .tile-stage').doesNotExist('no stage boots');
+    assert.dom('.small .guide-link').doesNotExist('and no guide link');
+    assert.dom('.roomy .tile-lede').exists('with room, what the demo is');
+    assert.dom('.roomy .guide-link').exists('and its guide');
+  });
+
+  test('where the host opens cards on a click, the tile leaves the click to it', async function (assert) {
+    // the overlay's listener: on the card's element, and it keeps the click
+    let overlay: string[] = [];
+    let opensOnClick = modifier((element: HTMLElement) => {
+      let open = (event: Event) => {
+        event.stopPropagation();
+        overlay.push('card');
+      };
+      element.addEventListener('click', open);
+      return () => element.removeEventListener('click', open);
+    });
+    provideConsumeContext(CardContextName, {
+      cardComponentModifier: opensOnClick,
+    } as unknown as CardContext);
+    let opened = gallery.provideViewCard();
+    await gallery.renderGallery();
+    await waitFor("[data-gallery-tile='keyframes'] .tile-title");
+
+    await click(live("[data-gallery-tile='keyframes'] .tile-title")!);
+    assert.deepEqual(overlay, ['card'], 'the host takes the click');
+    assert.deepEqual(opened, [], 'and the gallery does not open it again');
   });
 });

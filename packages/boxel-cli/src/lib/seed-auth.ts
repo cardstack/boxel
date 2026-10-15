@@ -83,6 +83,22 @@ export function mintRealmServerToken(
   });
 }
 
+/**
+ * Mint an operator token for one family of the realm server's operator
+ * endpoints (the `boxel realm-server` commands). It carries no user, names its
+ * family in the `operator` claim and lives for minutes; the server accepts it
+ * on those endpoints only, and the seed never leaves this machine.
+ */
+export function mintOperatorToken(
+  seed: string,
+  scope: 'data-keys',
+  opts: { expiresIn?: jwt.SignOptions['expiresIn'] } = {},
+): string {
+  return jwt.sign({ operator: scope }, seed, {
+    expiresIn: opts.expiresIn ?? '5m',
+  });
+}
+
 function normalizeRealmUrl(realmUrl: string): string {
   try {
     const u = new URL(realmUrl);

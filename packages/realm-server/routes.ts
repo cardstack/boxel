@@ -16,6 +16,10 @@ import handleCreateRealmRequest, {
   type CreateRealmDeps,
 } from './handlers/create-realm.ts';
 import handleDeleteRealm from './handlers/handle-delete-realm.ts';
+import {
+  handleDataKeyReseal,
+  handleDataKeyStatus,
+} from './handlers/handle-data-keys.ts';
 import handleFetchCatalogRealmsRequest from './handlers/handle-fetch-catalog-realms.ts';
 import handleFetchPublicRealmsRequest from './handlers/handle-fetch-public-realms.ts';
 import handleFetchUserRequest from './handlers/handle-fetch-user.ts';
@@ -30,6 +34,7 @@ import {
   healthCheck,
   jwtMiddleware,
   grafanaAuthorization,
+  operatorAuthorization,
 } from './middleware/index.ts';
 import type Koa from 'koa';
 import handleCreateUserRequest from './handlers/handle-create-user.ts';
@@ -89,6 +94,10 @@ import handleRunCommand from './handlers/handle-run-command.ts';
 import handleCapture from './handlers/handle-capture.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
+import {
+  OPENROUTER_PASSTHROUGH_PATH,
+  REQUEST_FORWARD_PATH,
+} from './lib/request-telemetry.ts';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -229,7 +238,7 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleCreateUserRequest(args),
   );
   router.post(
-    '/_request-forward',
+    REQUEST_FORWARD_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleRequestForward({
       dbAdapter: args.dbAdapter,
@@ -245,7 +254,7 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleClientTelemetry(),
   );
   router.post(
-    '/_openrouter/chat/completions',
+    OPENROUTER_PASSTHROUGH_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleOpenRouterPassthrough({
       dbAdapter: args.dbAdapter,
@@ -362,6 +371,19 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_archived-realms',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleArchivedRealms(args),
+  );
+
+  // Rotating the data key that seals stored secrets. Only an operator token
+  // signed with the realm secret seed reaches these.
+  router.get(
+    '/_data-keys',
+    operatorAuthorization(args.realmSecretSeed, 'data-keys'),
+    handleDataKeyStatus(args),
+  );
+  router.post(
+    '/_data-keys/reseal',
+    operatorAuthorization(args.realmSecretSeed, 'data-keys'),
+    handleDataKeyReseal(args),
   );
 
   // Grafana operator-action endpoints. All POST-only with

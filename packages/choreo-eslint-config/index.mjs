@@ -1,6 +1,6 @@
 /**
  * Lint rules shared by the Choreo packages: glimmer-motion, choreo,
- * choreo-player, choreo-gallery and choreo-test-app.
+ * choreo-player, choreo-gallery and choreo-film-app.
  *
  * They follow packages/boxel-ui/eslint.config.mjs minus the boxel-specific
  * plugins: simple-import-sort, sorted interface keys, curly braces everywhere,

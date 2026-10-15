@@ -1,4 +1,10 @@
-import { expect, test, type Browser, type Page } from '@playwright/test';
+import {
+  expect,
+  test,
+  type Browser,
+  type FrameLocator,
+  type Page,
+} from '@playwright/test';
 import type { Credentials } from '../support/synapse/index.ts';
 import {
   loginUser,
@@ -894,15 +900,26 @@ export async function assertRooms(page: Page, rooms: string[]) {
   await page.locator('[data-test-ai-assistant-panel]').click();
 }
 
+// The app's password fields, and the sign-in form's username, are in a frame
+// on the secure origin, out of reach of card code in the page. `form` names
+// which one when the page could hold more than one.
+export function credentialFields(page: Page, form?: string): FrameLocator {
+  return page.frameLocator(
+    form
+      ? `[data-test-credential-fields-frame="${form}"]`
+      : '[data-test-credential-fields-frame]',
+  );
+}
+
 export async function assertLoggedIn(page: Page, opts: ProfileAssertions) {
   await page.locator('[data-test-profile-icon-button]').click();
 
   await expect(
-    page.locator('[data-test-username-field]'),
+    credentialFields(page).locator('[data-test-username-field]'),
     'username field is not displayed',
   ).toHaveCount(0);
   await expect(
-    page.locator('[data-test-password-field]'),
+    credentialFields(page).locator('[data-test-password-field]'),
     'password field is not displayed',
   ).toHaveCount(0);
   await expect(page.locator('[data-test-profile-display-name]')).toContainText(
@@ -1071,11 +1088,11 @@ export async function createSubscribedUserAndLogin(
 
 export async function assertLoggedOut(page: Page) {
   await expect(
-    page.locator('[data-test-username-field]'),
+    credentialFields(page).locator('[data-test-username-field]'),
     'username field is displayed',
   ).toHaveCount(1);
   await expect(
-    page.locator('[data-test-password-field]'),
+    credentialFields(page).locator('[data-test-password-field]'),
     'password field is displayed',
   ).toHaveCount(1);
   await expect(

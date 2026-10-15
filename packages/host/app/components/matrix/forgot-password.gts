@@ -15,14 +15,16 @@ import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { eq, or } from '@cardstack/boxel-ui/helpers';
 
 import {
-  isMatrixError,
-  isValidPassword,
-} from '@cardstack/host/lib/matrix-utils';
+  CredentialFields,
+  credentialFieldsError,
+} from '@cardstack/host/lib/credential-fields';
+import { isMatrixError } from '@cardstack/host/lib/matrix-utils';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import AuthButton from './auth-button';
 import AuthFormField from './auth-form-field';
+import CredentialFieldsFrame from './credential-fields';
 
 import type { AuthMode } from './auth';
 
@@ -90,32 +92,7 @@ export default class ForgotPassword extends Component<Signature> {
       >Resend Email</AuthButton>
     {{else if (eq this.state.type 'resetPassword')}}
       <span class='title'>Reset your password</span>
-      <AuthFormField @label='Enter New Password'>
-        <BoxelInput
-          data-test-password-field
-          type='password'
-          name='password'
-          autocomplete='new-password'
-          @errorMessage={{this.passwordError}}
-          @state={{this.passwordInputState}}
-          @value={{this.password}}
-          @onInput={{this.setPassword}}
-          @onBlur={{this.checkPassword}}
-        />
-      </AuthFormField>
-      <AuthFormField @label='Re-Enter New Password'>
-        <BoxelInput
-          data-test-confirm-password-field
-          type='password'
-          name='confirm-password'
-          autocomplete='new-password'
-          @errorMessage={{this.confirmPasswordError}}
-          @state={{this.confirmPasswordInputState}}
-          @value={{this.confirmPassword}}
-          @onInput={{this.setConfirmPassword}}
-          @onBlur={{this.checkConfirmPassword}}
-        />
-      </AuthFormField>
+      <CredentialFieldsFrame @form='reset' @fields={{this.credentials}} />
       <div class='button-wrapper'>
         <AuthButton
           data-test-reset-password-btn
@@ -200,10 +177,9 @@ export default class ForgotPassword extends Component<Signature> {
   @tracked private isResetPasswordParamsError = false;
   @tracked private email: string | undefined;
   @tracked private emailError: string | undefined;
-  @tracked private password: string | undefined;
-  @tracked private confirmPassword: string | undefined;
-  @tracked private passwordError: string | undefined;
-  @tracked private confirmPasswordError: string | undefined;
+  // The new password and its confirmation are typed into a frame on the
+  // secure origin, which sets the password.
+  private credentials = new CredentialFields();
   @tracked private state:
     | { type: 'initial' }
     | { type: 'validateEmail'; email: string; sendAttempt: number }
@@ -224,6 +200,7 @@ export default class ForgotPassword extends Component<Signature> {
 
   constructor(owner: Owner, args: any) {
     super(owner, args);
+    this.credentials.onInput = () => (this.error = undefined);
 
     if (this.args.resetPasswordParams) {
       this.state = {
@@ -239,13 +216,7 @@ export default class ForgotPassword extends Component<Signature> {
   }
 
   private get isResetPasswordBtnDisabled() {
-    return Boolean(
-      !this.password ||
-      !this.confirmPassword ||
-      this.passwordError ||
-      this.confirmPasswordError ||
-      this.resetPassword.isRunning,
-    );
+    return Boolean(!this.credentials.complete || this.resetPassword.isRunning);
   }
 
   @action
@@ -254,46 +225,8 @@ export default class ForgotPassword extends Component<Signature> {
     this.emailError = undefined;
   }
 
-  @action
-  private setPassword(password: string) {
-    this.password = password;
-    this.passwordError = undefined;
-    this.error = undefined;
-  }
-
-  @action
-  private setConfirmPassword(confirmPassword: string) {
-    this.confirmPassword = confirmPassword;
-    this.confirmPasswordError = undefined;
-    this.error = undefined;
-  }
-
-  @action
-  private checkPassword() {
-    if (!this.password) {
-      this.passwordError = 'Password is missing';
-    } else if (!isValidPassword(this.password)) {
-      this.passwordError = 'Password must be at least 8 characters long';
-    }
-  }
-
-  @action
-  private checkConfirmPassword() {
-    if (this.confirmPassword !== this.password) {
-      this.confirmPasswordError = 'Passwords do not match';
-    }
-  }
-
   private get emailInputState() {
     return this.emailError ? 'invalid' : 'initial';
-  }
-
-  private get passwordInputState() {
-    return this.passwordError ? 'invalid' : 'initial';
-  }
-
-  private get confirmPasswordInputState() {
-    return this.confirmPasswordError ? 'invalid' : 'initial';
   }
 
   @action
@@ -371,11 +304,14 @@ export default class ForgotPassword extends Component<Signature> {
   });
 
   private resetPassword = restartableTask(async () => {
+    if (!(await this.credentials.validate())) {
+      return;
+    }
     if (this.state.type !== 'resetPassword') {
       throw new Error(
         `invalid state: cannot resetPassword() in state ${this.state.type}`,
       );
-    } else if (!this.password) {
+    } else if (!this.credentials.complete) {
       throw new Error(
         `bug: should never get here: reset password button disabled when no password`,
       );
@@ -386,17 +322,21 @@ export default class ForgotPassword extends Component<Signature> {
     }
 
     try {
-      await this.matrixService.setPassword(
-        {
-          threepid_creds: {
-            sid: this.args.resetPasswordParams.sid,
-            client_secret: this.args.resetPasswordParams.clientSecret,
+      let result = await this.credentials.submit({
+        operation: 'set-password',
+        args: {
+          auth: {
+            threepid_creds: {
+              sid: this.args.resetPasswordParams.sid,
+              client_secret: this.args.resetPasswordParams.clientSecret,
+            },
+            type: 'm.login.email.identity',
           },
-          type: 'm.login.email.identity',
         },
-        this.password,
-        true,
-      );
+      });
+      if (!result.ok) {
+        throw credentialFieldsError(result);
+      }
       this.state = {
         ...this.state,
         type: 'resetPasswordSuccess',

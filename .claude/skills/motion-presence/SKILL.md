@@ -5,7 +5,7 @@ description: >-
   as they are added to or removed from the DOM — lists, toasts, modals,
   wizards. Use whenever an element must animate OUT, or when choosing between
   sync/wait/popLayout modes, in glimmer-motion / Choreo code in this repo
-  (packages/glimmer-motion, packages/choreo, the Choreo gallery and test app,
+  (packages/glimmer-motion, packages/choreo, the Choreo gallery,
   host UI that animates with them).
 ---
 
@@ -65,6 +65,6 @@ _props_, but your template's own bindings are yours to keep stable.
   See `choreo-scene`.
 - The element isn't leaving, just moving → `motion-layout`.
 
-Canonical demos, in `packages/choreo-test-app/app/components/examples/`:
-`presence-modes.gts` (the three modes side by side),
-`shared-tabs.gts` (presence + layoutId handover), `sheet.gts`.
+Canonical demos, in `packages/choreo-gallery/realm/stages/`:
+`presence.gts` (the three modes side by side),
+`tabs.gts` (presence + layoutId handover), `sheet.gts`.

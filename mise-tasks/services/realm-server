@@ -135,6 +135,8 @@ LOW_CREDIT_THRESHOLD="${LOW_CREDIT_THRESHOLD:-2000}" \
   --prerendererUrl="${PRERENDER_MGR_URL}" \
   --securePort="${SECURE_PORT}" \
   --secureOriginURL="${SECURE_ORIGIN_URL}" \
+  --secureOriginAppOrigin="${HOST_URL}" \
+  --secureOriginAppOrigin="${HOST_TEST_RUNNER_URL}" \
   --migrateDB \
   $WORKER_MANAGER_ARG \
   \

@@ -54,6 +54,7 @@ import {
   setupRealmServerEndpoints,
   realmConfigCardJSON,
 } from '../helpers';
+import { signInThroughCredentialFields } from '../helpers/credential-fields';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import {
   getPlaygroundSelections,
@@ -1271,9 +1272,7 @@ module('Acceptance | operator mode tests', function (hooks) {
         'the param must outlive the login form',
       );
 
-      await fillIn('[data-test-username-field]', 'testuser');
-      await fillIn('[data-test-password-field]', 'mock-password');
-      await click('[data-test-login-btn]');
+      await signInThroughCredentialFields();
 
       // Three things have to line up for the modal to be on screen, and the
       // assertion alone cannot say which one is missing. Report the session's

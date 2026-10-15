@@ -29,7 +29,7 @@ For browser delivery, verify the chosen video and audio encoding in Safari. Chec
 
 ## Deploying the Site and Gallery
 
-This documentation is realm content: the guides, the demos they embed and the 3D room are all files in the gallery realm, `packages/choreo-gallery/realm`, so links between them stay inside one realm wherever it is served. Each deploy copies that directory onto the realm's disk, so git is the gallery's source of truth.
+This documentation is realm content: the guides, the demos they embed and the [3D room](../../widget-room) are all files in the gallery realm, `packages/choreo-gallery/realm`, so links between them stay inside one realm wherever it is served. Each deploy copies that directory onto the realm's disk, so git is the gallery's source of truth.
 
 To publish a copy to a realm of your own, push the directory from the package:
 
@@ -43,7 +43,7 @@ The realm carries no copies of `glimmer-motion` or `@cardstack/choreo`: its card
 
 ## Checking Navigation
 
-From the deployed realm, open a guide, follow its next-page link, open the demo it embeds, and enter the 3D gallery. Reload a guide's URL and repeat the tour's Play, Pause, and Resume actions. These checks catch linking and media failures that a local realm cannot reveal.
+From the deployed realm, open a guide, follow its next-page link, open the demo it embeds, and enter the [3D gallery](../../widget-room). Reload a guide's URL and repeat the tour's Play, Pause, and Resume actions. These checks catch linking and media failures that a local realm cannot reveal.
 
 ---
 

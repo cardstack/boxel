@@ -2,7 +2,7 @@
 
 A gallery gives the viewer a place to explore. Its architecture, exhibit sizes, and camera paths should help them understand the capabilities on display.
 
-The Choreo 3D gallery is the complete example. It includes framed demos, physical section signs, free exploration, a highlights tour, and a longer narrated tour.
+The [Choreo 3D gallery](../../widget-room) is the complete example. It includes framed demos, physical section signs, free exploration, a highlights tour, and a longer narrated tour.
 
 ## Organizing the Room
 

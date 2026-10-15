@@ -38,17 +38,28 @@ import {
 import { handleDebugCommands } from './lib/debug.ts';
 import { DelegatedUserRealmSessionManager } from './lib/user-delegated-realm-server-session.ts';
 import {
+  abandonedBotToolCalls,
+  cancelBotToolCalls,
   classifyToolCalls,
+  fulfillBotToolCalls,
   offeredBotTools,
   startBotToolTurns,
+  type BotToolCall,
+  type BotToolCallEntry,
   type BotToolTurn,
   type ClassifiedToolCalls,
 } from './lib/bot-tools/index.ts';
+import { INTERRUPTED_TOOL_CALL_REASON } from './lib/bot-tools/results.ts';
 import {
   ApprovalClaims,
   releasedToolCalls,
   type ReleasedToolCall,
 } from './lib/bot-tools/approval.ts';
+import { RoomTurns, type RoomTurn } from './lib/room-turns.ts';
+import {
+  readStopState,
+  STOPPED_TOOL_CALL_REASON,
+} from '@cardstack/runtime-common/ai/stop';
 import { isApprovalResult } from '@cardstack/runtime-common/ai';
 import type { Tool } from '@cardstack/base/matrix-event';
 import { Responder } from './lib/responder.ts';
@@ -94,6 +105,10 @@ let log = logger('ai-bot');
 // The approved bot-tool calls this process has taken on running (see
 // ApprovalClaims).
 const approvalClaims = new ApprovalClaims();
+
+// The handler runs in flight per room, so a stop reaches the parts of a run
+// that come after its history was read (see RoomTurns).
+const roomTurns = new RoomTurns();
 
 let trackAiUsageCostPromises = new Map<string, Promise<void>>();
 let activeGenerations = new Map<
@@ -297,6 +312,7 @@ Common issues are:
     async function (event, room, toStartOfTimeline) {
       let eventId = event.getId()!;
       let releaseRoomTurn: (() => void) | undefined;
+      let roomTurn: RoomTurn | undefined;
 
       try {
         // Ensure that the event body we have is a string
@@ -365,6 +381,14 @@ Common issues are:
             ts: event.event.origin_server_ts,
           });
         }
+
+        if (event.getType() === APP_BOXEL_STOP_GENERATING_EVENT_TYPE) {
+          roomTurns.stop(room.roomId);
+        }
+        // The run can be stopped from here on, including while it waits for
+        // an interrupted generation, its turn in the room, or the room lock.
+        let thisRoomTurn = roomTurns.begin(room.roomId);
+        roomTurn = thisRoomTurn;
 
         // Handle the case where the user stops the generation
         let activeGeneration = activeGenerations.get(room.roomId);
@@ -446,6 +470,20 @@ Common issues are:
         let pendingFulfillAgentId: string | undefined;
         let pendingReleasedCalls: ReleasedToolCall[] = [];
         let pendingReleasedAgentId: string | undefined;
+        // The bot-tool calls of an answer that was canceled mid-stream. They
+        // never run, but each is answered as canceled (after the lock is
+        // released, like the calls above), so no call is left without a
+        // result for the next prompt to trip over.
+        let pendingCanceledBotToolCalls: BotToolCall[] = [];
+        let pendingCanceledRequestEventId: string | undefined;
+        let pendingCanceledAgentId: string | undefined;
+        let pendingCanceledReason = STOPPED_TOOL_CALL_REASON;
+        // Whether the user has stopped the loop the bot-tool calls belong
+        // to: a stop already in the room when this run read it (after the
+        // approval the run picks up, say), or one that lands while the run
+        // is in flight.
+        let stopInHistory = false;
+        let stopped = () => thisRoomTurn.stopped || stopInHistory;
         // Each offered bot tool's state for this handler run, started once
         // the room history is in hand.
         let botToolTurns: Map<string, BotToolTurn> = new Map();
@@ -540,6 +578,8 @@ Common issues are:
               onBehalfOf: senderMatrixUserId,
               delegatedUserRealmSessions: assistant.delegatedUserRealmSessions,
             }));
+          stopInHistory =
+            readStopState(eventList, aiBotUserId).inForce !== undefined;
           // Run every held bot-tool call the user has approved and the bot
           // hasn't run yet, whatever event this handler runs for: an approval
           // whose own handler was stood down for a newer event is picked up
@@ -626,6 +666,15 @@ Common issues are:
               // out.
               ...botTools.map((tool) => tool.name),
             ]);
+            // The user stopped the loop after this run read the room; that
+            // stop is not in the history, so it holds the correctness check
+            // as well as the generation here.
+            if (thisRoomTurn.stopped) {
+              if (responder.responseEventId) {
+                await responder.finalize({ isCanceled: true });
+              }
+              return;
+            }
             if (promptParts.pendingCodePatchCorrectnessChecks) {
               return await publishCodePatchCorrectnessMessage(
                 promptParts.pendingCodePatchCorrectnessChecks,
@@ -733,6 +782,9 @@ Common issues are:
                 abort: () => compactionAbort.abort(),
               };
             }
+            // A stop that landed before the compaction began found no
+            // runner to abort.
+            thisRoomTurn.whenStopped(() => compactionAbort.abort());
             try {
               let result = await profTime(
                 eventId,
@@ -856,6 +908,10 @@ Common issues are:
                 lastGeneratedChunkId: generationId,
                 completionPromise: generationCompletionPromise,
               });
+              // A stop that landed while the request was being prepared, or
+              // while the history was being compacted, found no runner to
+              // abort.
+              thisRoomTurn.whenStopped(() => runner.abort());
 
               let completion = await profTime(
                 eventId,
@@ -966,6 +1022,20 @@ Common issues are:
               } else if (error instanceof APIUserAbortError) {
                 log.info(`[${eventId}] Generation was canceled by user`);
                 await responder.finalize({ isCanceled: true });
+                // The canceled answer keeps the calls it had streamed, the
+                // last one possibly cut off mid-arguments. A stop or a newer
+                // message aborts the runner, and in neither case does a call
+                // run.
+                if (responder.responseEventId) {
+                  pendingCanceledBotToolCalls = abandonedBotToolCalls(
+                    responder.responseState.toolCalls,
+                  );
+                  pendingCanceledRequestEventId = responder.responseEventId;
+                  pendingCanceledAgentId = agentId;
+                  pendingCanceledReason = stopped()
+                    ? STOPPED_TOOL_CALL_REASON
+                    : INTERRUPTED_TOOL_CALL_REASON;
+                }
               } else {
                 log.error(
                   `[${eventId}] Error during generation or finalization`,
@@ -1047,41 +1117,65 @@ Common issues are:
           // posts a command-result event that re-triggers the bot for the
           // continuation turn; that re-trigger acquires the room lock this
           // handler just released. Fulfilling here (rather than inside the
-          // lock) is what lets the continuation proceed.
+          // lock) is what lets the continuation proceed. The approved calls
+          // go first, then the response's own; one loop runs them all and
+          // checks for a stop before each (see fulfillBotToolCalls).
+          let entries: BotToolCallEntry[] = [];
           for (let released of pendingReleasedCalls) {
-            let [outcome] =
-              (await botToolTurns
-                .get(released.toolName)
-                ?.fulfill([released.call], {
+            let turn = botToolTurns.get(released.toolName);
+            if (turn) {
+              entries.push({
+                call: released.call,
+                turn,
+                target: {
                   client,
                   roomId: room.roomId,
                   requestEventId: released.requestEventId,
                   agentId: pendingReleasedAgentId,
-                })) ?? [];
-            // A result that never reached the room leaves the call to be
-            // run on a later handler run.
-            if (!outcome?.published) {
-              approvalClaims.release(released.call.id);
+                },
+              });
             }
           }
-          if (
-            pendingFulfillRequestEventId &&
-            pendingFulfillBotToolCalls.length > 0
-          ) {
+          if (pendingFulfillRequestEventId) {
             // Each tool runs its own calls, in the registry's order.
             for (let [toolName, turn] of botToolTurns) {
-              let calls = pendingFulfillBotToolCalls.filter(
-                (call) =>
-                  call.type === 'function' && call.function.name === toolName,
-              );
-              if (calls.length > 0) {
-                await turn.fulfill(calls, {
-                  client,
-                  roomId: room.roomId,
-                  requestEventId: pendingFulfillRequestEventId,
-                  agentId: pendingFulfillAgentId,
-                });
+              for (let call of pendingFulfillBotToolCalls) {
+                if (
+                  call.type === 'function' &&
+                  call.function.name === toolName
+                ) {
+                  entries.push({
+                    call,
+                    turn,
+                    target: {
+                      client,
+                      roomId: room.roomId,
+                      requestEventId: pendingFulfillRequestEventId,
+                      agentId: pendingFulfillAgentId,
+                    },
+                  });
+                }
               }
+            }
+          }
+          if (pendingCanceledRequestEventId) {
+            await cancelBotToolCalls(
+              pendingCanceledBotToolCalls,
+              {
+                client,
+                roomId: room.roomId,
+                requestEventId: pendingCanceledRequestEventId,
+                agentId: pendingCanceledAgentId,
+              },
+              pendingCanceledReason,
+            );
+          }
+          let outcomes = await fulfillBotToolCalls(entries, stopped);
+          // An approved call whose result never reached the room (or whose
+          // tool this run was not offered) is left to a later handler run.
+          for (let released of pendingReleasedCalls) {
+            if (!outcomes.get(released.call.id)?.published) {
+              approvalClaims.release(released.call.id);
             }
           }
         }
@@ -1097,6 +1191,9 @@ Common issues are:
         return;
       } finally {
         releaseRoomTurn?.();
+        if (room && roomTurn) {
+          roomTurns.end(room.roomId, roomTurn);
+        }
       }
     },
   );

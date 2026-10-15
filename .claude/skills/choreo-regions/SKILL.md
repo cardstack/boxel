@@ -4,8 +4,7 @@ description: >-
   Nested <Choreo> regions and far matching: composing multiple scenes in one
   tree, and flying one identity from one region into another (an item moving
   between panels, workspaces, bays). Use in glimmer-motion / Choreo code in
-  this repo (packages/glimmer-motion, packages/choreo, the Choreo gallery and
-  test app, host UI that animates with them) when a UI has more than one
+  this repo (packages/glimmer-motion, packages/choreo, the Choreo gallery, host UI that animates with them) when a UI has more than one
   <Choreo>, when deciding where region boundaries go, or when an element
   leaving one region must arrive in another as one continuous flight.
 ---
@@ -105,7 +104,7 @@ mid-flight, assert `orphanCount() === 0` and `strandedTransforms()` is
 empty (`motion-testing`). `setupChoreo(hooks)` resets the far-match
 barrier between tests — required, or passes leak across tests.
 
-Ground truth: `packages/choreo-test-app/app/components/examples/far-match.gts`
+Ground truth: `packages/choreo-gallery/realm/stages/far.gts`
 (three bays, the on/off switch is just id scoping) and its Deep Dive note
-`packages/choreo-test-app/app/components/notes/far.gts`; design in
+`packages/choreo-gallery/realm/notes/far.gts`; design in
 `packages/choreo-gallery/realm/docs/nested-choreo.md`.

@@ -6,23 +6,32 @@ import {
   containsMany,
   field,
   FieldDef,
+  linksTo,
 } from '@cardstack/base/card-api';
 import StringField from '@cardstack/base/string';
 import TextAreaField from '@cardstack/base/text-area';
 import type { Join } from '@cardstack/choreo/film';
+import { rri } from '@cardstack/runtime-common';
 import { array } from '@ember/helper';
+import { on } from '@ember/modifier';
+import { tracked } from '@glimmer/tracking';
 import type { ComponentLike } from '@glint/template';
+import { modifier } from 'ember-modifier';
 
+import type { ChoreoGallery } from './gallery';
 import type { FilmLink } from './lib/film-link';
 import { labSlug, LabState } from './lib/lab';
-import { ownClicks } from './lib/pointer';
-import { Theater } from './lib/theater';
+import { restWhenOff } from './lib/onstage';
+import { openThroughHost, ownClicks, ownControlClicks } from './lib/pointer';
+import { realmFile } from './lib/realm-url';
+import { requestTheater, takeTheaterRequest, Theater } from './lib/theater';
 import { ChoreoRoot } from './shell/choreo-root';
 import { DemoPage } from './shell/demo-page';
 import { DemoStage } from './shell/demo-stage';
 import { GuideLink } from './shell/guide-link';
 import { LabPanel } from './shell/lab-panel';
 import { LabToggle } from './shell/lab-toggle';
+import { SiteFrame } from './shell/site-frame';
 
 /** the gallery's sections, in the order its filters list them */
 export const GROUPS = [
@@ -48,7 +57,7 @@ export interface StageSignature {
     face?: 'stage' | 'tile';
     /** the demo page's line to its film, for a film stage to attach to */
     filmLink?: FilmLink;
-    /** opens the demo's page in theater, from a tile */
+    /** opens the demo card's page in theater, from a tile */
     open?: () => void;
     /** the demo page's theater, for a film stage to enter and leave */
     theater?: Theater;
@@ -95,35 +104,56 @@ export class DemoLesson extends FieldDef {
   @field combine = contains(TextAreaField);
 }
 
+/** the neighbours of a demo in its gallery's catalog */
+export interface Near {
+  next?: GalleryDemo;
+  prev?: GalleryDemo;
+}
+
+/**
+ * The demo's page, wherever it opens: in a stack over the gallery, as a
+ * published page of its own, or on its own in the host. It wears the site's
+ * frame, and its pager opens the demos either side of it in the gallery's
+ * order, through the host, as the gallery's tiles do.
+ */
 class Isolated extends Component<typeof GalleryDemo> {
-  readonly theater = new Theater();
+  /** a film's page opens in theater when its tile asked for it */
+  readonly theater = new Theater(
+    takeTheaterRequest((this.args.model as GalleryDemo).slug),
+  );
 
   get demo() {
     return this.args.model as GalleryDemo;
   }
 
+  get near(): Near {
+    let demos = (this.demo.gallery as ChoreoGallery | undefined)?.demos ?? [];
+    let index = demos.findIndex((demo) => demo?.id === this.demo.id);
+    if (index < 0) {
+      return {};
+    }
+    return {
+      next: demos[index + 1] ?? undefined,
+      prev: index > 0 ? (demos[index - 1] ?? undefined) : undefined,
+    };
+  }
+
+  get open() {
+    let viewCard = this.args.viewCard;
+    return viewCard
+      ? (demo: GalleryDemo) => viewCard(demo, 'isolated')
+      : undefined;
+  }
+
   <template>
-    <ChoreoRoot class='standalone'>
-      <div class='page {{if this.theater.on "is-theater"}}'>
-        <DemoPage @demo={{this.demo}} @theater={{this.theater}} />
-      </div>
-    </ChoreoRoot>
-    <style scoped>
-      .standalone {
-        min-height: 100%;
-      }
-
-      .page {
-        width: min(var(--page), calc(100% - 48px));
-        margin: 0 auto;
-        padding: 40px 0 64px;
-      }
-
-      /* theater opens on the picture, not on a band of ground above it */
-      .page.is-theater {
-        padding-top: 0;
-      }
-    </style>
+    <SiteFrame @theater={{this.theater}}>
+      <DemoPage
+        @demo={{this.demo}}
+        @near={{this.near}}
+        @onOpen={{this.open}}
+        @theater={{this.theater}}
+      />
+    </SiteFrame>
   </template>
 }
 
@@ -238,24 +268,141 @@ class Embedded extends Component<typeof GalleryDemo> {
   </template>
 }
 
+/** the smallest box a tile boots its live stage in */
+const STAGE_ROOM = { height: 300, width: 240 };
+
+/**
+ * The demo as a tile: the live stage over what it is, with its guide. It is
+ * the gallery's grid, and the host opens the demo card on a click anywhere on
+ * it that the stage does not keep for itself.
+ *
+ * Each tile is a live demo, and a grid holds dozens, so a tile spends only
+ * what it shows: its stage boots once the tile has room for it, rests while
+ * it is scrolled out of view, and a film shows its poster rather than
+ * running. In a box too small for a stage, as the host's lists and pickers
+ * draw it, the tile is just the demo's name.
+ */
 class Fitted extends Component<typeof GalleryDemo> {
+  @tracked roomy = false;
+
+  get demo() {
+    return this.args.model as GalleryDemo;
+  }
+
+  get deepDive(): boolean {
+    return Boolean((this.demo.constructor as typeof GalleryDemo).notes);
+  }
+
+  measure = modifier((element: HTMLElement) => {
+    let observer = new ResizeObserver(([entry]) => {
+      let { height, width } = entry!.contentRect;
+      let roomy = height >= STAGE_ROOM.height && width >= STAGE_ROOM.width;
+      if (roomy !== this.roomy) {
+        this.roomy = roomy;
+      }
+    });
+    observer.observe(element);
+    return () => observer.disconnect();
+  });
+
+  /** a film's door: its page, opened straight into theater */
+  get open() {
+    let viewCard = this.args.viewCard;
+    let slug = this.demo.slug;
+    if (!viewCard || !slug) {
+      return undefined;
+    }
+    return () => {
+      requestTheater(slug);
+      viewCard(this.demo, 'isolated');
+    };
+  }
+
   <template>
-    <ChoreoRoot class='fitted'>
-      <span class='fitted-group'>{{@model.group}}</span>
-      <span class='fitted-title'>{{@model.title}}</span>
+    <ChoreoRoot class='tile {{if this.roomy "is-roomy"}}' {{this.measure}}>
+      {{#if this.roomy}}
+        <div class='tile-stage' {{restWhenOff}} {{ownControlClicks}}>
+          <DemoStage @demo={{this.demo}} @face='tile' @open={{this.open}} />
+        </div>
+      {{/if}}
+      <div class='tile-meta'>
+        <span class='tile-group'>
+          {{@model.group}}
+          {{#if this.deepDive}}
+            <span class='tile-badge'>Deep Dive</span>
+          {{/if}}
+        </span>
+        {{! the tile's one link, to the demo card: its name, and the way in for
+          a keyboard, whose Enter the host takes as it takes a click }}
+        <a
+          class='tile-title'
+          href={{@model.id}}
+          {{on 'click' openThroughHost}}
+        >{{@model.title}}</a>
+        {{#if this.roomy}}
+          <span class='tile-lede'>{{@model.lede}}</span>
+          <span class='tile-links' {{ownClicks}}>
+            <GuideLink @demo={{this.demo}} />
+          </span>
+        {{/if}}
+      </div>
     </ChoreoRoot>
     <style scoped>
-      .fitted {
+      .tile {
         display: flex;
         flex-direction: column;
         justify-content: flex-end;
-        gap: 4px;
         height: 100%;
+        overflow: hidden;
+        background:
+          linear-gradient(
+            180deg,
+            rgba(var(--surface-tint-rgb), 0.02),
+            transparent 40%
+          ),
+          var(--bg-elev);
+      }
+
+      /* a NAMED size container, so a stage can ask about the platter
+         specifically rather than whichever container is nearest */
+      .tile-stage {
+        position: relative;
+        flex: 1;
+        min-height: 0;
+        container-name: platter;
+        container-type: size;
+        background:
+          radial-gradient(
+            80% 70% at 50% 40%,
+            rgba(255, 59, 31, 0.08),
+            transparent 62%
+          ),
+          var(--bg);
+      }
+
+      /* A tile nobody can see holds its animations where they stand —
+         paused, so coming back does not restart every loop */
+      .tile-stage.is-resting,
+      .tile-stage.is-resting :deep(*) {
+        animation-play-state: paused !important;
+      }
+
+      .tile-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
         padding: 10px 12px;
         overflow: hidden;
       }
 
-      .fitted-group {
+      .tile.is-roomy .tile-meta {
+        gap: 6px;
+        padding: 16px 18px 16px;
+        border-top: 1px solid var(--line);
+        background: rgba(var(--surface-tint-rgb), 0.015);
+      }
+
+      .tile-group {
         font-family: var(--font-mono);
         font-size: 9px;
         letter-spacing: 0.16em;
@@ -263,7 +410,28 @@ class Fitted extends Component<typeof GalleryDemo> {
         color: var(--ember-hot);
       }
 
-      .fitted-title {
+      .tile.is-roomy .tile-group {
+        font-size: 10px;
+      }
+
+      .tile-badge {
+        display: inline-block;
+        margin-left: 6px;
+        padding: 1px 6px;
+        font-size: 9px;
+        font-family: var(--font-mono);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--ember);
+        border: 1px solid var(--ember);
+        border-radius: 3px;
+        opacity: 0.7;
+        vertical-align: middle;
+      }
+
+      .tile-title {
+        color: inherit;
+        text-decoration: none;
         font-family: var(--font-display);
         font-weight: 700;
         font-size: 1rem;
@@ -271,6 +439,36 @@ class Fitted extends Component<typeof GalleryDemo> {
         line-height: 1.1;
         overflow: hidden;
         text-overflow: ellipsis;
+      }
+
+      .tile.is-roomy .tile-title {
+        font-size: 1.2rem;
+      }
+
+      @media (hover: hover) {
+        .tile:hover .tile-title {
+          color: var(--ember-hot);
+        }
+      }
+
+      /* the link is the tile's focus, and the whole tile wears the ring: the
+         tile clips what falls outside it, so the ring is drawn inside */
+      .tile-title:focus-visible {
+        outline: none;
+      }
+
+      .tile:has(.tile-title:focus-visible) {
+        outline: 2px solid var(--ember-hot);
+        outline-offset: -2px;
+      }
+
+      .tile-lede {
+        color: var(--ink-dim);
+        font-size: 0.92rem;
+      }
+
+      .tile-links {
+        margin-top: 4px;
       }
     </style>
   </template>
@@ -313,6 +511,16 @@ export class GalleryDemo extends CardDef {
   /** the data that drives the demo, quoted under the usage example */
   @field walkthrough = containsMany(WalkthroughStep);
   @field lesson = contains(DemoLesson);
+
+  /** the gallery that lists this demo, whose order the demo page pages in */
+  @field gallery = linksTo(CardDef, {
+    query: {
+      filter: {
+        on: { module: rri(realmFile('gallery')), name: 'ChoreoGallery' },
+        eq: { 'demos.id': '$this.id' },
+      },
+    },
+  });
 
   @field cardTitle = contains(StringField, {
     computeVia: function (this: GalleryDemo) {

@@ -14,6 +14,15 @@ versions may change behavior until `1.0.0`.
 
 ## [Unreleased]
 
+### Added
+
+- **`retime(root)`** restarts the motion already running at and under an element on its current
+  transition. Motion reads a transition when an animation starts, so an edited `transition` with an
+  unchanged target leaves a running spring or loop on its old timing; `retime` restarts the values
+  still animating on each element whose timing changed, toward the targets they already have, and
+  keeps every infinite loop's place in its turn. For tuning tools, which edit timing on motion that
+  is already playing.
+
 ### Fixed
 
 - **No `@glimmer/tracking` peer dependency.** Declaring it made pnpm and npm install the

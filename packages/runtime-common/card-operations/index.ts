@@ -138,7 +138,9 @@ export type {
 } from './executors.ts';
 export {
   OPERATIONS_CHANNEL,
+  KEY_USE_CHANNEL,
   emitCapabilityCheck,
+  emitKeyUse,
   emitNamedQueryRefusalHidden,
   emitOperationPerf,
   INTERNAL_ROUTE,
@@ -147,6 +149,7 @@ export {
   emitPolicySearchScope,
   emitPolicySnapshotRead,
   setCapabilityCheckSink,
+  setKeyUseSink,
   setNamedQueryRefusalHiddenSink,
   setOperationPerfSink,
   setPolicyCompileSink,
@@ -156,6 +159,8 @@ export {
 } from './telemetry.ts';
 export type {
   CapabilityCheckEvent,
+  KeyUseEvent,
+  KeyUseOutcome,
   NamedQueryRefusalHiddenEvent,
   OperationDiagnostics,
   OperationMissingRead,
@@ -263,6 +268,8 @@ export {
   isOperationFailure,
   isSourceResult,
   isWrite,
+  travelsAsWrite,
+  isCallApiResult,
   linkStrategyOf,
   readLinkStrategyOf,
   refusalForNonReader,
@@ -270,9 +277,22 @@ export {
   unshareableFormatsOf,
   AUTHENTICATION_REQUIRED,
 } from './types.ts';
+export {
+  buildCallApiRequest,
+  slotsIn,
+  type CallApiCredential,
+  type CallApiRequest,
+  type CallApiSender,
+} from './call-api.ts';
 export type {
   BaseOperation,
+  CallApiResponse,
+  CallApiSlot,
+  CallApiSlotKey,
+  CallApiSlotPlacement,
   EntryPosition,
+  OperationCallApi,
+  OperationCallApiResult,
   LowerOperationDeclarationsResult,
   OperationDefinition,
   ExplainedGrant,

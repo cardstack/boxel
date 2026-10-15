@@ -1,8 +1,14 @@
 import { createHash } from 'crypto';
 import { logger } from '@cardstack/runtime-common';
 import { sendMatrixEvent } from '@cardstack/runtime-common/ai';
-import { APP_BOXEL_TOOL_RESULT_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import {
+  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+  APP_BOXEL_TOOL_RESULT_REL_TYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+} from '@cardstack/runtime-common/matrix-constants';
+import { STOPPED_TOOL_CALL_REASON } from '@cardstack/runtime-common/ai/stop';
 import type { MatrixClient } from 'matrix-js-sdk';
+import type { BotToolCall, BotToolOutcome, BotToolTarget } from './types.ts';
 
 // What every tool ai-bot runs itself does with what it read: store it in the
 // Matrix media repo and publish the call's tool-result event.
@@ -84,4 +90,35 @@ export async function publishToolResult(
     );
     return false;
   }
+}
+
+// Why a call never ran when a newer message from the user interrupted the
+// answer that made it.
+export const INTERRUPTED_TOOL_CALL_REASON =
+  'The user sent a new message before this tool call ran.';
+
+// Answers a call the user's stop kept from running with a 'canceled' result,
+// so every call the model made still has an outcome in the room.
+export async function publishCanceledResult(
+  call: BotToolCall,
+  target: BotToolTarget,
+  reason: string = STOPPED_TOOL_CALL_REASON,
+): Promise<BotToolOutcome> {
+  let published = await publishToolResult(
+    target.client,
+    target.roomId,
+    {
+      msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+      commandRequestId: call.id,
+      failureReason: reason,
+      'm.relates_to': {
+        rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+        key: 'canceled',
+        event_id: target.requestEventId,
+      },
+      data: { context: { agentId: target.agentId } },
+    },
+    call.function.name,
+  );
+  return { commandRequestId: call.id, published };
 }

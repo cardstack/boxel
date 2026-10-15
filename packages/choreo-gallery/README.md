@@ -60,8 +60,11 @@ stage registers as it renders, and an edit is written back to
 `demoTuning(slug).values`, where the stage reads it. The panel is
 `shell/dial-panel.gts`, the one Drift and Hang use, and the demo's authored
 looks (`lib/presets.ts`) are its shipped tunes. An edit reaches the stage as
-it renders; motion already running keeps its timing until the demo moves
-again, and the lab's replay runs the stage from the start.
+it renders, and motion already running takes the new timing where it is: the
+lab calls glimmer-motion's `retime` on every stage showing the demo (each
+`DemoStage` carries `data-demo-tuning`), and an edited Choreo timeline
+replaces its run, which carries each ambient loop on from the point of its
+cycle it had reached. The lab's replay runs the stage from the start.
 
 ## The films
 
