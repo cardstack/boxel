@@ -1,4 +1,5 @@
 import jwt from 'jsonwebtoken';
+import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import type { RealmAuthenticator } from './realm-authenticator.ts';
 
 /**
@@ -86,17 +87,76 @@ export function mintRealmServerToken(
 /**
  * Mint an operator token for one family of the realm server's operator
  * endpoints (the `boxel realm-server` commands). It carries no user, names its
- * family in the `operator` claim and lives for minutes; the server accepts it
- * on those endpoints only, and the seed never leaves this machine.
+ * family in the `operator` claim, names the realm server's origin as its
+ * audience and lives for minutes; only that server accepts it, on those
+ * endpoints only, and the seed never leaves this machine.
  */
 export function mintOperatorToken(
   seed: string,
-  scope: 'data-keys',
+  scope: 'data-keys' | 'system-keys',
+  audience: string,
   opts: { expiresIn?: jwt.SignOptions['expiresIn'] } = {},
 ): string {
   return jwt.sign({ operator: scope }, seed, {
+    audience,
     expiresIn: opts.expiresIn ?? '5m',
   });
+}
+
+const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/**
+ * The URL of an operator endpoint on a realm server. An operator request
+ * carries a seed-signed token, and may carry a key value, so it goes only over
+ * https, or over plain http to this machine.
+ */
+export function operatorEndpointURL(realmServerUrl: string, path: string): URL {
+  let url: URL;
+  try {
+    url = new URL(path, ensureTrailingSlash(realmServerUrl));
+  } catch {
+    throw new Error(`${realmServerUrl} is not a URL`);
+  }
+  if (url.protocol !== 'https:' && !LOOPBACK_HOSTS.has(url.hostname)) {
+    throw new Error(
+      `${url.origin} is not https; refusing to send an operator request to it`,
+    );
+  }
+  return url;
+}
+
+/**
+ * Sends a request to a realm server's operator endpoint with an operator token
+ * for `scope` bound to that server's origin. Redirects are refused rather than
+ * followed: a redirect to another origin would carry the body there.
+ */
+export async function operatorRequest(
+  {
+    realmServerUrl,
+    realmSecretSeed,
+    fetch = globalThis.fetch,
+  }: {
+    realmServerUrl: string;
+    realmSecretSeed: string;
+    fetch?: typeof globalThis.fetch;
+  },
+  scope: 'data-keys' | 'system-keys',
+  path: string,
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  body?: unknown,
+): Promise<{ url: string; response: Response }> {
+  let url = operatorEndpointURL(realmServerUrl, path);
+  let response = await fetch(url.href, {
+    method,
+    redirect: 'error',
+    headers: {
+      Accept: 'application/json',
+      Authorization: `Bearer ${mintOperatorToken(realmSecretSeed, scope, url.origin)}`,
+      ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
+    },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  });
+  return { url: url.href, response };
 }
 
 function normalizeRealmUrl(realmUrl: string): string {

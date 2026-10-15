@@ -684,11 +684,14 @@ export async function sendResponseForForbiddenRequest(
 }
 
 // Admits only an operator token for `scope`, signed with the realm secret
-// seed (see utils/operator-token.ts).
+// seed for this server's origin (see utils/operator-token.ts). The verified
+// claims are left on `ctxt.state.operatorToken` for the handler.
 export function operatorAuthorization(
   secretSeed: string,
   scope: OperatorScope,
+  serverURL: string | URL,
 ): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+  let audience = new URL(serverURL).origin;
   return async function (ctxt: Koa.Context, next: Koa.Next) {
     let authorization = ctxt.req.headers['authorization'];
     if (!authorization) {
@@ -699,7 +702,12 @@ export function operatorAuthorization(
       return;
     }
     try {
-      verifyOperatorToken(authorization, secretSeed, scope);
+      ctxt.state.operatorToken = verifyOperatorToken(
+        authorization,
+        secretSeed,
+        scope,
+        audience,
+      );
     } catch (e) {
       if (e instanceof AuthenticationError) {
         await sendResponseForUnauthorizedRequest(ctxt, e.message);

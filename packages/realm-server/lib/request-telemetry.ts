@@ -8,7 +8,8 @@
 //   keeps only the method and the URL's origin and path. The secure origin is
 //   where credentials are typed. A proxy route's body is the caller's own
 //   content (a forwarded request's URL, headers and body, or a whole prompt),
-//   and its query string can carry a token.
+//   and its query string can carry a token. The same holds for the system-key
+//   routes, whose bodies carry a key's value.
 // - An event raised during any other request keeps its request context, minus
 //   the credential headers (`Authorization`, `Proxy-Authorization`, `Cookie`,
 //   `Set-Cookie` and the request-signature headers) and the parsed cookies,
@@ -41,6 +42,9 @@ const proxyRoutePaths = new Set([
   REQUEST_FORWARD_PATH,
   OPENROUTER_PASSTHROUGH_PATH,
 ]);
+
+// The operator routes that store a system key, and everything beneath them.
+export const SYSTEM_KEYS_PATH = '/_system-keys';
 
 // The headers whose value is a credential: the caller's session token, its
 // cookies, the HMAC signatures that authenticate a worker request
@@ -155,6 +159,11 @@ function isProxyRoutePath(pathname: string): boolean {
   return proxyRoutePaths.has(path);
 }
 
+function isSystemKeysPath(pathname: string): boolean {
+  let path = pathname.toLowerCase();
+  return path === SYSTEM_KEYS_PATH || path.startsWith(`${SYSTEM_KEYS_PATH}/`);
+}
+
 // A proxy route's URL followed by a query string, wherever it is written: the
 // request log line names the incoming URL, and Sentry keeps that line as a
 // breadcrumb on every event raised during the request.
@@ -245,9 +254,9 @@ function withoutCredentials(request: SentryRequestData): SentryRequestData {
 }
 
 // Whether telemetry about this request keeps only its method and the origin
-// and path of its URLs: a request to the secure origin or to a proxy route.
-// `url` is the full request URL; `headers` supply the host when they carry
-// one.
+// and path of its URLs: a request to the secure origin, to a proxy route, or
+// to a system-keys route (whose bodies carry a key value). `url` is the full
+// request URL; `headers` supply the host when they carry one.
 export function keepsMethodAndPathOnly(request: {
   url?: string;
   headers?: Record<string, string | string[] | undefined>;
@@ -256,7 +265,10 @@ export function keepsMethodAndPathOnly(request: {
     return true;
   }
   let parsed = parseURL(request.url);
-  return parsed !== undefined && isProxyRoutePath(parsed.pathname);
+  return (
+    parsed !== undefined &&
+    (isProxyRoutePath(parsed.pathname) || isSystemKeysPath(parsed.pathname))
+  );
 }
 
 type SpanData = Record<string, unknown>;

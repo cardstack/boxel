@@ -136,6 +136,12 @@ function isAllowlisted(hostname: string): boolean {
   return settings.devAllowlist.includes(normalizeHost(hostname));
 }
 
+// Whether the local development allowlist names `hostname`, so the client
+// would send to it over plain http.
+export function isOutboundDevAllowlisted(hostname: string): boolean {
+  return isAllowlisted(hostname);
+}
+
 // --- Settings from the environment and the startup self-check ---------------
 
 export class OutboundSettingsError extends Error {}

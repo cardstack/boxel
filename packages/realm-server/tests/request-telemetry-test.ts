@@ -226,53 +226,63 @@ module(basename(import.meta.filename), function () {
       }
     });
 
-    test('lists only header names on a proxy route', async function (assert) {
-      sentry = startSentryCapture({ tracing: false, incomingRequests: true });
-      let origin = await startLoggedServer();
-      let response: Response | undefined;
-      let lines = await withLogDefinition('realm:requests', 'debug', () =>
-        logLinesDuring(['realm:requests'], async () => {
-          response = await fetch(`${origin}/_request-forward`, {
-            method: 'POST',
-            headers: {
-              authorization: 'Bearer session-jwt-0c5f72',
-              'x-boxel-client-request-id': 'request-id-unlisted-4be1d8',
-              referer: 'https://app.telemetry.test/referer-marker-97a3c0/',
-            },
-            body: '{}',
-          });
-          await response.text();
-        }),
-      );
-      let sent = await sentry.flushed();
-      let events = await sentry.flushedEvents();
-
-      assert.strictEqual(response!.status, 200);
-      let headerLine = lines.find(
-        (line) =>
-          line.level === 'debug' &&
-          line.message.includes('x-boxel-client-request-id'),
-      );
-      assert.ok(headerLine, 'the debug line lists the header names');
-      let logged = JSON.parse(headerLine!.message) as unknown;
-      assert.true(Array.isArray(logged), 'the debug line is a list of names');
-      assert.true(
-        (logged as string[]).includes('authorization'),
-        'the Authorization header is named',
-      );
-      assert.strictEqual(events.length, 1, 'the error reached Sentry');
-      for (let value of [
-        'session-jwt-0c5f72',
-        'request-id-unlisted-4be1d8',
-        'referer-marker-97a3c0',
-      ]) {
-        assert.false(
-          lines.some((line) => line.message.includes(value)),
-          `no log line carries ${value}`,
+    // A system-key route's body carries a key value, so it is logged as a
+    // proxy route is.
+    for (let [route, path] of [
+      ['a proxy route', '/_request-forward'],
+      [
+        'a system-key route',
+        '/_system-keys/6c1f3f8e-4a0e-4b9e-9a51-3c1d2b7a9e10',
+      ],
+    ]) {
+      test(`lists only header names on ${route}`, async function (assert) {
+        sentry = startSentryCapture({ tracing: false, incomingRequests: true });
+        let origin = await startLoggedServer();
+        let response: Response | undefined;
+        let lines = await withLogDefinition('realm:requests', 'debug', () =>
+          logLinesDuring(['realm:requests'], async () => {
+            response = await fetch(`${origin}${path}`, {
+              method: 'POST',
+              headers: {
+                authorization: 'Bearer session-jwt-0c5f72',
+                'x-boxel-client-request-id': 'request-id-unlisted-4be1d8',
+                referer: 'https://app.telemetry.test/referer-marker-97a3c0/',
+              },
+              body: '{}',
+            });
+            await response.text();
+          }),
         );
-        assert.false(sent.includes(value), `no envelope carries ${value}`);
-      }
-    });
+        let sent = await sentry.flushed();
+        let events = await sentry.flushedEvents();
+
+        assert.strictEqual(response!.status, 200);
+        let headerLine = lines.find(
+          (line) =>
+            line.level === 'debug' &&
+            line.message.includes('x-boxel-client-request-id'),
+        );
+        assert.ok(headerLine, 'the debug line lists the header names');
+        let logged = JSON.parse(headerLine!.message) as unknown;
+        assert.true(Array.isArray(logged), 'the debug line is a list of names');
+        assert.true(
+          (logged as string[]).includes('authorization'),
+          'the Authorization header is named',
+        );
+        assert.strictEqual(events.length, 1, 'the error reached Sentry');
+        for (let value of [
+          'session-jwt-0c5f72',
+          'request-id-unlisted-4be1d8',
+          'referer-marker-97a3c0',
+        ]) {
+          assert.false(
+            lines.some((line) => line.message.includes(value)),
+            `no log line carries ${value}`,
+          );
+          assert.false(sent.includes(value), `no envelope carries ${value}`);
+        }
+      });
+    }
   });
 
   module('a transaction for an ordinary request', function (hooks) {
@@ -394,6 +404,35 @@ module(basename(import.meta.filename), function () {
         method: 'POST',
         url: 'https://app.telemetry.test/_openrouter/chat/completions/',
       });
+    });
+
+    test('a system-key route, and anything beneath it, keeps only its method and path', function (assert) {
+      for (let url of [
+        'https://app.telemetry.test/_system-keys',
+        'https://app.telemetry.test/_System-Keys/0b6f6d55-6f39-4b4e-9d5e-0c3c35d1a0e1',
+      ]) {
+        let event = scrubRequestTelemetry({
+          request: {
+            method: 'POST',
+            url,
+            headers: { host: 'app.telemetry.test', accept: '*/*' },
+            data: '{"value":"sk-system-value"}',
+          },
+        });
+        assert.deepEqual(event.request as unknown, { method: 'POST', url });
+      }
+      let neighbour = scrubRequestTelemetry({
+        request: {
+          method: 'GET',
+          url: 'https://app.telemetry.test/_system-keys-elsewhere',
+          query_string: 'a=b',
+        },
+      });
+      assert.strictEqual(
+        (neighbour.request as { query_string?: unknown }).query_string,
+        'a=b',
+        'a path that only starts with the route keeps its context',
+      );
     });
 
     test('a path that only starts with a proxy route keeps its context', function (assert) {

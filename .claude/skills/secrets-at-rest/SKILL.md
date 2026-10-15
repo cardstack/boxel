@@ -190,8 +190,12 @@ sealed census: incoming_webhooks.signing_secret rowsByKeyId=kms-3f9c0a1b2c4d5e6f
 
 `boxel realm-server` holds commands authorized only by the realm secret seed;
 it is left out of the CLI's general help. The token they sign carries an
-`operator` claim naming one family of endpoints (`data-keys` here), no user,
-and lives at most 15 minutes, measured against the server's clock. The server
+`operator` claim naming one family of endpoints (`data-keys` here;
+`system-keys` for `boxel realm-server keys`), no user, the realm server's
+origin as its audience (`aud`, which must match the origin the server knows
+itself by, so `--realm-server` must be that URL), and lives at most 15
+minutes, measured against the server's clock. The commands send it only over
+https (or plain http to this machine) and never follow a redirect. The server
 never mints one, accepts it only on that family's endpoints
 (`GET /_data-keys`, `POST /_data-keys/reseal?currentKeyId=<id>`), and refuses
 it everywhere a user or realm session is expected. The endpoints report key
@@ -291,8 +295,9 @@ Grafana and Claude read-only database users), has no `SELECT` on the table.
   A row with a loaded data key is tampered (see above): the backfill reports
   it and leaves it for an operator.
 
-- **Writes** go through `saveProxyEndpoint`, which writes both forms
-  together.
+- **Writes** go through `saveProxyEndpoint` or the system-keys operator
+  endpoints (`boxel realm-server keys`, see the `system-keys` skill), which
+  write both forms together.
 
 ### The backfill
 

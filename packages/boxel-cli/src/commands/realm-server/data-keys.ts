@@ -1,9 +1,8 @@
 import type { Command } from 'commander';
-import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import { cliLog } from '../../lib/cli-log.ts';
 import { FG_GREEN, FG_YELLOW, RESET } from '../../lib/colors.ts';
 import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
-import { mintOperatorToken } from '../../lib/seed-auth.ts';
+import { operatorRequest } from '../../lib/seed-auth.ts';
 
 // `boxel realm-server data-keys`: where a rotation of the data key that seals
 // the realm server's stored secrets stands, and the pass that re-seals stored
@@ -45,22 +44,16 @@ export interface DataKeysOptions {
 }
 
 async function operatorFetch(
-  {
-    realmServerUrl,
-    realmSecretSeed,
-    fetch = globalThis.fetch,
-  }: DataKeysOptions,
+  options: DataKeysOptions,
   path: string,
   method: 'GET' | 'POST',
 ): Promise<any> {
-  let url = new URL(path, ensureTrailingSlash(realmServerUrl)).href;
-  let response = await fetch(url, {
+  let { url, response } = await operatorRequest(
+    options,
+    'data-keys',
+    path,
     method,
-    headers: {
-      Accept: 'application/json',
-      Authorization: `Bearer ${mintOperatorToken(realmSecretSeed, 'data-keys')}`,
-    },
-  });
+  );
   if (!response.ok) {
     let body = await response.text().catch(() => '');
     throw new Error(
