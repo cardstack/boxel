@@ -30,7 +30,7 @@ export const motionPreference = new MotionPreference();
  * Every demo here is a piece of motion, so the gallery does not take the
  * motion away; it waits to be asked. A held stage counts as off, wherever it
  * is: its autoplay does not start and its endless effects stand still (see
- * `observeStage` and `restWhenOff`). Touching the stage, by pointer or key, is
+ * `observeStage` and `restWhenOff`). Touching the stage, by pointer, key or click, is
  * asking: the stage wakes, and plays under the library's own reduced-motion
  * policy, in which positions land at once and fades still play. `full` asks
  * for the demo as it was designed, reduced motion and all set aside.
@@ -67,14 +67,21 @@ export class MotionHold {
 }
 
 /**
- * Wake a hold when the viewer reaches into the stage. Taken in the capture
- * phase, so the stage hears it is on before its own controls hear the press.
+ * Wake a hold when the viewer reaches into the stage: a press, a key, or a
+ * bare click, which is all a screen reader's browse mode or voice control
+ * sends. Listened for in the capture phase, so a control that stops its
+ * event's propagation still wakes the stage. The stage hears that it is on
+ * once the hold's change renders, after the press's own handlers have run.
  */
+const WAKERS = ['pointerdown', 'keydown', 'click'] as const;
+
 export const wakeOnTouch = modifier((el: HTMLElement, [hold]: [MotionHold]) => {
-  el.addEventListener('pointerdown', hold.wake, { capture: true });
-  el.addEventListener('keydown', hold.wake, { capture: true });
+  for (const type of WAKERS) {
+    el.addEventListener(type, hold.wake, { capture: true });
+  }
   return () => {
-    el.removeEventListener('pointerdown', hold.wake, { capture: true });
-    el.removeEventListener('keydown', hold.wake, { capture: true });
+    for (const type of WAKERS) {
+      el.removeEventListener(type, hold.wake, { capture: true });
+    }
   };
 });

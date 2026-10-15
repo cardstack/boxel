@@ -146,6 +146,15 @@ module('Integration | Choreo gallery | reduced motion', function (hooks) {
     );
   });
 
+  test('a bare click wakes a held stage, as a screen reader sends one', async function (assert) {
+    await gallery.renderDemo('keyframes');
+    await waitFor('[data-test-stage]');
+    await click('[data-test-stage]');
+    assert
+      .dom('[data-test-stage]')
+      .hasAttribute('data-motion-hold', 'free', 'the stage wakes');
+  });
+
   test('nothing is held for a viewer who has not asked for less motion', async function (assert) {
     preference.reduce = false;
     await gallery.renderDemo('keyframes');
