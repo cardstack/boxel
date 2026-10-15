@@ -145,7 +145,10 @@ module('Integration | realm config policy standing', function (hooks) {
         <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
-    await waitFor(`[data-test-stack-card="${CONFIG}"]`);
+    // The stack card carries the card's id, which is in prefix form when the
+    // realm is registered under a prefix.
+    let configId = realmPrefix ? `${realmPrefix}realm` : CONFIG;
+    await waitFor(`[data-test-stack-card="${configId}"]`);
     if (awaitStanding) {
       await waitFor('[data-test-realm-policy-standing="answered"]', {
         timeout: 10_000,
