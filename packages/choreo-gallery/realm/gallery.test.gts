@@ -191,8 +191,17 @@ module('Choreo gallery | site', function (hooks) {
       );
 
       await click(summary);
+      let escapes: KeyboardEvent[] = [];
+      let hear = (event: KeyboardEvent) => escapes.push(event);
+      document.addEventListener('keydown', hear);
       await triggerKeyEvent(picker, 'keydown', 'Escape');
+      document.removeEventListener('keydown', hear);
       assert.false(picker.open, 'Escape closes it');
+      assert.strictEqual(
+        escapes.length,
+        0,
+        'and goes no further, so the host does not close the card as well',
+      );
       assert.strictEqual(document.activeElement, summary, 'onto the pill too');
     } finally {
       setThemeMode(mode);

@@ -33,9 +33,17 @@ function closeMenu(menu: HTMLDetailsElement) {
   menu.querySelector('summary')?.focus();
 }
 
+/**
+ * Escape in an open menu closes the menu and goes no further, so the host
+ * does not also take it as Escape for the card the menu sits in. On a closed
+ * pill it is the host's.
+ */
 function dismiss(event: Event) {
-  if (event instanceof KeyboardEvent && event.key === 'Escape') {
-    closeMenu(event.currentTarget as HTMLDetailsElement);
+  let menu = event.currentTarget as HTMLDetailsElement;
+  if (event instanceof KeyboardEvent && event.key === 'Escape' && menu.open) {
+    event.preventDefault();
+    event.stopPropagation();
+    closeMenu(menu);
   }
 }
 
