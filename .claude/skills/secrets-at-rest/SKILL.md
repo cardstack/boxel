@@ -1,6 +1,6 @@
 ---
 name: secrets-at-rest
-description: Operate and diagnose the realm server's secrets-at-rest helper (`packages/realm-server/lib/secrets-at-rest/`) — AES-256-GCM sealing of stored secrets (API keys, OAuth client secrets and refresh tokens, service-account files, endpoint keys, webhook signing secrets) under a 32-byte data key that KMS wraps, bound to its field (table and column), owner, row id and destination. Covers the two providers (KMS and the local development key), the startup self-check the realm server and the worker manager run (workers take their keys from the manager) and what its log line reports, why a deployed server refuses to start, the KMS encryption contexts involved, key ids, re-sealing a secret with its destination, rotating the data key (`boxel realm-server data-keys status | reseal`, `SECRETS_ADDITIONAL_WRAPPED_DATA_KEYS`, the re-seal pass, retiring an old data key, the sealed census), the plaintext census, and sealing the proxy endpoint (system) keys in `proxy_endpoints`, with the backfill that seals them and how to run it on demand. Use when the realm server or a worker won't boot with "Secrets-at-rest self-check failed", when reading the `secrets-at-rest` boot line, when a stored secret fails to open with SecretDecryptionError, when a table starts sealing its secrets with the helper, when rotating the data key, or when the census reports `proxy_endpoints.api_key` rows still in plain text.
+description: Operate and diagnose the realm server's secrets-at-rest helper (`packages/realm-server/lib/secrets-at-rest/`) — AES-256-GCM sealing of stored secrets (API keys, OAuth client secrets and refresh tokens, service-account files, endpoint keys, webhook signing secrets) under a 32-byte data key that KMS wraps, bound to its field (table and column), owner, row id and destination. Covers the two providers (KMS and the local development key), the startup self-check the realm server and the worker manager run (workers take their keys from the manager) and what its log line reports, why a deployed server refuses to start, the KMS encryption contexts involved, key ids, re-sealing a secret with its destination, rotating the data key (`boxel realm-server data-keys status | reseal`, `SECRETS_ADDITIONAL_WRAPPED_DATA_KEYS`, the re-seal pass, retiring an old data key, the sealed census), the plaintext census, sealing the proxy endpoint (system) keys in `proxy_endpoints` and the incoming webhook signing secrets in `incoming_webhooks`, with the backfills that seal them and how to run them on demand, and why a webhook's signing secret is shown only once. Use when the realm server or a worker won't boot with "Secrets-at-rest self-check failed", when reading the `secrets-at-rest` boot line, when a stored secret fails to open with SecretDecryptionError, when a table starts sealing its secrets with the helper, when rotating the data key, or when the census reports `proxy_endpoints.api_key` or `incoming_webhooks.signing_secret` rows still in plain text.
 ---
 
 # Secrets at rest (operators)
@@ -183,6 +183,7 @@ and warns when rows reference a data key it hasn't loaded:
 
 ```
 sealed census: proxy_endpoints.api_key rowsByKeyId=kms-3f9c0a1b2c4d5e6f=12
+sealed census: incoming_webhooks.signing_secret rowsByKeyId=kms-3f9c0a1b2c4d5e6f=40
 ```
 
 ### The `boxel realm-server` commands
@@ -216,6 +217,7 @@ at startup:
 
 ```
 plaintext census: proxy_endpoints.api_key plaintextRows=0
+plaintext census: incoming_webhooks.signing_secret plaintextRows=0
 ```
 
 With no entries it logs `plaintext census: no table seals its secrets with
@@ -225,6 +227,33 @@ Reading the census: `plaintextRows` is the number of rows whose secret
 hasn't been sealed yet. It should read 0 on every startup after the first
 one following a deploy. A row added by hand reads 1 until the next startup
 or until the backfill is run on demand.
+
+## Tables that seal alongside a plain-text column
+
+`lib/secrets-at-rest/sealed-columns.ts` holds what every such table shares.
+The sealed value lives in four columns named after the plain-text one:
+`<column>_ciphertext`, `<column>_nonce`, `<column>_tag` and `<column>_key_id`.
+Every write keeps the plain-text column in step, so it is the source the
+sealed columns are checked against. Reads go through
+`openWithPlainTextFallback`, which serves the plain-text value whenever the
+two disagree. Backfills go through `backfillDecision`, which decides
+seal / unchanged / unloadedKey / tampered the same way for every table.
+
+A sealed value that fails to open under a data key the process has loaded,
+opens to a value other than the plain text, or is sealed under the public
+`local-development` key when the process seals with another key, is
+**tampered**. Every application write keeps the binding's columns, the plain
+text and the sealed value in step, and a deployed process never seals with the
+local key, so only an edit outside the application produces any of these
+states. A local-key row is not opened to check it: anyone can seal with that
+key, so opening it proves nothing about its binding. The binding's `owner` and `id` are what stop a sealed secret being
+moved to another user or row, so the backfill never re-seals a tampered row
+on its own: that would make the edit permanent and leave it looking like an
+application write. It logs an error naming the row (never the secret),
+reports it to Sentry, and leaves the row as it is. Reads keep serving the
+plain-text value meanwhile. Once an operator has inspected the row and
+accepts what it says, the on-demand command with `--reseal-tampered`
+seals it again; otherwise the operator restores the edited columns.
 
 ## Proxy endpoint keys
 
@@ -258,8 +287,9 @@ Grafana and Claude read-only database users), has no `SELECT` on the table.
 
   Each case except the first is logged once per sealed value, as a warning
   on the `proxy-endpoint-keys` channel:
-  `the sealed key for proxy endpoint <url> … so its plain-text key is used until the backfill seals it again`.
-  The next startup's backfill, or the on-demand command, seals it again.
+  `the sealed key for proxy endpoint <url> … so its plain-text key is used`.
+  A row with a loaded data key is tampered (see above): the backfill reports
+  it and leaves it for an operator.
 
 - **Writes** go through `saveProxyEndpoint`, which writes both forms
   together.
@@ -270,15 +300,13 @@ Grafana and Claude read-only database users), has no `SELECT` on the table.
 every time the realm server starts, before the census, and logs one line:
 
 ```
-proxy endpoint keys: sealed=0 cleared=0 unchanged=3 unloadedKey=0 skipped=0
+proxy endpoint keys: sealed=0 cleared=0 unchanged=3 unloadedKey=0 tampered=0 skipped=0
 ```
 
 - `sealed`: rows sealed from `api_key` because their sealed key was
-  missing, didn't open, or opened to a value other than `api_key` (for
-  example, a key edited by hand). A key that didn't open is logged as a
-  warning naming its url. This count also includes rows that a process
-  sealing with KMS found sealed under the public `local-development` key: it
-  seals them again, and logs a warning for each.
+  missing. With `--reseal-tampered` it also includes tampered rows, rows
+  under the public `local-development` key among them, each logged as a
+  warning.
 - `cleared`: rows with no `api_key` whose sealed columns were emptied.
 - `unchanged`: rows that were already correct. A second run reports every
   row here.
@@ -288,6 +316,11 @@ proxy endpoint keys: sealed=0 cleared=0 unchanged=3 unloadedKey=0 skipped=0
   a row back onto an older data key. A rotation loads a new data key
   everywhere before any process seals with it, so a nonzero count means a
   rotation step was skipped or a data key was retired too early.
+- `tampered`: rows whose sealed key fails to open under a loaded data key,
+  opens to a value other than `api_key` (for example, a `url` or key edited
+  by hand), or is sealed under the public `local-development` key in a
+  process sealing with KMS. Each is logged as an error naming its url,
+  reported to Sentry, and left as it is.
 - `skipped`: rows that changed between the read and the update. Those rows
   are left to whatever changed them.
 
@@ -306,6 +339,70 @@ private address can be another machine, and a tunnel to a deployed database
 also answers on `localhost`. Against a deployed database it needs
 `SECRETS_KMS_KEY_ARN` and `SECRETS_WRAPPED_DATA_KEY`, and a role that can
 decrypt with that key, which in practice means running it inside a
-realm-server task. If rows do end up sealed under the local key, the next
-realm-server start seals them again under KMS. The command logs the
-backfill line, then the census.
+realm-server task. A row sealed under the local key in a deployed database
+counts as `tampered` at the next realm-server start, and is sealed again under
+KMS only by this command with `--reseal-tampered`. The command logs the
+backfill line, then the census. With `--reseal-tampered`
+(`pnpm seal-proxy-endpoint-keys --reseal-tampered`) it also seals tampered
+rows again from their plain-text key; run it only after inspecting the rows
+the `tampered` count reported.
+
+## Incoming webhook signing secrets
+
+`incoming_webhooks.signing_secret` verifies the signature on each webhook
+Boxel receives at `/_webhooks/<webhook_path>`. Each secret is sealed into
+`signing_secret_ciphertext`, `signing_secret_nonce`, `signing_secret_tag` and
+`signing_secret_key_id` (`packages/realm-server/lib/incoming-webhook-secrets.ts`),
+bound to:
+
+| Binding       | Value                                                        |
+| ------------- | ------------------------------------------------------------ |
+| `field`       | `incoming_webhooks.signing_secret`                           |
+| `owner`       | the row's `username`, the Matrix user who registered it      |
+| `id`          | the row's `id`                                               |
+| `destination` | none: Boxel never sends the secret, it only verifies with it |
+
+The plain-text `signing_secret` column is kept in step by every write, as for
+proxy endpoint keys, and `readonly_role` and its members have no `SELECT` on
+the table.
+
+- **Shown once.** The API returns a secret only in the response that issues
+  it: `POST /_incoming-webhooks` (create) and
+  `POST /_incoming-webhooks/rotate-signing-secret` with
+  `{"data": {"type": "incoming-webhook", "id": "<id>"}}` (rotate). Every
+  other read, `GET /_incoming-webhooks` included, reports
+  `signingSecretCreatedAt` instead, from `signing_secret_created_at`, or
+  from `created_at` for a row written without it. A user who has lost a
+  secret rotates it. A signature made with the old secret stops verifying
+  as soon as the rotation responds.
+- **Reads.** Only the webhook receiver opens a secret, to check a signature.
+  Whenever the sealed and plain-text secrets disagree, it verifies against
+  `signing_secret` and logs a warning once per sealed value on the
+  `incoming-webhook-secrets` channel:
+  `the sealed signing secret of incoming webhook <id> … so its plain-text secret is used`.
+  A changed `username` or `id`, a data key this process hasn't loaded, or a
+  secret edited by hand all lead here. A changed `username` changes who a
+  verified delivery's commands run as, which is why the backfill treats such
+  a row as tampered and leaves its binding for an operator.
+- **The backfill.** `sealIncomingWebhookSecrets` runs at every realm-server
+  start, right after the proxy endpoint backfill and before the census, and
+  logs one line:
+
+  ```
+  incoming webhook secrets: sealed=0 unchanged=12 unloadedKey=0 tampered=0 skipped=0
+  ```
+
+  The counts mean what they do for proxy endpoint keys. There is no
+  `cleared`, since the plain-text column is `NOT NULL`. A row rotated
+  between the backfill's read and its update counts as `skipped` and keeps
+  the rotation's secret. A failure is reported to Sentry and logged as
+  `Sealing incoming webhook signing secrets failed: …`. It doesn't stop
+  startup: the receiver keeps verifying with `signing_secret`.
+
+- **Data-key rotation.** The column is registered in `SEALED_COLUMNS`
+  (binding columns `id` and `username`), so the re-seal pass and the sealed
+  census cover it.
+- **On demand.** `pnpm seal-incoming-webhook-secrets` in
+  `packages/realm-server` runs the same pass and then the census. It takes
+  its database and data key exactly as `pnpm seal-proxy-endpoint-keys` does,
+  and takes the same `--reseal-tampered` flag.

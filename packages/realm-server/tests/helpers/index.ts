@@ -71,6 +71,11 @@ import {
   type RealmRegistryRow,
 } from '../../lib/realm-registry-reconciler.ts';
 import { realmDiskPath } from '../../lib/realm-disk-path.ts';
+import {
+  installSecretsKeyring,
+  LocalKeyProvider,
+  resetSecretsAtRest,
+} from '../../lib/secrets-at-rest/index.ts';
 import { findRealm } from '../../lib/realm-routing.ts';
 import { upsertPublishedRealmInRegistry } from '../../lib/realm-registry-writes.ts';
 
@@ -1255,6 +1260,18 @@ type BeforeAfterCallback = (
 ) => Promise<void>;
 
 type TestDatabaseTemplateProvider = string | (() => string | undefined);
+
+// Installs the local development keyring for each test, as realm-server
+// startup installs its keyring, for tests whose requests seal or open a
+// stored secret.
+export function setupSecretsKeyring(hooks: NestedHooks) {
+  hooks.beforeEach(async function () {
+    installSecretsKeyring(await new LocalKeyProvider().loadDataKeys());
+  });
+  hooks.afterEach(function () {
+    resetSecretsAtRest();
+  });
+}
 
 export function setupDB(
   hooks: NestedHooks,

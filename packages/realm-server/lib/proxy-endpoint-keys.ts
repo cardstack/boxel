@@ -1,10 +1,15 @@
 import { randomUUID } from 'node:crypto';
 import { logger, type DBAdapter } from '@cardstack/runtime-common';
 import {
-  LOCAL_DATA_KEY_ID,
+  backfillDecision,
+  reportTamperedSecret,
+  hasSealedColumns,
+  openWithPlainTextFallback,
   PLATFORM_SECRET_OWNER,
+  sealedColumnBindings,
+  sealedColumnsSelect,
+  sealedFromColumns,
   secretsKeyring,
-  type SealedSecret,
   type SecretBinding,
   type SecretsKeyring,
 } from './secrets-at-rest/index.ts';
@@ -22,10 +27,7 @@ export const PROXY_ENDPOINT_KEY_FIELD = 'proxy_endpoints.api_key';
 // The key columns a read selects, with the sealed parts as base64.
 export const PROXY_ENDPOINT_KEY_COLUMNS = [
   'api_key',
-  `encode(api_key_ciphertext, 'base64') AS api_key_ciphertext`,
-  `encode(api_key_nonce, 'base64') AS api_key_nonce`,
-  `encode(api_key_tag, 'base64') AS api_key_tag`,
-  'api_key_key_id',
+  sealedColumnsSelect('api_key'),
 ].join(', ');
 
 export interface ProxyEndpointKeyRow {
@@ -55,47 +57,6 @@ export function proxyEndpointKeyBinding({
   };
 }
 
-function sealedKey(row: ProxyEndpointKeyRow): SealedSecret | undefined {
-  let {
-    api_key_ciphertext: ciphertext,
-    api_key_nonce: nonce,
-    api_key_tag: tag,
-    api_key_key_id: keyId,
-  } = row;
-  if (ciphertext == null || nonce == null || tag == null || keyId == null) {
-    return undefined;
-  }
-  return {
-    keyId,
-    nonce: Buffer.from(nonce, 'base64'),
-    ciphertext: Buffer.from(ciphertext, 'base64'),
-    tag: Buffer.from(tag, 'base64'),
-  };
-}
-
-function hasSealedColumns(row: ProxyEndpointKeyRow): boolean {
-  return (
-    row.api_key_ciphertext != null ||
-    row.api_key_nonce != null ||
-    row.api_key_tag != null ||
-    row.api_key_key_id != null
-  );
-}
-
-// The sealed columns as bindings for `decode($n, 'base64')`, `decode(...)`,
-// `decode(...)` and the key id.
-function sealedBindings(sealed: SealedSecret | undefined) {
-  if (!sealed) {
-    return [null, null, null, null];
-  }
-  return [
-    sealed.ciphertext.toString('base64'),
-    sealed.nonce.toString('base64'),
-    sealed.tag.toString('base64'),
-    sealed.keyId,
-  ];
-}
-
 // Each row whose sealed key disagrees with its plain-text key is reported
 // once per sealed value, not on every reload of the endpoint cache.
 const reportedDrift = new Set<string>();
@@ -107,7 +68,7 @@ function reportDrift(row: ProxyEndpointKeyRow, reason: string): void {
   }
   reportedDrift.add(drift);
   log.warn(
-    `the sealed key for proxy endpoint ${row.url} ${reason}, so its plain-text key is used until the backfill seals it again`,
+    `the sealed key for proxy endpoint ${row.url} ${reason}, so its plain-text key is used`,
   );
 }
 
@@ -123,25 +84,17 @@ export function readProxyEndpointKey(
   row: ProxyEndpointKeyRow,
   keyring?: SecretsKeyring,
 ): string | null {
-  let sealed = sealedKey(row);
+  let sealed = sealedFromColumns({ ...row }, 'api_key');
   if (!sealed) {
     return row.api_key;
   }
-  let opened: string;
-  try {
-    opened = (keyring ?? secretsKeyring()).open(
-      sealed,
-      proxyEndpointKeyBinding(row),
-    );
-  } catch (e: any) {
-    reportDrift(row, `could not be opened (${e?.message ?? e})`);
-    return row.api_key;
-  }
-  if (opened !== row.api_key) {
-    reportDrift(row, 'differs from its plain-text key');
-    return row.api_key;
-  }
-  return opened;
+  return openWithPlainTextFallback({
+    plainText: row.api_key,
+    sealed,
+    binding: proxyEndpointKeyBinding(row),
+    keyring: keyring ?? secretsKeyring(),
+    onDisagreement: (reason) => reportDrift(row, reason),
+  });
 }
 
 export interface ProxyEndpoint {
@@ -203,7 +156,7 @@ export async function saveProxyEndpoint(
         endpoint.supportsStreaming,
         endpoint.authMethod ?? null,
         endpoint.authParameterName ?? null,
-        ...sealedBindings(sealed),
+        ...sealedColumnBindings(sealed),
       ],
       redactBindings: true,
     },
@@ -212,8 +165,8 @@ export async function saveProxyEndpoint(
 }
 
 export interface ProxyEndpointKeySealing {
-  // Rows whose key was sealed, including rows sealed under the public local
-  // development key by a process that seals with another key.
+  // Rows whose key was sealed: rows with no sealed key and, with
+  // `resealTampered`, tampered rows.
   sealed: number;
   // Rows with no plain-text key whose sealed columns were emptied.
   cleared: number;
@@ -222,23 +175,19 @@ export interface ProxyEndpointKeySealing {
   // Rows sealed under a data key this process hasn't loaded, left as they
   // are.
   unloadedKey: number;
+  // Rows whose sealed value fails to open under a loaded key, opens to a
+  // value other than the plain text, or is sealed under the public local
+  // development key in a process sealing with another key, reported and left
+  // as they are.
+  tampered: number;
   // Rows that changed between the read and the update, left to whoever
   // changed them.
   skipped: number;
 }
 
-// Seals every row's plain-text key into its sealed columns. The plain-text
-// column is the source: a row whose sealed key is missing, doesn't open under
-// its binding (its url or id was edited outside the application), or opens to
-// a different value (its plain text was) is sealed from it, and a row with no
-// plain-text key has its sealed columns emptied. A row whose sealed key opens
-// to its plain-text key is left alone, so a second run changes nothing.
-//
-// A row sealed under a data key this process hasn't loaded is left alone and
-// reported: re-sealing it under this process's current key would move it back
-// onto an older data key than the one a rotation put it under. The one
-// exception is the public local development key: a process sealing with any
-// other key seals such a row again, since anyone can open it.
+// Seals every row's plain-text key into its sealed columns, as
+// `backfillDecision` decides, and empties the sealed columns of a row with no
+// plain-text key.
 //
 // Each update applies only while the row still holds the key and the nonce
 // that were read, so it never overwrites a concurrent write or re-seal, and
@@ -246,6 +195,7 @@ export interface ProxyEndpointKeySealing {
 export async function sealProxyEndpointKeys(
   dbAdapter: DBAdapter,
   keyring: SecretsKeyring = secretsKeyring(),
+  { resealTampered = false }: { resealTampered?: boolean } = {},
 ): Promise<ProxyEndpointKeySealing> {
   let rows = (await dbAdapter.execute(
     `SELECT id, url, ${PROXY_ENDPOINT_KEY_COLUMNS} FROM proxy_endpoints`,
@@ -255,12 +205,13 @@ export async function sealProxyEndpointKeys(
     cleared: 0,
     unchanged: 0,
     unloadedKey: 0,
+    tampered: 0,
     skipped: 0,
   };
   for (let row of rows) {
     let binding = proxyEndpointKeyBinding(row);
     if (row.api_key == null) {
-      if (!hasSealedColumns(row)) {
+      if (!hasSealedColumns({ ...row }, 'api_key')) {
         result.unchanged++;
         continue;
       }
@@ -276,34 +227,19 @@ export async function sealProxyEndpointKeys(
       result[updated.length > 0 ? 'cleared' : 'skipped']++;
       continue;
     }
-    let sealed = sealedKey(row);
-    if (
-      sealed?.keyId === LOCAL_DATA_KEY_ID &&
-      keyring.currentKeyId !== LOCAL_DATA_KEY_ID
-    ) {
-      log.warn(
-        `the key for proxy endpoint ${row.url} is sealed under the public local development key, so it is sealed again under data key ${keyring.currentKeyId}`,
-      );
-    } else if (sealed) {
-      if (!keyring.keyIds.includes(sealed.keyId)) {
-        log.warn(
-          `the key for proxy endpoint ${row.url} is sealed under data key ${sealed.keyId}, which this process has not loaded, so it is left as it is`,
-        );
-        result.unloadedKey++;
-        continue;
-      }
-      let opened: string | undefined;
-      try {
-        opened = keyring.open(sealed, binding);
-      } catch {
-        log.warn(
-          `the sealed key for proxy endpoint ${row.url} does not open under its binding, so it is sealed again from its plain-text key`,
-        );
-      }
-      if (opened === row.api_key) {
-        result.unchanged++;
-        continue;
-      }
+    let decision = backfillDecision({
+      plainText: row.api_key,
+      sealed: sealedFromColumns({ ...row }, 'api_key'),
+      binding,
+      keyring,
+      subject: `the key for proxy endpoint ${row.url}`,
+      warn: (message) => log.warn(message),
+      reportTampered: (message) => reportTamperedSecret(log, message),
+      resealTampered,
+    });
+    if (decision !== 'seal') {
+      result[decision]++;
+      continue;
     }
     let updated = await dbAdapter.execute(
       `UPDATE proxy_endpoints SET
@@ -318,7 +254,7 @@ export async function sealProxyEndpointKeys(
         bind: [
           row.id,
           row.url,
-          ...sealedBindings(keyring.seal(row.api_key, binding)),
+          ...sealedColumnBindings(keyring.seal(row.api_key, binding)),
           row.api_key,
           row.api_key_nonce,
         ],
@@ -328,7 +264,7 @@ export async function sealProxyEndpointKeys(
     result[updated.length > 0 ? 'sealed' : 'skipped']++;
   }
   log.info(
-    `proxy endpoint keys: sealed=${result.sealed} cleared=${result.cleared} unchanged=${result.unchanged} unloadedKey=${result.unloadedKey} skipped=${result.skipped}`,
+    `proxy endpoint keys: sealed=${result.sealed} cleared=${result.cleared} unchanged=${result.unchanged} unloadedKey=${result.unloadedKey} tampered=${result.tampered} skipped=${result.skipped}`,
   );
   return result;
 }

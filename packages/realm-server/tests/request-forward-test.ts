@@ -2057,7 +2057,7 @@ module(basename(import.meta.filename), function () {
           );
         });
 
-        test('a key edited by hand reaches the vendor before the backfill seals it again', async function (assert) {
+        test('a key edited by hand reaches the vendor', async function (assert) {
           await dbAdapter.execute(
             `UPDATE proxy_endpoints SET api_key = 'stub-vendor-key-edited' WHERE url = $1`,
             { bind: [`${vendor.url}/`] },
