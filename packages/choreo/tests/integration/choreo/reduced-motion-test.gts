@@ -217,6 +217,67 @@ module('Integration | choreo | reduced motion', function (hooks) {
     assert.strictEqual(scale, 2, 'the frame already holds the zoomed shot');
   });
 
+  test("an engine tween follows the region's policy now, not its node's at mount", async function (assert) {
+    class App extends Component {
+      @tracked policy: Policy = 'always';
+      @tracked take = 0;
+      constructor(o: unknown, a: object) {
+        super(o as never, a);
+        app = this;
+      }
+      <template>
+        <MotionConfig @reducedMotion={{this.policy}}>
+          <Choreo
+            class='stage'
+            style='position:relative;width:300px;height:200px'
+            as |c|
+          >
+            <div
+              id='card'
+              data-take={{this.take}}
+              {{motion id='card'}}
+            >card</div>
+            {{#if this.take}}
+              <c.Tween
+                @of={{c.id 'card'}}
+                @x={{array 120 0}}
+                @duration={{0.6}}
+                @ease='linear'
+              />
+            {{/if}}
+          </Choreo>
+        </MotionConfig>
+      </template>
+    }
+    let app: App | undefined;
+    const xOf = () =>
+      new DOMMatrix(getComputedStyle(find('#card') as HTMLElement).transform).e;
+    const play = async () => {
+      app!.take += 1;
+      await settled();
+      await nextFrame();
+      await nextFrame();
+      return xOf();
+    };
+
+    await render(<template><App /></template>);
+    await animationsSettled();
+    // mounted reducing; the region now says play
+    app!.policy = 'never';
+    const travelling = await play();
+    assert.true(
+      travelling > 0,
+      `the card travels though its node mounted reducing (x ${travelling})`,
+    );
+    await animationsSettled();
+
+    // and the other way: the region now says reduce
+    app!.policy = 'always';
+    const landed = await play();
+    assert.strictEqual(landed, 0, 'the card lands at once');
+    await animationsSettled();
+  });
+
   test('an engine tween jumps its position and still fades', async function (assert) {
     class App extends Component {
       @tracked shown = false;

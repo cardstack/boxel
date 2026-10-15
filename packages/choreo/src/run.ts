@@ -2308,9 +2308,10 @@ export class ChoreoRun implements Run {
     }
     const transition = carryVelocity(
       scaleTransition(
-        // the run's decision, not each node's: a sprite mounted before the
-        // preference changed would otherwise still travel
-        { ...cue.transition, reduceMotion: this.reduced || undefined } as never,
+        // the run's decision, not each node's: a node settles its own as it
+        // mounts, and one mounted before the policy changed would otherwise
+        // go on travelling, or go on jumping, against the rest of the run
+        { ...cue.transition, reduceMotion: this.reduced } as never,
         this.scale,
       ) as Record<string, unknown>,
       cue,
