@@ -98,6 +98,19 @@ function optionLabel(
   return options.find((option) => option.value === value)?.label ?? value;
 }
 
+// The status chip's label: the adoption status, or the implementation status
+// for a component nobody has adopted yet; undefined hides the chip.
+function statusLabel(
+  adoptionStatus: string | undefined,
+  implementationStatus: string | undefined,
+): string | undefined {
+  if (adoptionStatus) return optionLabel(ADOPTION_OPTIONS, adoptionStatus);
+  if (implementationStatus) {
+    return optionLabel(IMPLEMENTATION_OPTIONS, implementationStatus);
+  }
+  return undefined;
+}
+
 function isInUse(status: string | undefined): boolean {
   return status === 'in-use';
 }
@@ -561,7 +574,7 @@ export class PretUISpec extends Spec {
         },
         // versions are earned by use — nothing worn shows no number
         ...(isInUse(m.adoptionStatus)
-          ? [{ key: 'Version', value: m.version ?? '0.0.0' }]
+          ? [{ key: 'Version', value: m.version || '0.0.0' }]
           : []),
         { key: 'Source', value: m.source ?? '—' },
       ];
@@ -737,13 +750,18 @@ export class PretUISpec extends Spec {
                   data-test-pretui-version
                 />
               {{/if}}
-              {{#if @model.adoptionStatus}}
-                <StatusChip
-                  @value={{optionLabel ADOPTION_OPTIONS @model.adoptionStatus}}
-                  @tone={{adoptionTone @model.adoptionStatus}}
-                  data-test-pretui-adoption
-                />
-              {{/if}}
+              {{#let
+                (statusLabel @model.adoptionStatus @model.implementationStatus)
+                as |label|
+              }}
+                {{#if label}}
+                  <StatusChip
+                    @value={{label}}
+                    @tone={{adoptionTone @model.adoptionStatus}}
+                    data-test-pretui-status
+                  />
+                {{/if}}
+              {{/let}}
               {{#if (isNewIn @model.introducedVersion)}}<Chip
                   @label='New'
                   @tone='attention'
@@ -897,7 +915,7 @@ export class PretUISpec extends Spec {
                 {{#if this.isHost}}
                   <EmptyState
                     @title='Catalog infrastructure — demo excluded'
-                    @message='Host chrome stays in boxel-ui by design. It is indexed here for vocabulary coverage, not as a Pret UI demo target.'
+                    @message='Host chrome is indexed here for vocabulary coverage, not as a Pret UI demo target.'
                   />
                 {{else}}
                   <EmptyState
@@ -1369,20 +1387,25 @@ export class PretUISpec extends Spec {
                     aria-hidden='true'
                   /><VisuallyHidden>Featured: a flagship component</VisuallyHidden></span>{{/if}}
             </div>
-            <div class='fit-sub'>
+            <div class='fit-sub' data-test-pretui-fit-sub>
               {{#if @model.category}}<span>{{@model.category}}</span>{{/if}}
               {{#if (isInUse @model.adoptionStatus)}}
                 <span>{{if @model.version @model.version '0.0.0'}}</span>
               {{/if}}
             </div>
-            <div class='fit-extra'>
-              {{#if @model.adoptionStatus}}
-                <StatusChip
-                  @value={{optionLabel ADOPTION_OPTIONS @model.adoptionStatus}}
-                  @tone={{adoptionTone @model.adoptionStatus}}
-                  data-test-pretui-adoption
-                />
-              {{/if}}
+            <div class='fit-extra' data-test-pretui-fit-extra>
+              {{#let
+                (statusLabel @model.adoptionStatus @model.implementationStatus)
+                as |label|
+              }}
+                {{#if label}}
+                  <StatusChip
+                    @value={{label}}
+                    @tone={{adoptionTone @model.adoptionStatus}}
+                    data-test-pretui-status
+                  />
+                {{/if}}
+              {{/let}}
               {{#if (isNewIn @model.introducedVersion)}}<Chip
                   @label='New'
                   @tone='attention'
@@ -1531,13 +1554,18 @@ export class PretUISpec extends Spec {
               @model.componentName
               'Component'
             }}</span>
-          {{#if @model.adoptionStatus}}
-            <StatusChip
-              @value={{optionLabel ADOPTION_OPTIONS @model.adoptionStatus}}
-              @tone={{adoptionTone @model.adoptionStatus}}
-              data-test-pretui-adoption
-            />
-          {{/if}}
+          {{#let
+            (statusLabel @model.adoptionStatus @model.implementationStatus)
+            as |label|
+          }}
+            {{#if label}}
+              <StatusChip
+                @value={{label}}
+                @tone={{adoptionTone @model.adoptionStatus}}
+                data-test-pretui-status
+              />
+            {{/if}}
+          {{/let}}
         </div>
         <div class='tile-meta'>
           {{! always rendered, so the source token keeps the right edge }}

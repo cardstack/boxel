@@ -10,6 +10,8 @@ import { realmURL } from 'https://cardstack.com/base/card-api';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const Isolated = PretUISpec.isolated as any;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const Fitted = PretUISpec.fitted as any;
 
 function specModel(name: string, overrides: Record<string, unknown> = {}) {
   return {
@@ -106,22 +108,39 @@ module('Pretui | PretUISpec', function (hooks) {
     assert.dom('[data-test-pretui-version]').doesNotExist();
   });
 
-  test('a deprecated component carries a danger-toned adoption chip', async function (assert) {
+  test('a deprecated component carries a danger-toned status chip', async function (assert) {
     let model = specModel('Button', { adoptionStatus: 'deprecated' });
     await render(<template><Isolated @model={{model}} /></template>);
-    assert
-      .dom('[data-test-pretui-adoption]')
-      .hasAttribute('data-tone', 'danger');
+    assert.dom('[data-test-pretui-status]').hasAttribute('data-tone', 'danger');
   });
 
-  test('the adoption chip names the adoption status, and is absent without one', async function (assert) {
-    let model = specModel('Button', { adoptionStatus: 'demo-ready' });
-    await render(<template><Isolated @model={{model}} /></template>);
-    assert.dom('[data-test-pretui-adoption]').hasText('Demo ready');
+  test('the status chip names the adoption status, else the implementation status', async function (assert) {
+    let adopted = specModel('Button', { adoptionStatus: 'demo-ready' });
+    await render(<template><Isolated @model={{adopted}} /></template>);
+    assert.dom('[data-test-pretui-status]').hasText('Demo ready');
 
-    let unset = specModel('Button');
+    let planned = specModel('Button', { implementationStatus: 'planned' });
+    await render(<template><Isolated @model={{planned}} /></template>);
+    assert.dom('[data-test-pretui-status]').hasText('Planned');
+
+    let unset = specModel('Button', { implementationStatus: undefined });
     await render(<template><Isolated @model={{unset}} /></template>);
-    assert.dom('[data-test-pretui-adoption]').doesNotExist();
+    assert.dom('[data-test-pretui-status]').doesNotExist();
+  });
+
+  test('the fitted view hides its subtitle and chip rows when they are empty', async function (assert) {
+    let model = specModel('Button', {
+      category: undefined,
+      implementationStatus: undefined,
+    });
+    await render(<template><Fitted @model={{model}} /></template>);
+    assert.dom('[data-test-pretui-fit-sub]').isNotVisible();
+    assert.dom('[data-test-pretui-fit-extra]').isNotVisible();
+
+    let filled = specModel('Button', { adoptionStatus: 'in-use' });
+    await render(<template><Fitted @model={{filled}} /></template>);
+    assert.dom('[data-test-pretui-fit-sub]').isVisible();
+    assert.dom('[data-test-pretui-fit-extra]').isVisible();
   });
 
   test('each input page loads from its own usage module', async function (assert) {
