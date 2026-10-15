@@ -18,8 +18,8 @@ mistake at authoring time.
 Examples of **incorrect** code for this rule:
 
 ```gts
-import { field, contains, CardDef } from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
+import { field, contains, CardDef } from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
 
 class Product extends CardDef {
   @field captureURLs = contains(StringField);
@@ -29,7 +29,7 @@ class Product extends CardDef {
 Examples of **correct** code for this rule:
 
 ```gts
-import { CardDef, Component } from 'https://cardstack.com/base/card-api';
+import { CardDef, Component } from '@cardstack/base/card-api';
 
 class Product extends CardDef {
   static fitted = class extends Component<typeof Product> {

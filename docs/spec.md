@@ -8,10 +8,12 @@ At its core, a Spec links to an exported definition in modules via **Code Ref** 
 
 ```typescript
 {
-  module: string; // Path to the module file (e.g., './my-component.gts')
+  module: RealmResourceIdentifier; // Absolute module identifier: a URL for workspace realms, '@cardstack/<realm>/…' for well-known realms
   name: string; // Export name (e.g., 'MyComponent')
 }
 ```
+
+Card JSON may store `module` relative to the card (e.g. `'./my-component'`); it is resolved to an absolute identifier when the card is loaded.
 
 When a module is edited (for example, if a definition is renamed), the spec might potentially become outdated.
 

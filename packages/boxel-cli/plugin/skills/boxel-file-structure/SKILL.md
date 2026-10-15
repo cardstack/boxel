@@ -208,7 +208,9 @@ GrammyAward/              # Instances in PascalCase directory
 
 ## Links Between Cards
 
-When linking to other cards, use the card's URL without `.json`:
+When linking to other cards, use the card's identifier without `.json`: a
+relative path, a URL for workspace realms, or `@cardstack/<realm>/…` for
+well-known realms.
 
 ```json
 {
@@ -226,22 +228,21 @@ When linking to other cards, use the card's URL without `.json`:
 
 ## Base Realms (Read-Only)
 
-These realms contain shared definitions you can import from:
+These realms contain shared definitions you can import from. Name them by
+their `@cardstack/<realm>/` prefix, which resolves in every environment:
 
-**Production:**
-- `https://cardstack.com/base/` - Core types (CardDef, FieldDef, etc.)
-- `https://app.boxel.ai/catalog/` - Catalog cards
-- `https://app.boxel.ai/skills/` - Skill cards
+- `@cardstack/base/` - Core types (CardDef, FieldDef, etc.)
+- `@cardstack/catalog/` - Catalog cards
+- `@cardstack/skills/` - Skill cards
 
-**Staging:**
-- `https://cardstack.com/base/` - Same core types
-- `https://realms-staging.stack.cards/catalog/`
-- `https://realms-staging.stack.cards/skills/`
+Don't import from `https://cardstack.com/base/` or from a realm's
+environment-specific URL. The `@cardstack/boxel/no-url-form-base-imports` lint
+rule rewrites the base alias to `@cardstack/base/`.
 
 ## Common Import Patterns
 
 ```gts
-// Core imports (always from cardstack.com/base)
+// Core imports (always from @cardstack/base/)
 import {
   CardDef,
   FieldDef,
@@ -254,13 +255,13 @@ import {
   NumberField,
   BooleanField,
   Component,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 
 // Import from same workspace
 import { Author } from './author';
 
 // Import from base realm
-import { Skill } from 'https://cardstack.com/base/skill';
+import { Skill } from '@cardstack/base/skill';
 ```
 
 ## Query Structure (for API searches)

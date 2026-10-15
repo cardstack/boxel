@@ -27,14 +27,14 @@ The content-only renderers — just the file's content, none of the shell chrome
 
 Import them by context:
 
-- Card code (in a realm): `import { MarkdownPreview } from 'https://cardstack.com/base/file-formats/index';`
+- Card code (in a realm): `import { MarkdownPreview } from '@cardstack/base/file-formats/index';`
 - Host / base TS: the base-realm value is only available at runtime through the loader — import the **type** statically and load the value:
 
   ```ts
   import type * as FileFormats from '@cardstack/base/file-formats/index';
 
   let { MarkdownPreview } = await loader.import<typeof FileFormats>(
-    `${baseRealm.url}file-formats/index`,
+    '@cardstack/base/file-formats/index',
   );
   ```
 
