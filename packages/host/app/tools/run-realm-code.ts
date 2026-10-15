@@ -98,6 +98,15 @@ const MAX_BINARY_FILE_SIZE = 2_000_000;
 const MAX_BINARY_BYTES_PER_RUN = 5_000_000;
 const BASE64_RE = /^[A-Za-z0-9+/]*={0,2}$/;
 const DATA_URL_PREFIX_RE = /^data:[^,]*;base64,/i;
+// realm.fs.download limits. The bytes go from the host to the realm and never
+// into the sandbox, so they are wider than the writeBytes limits.
+const MAX_DOWNLOAD_FILE_SIZE = 10_000_000;
+const MAX_DOWNLOAD_BYTES_PER_RUN = 25_000_000;
+// One download may take this long. It counts toward the run's own time limit
+// too, so a slow download cannot hold the run past that.
+const DOWNLOAD_TIMEOUT_MS = 20_000;
+// The last part of a path, when it has a file extension.
+const FILE_EXTENSION_RE = /\.[A-Za-z0-9]+$/;
 // How many cards one `realm.cards.search` answers with when the query names no
 // page size, and the most it answers with whatever the query asks for.
 const DEFAULT_SEARCH_RESULTS = 50;
@@ -171,6 +180,17 @@ type GenerateImage = (input: {
   signal: AbortSignal;
 }) => Promise<GeneratedImage>;
 
+// Fetches the bytes at a URL, at most `maxBytes` of them, or stops when
+// `signal` aborts.
+type DownloadFile = (
+  sourceUrl: string,
+  maxBytes: number,
+  signal: AbortSignal,
+) => Promise<Uint8Array>;
+
+// What a DownloadFile throws for a body larger than `maxBytes`.
+class DownloadTooLarge extends Error {}
+
 // What `lookup` finds for a file that is not UTF-8 text.
 const BINARY = Symbol('binary');
 
@@ -228,8 +248,9 @@ interface IndexActions {
 
 const MAX_INVALIDATE_PATHS = 100;
 
-// Calls that cannot be undone, that spend the user's credit, or that change
-// the state of a whole realm for a long time. A script that may make one
+// Calls that cannot be undone, that spend the user's credit, that change
+// the state of a whole realm for a long time, or that fetch any URL with the
+// user's realm credentials (realm.fs.download). A script that may make one
 // names the call in its code. Such a run always waits for the user's click
 // (`neverAutoExecutesFor`), and only such a run may make the call: a script
 // that reaches it another way is refused, so none of them runs without a
@@ -239,6 +260,7 @@ const CLICK_REQUIRED_CALLS = [
   'realm.images.generate',
   'realm.index.fullReindex',
   'realm.index.cancelJob',
+  'realm.fs.download',
 ] as const;
 type ClickRequiredCall = (typeof CLICK_REQUIRED_CALLS)[number];
 
@@ -268,6 +290,7 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   'fs.writeText': true,
   'fs.copy': true,
   'fs.writeBytes': true,
+  'fs.download': true,
   'cards.search': false,
   'cards.get': false,
   'entries.search': false,
@@ -354,6 +377,7 @@ class RealmFsSession {
   private imagesRequested = 0;
   // Image request time this run has used, in ms, of IMAGE_TIME_BUDGET_MS.
   private imageTimeUsed = 0;
+  private downloadedBytes = 0;
   // What `realm.capture` takes in this run.
   readonly captures: RealmCaptures;
   // What `realm.ui` asked for, in the order the script asked.
@@ -375,6 +399,7 @@ class RealmFsSession {
     private writeFile: WriteFile,
     private writeBinaryFile: WriteBinaryFile,
     private deleteFile: DeleteFile,
+    private downloadFile: DownloadFile,
     private listDirectory: ListDirectory,
     private search: SearchCards,
     private resolveURL: ResolveURL,
@@ -630,6 +655,61 @@ class RealmFsSession {
         this.known.set(url, undefined);
         this.deleted.add(url);
         return { path: this.relative(url), deleted: true };
+      }
+      // The host fetches the file and saves it; the bytes never enter the
+      // sandbox, which has no network access of its own.
+      case 'fs.download': {
+        if (!this.namedCalls.has('realm.fs.download')) {
+          throw notNamedError('realm.fs.download');
+        }
+        let sourceUrl = downloadSource(args[0]);
+        let url = this.resolve(method, args[1]);
+        // The realm infers the file type from the extension.
+        if (!FILE_EXTENSION_RE.test(url.slice(url.lastIndexOf('/') + 1))) {
+          throw new Error(
+            `realm.fs.download needs a path with a file extension, so the realm knows the file type: ${url}`,
+          );
+        }
+        // Only creates, the same as realm.fs.writeText.
+        if ((await this.lookup(url)) !== undefined) {
+          throw new Error(`File already exists: ${url}`);
+        }
+        let left = MAX_DOWNLOAD_BYTES_PER_RUN - this.downloadedBytes;
+        let maxBytes = Math.min(MAX_DOWNLOAD_FILE_SIZE, left);
+        let bytes: Uint8Array;
+        try {
+          bytes = await this.download(sourceUrl, maxBytes);
+        } catch (error) {
+          if (error instanceof DownloadTooLarge) {
+            throw new Error(
+              maxBytes < MAX_DOWNLOAD_FILE_SIZE
+                ? `realm.fs.download accepts at most ${MAX_DOWNLOAD_BYTES_PER_RUN} bytes per run: ${sourceUrl} is larger than the ${left} bytes left`
+                : `realm.fs.download accepts at most ${MAX_DOWNLOAD_FILE_SIZE} bytes per file: ${sourceUrl} is larger`,
+            );
+          }
+          throw error;
+        }
+        // Charged as soon as the bytes arrive, so a save that fails or is
+        // refused below cannot be retried past the per-run limit.
+        this.downloadedBytes += bytes.byteLength;
+        if (bytes.byteLength === 0) {
+          throw new Error(`${sourceUrl} returned an empty file`);
+        }
+        if (this.closed) {
+          this.refused += 1;
+          throw new Error(`The run has ended; ${url} was not saved`);
+        }
+        await this.writeBinaryFile(url, bytes);
+        this.binaryDigests.set(url, await sha256(bytes));
+        // The lookup above recorded the file as missing.
+        this.known.delete(url);
+        this.binary.add(url);
+        this.markCreated(url);
+        return {
+          path: this.relative(url),
+          size: bytes.byteLength,
+          saved: true,
+        };
       }
       case 'capture': {
         let url = this.resolve(method, args[0]);
@@ -1201,6 +1281,51 @@ class RealmFsSession {
     };
   }
 
+  // Downloads within DOWNLOAD_TIMEOUT_MS, and stops when the run ends.
+  private async download(
+    sourceUrl: string,
+    maxBytes: number,
+  ): Promise<Uint8Array> {
+    // The run can end while an unawaited call waits on its lookup. An abort
+    // listener added after that would never fire, so nothing is fetched.
+    if (this.inFlight.signal.aborted) {
+      this.refused += 1;
+      throw new Error(`The run has ended; ${sourceUrl} was not downloaded`);
+    }
+    let stop = new AbortController();
+    let timer = setTimeout(
+      () =>
+        stop.abort(
+          new Error(
+            `Downloading ${sourceUrl} took longer than ${DOWNLOAD_TIMEOUT_MS / 1000} s`,
+          ),
+        ),
+      DOWNLOAD_TIMEOUT_MS,
+    );
+    let onRunEnd = () =>
+      stop.abort(
+        new Error(`The run has ended; ${sourceUrl} was not downloaded`),
+      );
+    this.inFlight.signal.addEventListener('abort', onRunEnd, { once: true });
+    try {
+      // A fetch that ignores the signal still ends the call when it aborts.
+      return await new Promise<Uint8Array>((resolve, reject) => {
+        stop.signal.addEventListener(
+          'abort',
+          () => reject(stop.signal.reason),
+          { once: true },
+        );
+        this.downloadFile(sourceUrl, maxBytes, stop.signal).then(
+          resolve,
+          reject,
+        );
+      });
+    } finally {
+      clearTimeout(timer);
+      this.inFlight.signal.removeEventListener('abort', onRunEnd);
+    }
+  }
+
   private async load(url: string): Promise<string | undefined> {
     let content = await this.lookup(url);
     if (content === BINARY) {
@@ -1284,6 +1409,29 @@ async function sha256(bytes: Uint8Array): Promise<string> {
     .join('');
 }
 
+// The URL a download reads from: an absolute http or https URL.
+function downloadSource(value: unknown): string {
+  if (typeof value !== 'string') {
+    throw new TypeError(
+      'realm.fs.download expects a source URL and a destination path',
+    );
+  }
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(
+      `realm.fs.download expects an absolute source URL: ${value}`,
+    );
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error(
+      `realm.fs.download downloads only http and https URLs: ${value}`,
+    );
+  }
+  return url.href;
+}
+
 // Accepts plain base64, with or without line breaks, or a base64 data URL.
 // The base64 content of a writeBytes call, without a `data:` URL prefix or
 // whitespace.
@@ -1337,11 +1485,12 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'cards with realm.cards.search, reads cards as JSON data with ' +
     'realm.cards.get, finds cards, specs and files across realms with ' +
     'realm.entries.search, can look at what it made with realm.capture, can ' +
-    'generate images into the realm with realm.images.generate, can ' +
-    'create workspaces with realm.workspaces.create, can change the ' +
-    'skills and model of this room with room.*, and can refresh the index ' +
-    'of the workspace with realm.index.*. In a workspace the user can only ' +
-    'read, reads work and each write is refused. Return ' +
+    'generate images into the realm with realm.images.generate, can save a ' +
+    'file from a URL with realm.fs.download, can create workspaces with ' +
+    'realm.workspaces.create, can change the skills and model of this room ' +
+    'with room.*, and can refresh the index of the workspace with ' +
+    'realm.index.*. In a workspace the user can only read, reads work and ' +
+    'each write is refused. Return ' +
     '{ show: "<card path>" } to open a card in the realm when the run ends.';
   static actionVerb = 'Run';
   // `room.*` changes the room the call came from. The tool service sets
@@ -1419,6 +1568,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
         this.writeFile(roomId, url, content, expected, options),
       (url, bytes) => this.writeBinaryFile(roomId, url, bytes),
       (url, expected) => this.deleteFile(url, expected),
+      (url, maxBytes, signal) => this.downloadFile(url, maxBytes, signal),
       (url) => this.listDirectory(url),
       // The run reads only the rows' own data, so the linked cards' resources
       // are not asked for.
@@ -2046,6 +2196,62 @@ export default class RunRealmCodeTool extends HostBaseTool<
           signal,
         }),
     );
+  }
+
+  // `authedFetch` adds the user's realm token when the URL is in a realm the
+  // user can read, the same as the download-file-to-realm tool, so a capture
+  // URL of a private realm downloads. Any other URL is a plain fetch.
+  private async downloadFile(
+    sourceUrl: string,
+    maxBytes: number,
+    signal: AbortSignal,
+  ): Promise<Uint8Array> {
+    let response = await this.network.authedFetch(sourceUrl, {
+      method: 'GET',
+      signal,
+    });
+    if (!response.ok) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new Error(
+        `Unable to download ${sourceUrl}: ${response.status} ${response.statusText}`,
+      );
+    }
+    let declared = Number(response.headers.get('content-length'));
+    if (declared > maxBytes) {
+      await response.body?.cancel().catch(() => undefined);
+      throw new DownloadTooLarge();
+    }
+    if (!response.body) {
+      let bytes = new Uint8Array(await response.arrayBuffer());
+      if (bytes.byteLength > maxBytes) {
+        throw new DownloadTooLarge();
+      }
+      return bytes;
+    }
+    // Read in chunks, so a body without a declared length stops at the
+    // limit instead of after it has all arrived.
+    let reader = response.body.getReader();
+    let chunks: Uint8Array[] = [];
+    let total = 0;
+    for (;;) {
+      let { done, value } = await reader.read();
+      if (done || !value) {
+        break;
+      }
+      total += value.byteLength;
+      if (total > maxBytes) {
+        await reader.cancel().catch(() => undefined);
+        throw new DownloadTooLarge();
+      }
+      chunks.push(value);
+    }
+    let bytes = new Uint8Array(total);
+    let offset = 0;
+    for (let chunk of chunks) {
+      bytes.set(chunk, offset);
+      offset += chunk.byteLength;
+    }
+    return bytes;
   }
 
   private async listDirectory(
