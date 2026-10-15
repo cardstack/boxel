@@ -504,13 +504,11 @@ function start(form) {
   // from the fields and the parts that aren't secret taken from the app.
   const OPERATIONS = {
     async login() {
-      return await passwordLogin((username) => ({ user: username }));
+      return await passwordLogin();
     },
 
     async 'cli-login'() {
-      return await passwordLogin((username) => ({
-        identifier: { type: 'm.id.user', user: username },
-      }));
+      return await passwordLogin();
     },
 
     async register({ username, auth }) {
@@ -549,14 +547,17 @@ function start(form) {
   };
 
   // Signs in with the username field as a Matrix username, then, if that
-  // fails, as an email address. `asUser` gives the part of the request that
-  // names the account as a username. When neither signs in, the username
+  // fails, as an email address. When neither signs in, the username
   // attempt's response is returned.
-  async function passwordLogin(asUser) {
+  async function passwordLogin() {
     let password = value('password');
     let username = value('username');
     let byUsername = await matrixRequest('login', {
-      body: { ...asUser(username), password, type: 'm.login.password' },
+      body: {
+        identifier: { type: 'm.id.user', user: username },
+        password,
+        type: 'm.login.password',
+      },
     });
     if (byUsername.ok) {
       return byUsername;
