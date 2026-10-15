@@ -191,6 +191,12 @@ export default class HostModeStack extends Component<Signature> {
       .stack-items {
         display: contents;
       }
+
+      /* the top card takes focus from script as it opens, to carry the
+         keyboard into it; it is no control, so it draws no ring */
+      .host-mode-stack :deep([data-host-mode-stack-item]:focus) {
+        outline: none;
+      }
     </style>
   </template>
 }
