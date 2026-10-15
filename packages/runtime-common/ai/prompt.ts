@@ -57,6 +57,7 @@ import {
   APP_BOXEL_ACTIVE_LLM,
   DEFAULT_FALLBACK_MODELS,
   DEFAULT_FALLBACK_MODEL_ID,
+  CAPTURE_SOURCE_URL_PREFIX,
 } from '../matrix-constants.ts';
 import {
   buildToolFunctionNameFromResolvedRef,
@@ -2187,6 +2188,7 @@ function gatherPatchedFiles(
       if (
         !sourceUrl ||
         filesByKey.has(sourceUrl) ||
+        sourceUrl.startsWith(CAPTURE_SOURCE_URL_PREFIX) ||
         !hasCheckableSource(file.contentType)
       ) {
         continue;

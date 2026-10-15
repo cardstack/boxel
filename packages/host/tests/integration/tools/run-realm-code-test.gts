@@ -7,6 +7,7 @@ import { module, test } from 'qunit';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  CAPTURE_SOURCE_URL_PREFIX,
   DEFAULT_FALLBACK_MODELS,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -322,6 +323,10 @@ return await realm.capture('seen.json');`,
       attachments[1].url,
       result.captures[0].url,
       'the capture rides as the media already uploaded',
+    );
+    assert.true(
+      attachments[1].sourceUrl.startsWith(CAPTURE_SOURCE_URL_PREFIX),
+      `the capture is named by a capture source URL, which keeps it out of correctness checks: ${attachments[1].sourceUrl}`,
     );
   });
 

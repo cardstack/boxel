@@ -1,5 +1,9 @@
 import { rri, urlNamesFile } from '@cardstack/runtime-common';
 import { MAX_TOOL_RESULT_MEDIA_FILE_BYTES } from '@cardstack/runtime-common/ai';
+import {
+  CAPTURE_SOURCE_URL_PREFIX,
+  LOCAL_SOURCE_URL_PREFIX,
+} from '@cardstack/runtime-common/matrix-constants';
 
 import type { ResultAttachment } from './host-base-tool';
 import type LoaderService from '../services/loader-service';
@@ -76,8 +80,6 @@ const TALL_PAGE_RATIO = 2;
 // stored capture, so it needs only a short window past the server's hint.
 const MIN_RETRY_WINDOW_MS = 2_000;
 
-const LOCAL_SOURCE_PREFIX = 'boxel-local://';
-
 export class VisualCaptureError extends Error {}
 
 function notInWorkspace(reference: string): VisualCaptureError {
@@ -108,7 +110,7 @@ export async function resolveViewTarget(
     throw new VisualCaptureError('A URL to view is required.');
   }
   if (
-    trimmed.startsWith(LOCAL_SOURCE_PREFIX) ||
+    trimmed.startsWith(LOCAL_SOURCE_URL_PREFIX) ||
     trimmed.startsWith('mxc://') ||
     trimmed.startsWith('data:')
   ) {
@@ -319,7 +321,7 @@ export async function captureForAgent(
     image.contentType,
   )}`;
   let local = matrixService.fileAPI.createFileDef({
-    sourceUrl: `${LOCAL_SOURCE_PREFIX}capture/${await shortHash(
+    sourceUrl: `${CAPTURE_SOURCE_URL_PREFIX}${await shortHash(
       image.bytes,
     )}/${encodeURIComponent(name)}`,
     name,
