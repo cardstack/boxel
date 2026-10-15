@@ -58,7 +58,10 @@ import {
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
-import { DEFAULT_FALLBACK_MODELS } from '@cardstack/runtime-common/matrix-constants';
+import {
+  DEFAULT_FALLBACK_MODELS,
+  LOCAL_SOURCE_URL_PREFIX,
+} from '@cardstack/runtime-common/matrix-constants';
 import type { Query } from '@cardstack/runtime-common/query';
 
 import ENV from '@cardstack/host/config/environment';
@@ -106,8 +109,6 @@ import type { RoomSkill } from '../../resources/room';
 import type { CardDef } from '@cardstack/base/card-api';
 import type { FileDef } from '@cardstack/base/file-api';
 import type { MatrixEvent } from 'matrix-js-sdk';
-
-const LOCAL_SOURCE_URL_PREFIX = 'boxel-local://';
 
 interface Signature {
   Element: HTMLElement;

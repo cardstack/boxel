@@ -3,7 +3,8 @@ import { RealmPaths, ensureTrailingSlash, type LocalPath } from '../paths.ts';
 import { urlNamesFile } from '../file-def-code-ref.ts';
 import { codeRefFromInternalKey } from '../index.ts';
 import { baseRealm } from '../constants.ts';
-import { readOperation } from './read.ts';
+import { indexedInstance, readOperation } from './read.ts';
+import { callApiOperation, type CallApiSender } from './call-api.ts';
 import { readSourceOperation } from './read-source.ts';
 import {
   hasTransforms,
@@ -41,7 +42,8 @@ import {
   isOperationFailure,
   unshareableFormatsOf,
   isHeadResult,
-  isWrite,
+  isCallApiResult,
+  travelsAsWrite,
   type BaseOperation,
   type OperationDefinition,
   type OperationResult,
@@ -202,6 +204,9 @@ export interface OperationCore {
     href: string,
     caller: ScopeCaller,
   ): Promise<{ realm: string; read: boolean } | undefined>;
+  // Sends a `callApi`'s request through the realm server's guarded outbound
+  // client. A core without it sends nothing.
+  callApi?: CallApiSender;
 }
 
 // The realm's own `FileRef`, narrowed to what a stored-bytes read uses. Stated
@@ -325,6 +330,12 @@ export interface RunOperationOptions {
   // `skipQueryBackedExpansion`, which is already part of the response cache's
   // key — so the two shapes never share a cache entry.
   skipLinkAssemblyBudget?: boolean;
+  // The request this invocation arrived in is part of a render, which a
+  // `callApi` refuses: a render is replayed and its output shared, so it may
+  // not send requests on anyone's behalf. The realm sets it for a request
+  // marked as a prerender's own fetch and for one made on a realm-authority
+  // session, which only a realm rendering its own cards holds.
+  duringPrerender?: boolean;
   // Report a stored-bytes read's `version` only where the realm already
   // recorded one, rather than reading the file to fingerprint it.
   //
@@ -572,6 +583,7 @@ const ALL_BASE_OPERATIONS: Readonly<Record<BaseOperation, true>> = {
   appendLine: true,
   explain: true,
   validate: true,
+  callApi: true,
 };
 
 // Keyed by kind for the lookup dispatch actually does, but built from a table
@@ -591,6 +603,7 @@ const CARRIED_BY: Readonly<Record<BaseOperation, readonly DefKind[]>> = {
   // Carried by nothing on its own. See `DECLARATION_ONLY`.
   explain: [],
   validate: [],
+  callApi: [],
 };
 
 // The behaviors a target carries only under a name its type declares on
@@ -598,16 +611,19 @@ const CARRIED_BY: Readonly<Record<BaseOperation, readonly DefKind[]>> = {
 // operation by that name, and asking for it is asking for an operation that
 // does not exist. An explain and a validate are the two: each answers only on
 // the card that declares it, a policy card, or for a validate the realm's
-// config card too.
+// config card too. A callApi is the third: only a card that declares a request
+// has one to send.
 const DECLARATION_ONLY: Readonly<Partial<Record<BaseOperation, true>>> =
   Object.assign(Object.create(null) as Partial<Record<BaseOperation, true>>, {
     explain: true,
     validate: true,
+    callApi: true,
   });
 
 const DECLARABLE_ON: Readonly<Partial<Record<BaseOperation, DefKind[]>>> = {
   explain: ['card-def'],
   validate: ['card-def'],
+  callApi: ['card-def'],
 };
 
 function carriedBy(kind: DefKind): Partial<Record<BaseOperation, true>> {
@@ -793,7 +809,7 @@ export async function resolvesToWrite(
       name,
       scope.derive({ coarseDeclined: 'none' }),
     );
-    return isWrite(base);
+    return travelsAsWrite(base);
   } catch {
     return false;
   }
@@ -1443,12 +1459,14 @@ function transformContext(
 
 // The `output` stage over what the behavior answered.
 //
-// A read is the only behavior that reaches this carrying a declaration today —
-// `readSource` is resolved without one, a `query` is refused before it runs,
-// and the writes are the coordinator's — so the two read shapes are the two
-// arms. A headers-only read projects nothing and says that the full read
-// would, because a `HEAD` states the headers a `GET` would send and a
-// projected body is not cacheable the way an unprojected one is.
+// The behaviors that reach this carrying an `output` are a read and a callApi
+// — `readSource` is resolved without a declaration, a `query` is refused
+// before it runs, an explain and a validate refuse an `output` where they are
+// lowered, and the writes are the coordinator's. So the arms are the two read
+// shapes and a callApi's response. A headers-only read projects nothing and
+// says that the full read would, because a `HEAD` states the headers a `GET`
+// would send and a projected body is not cacheable the way an unprojected one
+// is.
 async function projectResult(
   core: OperationCore,
   request: OperationRequest,
@@ -1460,6 +1478,35 @@ async function projectResult(
   }
   if (isHeadResult(result)) {
     return { ...result, projected: true };
+  }
+  // A callApi's `output` maps the vendor's response — status, headers and
+  // body — to what the card wants back. The answer sits in the batch's
+  // results by itself, where a list reads as a group's answers and `null` as
+  // a removal, so the projection has to be an object.
+  if (isCallApiResult(result)) {
+    let projection = await runOutputTransform(
+      definition,
+      result.callApi,
+      transformContext(core, request),
+    );
+    if (
+      typeof projection !== 'object' ||
+      projection === null ||
+      Array.isArray(projection)
+    ) {
+      throw new OperationFailure({
+        id: targetId(request.target),
+        status: 400,
+        code: 'invalid-params',
+        title: 'Cannot run transform',
+        detail:
+          `the \`output\` stage of operation "${request.name}" maps a ` +
+          `response, which answers as an object, and this program produced ` +
+          `something else`,
+        meta: { operation: request.name, stage: 'output' },
+      });
+    }
+    return { callApi: projection };
   }
   if (isDocumentResult(result)) {
     let projection = await runOutputTransform(
@@ -1535,6 +1582,22 @@ async function runBaseOperation(
       return await explainOperation(core, canonical);
     case 'validate':
       return await validateOperation(core, canonical);
+    case 'callApi':
+      return await callApiOperation(canonical, definition, {
+        realmURL: core.realmURL,
+        duringPrerender: opts.duringPrerender ?? false,
+        sender: core.callApi,
+        ...(canonical.target.kind === 'instance'
+          ? {
+              instance: () =>
+                indexedInstance(
+                  core,
+                  new URL((canonical.target as { url: string }).url),
+                ),
+            }
+          : {}),
+        realmConfig: () => core.realmConfig(),
+      });
     case 'query':
       // A declared query is a saved search, invoked by naming it in a request
       // to `_search` or `_federated-search`. The realm resolves it there, from

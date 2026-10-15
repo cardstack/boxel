@@ -1,6 +1,6 @@
 ---
 name: outbound-guard
-description: Operate and diagnose the realm server's guarded outbound client (`packages/realm-server/lib/outbound/`) — the one client every call that sends a stored credential to an outside vendor goes through (`_request-forward`, the OpenRouter passthrough, the OpenRouter generation-cost lookup, and later callApi, token minting and pipelines). Covers what the guard refuses (non-HTTPS, private / loopback / link-local / metadata / IPv4-mapped addresses, `X-Boxel-*` headers, redirect hops into any of those), the local development allowlist and the startup self-check that refuses it on a deployed server, the connect and total timeouts, how a refusal reaches the caller (400 / 502 / 504), reading the response size cap's observe-mode logs to choose enforced cap values, the pre-substitution invariant (every recorded URL is the origin and path of the one the caller sent, never the one with the credential attached, and never the caller's query string), what a Sentry event keeps of the incoming request (only the method and path on the proxy routes, and never the Authorization header or cookies on any route), and finding a send-path error by the key's name in logs and Sentry. Also covers the response scrubber (`lib/outbound/scrubber.ts`) that removes every registered credential from a response's headers and decompressed body as a stream — what it matches, its hold-back window, and how a caller registers a value. Use when a forward fails with 502 "Destination refused" or 504, when the realm server won't boot with "Outbound guard self-check failed", when tracing a send-path error back to the key it used, when a response comes back with `[REDACTED]` in it, when adding a new path that sends a credential and must register it, when adding a destination to `proxy_endpoints`, when pointing a local stack at a local vendor, or when deciding the enforced response size caps.
+description: Operate and diagnose the realm server's guarded outbound client (`packages/realm-server/lib/outbound/`) — the one client every call that sends a stored credential to an outside vendor goes through (`_request-forward`, the OpenRouter passthrough, the OpenRouter generation-cost lookup, and `callApi` card operations). Covers what the guard refuses (non-HTTPS, private / loopback / link-local / metadata / IPv4-mapped addresses, `X-Boxel-*` headers, redirect hops into any of those), the local development allowlist and the startup self-check that refuses it on a deployed server, the connect and total timeouts, how a refusal reaches the caller (400 / 502 / 504), reading the response size cap's observe-mode logs to choose enforced cap values, the pre-substitution invariant (every recorded URL is the origin and path of the one the caller sent, never the one with the credential attached, and never the caller's query string), what a Sentry event keeps of the incoming request (only the method and path on the proxy routes, and never the Authorization header or cookies on any route), and finding a send-path error by the key's name in logs and Sentry. Also covers the response scrubber (`lib/outbound/scrubber.ts`) that removes every registered credential from a response's headers and decompressed body as a stream — what it matches, its hold-back window, and how a caller registers a value. Use when a forward fails with 502 "Destination refused" or 504, when the realm server won't boot with "Outbound guard self-check failed", when tracing a send-path error back to the key it used, when a response comes back with `[REDACTED]` in it, when adding a new path that sends a credential and must register it, when adding a destination to `proxy_endpoints`, when pointing a local stack at a local vendor, or when deciding the enforced response size caps.
 ---
 
 # Outbound guard (operators)
@@ -8,9 +8,13 @@ description: Operate and diagnose the realm server's guarded outbound client (`p
 Every realm-server call that carries a stored credential to an outside vendor
 goes through `outboundFetch` in `packages/realm-server/lib/outbound/client.ts`.
 Today that is `POST /_request-forward` (including streamed calls),
-`POST /_openrouter/chat/completions`, and the generation-cost lookup either of
+`POST /_openrouter/chat/completions`, the generation-cost lookup either of
 them makes when a response carried a generation id but no inline cost
-(`OpenRouterCreditStrategy` in `lib/credit-strategies.ts`). The guard is
+(`OpenRouterCreditStrategy` in `lib/credit-strategies.ts`), and every `callApi`
+card operation (`lib/outbound/call-api-sender.ts`; see the `call-api` skill).
+A `callApi` carries no `credential`: its credentials are `substitutions`,
+filled into the request after the destination check and never followed across
+a redirect to another origin. The guard is
 always on, in every environment; local development gets a short allowlist, never an off switch.
 
 ## What it refuses
@@ -141,6 +145,44 @@ So an event from a failed forward still has the route, the method and the
 stack, but not what the caller sent. The log line logged with it
 (`Error in request forward handler (key=<name> url=<url>)`) names the key and
 the origin and path of the destination.
+
+### Transactions
+
+With tracing on, each incoming request is also a transaction, and a
+transaction records the URL in more places than `event.request`. The server
+span's attributes (`http.url`, `http.target`, `http.query`, and the like)
+become the trace context's `data`, and each child span carries its own.
+Sentry's fetch instrumentation also records an outgoing request's URL and
+query as a breadcrumb's `data` (`url`, `http.query`). The same hook applies the
+table above to every one of these URL attributes:
+
+- On a transaction or event for a proxy route or the secure origin, each keeps
+  only its origin and path. `http.query`, `url.query` and the fragment
+  attributes are dropped.
+- On any other, each keeps its query with a `token` parameter masked as
+  `REDACTED`.
+- A URL attribute that itself names a proxy route or the secure origin keeps
+  only its origin and path either way.
+
+The transaction's name and each span's description are the method and path
+alone (`POST /_request-forward`), and its status, op and timing are untouched.
+So a transaction still says which route was hit, how it ended and how long it
+took. A guarded request records no span at all (`guardedFetchIntegration`, as
+above), so the destination URL a caller asked to forward to never appears as a
+child span.
+
+The rules key on attribute names, listed in `lib/request-telemetry.ts`
+(`fullURLAttributes`, `pathAndQueryAttributes`, `queryAttributes`,
+`fragmentAttributes`). An instrumentation that records a URL under a new name
+needs that name added there. Any other string attribute only loses a proxy
+route's query string, the same as a breadcrumb message.
+
+`tests/helpers/sentry-capture.ts` with `tracing: true` and
+`incomingRequests: true` records real incoming transactions in a test. The
+tracer provider it needs is registered once per process and stays: the HTTP
+instrumentation keeps the first tracer it is given. Its sampler samples only
+while a capture with both options is running, so every other capture, before
+or after, still records no spans.
 
 ## Finding a send-path error by key name
 

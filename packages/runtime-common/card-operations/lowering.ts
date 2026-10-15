@@ -11,6 +11,11 @@ import {
   callsActor,
   usesVolatileCall,
 } from './bxl-emit.ts';
+import {
+  callApiReadsActor,
+  lowerCallApi,
+  type CallApiClauses,
+} from './call-api.ts';
 import { operationLabelProblem } from './label.ts';
 import { isBxl, isMarker, lowerQueryTemplate } from './query.ts';
 import {
@@ -171,6 +176,9 @@ const DECLARABLE_BY: Record<BaseOperationName, readonly Definition['type'][]> =
     // card.
     explain: ['card-def'],
     validate: ['card-def'],
+    // Reached only through a declaration: a card with a request to send says
+    // what it is.
+    callApi: ['card-def'],
   };
 
 function declarableBases(
@@ -201,6 +209,7 @@ function runsNoProgram(base: BaseOperationName, kind: Definition['type']) {
     base === 'appendContainsMany' ||
     base === 'explain' ||
     base === 'validate' ||
+    base === 'callApi' ||
     (base === 'update' && kind === 'file-def')
   );
 }
@@ -525,7 +534,9 @@ async function lowerOperation(
           ? `an "explain" operation reports what the realm's policy decides rather than running a program over a document, so this program would never be reached`
           : base === 'validate'
             ? `a "validate" operation reports what the policy card compiles to rather than running a program over a document, so this program would never be reached`
-            : `an "${base}" operation appends to the stored file rather than running a program over a document, so this program would never be reached`,
+            : base === 'callApi'
+              ? `a "callApi" operation sends the request it declares rather than running a program over a document, so this program would never be reached`
+              : `an "${base}" operation appends to the stored file rather than running a program over a document, so this program would never be reached`,
     );
   } else if (rawProgram) {
     // An author's program is written in the readable spelling; canonicalizing
@@ -625,6 +636,16 @@ async function lowerOperation(
       operation.query = query;
     }
   }
+  if (base === 'callApi') {
+    let request = lowerCallApi(
+      declaration as CallApiClauses,
+      sink,
+      (value, path) => templateOf(value, { path, paramNames, sink }),
+    );
+    if (request) {
+      operation.callApi = request;
+    }
+  }
   if (
     base === 'appendContainsMany' &&
     !isBuiltInAppend(sink.operation, declaration as AppendContainsManyClauses)
@@ -666,6 +687,9 @@ function readsActor(operation: OperationDefinition): boolean {
     if (program && callsActor(program.source)) {
       return true;
     }
+  }
+  if (operation.callApi && callApiReadsActor(operation.callApi)) {
+    return true;
   }
   return [operation.fill, operation.items].some(
     (template) => template !== undefined && templateReadsActor(template),

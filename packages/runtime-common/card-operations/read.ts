@@ -25,7 +25,10 @@ import type {
 } from './dispatch.ts';
 import type { LinkStrategy } from '@cardstack/base/operations';
 import type { LocalPath } from '../paths.ts';
-import type { SingleFileMetaDocument } from '../document-types.ts';
+import type {
+  SingleCardDocument,
+  SingleFileMetaDocument,
+} from '../document-types.ts';
 import type { SearchResultError } from '../realm-index-query-engine.ts';
 
 // ============================================================================
@@ -453,6 +456,25 @@ async function missingTarget(
     detail: `${url.href} has not finished indexing`,
     meta: { awaitingIndex: true },
   });
+}
+
+// An instance target's indexed document, for a behavior that reads the card's
+// fields rather than serving it: its stored values and its computed ones as the
+// index holds them, with no links assembled.
+export async function indexedInstance(
+  core: OperationCore,
+  url: URL,
+): Promise<SingleCardDocument> {
+  let result = await core.indexQueryEngine.cardDocument(url, {
+    loadLinks: false,
+  });
+  if (result === undefined) {
+    throw await missingTarget(core, url, localPathFor(core, url));
+  }
+  if (result.type === 'error') {
+    throw errorRowFailure(url, result);
+  }
+  return result.doc;
 }
 
 function numberOrNull(value: unknown): number | null {
