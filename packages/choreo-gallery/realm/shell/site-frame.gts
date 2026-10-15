@@ -72,7 +72,12 @@ export class SiteFrame extends Component<Signature> {
         flex-direction: column;
       }
 
+      /* the bar is a container, so the pickers in it can ask how wide the
+         bar is rather than the window; --bar-gutter is its inline padding,
+         which a menu spanning the bar lines up with */
       .topbar {
+        --bar-gutter: 28px;
+        container: site-bar / inline-size;
         position: sticky;
         top: 0;
         z-index: 10;
@@ -80,7 +85,7 @@ export class SiteFrame extends Component<Signature> {
         align-items: center;
         justify-content: space-between;
         gap: 24px;
-        padding: 18px 28px;
+        padding: 18px var(--bar-gutter);
         /* blur only — no tint of its own. Content scrolling underneath
            softens instead of darkening. */
         backdrop-filter: blur(18px);
@@ -212,7 +217,8 @@ export class SiteFrame extends Component<Signature> {
 
       @media (max-width: 720px) {
         .topbar {
-          padding: 14px 16px;
+          --bar-gutter: 16px;
+          padding: 14px var(--bar-gutter);
           gap: 12px;
         }
 

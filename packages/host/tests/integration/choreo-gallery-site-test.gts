@@ -4,9 +4,10 @@
  * the theme switch, and each tile handing its demo card to the host to open.
  */
 import { htmlSafe } from '@ember/template';
-import { click, render, waitFor } from '@ember/test-helpers';
+import { click, render, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { live, liveAll } from '@cardstack/choreo/test-support';
+
 import { modifier } from 'ember-modifier';
 import { module, test } from 'qunit';
 
@@ -21,6 +22,7 @@ import { provideConsumeContext, testRealmURL } from '../helpers/index';
 import type * as ThemeModule from '../../../choreo-gallery/realm/lib/theme';
 import type * as CardAPI from '@cardstack/base/card-api';
 import type { CardContext } from '@cardstack/base/card-api';
+import type { ComponentLike } from '@glint/template';
 
 const THEME_KEY = 'choreo-theme';
 
@@ -102,6 +104,86 @@ module('Integration | Choreo gallery | site', function (hooks) {
 
     await click(option('Dark'));
     assert.strictEqual(site().dataset['theme'], 'dark', 'and dark again');
+  });
+
+  test('a narrow site keeps its appearance menu inside its bar, and two sites keep their own', async function (assert) {
+    let { SiteFrame } = await gallery.import<{
+      SiteFrame: ComponentLike<{ Blocks: { default: [] } }>;
+    }>('shell/site-frame');
+    let narrow = htmlSafe('width: 320px;');
+    let wide = htmlSafe('width: 1000px;');
+    await render(
+      <template>
+        <div class='narrow' style={{narrow}}><SiteFrame /></div>
+        <div class='wide' style={{wide}}><SiteFrame /></div>
+      </template>,
+    );
+    let picker = (site: string) =>
+      document.querySelector<HTMLDetailsElement>(`.${site} .header-picker`)!;
+
+    for (let site of ['narrow', 'wide']) {
+      await click(picker(site).querySelector('summary')!);
+      // positions as the screen shows them, since the test container is scaled
+      let bar = document
+        .querySelector(`.${site} .topbar`)!
+        .getBoundingClientRect();
+      let menu = picker(site)
+        .querySelector('.header-picker-menu')!
+        .getBoundingClientRect();
+      assert.true(
+        menu.left >= bar.left,
+        `${site}: the menu starts inside the bar (${menu.left} against ${bar.left})`,
+      );
+      assert.true(
+        menu.right <= bar.right,
+        `${site}: the menu ends inside the bar (${menu.right} against ${bar.right})`,
+      );
+      if (site === 'narrow') {
+        // the window is wide, so the bar keeps its wide padding: the menu
+        // spanning the bar lines up with it
+        let topbar = document.querySelector<HTMLElement>('.narrow .topbar')!;
+        let scale = bar.width / topbar.offsetWidth;
+        let gutter = parseFloat(getComputedStyle(topbar).paddingLeft);
+        let inset = (menu.left - bar.left) / scale;
+        assert.true(
+          Math.abs(inset - gutter) < 1,
+          `the menu is inset ${inset}px, the bar's ${gutter}px gutter`,
+        );
+      }
+    }
+    assert.true(
+      picker('narrow').open,
+      'opening the other site’s picker leaves this one open',
+    );
+    assert.true(picker('wide').open, 'and that one is open too');
+  });
+
+  test('the headline sizes to its site, not the window, as in a host stack', async function (assert) {
+    let demos = await gallery.demos(['keyframes']);
+    let { ChoreoGallery } = await gallery.import<{
+      ChoreoGallery: new (attrs: object) => CardAPI.CardDef;
+    }>('gallery');
+    let { getComponent } = (await gallery.loader.import(
+      '@cardstack/base/card-api',
+    )) as typeof CardAPI;
+    let Gallery = getComponent(new ChoreoGallery({ demos }));
+    let narrow = htmlSafe('width: 420px;');
+    await render(
+      <template>
+        <div class='narrow' style={{narrow}}>
+          <Gallery @format='isolated' />
+        </div>
+      </template>,
+    );
+    let hero = document.querySelector<HTMLElement>('.narrow .hero')!;
+    let size = parseFloat(getComputedStyle(hero.querySelector('h1')!).fontSize);
+
+    // the condensed face sets 'Choreographed.' about 5.5em wide, so at 17.5%
+    // of the hero's width the word fits it
+    assert.true(
+      size <= hero.clientWidth * 0.175 + 0.5,
+      `the headline is ${size}px in a ${hero.clientWidth}px hero`,
+    );
   });
 
   test('a tile hands its demo card to the host, which opens it', async function (assert) {
@@ -203,6 +285,69 @@ module('Integration | Choreo gallery | site', function (hooks) {
     assert.dom('.small .guide-link').doesNotExist('and no guide link');
     assert.dom('.roomy .tile-lede').exists('with room, what the demo is');
     assert.dom('.roomy .guide-link').exists('and its guide');
+  });
+
+  test('a tile’s name too long for it ends in an ellipsis on a whole line, at every short size the host draws', async function (assert) {
+    let [keyframes] = await gallery.demos(['keyframes']);
+    // long enough to run past two lines of the widest tile here in any face
+    keyframes!.title =
+      'A demo with a name far too long for any tile the host draws, at any of its sizes, in whichever face the browser sets it';
+    let { getComponent } = (await gallery.loader.import(
+      '@cardstack/base/card-api',
+    )) as typeof CardAPI;
+    let Fitted = getComponent(keyframes!);
+    // the host's badges and strips, and a box a little taller
+    let sizes = [
+      [150, 40],
+      [250, 40],
+      [150, 65],
+      [250, 65],
+      [400, 65],
+      [150, 105],
+      [250, 105],
+      [180, 120],
+    ];
+    let boxes = sizes.map(([width, height]) =>
+      htmlSafe(`position: relative; width: ${width}px; height: ${height}px;`),
+    );
+    await render(
+      <template>
+        {{#each boxes as |box|}}
+          <div class='box' style={{box}}><Fitted @format='fitted' /></div>
+        {{/each}}
+      </template>,
+    );
+
+    // a tile measures itself before it settles on what it shows
+    await waitUntil(
+      () => document.querySelectorAll('.box .tile.is-tiny').length === 2,
+    );
+    let rendered = Array.from(document.querySelectorAll<HTMLElement>('.box'));
+    for (let [index, box] of rendered.entries()) {
+      let [width, height] = sizes[index]!;
+      let title = box.querySelector<HTMLElement>('.tile-title')!;
+      let lineHeight = parseFloat(getComputedStyle(title).lineHeight);
+      let lines = Math.max(1, Math.round(title.clientHeight / lineHeight));
+      // positions as the screen shows them, since the test container is scaled
+      let scale = box.getBoundingClientRect().height / box.offsetHeight;
+      let bottom =
+        (title.getBoundingClientRect().bottom -
+          box.getBoundingClientRect().top) /
+        scale;
+
+      assert.true(
+        title.scrollHeight > title.clientHeight,
+        `${width}×${height}: the name runs past what the tile shows`,
+      );
+      assert.true(
+        Math.abs(title.clientHeight - lines * lineHeight) < 2,
+        `${width}×${height}: it shows ${lines} whole line(s) (${title.clientHeight}px at ${lineHeight}px a line)`,
+      );
+      assert.true(
+        bottom <= height + 0.5,
+        `${width}×${height}: the last line ends inside the tile (${bottom}px)`,
+      );
+    }
   });
 
   test('where the host opens cards on a click, the tile leaves the click to it', async function (assert) {

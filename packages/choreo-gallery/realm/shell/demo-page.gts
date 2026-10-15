@@ -157,17 +157,19 @@ export class DemoPage extends Component<Signature> {
             {{/each}}
             {{! THE MARK, in theater only, where the site's bar has stepped out.
             It is also the way out, because the thing a viewer wants after
-            the film is how it was made. }}
+            the film is how it was made — so the whole pill is the button,
+            and on a narrow stage, where the words step out, the mark alone
+            is still a target and the words are still its name. }}
             {{#if this.inTheater}}
-              <div class='theater-mark'>
+              <button
+                type='button'
+                class='theater-mark'
+                data-test-theater-exit
+                {{on 'click' this.leaveTheater}}
+              >
                 <ChoreoMark />
-                <button
-                  type='button'
-                  class='theater-built'
-                  data-test-theater-exit
-                  {{on 'click' this.leaveTheater}}
-                >How this is built</button>
-              </div>
+                <span class='theater-built'>How this is built</span>
+              </button>
             {{/if}}
           </div>
           {{#if this.labOpen}}
@@ -515,6 +517,8 @@ export class DemoPage extends Component<Signature> {
         --ring: var(--pill-ink);
         backdrop-filter: blur(10px);
         -webkit-backdrop-filter: blur(10px);
+        font: inherit;
+        cursor: pointer;
         opacity: 0.9;
         transition:
           opacity 200ms ease,
@@ -533,19 +537,15 @@ export class DemoPage extends Component<Signature> {
       }
 
       .theater-built {
-        padding: 0;
-        border: 0;
-        background: none;
         color: var(--pill-ink);
         font-family: var(--font-mono);
         font-size: 10px;
         letter-spacing: 0.16em;
         text-transform: uppercase;
         white-space: nowrap;
-        cursor: pointer;
       }
 
-      .theater-built:hover {
+      .theater-mark:hover .theater-built {
         text-decoration: underline;
         text-underline-offset: 3px;
       }
@@ -886,10 +886,21 @@ export class DemoPage extends Component<Signature> {
         }
       }
 
-      /* a phone frame has no room for a byline beside the mark */
-      @media (max-width: 700px) {
+      /* a phone-sized stage has no room for a byline beside the mark: the
+         words leave the picture but stay the button's name. The stage is the
+         platter, so this answers to the card's width, which in a host stack
+         is narrower than the window. */
+      @container platter (max-width: 700px) {
+        .theater-mark {
+          padding: 7px 10px;
+        }
+
         .theater-built {
-          display: none;
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
         }
       }
 
