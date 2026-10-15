@@ -296,6 +296,13 @@ class Fitted extends Component<typeof GalleryDemo> {
   measure = modifier((element: HTMLElement) => {
     let observer = new ResizeObserver(([entry]) => {
       let { height, width } = entry!.contentRect;
+      // No box at all is not a small box: the host hides a covered stack
+      // item's content with `display: none`. The stage stays mounted, resting
+      // (see `restWhenOff`), and carries on from where it was when the card
+      // shows again, rather than starting over.
+      if (height === 0 && width === 0) {
+        return;
+      }
       let roomy = height >= STAGE_ROOM.height && width >= STAGE_ROOM.width;
       if (roomy !== this.roomy) {
         this.roomy = roomy;
