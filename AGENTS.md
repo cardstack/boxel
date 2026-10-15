@@ -289,6 +289,11 @@ Symptom differs from triggers 1–2: the template body is silently dropped, so t
 - Load the `catalog-pairing` skill before opening or editing a pull request in either repository that depends on the other, and whenever Lint Catalog fails. The `PreToolUse` hook (`.claude/hooks/require-skill.mjs`) refuses a `gh pr create`/`edit` or GitHub MCP pull request call that opens or edits a boxel-catalog pull request, or writes a `Merges before:`/`Merges after:` line, until the session has loaded the skill.
 - Production gets the catalog only from boxel-catalog's "Deploy to production". Manual Deploy [boxel] to production runs it with the catalog revision boxel pins, before its release and again after it, and anyone can run it by hand to ship catalog `main` ahead of boxel. It refuses while a catalog pull request it would deploy says `Merges after:` a boxel pull request production doesn't run. Load the `catalog-deploy` skill to deploy the catalog, or when that deploy refuses.
 
+## Architecture decision records
+
+- `docs/adr/` records why the codebase is shaped as it is. Each ADR declares `scope` globs for the code it governs. Before reversing or working around an established pattern, run `grep -l '<path>' docs/adr/[0-9]*.md`. Don't silently contradict an `accepted` ADR: follow it, or say that the change needs a superseding ADR.
+- When a change makes a decision that outlives its PR (hard to reverse, cross-cutting, chosen between viable alternatives), load the `adr` skill and draft a `proposed` ADR in the same PR. Only a person marks an ADR `accepted`.
+
 ## Linear Ticket Process (Reusable)
 
 This end-to-end workflow can be used as a template for future tickets.
@@ -374,6 +379,7 @@ Scale the template to the PR. For small PRs (roughly 1-3 files, no tricky decisi
 
 - Major decisions and the "why" behind them. Edge cases handled. Be succinct (3-5 bullets typical).
 - Don't restate what the diff shows; don't recap failed attempts that aren't relevant anymore.
+- A decision that outlives the PR belongs in an ADR (`docs/adr/`); link it here instead of restating it.
 ```
 
 Skip a test-plan section — CI shows test status. Skip tool-attribution footers — commit trailers handle that.

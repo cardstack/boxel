@@ -10,7 +10,7 @@ Reader-facing prose describes the **current contract**, stated as timeless fact.
 
 This codebase is **open source**; the issue tracker is **private**. A ticket ID in a comment is opaque to almost everyone who will ever read it.
 
-**Scope.** These rules govern prose you _write or introduce_: code comments, skill files, PR descriptions, PR review replies, and tracker restatements. Two things are deliberately outside it: **commit messages** (see [Where the journey legitimately goes](#where-the-journey-legitimately-goes)) and **pre-existing prose you're merely editing around** — you need not clean up rot you didn't write.
+**Scope.** These rules govern prose you _write or introduce_: code comments, skill files, PR descriptions, PR review replies, and tracker restatements. Three things are deliberately outside it: **commit messages** (see [Where the journey legitimately goes](#where-the-journey-legitimately-goes)), the **Sources section of an ADR** in `docs/adr/` (which cites commit SHAs and PR numbers by design — see the `adr` skill), and **pre-existing prose you're merely editing around** — you need not clean up rot you didn't write.
 
 ## The two rules
 
