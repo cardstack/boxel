@@ -404,8 +404,9 @@ export class RealmIndexUpdater {
   //   - an executable module, which is what a card's type is built from,
   //     unless its writer read that the write left the module's schema as it
   //     was (`IncrementalIndexOptions.modulesWithoutSchemaChange`). That pass
-  //     still re-indexes every dependent, but the type a staging write
-  //     resolves is the same before and after it, so another writer has
+  //     still re-indexes every dependent, but the fields, field options,
+  //     serialization hooks and operation declarations a staging write
+  //     resolves are the same before and after it, so another writer has
   //     nothing to wait for;
   //   - the realm's config document, whose indexed row overlays — and wins
   //     over — the settings read off disk, so a program reading a setting

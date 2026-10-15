@@ -206,19 +206,142 @@ module(basename(import.meta.filename), function () {
       assert.false(await changed(undefined, helper), 'helper created');
     });
 
-    test('a source that does not parse proves no schema change', async function (assert) {
+    test('a source that does not parse after the write proves no schema change', async function (assert) {
       assert.false(await changed(personGts, `${personGts}\nclass {`));
-      assert.false(await changed(`${personGts}\nclass {`, personGts));
+    });
+
+    test('a broken source between two versions does not hide the schema change across them', async function (assert) {
+      let broken = `${personGts}\nclass {`;
+      let withLastName = edit(
+        personGts,
+        '@field pet',
+        '@field lastName = contains(StringField);\n    @field pet',
+      );
+      assert.false(await changed(personGts, broken), 'into the broken source');
+      assert.true(
+        await changed(broken, withLastName),
+        'out of it, into a source that declares a schema',
+      );
+    });
+
+    test('a field is read however it is spelled', async function (assert) {
+      let head = `
+        import { CardDef, field, contains, linksTo } from '@cardstack/base/card-api';
+        import * as Base from '@cardstack/base/card-api';
+        import StringField from '@cardstack/base/string';
+        import NumberField from '@cardstack/base/number';
+      `;
+      assert.true(
+        await changed(
+          `${head}export class P extends CardDef {}\nclass Pet extends CardDef {}`,
+          `${head}export class P extends CardDef { @field pet = linksTo(() => Pet); }\nclass Pet extends CardDef {}`,
+        ),
+        'a forward reference to a class declared later',
+      );
+      assert.true(
+        await changed(
+          `${head}export class P extends Base.CardDef { @field a = contains(StringField); }`,
+          `${head}export class P extends Base.FieldDef { @field a = contains(StringField); }`,
+        ),
+        'a superclass reached through a namespace',
+      );
+      assert.true(
+        await changed(
+          `${head}export class P extends CardDef {}`,
+          `${head}export class P extends CardDef { @field 'my-field' = contains(StringField); }`,
+        ),
+        'a string-keyed field',
+      );
+      assert.true(
+        await changed(
+          `${head}export const P = class extends CardDef {};`,
+          `${head}export const P = class extends CardDef { @field a = contains(StringField); };`,
+        ),
+        'a class expression',
+      );
+      assert.true(
+        await changed(
+          `${head}const S = StringField;\nexport class P extends CardDef { @field a = contains(S); }`,
+          `${head}const S = NumberField;\nexport class P extends CardDef { @field a = contains(S); }`,
+        ),
+        'a local alias of the field class',
+      );
+      assert.true(
+        await changed(
+          `${head}export const ActiveField = StringField;`,
+          `${head}export const ActiveField = NumberField;`,
+        ),
+        'an exported alias another module declares a field with',
+      );
+      assert.true(
+        await changed(
+          `${head}const opts = {};\nexport class P extends CardDef { @field a = contains(StringField, opts); }`,
+          `${head}const opts = { computeVia() { return 'x'; } };\nexport class P extends CardDef { @field a = contains(StringField, opts); }`,
+        ),
+        'options held in a variable gaining a compute function',
+      );
+      assert.false(
+        await changed(
+          `${head}const opts = { computeVia() { return 'x'; } };\nexport class P extends CardDef { @field a = contains(StringField, opts); }`,
+          `${head}const opts = { computeVia() { return 'y'; } };\nexport class P extends CardDef { @field a = contains(StringField, opts); }`,
+        ),
+        'while what that compute function computes is no part of the schema',
+      );
+      assert.true(
+        await changed(
+          `${head}export class P extends CardDef { @field a = contains(StringField) }`,
+          `${head}export class P extends CardDef { @field a = contains(StringField);\n  @field b = contains(StringField) }`.replace(
+            'contains(StringField) }',
+            'contains(NumberField)\n  <template>hi</template> }',
+          ),
+        ),
+        'a field with no semicolon ahead of a template in the class body',
+      );
+      assert.true(
+        await changed(
+          `${head}export class P extends CardDef { @field a = contains(StringField); }`,
+          `${head.replace("'@cardstack/base/string'", "'./my-string'")}export class P extends CardDef { @field a = contains(StringField); }`,
+        ),
+        'an import the field class resolves through',
+      );
+    });
+
+    test('component state and unrelated imports are no part of the schema', async function (assert) {
+      let head = `
+        import { CardDef, field, contains, Component } from '@cardstack/base/card-api';
+        import StringField from '@cardstack/base/string';
+        import { tracked } from '@glimmer/tracking';
+      `;
+      let card = (state: string) =>
+        `${head}export class P extends CardDef {
+          @field a = contains(StringField);
+          static isolated = class extends Component<typeof this> { ${state} };
+        }`;
+      assert.false(
+        await changed(
+          card('@tracked open = false;'),
+          card('@tracked open = true; @tracked page = 1;'),
+        ),
+        "a component's tracked state",
+      );
+      assert.false(
+        await changed(
+          card(''),
+          `import { format } from 'date-fns';\n${card('')}`,
+        ),
+        'an import nothing in the schema refers to',
+      );
     });
   });
 
   module('module writes at the write-path gate', function (hooks) {
     let realmURL = new URL('http://127.0.0.1:4444/module-schema-gate/');
     let realm: Realm;
-    // Whether each pass the realm enqueued for a module held the write-path
-    // gate, read the moment its enqueue returned. Read there rather than raced
-    // against afterwards: a pass settles as fast as the worker runs it.
-    let modulePasses: { url: string; holdsGate: boolean }[];
+    // The modules in each pass the realm enqueued, and whether the pass held
+    // the write-path gate, read the moment its enqueue returned. Read there
+    // rather than raced against afterwards: a pass settles as fast as the
+    // worker runs it.
+    let modulePasses: { modules: string[]; holdsGate: boolean }[];
 
     let petGts = `
       import { contains, field, CardDef } from '@cardstack/base/card-api';
@@ -256,14 +379,16 @@ module(basename(import.meta.filename), function () {
         ...args: Parameters<typeof updater.enqueueChanges>
       ) => {
         let result = await enqueueChanges(...args);
-        for (let { url } of args[0]) {
-          if (url.href.endsWith('.gts')) {
-            modulePasses.push({
-              url: url.href,
-              holdsGate:
-                updater.incrementalIndexingAffectingStaging() !== undefined,
-            });
-          }
+        let modules = args[0]
+          .map(({ url }) => url.href)
+          .filter((href) => href.endsWith('.gts'))
+          .sort();
+        if (modules.length > 0) {
+          modulePasses.push({
+            modules,
+            holdsGate:
+              updater.incrementalIndexingAffectingStaging() !== undefined,
+          });
         }
         return result;
       };
@@ -279,8 +404,52 @@ module(basename(import.meta.filename), function () {
         edit(personGts, '<h1>{{@model.firstName}}</h1>', '<p>Hi</p>'),
       );
       assert.deepEqual(modulePasses, [
-        { url: `${realmURL.href}person.gts`, holdsGate: false },
+        { modules: [`${realmURL.href}person.gts`], holdsGate: false },
       ]);
+    });
+
+    test('a module write whose indexing is deferred does not hold other writers when it leaves the schema', async function (assert) {
+      await realm.writeMany(
+        new Map([
+          [
+            'person.gts',
+            edit(personGts, '<h1>{{@model.firstName}}</h1>', '<p>Hi</p>'),
+          ],
+        ]),
+        { waitForIndex: false },
+      );
+      assert.deepEqual(modulePasses, [
+        { modules: [`${realmURL.href}person.gts`], holdsGate: false },
+      ]);
+      await realm.incrementalIndexing();
+    });
+
+    test('a batch that writes a module and then an instance runs the module pass outside the gate', async function (assert) {
+      await realm.writeMany(
+        new Map([
+          [
+            'person.gts',
+            edit(personGts, '<h1>{{@model.firstName}}</h1>', '<p>Hi</p>'),
+          ],
+          [
+            'mango.json',
+            JSON.stringify({
+              data: {
+                type: 'card',
+                attributes: { firstName: 'Mango Jr.' },
+                meta: {
+                  adoptsFrom: { module: rri('./person'), name: 'Person' },
+                },
+              },
+            }),
+          ],
+        ]),
+      );
+      assert.deepEqual(
+        modulePasses,
+        [{ modules: [`${realmURL.href}person.gts`], holdsGate: false }],
+        'the pass that flushes the module ahead of the instance',
+      );
     });
 
     test('a module write that changes the schema holds other writers', async function (assert) {
@@ -293,7 +462,7 @@ module(basename(import.meta.filename), function () {
         ),
       );
       assert.deepEqual(modulePasses, [
-        { url: `${realmURL.href}person.gts`, holdsGate: true },
+        { modules: [`${realmURL.href}person.gts`], holdsGate: true },
       ]);
     });
 
@@ -315,8 +484,13 @@ module(basename(import.meta.filename), function () {
         ]),
       );
       assert.deepEqual(
-        modulePasses.map(({ holdsGate }) => holdsGate),
-        [true, true],
+        modulePasses,
+        [
+          {
+            modules: [`${realmURL.href}person.gts`, `${realmURL.href}pet.gts`],
+            holdsGate: true,
+          },
+        ],
         'one pass carries both modules, and the schema change holds it',
       );
     });
