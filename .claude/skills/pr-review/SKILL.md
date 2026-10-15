@@ -29,6 +29,7 @@ If the diff touches an area with a dedicated domain skill (index-query-engine, s
 3. **Bot findings are leads, not findings.** Verify reachability with a concrete path through the code before repeating one. Confirmed → fold it into the relevant comment along with the verification. Unverified → don't amplify it.
 4. **Check out the head branch** read-only in a worktree under `.claude/worktrees/`. Never commit to or push another author's branch. The diff shows what changed; the review is about how that lands in the code around it, which requires the whole tree.
 5. **Read beyond the diff.** For each non-trivial hunk, read the enclosing file, then the callers and callees of everything it touches. The highest-value findings usually live one call site away from the diff.
+6. **Read the ADRs that govern the diff.** List each ADR's scope (`grep -H '^scope:' docs/adr/[0-9]*.md`) and match the globs against the changed files (`gh pr diff {n} --name-only`). Read every `accepted` or `proposed` ADR that matches before judging the change. Each one records a decision the change must keep, or must explicitly supersede.
 
 ## Phase 2 — Investigate like the next owner
 
@@ -62,6 +63,14 @@ Work through the diff as if inheriting the code, not skimming it.
 
 - **Docs move with contracts.** If the diff changes documented behavior, the docs are part of the diff — and doc claims get verified like code claims (a key documented as "present on both row kinds" is checked against the code that stamps it).
 - **Migrations**: paired schema regeneration, `down()` fidelity against the exact names/opclasses the original migration created, and the concurrency pattern established in the migrations directory.
+- **Decisions hold, or are superseded on purpose.** Load the `adr` skill when any of the following applies:
+  - A change contradicts an `accepted` ADR from Phase 1 without a superseding ADR in the diff. That is a blocking finding: ask the author either to conform or to add the superseding ADR.
+  - The diff makes a new decision that meets the bar in `docs/adr/README.md` (hard to reverse, cross-cutting, chosen between viable alternatives) and has no ADR. Ask for a `proposed` one. This is non-blocking unless the decision is hard to reverse.
+  - An ADR is part of the diff. Check it against the skill's rules:
+    - it is not self-marked `accepted`;
+    - its `scope` globs match the code it governs;
+    - the index row is added;
+    - in a retroactive ADR, every rationale claim cites a source or sits under Open questions. An uncited "why" is a finding even when it sounds right.
 
 ## Phase 3 — Classify every finding
 
