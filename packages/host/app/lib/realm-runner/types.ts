@@ -24,7 +24,11 @@ export type RealmRunnerCallMethod =
   | 'ui.switchSubmode'
   | 'ui.openFile'
   | 'ui.previewFormat'
-  | 'ui.openWorkspace';
+  | 'ui.openWorkspace'
+  | 'index.invalidate'
+  | 'index.reindex'
+  | 'index.fullReindex'
+  | 'index.cancelJob';
 
 export type RealmRunnerCallHandler = (
   method: RealmRunnerCallMethod,

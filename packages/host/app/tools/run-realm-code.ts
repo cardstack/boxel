@@ -217,14 +217,28 @@ type CreateWorkspace = (input: {
 // Deletes a workspace the current user owns and returns its URL.
 type DeleteWorkspace = (realmIdentifier: string) => Promise<{ url: string }>;
 
-// Calls that cannot be undone or that spend the user's credit. A script that
-// may make one names the call in its code. Such a run always waits for the
-// user's click (`neverAutoExecutesFor`), and only such a run may make the
-// call: a script that reaches it another way is refused, so none of them runs
-// without a click.
+// The index of the run's realm. Every call acts on the whole realm or on
+// paths already resolved inside it.
+interface IndexActions {
+  invalidate(urls: string[]): Promise<void>;
+  reindex(): Promise<void>;
+  fullReindex(): Promise<void>;
+  cancelJob(): Promise<void>;
+}
+
+const MAX_INVALIDATE_PATHS = 100;
+
+// Calls that cannot be undone, that spend the user's credit, or that change
+// the state of a whole realm for a long time. A script that may make one
+// names the call in its code. Such a run always waits for the user's click
+// (`neverAutoExecutesFor`), and only such a run may make the call: a script
+// that reaches it another way is refused, so none of them runs without a
+// click.
 const CLICK_REQUIRED_CALLS = [
   'realm.workspaces.delete',
   'realm.images.generate',
+  'realm.index.fullReindex',
+  'realm.index.cancelJob',
 ] as const;
 type ClickRequiredCall = (typeof CLICK_REQUIRED_CALLS)[number];
 
@@ -269,6 +283,10 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   'ui.openFile': false,
   'ui.previewFormat': false,
   'ui.openWorkspace': false,
+  'index.invalidate': true,
+  'index.reindex': true,
+  'index.fullReindex': true,
+  'index.cancelJob': true,
 };
 
 // Runs one search in the run's realm and answers with the entry document.
@@ -320,6 +338,9 @@ class RealmFsSession {
   // Workspaces this run deleted that do not exist again: a later create at
   // the same URL takes the URL out.
   readonly goneWorkspaces = new Set<string>();
+  // `realm.index` calls this run made, in order. The realm server has started
+  // each one, so a retry must not start it again.
+  readonly indexActions: string[] = [];
   // Binary files this run knows exist: found by a lookup or saved by
   // realm.fs.writeBytes. They are not in `known`, since their content is not
   // text, but they count toward MAX_FILES.
@@ -364,6 +385,7 @@ class RealmFsSession {
     private deleteWorkspace: DeleteWorkspace,
     private generateImage: GenerateImage,
     private namedCalls: Set<ClickRequiredCall>,
+    private index: IndexActions,
     private mayWrite: boolean,
     readonly room: RoomActions,
   ) {
@@ -760,6 +782,43 @@ class RealmFsSession {
       }
       case 'ui.openWorkspace':
         return this.queueUiAction({ action: 'openWorkspace' });
+      // Indexing runs on the realm server after the call returns: each call
+      // starts the work, and the script does not wait for it to finish.
+      case 'index.invalidate': {
+        let paths = typeof args[0] === 'string' ? [args[0]] : args[0];
+        if (
+          !Array.isArray(paths) ||
+          paths.length === 0 ||
+          paths.length > MAX_INVALIDATE_PATHS
+        ) {
+          throw new TypeError(
+            `realm.index.invalidate expects a path or an array of 1 to ${MAX_INVALIDATE_PATHS} paths`,
+          );
+        }
+        let urls = paths.map((path) => this.resolve(method, path));
+        await this.index.invalidate(urls);
+        let invalidated = urls.map((url) => this.relative(url));
+        this.indexActions.push(`invalidate ${invalidated.join(', ')}`);
+        return { invalidated };
+      }
+      case 'index.reindex':
+        await this.index.reindex();
+        this.indexActions.push('reindex');
+        return { reindex: 'started' };
+      case 'index.fullReindex':
+        if (!this.namedCalls.has('realm.index.fullReindex')) {
+          throw notNamedError('realm.index.fullReindex');
+        }
+        await this.index.fullReindex();
+        this.indexActions.push('fullReindex');
+        return { fullReindex: 'started' };
+      case 'index.cancelJob':
+        if (!this.namedCalls.has('realm.index.cancelJob')) {
+          throw notNamedError('realm.index.cancelJob');
+        }
+        await this.index.cancelJob();
+        this.indexActions.push('cancelJob');
+        return { cancelled: true };
       default:
         throw new Error(`Unknown realm call: ${String(method)}`);
     }
@@ -1279,9 +1338,10 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'realm.cards.get, finds cards, specs and files across realms with ' +
     'realm.entries.search, can look at what it made with realm.capture, can ' +
     'generate images into the realm with realm.images.generate, can ' +
-    'create workspaces with realm.workspaces.create, and can change the ' +
-    'skills and model of this room with room.*. In a workspace the user ' +
-    'can only read, reads work and each write is refused. Return ' +
+    'create workspaces with realm.workspaces.create, can change the ' +
+    'skills and model of this room with room.*, and can refresh the index ' +
+    'of the workspace with realm.index.*. In a workspace the user can only ' +
+    'read, reads work and each write is refused. Return ' +
     '{ show: "<card path>" } to open a card in the realm when the run ends.';
   static actionVerb = 'Run';
   // `room.*` changes the room the call came from. The tool service sets
@@ -1388,6 +1448,12 @@ export default class RunRealmCodeTool extends HostBaseTool<
         ),
       (imageInput) => this.generateImage(imageInput),
       namedCalls,
+      {
+        invalidate: (urls) => this.realm.invalidateUrls(realmURL, urls),
+        reindex: () => this.realm.reindex(realmURL),
+        fullReindex: () => this.realm.fullReindex(realmURL),
+        cancelJob: () => this.realm.cancelIndexingJob(realmURL),
+      },
       this.realm.canWrite(realmURL),
       new RoomActions({
         checkSkill: (id) => this.checkSkill(id),
@@ -1451,6 +1517,11 @@ export default class RunRealmCodeTool extends HostBaseTool<
       // A delete cannot be undone, so the model must know it happened.
       if (session.deletedWorkspaces.length > 0) {
         report += ` Workspaces already deleted by this run: ${session.deletedWorkspaces.join(', ')}`;
+      }
+      // Index actions start on the realm server when the call returns, so
+      // name them, so a retry does not start a full reindex again.
+      if (session.indexActions.length > 0) {
+        report += ` Index actions already started by this run: ${session.indexActions.join('; ')}`;
       }
       // Room changes are made only after a run that finished, so a failed
       // run made none.
@@ -1523,6 +1594,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
       ),
       createdWorkspaces: [...session.createdWorkspaces],
       deletedWorkspaces: [...session.deletedWorkspaces],
+      indexActions: [...session.indexActions],
       roomChanges,
     });
   }
