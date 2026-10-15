@@ -20,6 +20,13 @@ import {
   handleDataKeyReseal,
   handleDataKeyStatus,
 } from './handlers/handle-data-keys.ts';
+import {
+  handleAddSystemKey,
+  handleDeleteSystemKey,
+  handleListSystemKeys,
+  handleReplaceSystemKey,
+  handleShowSystemKey,
+} from './handlers/handle-system-keys.ts';
 import handleFetchCatalogRealmsRequest from './handlers/handle-fetch-catalog-realms.ts';
 import handleFetchPublicRealmsRequest from './handlers/handle-fetch-public-realms.ts';
 import handleFetchUserRequest from './handlers/handle-fetch-user.ts';
@@ -421,13 +428,47 @@ export function createRoutes(args: CreateRoutesArgs) {
   // signed with the realm secret seed reaches these.
   router.get(
     '/_data-keys',
-    operatorAuthorization(args.realmSecretSeed, 'data-keys'),
+    operatorAuthorization(args.realmSecretSeed, 'data-keys', args.serverURL),
     handleDataKeyStatus(args),
   );
   router.post(
     '/_data-keys/reseal',
-    operatorAuthorization(args.realmSecretSeed, 'data-keys'),
+    operatorAuthorization(args.realmSecretSeed, 'data-keys', args.serverURL),
     handleDataKeyReseal(args),
+  );
+
+  // System keys: the platform's own vendor keys that `_request-forward`
+  // attaches. Only an operator token for `system-keys` reaches these, and
+  // none of them answers with a value.
+  let systemKeysAuthorization = operatorAuthorization(
+    args.realmSecretSeed,
+    'system-keys',
+    args.serverURL,
+  );
+  router.get(
+    '/_system-keys',
+    systemKeysAuthorization,
+    handleListSystemKeys(args),
+  );
+  router.post(
+    '/_system-keys',
+    systemKeysAuthorization,
+    handleAddSystemKey(args),
+  );
+  router.get(
+    '/_system-keys/:id',
+    systemKeysAuthorization,
+    handleShowSystemKey(args),
+  );
+  router.patch(
+    '/_system-keys/:id',
+    systemKeysAuthorization,
+    handleReplaceSystemKey(args),
+  );
+  router.delete(
+    '/_system-keys/:id',
+    systemKeysAuthorization,
+    handleDeleteSystemKey(args),
   );
 
   // Grafana operator-action endpoints. All POST-only with

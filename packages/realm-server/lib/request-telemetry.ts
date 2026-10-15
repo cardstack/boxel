@@ -4,12 +4,13 @@
 // listeners, and attaches them to any event raised while that request is in
 // flight. Sentry keeps up to `maxValueLength` characters of each value. So:
 //
-// - An event raised during a request to the secure origin, to a proxy route or
-//   to a key route keeps only the method and the URL's origin and path. The
-//   secure origin is where credentials are typed. A proxy route's body is the
-//   caller's own content (a forwarded request's URL, headers and body, or a
-//   whole prompt), and its query string can carry a token. A key route's body
-//   can carry a key's value or the ticket that authorizes writing one.
+// - An event raised during a request to the secure origin, to a proxy route,
+//   to a system-key route or to a key route keeps only the method and the
+//   URL's origin and path. The secure origin is where credentials are typed. A
+//   proxy route's body is the caller's own content (a forwarded request's URL,
+//   headers and body, or a whole prompt), and its query string can carry a
+//   token. A system-key route's body carries a key's value, and a key route's
+//   body can carry a key's value or the ticket that authorizes writing one.
 // - An event raised during any other request keeps its request context, minus
 //   the credential headers (`Authorization`, `Proxy-Authorization`, `Cookie`,
 //   `Set-Cookie` and the request-signature headers) and the parsed cookies,
@@ -50,6 +51,9 @@ export const USER_KEYS_PATH = '/_user-keys';
 export const KEY_WRITE_TICKETS_PATH = '/_key-write-tickets';
 
 const keyRoutePaths = [USER_KEYS_PATH, KEY_WRITE_TICKETS_PATH];
+
+// The operator routes that store a system key, and everything beneath them.
+export const SYSTEM_KEYS_PATH = '/_system-keys';
 
 // The headers whose value is a credential: the caller's session token, its
 // cookies, the HMAC signatures that authenticate a worker request
@@ -173,6 +177,11 @@ export function isKeyRoutePath(pathname: string): boolean {
   );
 }
 
+function isSystemKeysPath(pathname: string): boolean {
+  let path = pathname.toLowerCase();
+  return path === SYSTEM_KEYS_PATH || path.startsWith(`${SYSTEM_KEYS_PATH}/`);
+}
+
 function escapeRegExp(path: string): string {
   return path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
@@ -273,9 +282,10 @@ function withoutCredentials(request: SentryRequestData): SentryRequestData {
 }
 
 // Whether telemetry about this request keeps only its method and the origin
-// and path of its URLs: a request to the secure origin, a proxy route or a key
-// route. `url` is the full request URL; `headers` supply the host when they
-// carry one.
+// and path of its URLs: a request to the secure origin, to a proxy route, to a
+// system-key route or to a key route (whose bodies can carry a key's value).
+// `url` is the full request URL; `headers` supply the host when they carry
+// one.
 export function keepsMethodAndPathOnly(request: {
   url?: string;
   headers?: Record<string, string | string[] | undefined>;
@@ -286,7 +296,9 @@ export function keepsMethodAndPathOnly(request: {
   let parsed = parseURL(request.url);
   return (
     parsed !== undefined &&
-    (isProxyRoutePath(parsed.pathname) || isKeyRoutePath(parsed.pathname))
+    (isProxyRoutePath(parsed.pathname) ||
+      isSystemKeysPath(parsed.pathname) ||
+      isKeyRoutePath(parsed.pathname))
   );
 }
 

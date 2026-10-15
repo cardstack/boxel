@@ -42,7 +42,7 @@ const require = createRequire(import.meta.url);
 const USER_KEYS_MIGRATION = join(
   dirname(require.resolve('@cardstack/postgres/package.json')),
   'migrations',
-  '1791999986682_add-user-keys.js',
+  '1792100613068_add-user-keys.js',
 );
 
 const OWNER = '@key-owner:localhost';

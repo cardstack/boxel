@@ -54,6 +54,7 @@ import {
 } from '../handlers/handle-data-keys.ts';
 
 const TABLE = 'rotation_test_secrets';
+const SERVER_ORIGIN = 'http://127.0.0.1:4445';
 const FIELD = `${TABLE}.secret`;
 const OWNER = '@secret-owner:example.test';
 
@@ -409,6 +410,7 @@ module(basename(import.meta.filename), function () {
         { operator: 'data-keys' },
         realmSecretSeed,
         {
+          audience: SERVER_ORIGIN,
           expiresIn: '5m',
         },
       );
@@ -421,8 +423,12 @@ module(basename(import.meta.filename), function () {
         /Token invalid/,
       );
       assert.strictEqual(
-        verifyOperatorToken(`Bearer ${token}`, realmSecretSeed, 'data-keys')
-          .operator,
+        verifyOperatorToken(
+          `Bearer ${token}`,
+          realmSecretSeed,
+          'data-keys',
+          SERVER_ORIGIN,
+        ).operator,
         'data-keys',
         'the same token is good on its own endpoints',
       );
@@ -452,7 +458,7 @@ module(basename(import.meta.filename), function () {
         virtualNetwork,
         testRealmDir,
         realmsRootPath: join(dir.name, 'realm_server_1'),
-        realmURL: new URL('http://127.0.0.1:4445/test/'),
+        realmURL: new URL(`${SERVER_ORIGIN}/test/`),
         dbAdapter,
         publisher,
         runner,
@@ -545,11 +551,16 @@ module(basename(import.meta.filename), function () {
       },
     });
 
+    // Signed for the test realm server's origin, as the CLI signs one for
+    // the server it calls.
     function operatorToken(
       claims: Record<string, unknown> = { operator: 'data-keys' },
       expiresIn: jsonwebtoken.SignOptions['expiresIn'] = '5m',
     ): string {
-      return jsonwebtoken.sign(claims, realmSecretSeed, { expiresIn });
+      return jsonwebtoken.sign(claims, realmSecretSeed, {
+        expiresIn,
+        ...('aud' in claims ? {} : { audience: SERVER_ORIGIN }),
+      });
     }
 
     test('status reports the loaded data keys and the rows each one sealed', async function (assert) {
@@ -594,7 +605,12 @@ module(basename(import.meta.filename), function () {
           (() => {
             let iat = Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60;
             return jsonwebtoken.sign(
-              { operator: 'data-keys', iat, exp: iat + 5 * 60 },
+              {
+                operator: 'data-keys',
+                aud: SERVER_ORIGIN,
+                iat,
+                exp: iat + 5 * 60,
+              },
               realmSecretSeed,
             );
           })(),
@@ -602,6 +618,20 @@ module(basename(import.meta.filename), function () {
         [
           'an operator token signed with another seed',
           jsonwebtoken.sign({ operator: 'data-keys' }, 'another seed', {
+            audience: SERVER_ORIGIN,
+            expiresIn: '5m',
+          }),
+        ],
+        [
+          'an operator token for another realm server',
+          operatorToken({
+            operator: 'data-keys',
+            aud: 'https://realms.another.example',
+          }),
+        ],
+        [
+          'an operator token that names no realm server',
+          jsonwebtoken.sign({ operator: 'data-keys' }, realmSecretSeed, {
             expiresIn: '5m',
           }),
         ],

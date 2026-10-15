@@ -64,6 +64,7 @@ describe('boxel realm-server data-keys', () => {
     let token = requests[0].authorization.replace(/^Bearer /, '');
     let claims = jwt.verify(token, SEED) as Record<string, unknown>;
     expect(claims.operator).toBe('data-keys');
+    expect(claims.aud).toBe('https://realms.example.test');
     expect(claims).not.toHaveProperty('user');
     expect((claims.exp as number) - (claims.iat as number)).toBeLessThanOrEqual(
       15 * 60,
