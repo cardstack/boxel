@@ -1452,11 +1452,6 @@ export class Rack extends Component {
         cursor: grabbing;
       }
 
-      .rk-rail:focus-visible {
-        outline: 2px solid var(--accent);
-        outline-offset: 3px;
-      }
-
       /* the groove the marker slides in, filled up to where the playhead is */
       .rk-track {
         position: absolute;

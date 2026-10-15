@@ -92,8 +92,9 @@ export const ChoreoRoot: TOC<Signature> = <template>
       --eyebrow: var(--ember-ink);
       /* ember text on an ember-tinted fill, such as a diagram's hot box */
       --hot-ink: #ff9370;
-      /* a focus indicator needs 3:1 against whatever it is drawn over */
-      --focus-ring: var(--ember-hot);
+      /* the theme's focus color, which Boxel's own components read too; a
+         focus indicator needs 3:1 against whatever it is drawn over */
+      --ring: var(--ember-hot);
       --glow: rgba(255, 59, 31, 0.38);
       /* the mark's fading tail and its inner orbit. The -dark pair holds in
          either theme, for a mark that sits on a dark ground. */
@@ -170,7 +171,7 @@ export const ChoreoRoot: TOC<Signature> = <template>
       --iris-ink: #7334f5;
       --steel-ink: #5e686e;
       --hot-ink: #a02600;
-      --focus-ring: var(--ember-ink);
+      --ring: var(--ember-ink);
       --mark-tail: rgba(255, 59, 31, 0.5);
       --mark-orbit: rgba(94, 104, 110, 0.85);
       --syn-string: #a24f00;
@@ -210,7 +211,7 @@ export const ChoreoRoot: TOC<Signature> = <template>
     }
 
     :where(.choreo-site) :deep(:where(:focus-visible)) {
-      outline: 2px solid var(--focus-ring);
+      outline: 2px solid var(--ring);
       outline-offset: 3px;
     }
 
@@ -220,7 +221,7 @@ export const ChoreoRoot: TOC<Signature> = <template>
        scope attribute, so a class rule a component sets on its own buttons,
        at (0,3,0) or more, still wins. :not(svg) is only that notch. */
     :where(.choreo-site) :deep(button:focus-visible:not(svg)) {
-      outline-color: var(--focus-ring);
+      outline-color: var(--ring);
     }
 
     /* glimmer-motion marks the document while a drag is held, so nothing in

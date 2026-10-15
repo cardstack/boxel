@@ -512,7 +512,7 @@ export class DemoPage extends Component<Signature> {
         --mark-tail: var(--mark-tail-dark);
         --mark-orbit: var(--mark-orbit-dark);
         --pill-ink: rgba(255, 250, 242, 0.96);
-        --focus-ring: var(--pill-ink);
+        --ring: var(--pill-ink);
         backdrop-filter: blur(10px);
         -webkit-backdrop-filter: blur(10px);
         opacity: 0.9;
