@@ -275,8 +275,7 @@ const MAX_INVALIDATE_PATHS = 100;
 // so the panel and the click rule read the same list.
 const CLICK_REQUIRED_CALLS = {
   'realm.workspaces.delete': 'Deletes a workspace. This cannot be undone.',
-  'realm.fs.deleteExisting':
-    'Deletes a file that was in the workspace before the run. This cannot be undone.',
+  'realm.fs.delete': 'Deletes a file. This cannot be undone.',
   'realm.images.generate': 'Generates images, which uses your credit.',
   'realm.index.fullReindex':
     'Indexes the whole workspace again from the start, which can take a long time.',
@@ -320,7 +319,6 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   'cards.update': true,
   'entries.search': false,
   'fs.delete': true,
-  'fs.deleteExisting': true,
   capture: false,
   'images.generate': true,
   'workspaces.create': false,
@@ -374,10 +372,8 @@ class RealmFsSession {
   // Files saved by this run, in the order of their first save. A file the
   // run deleted is no longer here.
   readonly saved = new Set<string>();
-  // Files this run created that still exist: the only files realm.fs.delete
-  // may delete, so a script can undo its own mistake but cannot remove a file
-  // that was there before the run. That takes realm.fs.deleteExisting, which
-  // waits for the user's click.
+  // Files this run created that still exist, so a delete is reported as
+  // undoing the run's own write rather than removing an earlier file.
   private created = new Set<string>();
   // Files this run created and then deleted, in the order of their delete.
   readonly deleted = new Set<string>();
@@ -387,8 +383,8 @@ class RealmFsSession {
     string,
     { expected: string; doc: LooseSingleCardDocument }
   >();
-  // Files that existed before this run and that realm.fs.deleteExisting
-  // deleted, in the order of their delete.
+  // Files that existed before this run and that realm.fs.delete deleted, in
+  // the order of their delete.
   readonly deletedExisting = new Set<string>();
   // Workspaces created by this run, in order.
   readonly createdWorkspaces: string[] = [];
@@ -672,39 +668,16 @@ class RealmFsSession {
         return await this.updateCard(args[0], args[1]);
       case 'entries.search':
         return await this.searchEntriesFor(args[0], args[1]);
+      // Deletes a file, one this run created or one that was there before
+      // the run. The run waits for the user's click, since the delete cannot
+      // be undone.
       case 'fs.delete': {
-        let url = this.resolve(method, args[0]);
-        this.assertNoCardUpdate(url);
-        if (!this.created.has(url)) {
-          throw new Error(
-            this.deleted.has(url)
-              ? `File not found; this run already deleted it: ${url}`
-              : `realm.fs.delete deletes only a file this run created, and realm.fs.deleteExisting any other file: ${url}`,
-          );
-        }
-        if (this.closed) {
-          this.refused += 1;
-          throw new Error(`The run has ended; ${url} was not deleted`);
-        }
-        let digest = this.binaryDigests.get(url);
-        await this.deleteFile(
-          url,
-          digest !== undefined
-            ? { sha256: digest }
-            : { content: this.known.get(url) ?? '' },
-        );
-        this.forgetDeleted(url);
-        this.deleted.add(url);
-        return { path: this.relative(url), deleted: true };
-      }
-      // Deletes a file that was there before the run. The run waits for the
-      // user's click, since the delete cannot be undone.
-      case 'fs.deleteExisting': {
-        if (!this.namedCalls.has('realm.fs.deleteExisting')) {
-          throw notNamedError('realm.fs.deleteExisting');
+        if (!this.namedCalls.has('realm.fs.delete')) {
+          throw notNamedError('realm.fs.delete');
         }
         // A path that ends in `/` is refused here, so no folder is deleted.
         let url = this.resolve(method, args[0]);
+        this.assertNoCardUpdate(url);
         // A text file is compared with what the run last read or saved, so
         // a file someone changed after the script read it is kept.
         let content = await this.lookup(url);

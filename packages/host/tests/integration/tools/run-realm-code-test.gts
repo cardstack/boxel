@@ -870,48 +870,6 @@ return {
     }
   });
 
-  test('realm.fs.delete refuses a file the run did not create', async function (assert) {
-    let toolService = getService('tool-service');
-    let cardService = getService('card-service');
-    let command = new RunRealmCodeTool(toolService.toolContext);
-
-    let result = await command.execute({
-      realm: testRealmURL,
-      roomId: '!room:example.com',
-      code: `let refused = [];
-try { await realm.fs.delete('notes/first.md'); } catch (e) { refused.push(e.message); }
-await realm.fs.replace('task.json', '"Old title"', '"New title"');
-try { await realm.fs.delete('task.json'); } catch (e) { refused.push(e.message); }
-await realm.fs.writeText('scratch.md', 'x');
-await realm.fs.delete('scratch.md');
-try { await realm.fs.delete('scratch.md'); } catch (e) { refused.push(e.message); }
-return refused;`,
-    });
-
-    let refused: string[] = JSON.parse(result.scriptResult!);
-    assert.strictEqual(refused.length, 3, 'each delete is refused');
-    assert.true(
-      /deletes only a file this run created, and realm\.fs\.deleteExisting any other file: .*notes\/first\.md/.test(
-        refused[0]!,
-      ),
-      `a file the run did not touch: ${refused[0]}`,
-    );
-    assert.true(
-      /deletes only a file this run created, and realm\.fs\.deleteExisting any other file: .*task\.json/.test(
-        refused[1]!,
-      ),
-      `a file the run edited but did not create: ${refused[1]}`,
-    );
-    assert.true(
-      /this run already deleted it/.test(refused[2]!),
-      `a file the run already deleted: ${refused[2]}`,
-    );
-    for (let path of ['notes/first.md', 'task.json']) {
-      let source = await cardService.getSource(new URL(path, testRealmURL));
-      assert.strictEqual(source.status, 200, `${path} is still in the realm`);
-    }
-  });
-
   test('realm.fs.delete refuses a binary file the run created when someone replaced it', async function (assert) {
     let toolService = getService('tool-service');
     let network = getService('network');
@@ -967,22 +925,28 @@ try {
     );
   });
 
-  test('a script that deletes a file from before the run always waits for the user', function (assert) {
+  test('a script that deletes a file always waits for the user', function (assert) {
     assert.true(
       RunRealmCodeTool.neverAutoExecutesFor({
-        code: `await realm.fs.deleteExisting('notes/first.md');`,
+        code: `await realm.fs.delete('notes/first.md');`,
       }),
-      'a run that names realm.fs.deleteExisting waits for a click',
+      'a run that names realm.fs.delete waits for a click',
     );
-    assert.false(
+    assert.true(
       RunRealmCodeTool.neverAutoExecutesFor({
         code: `await realm.fs.writeText('a.md', 'x'); await realm.fs.delete('a.md');`,
       }),
-      'a run that deletes only its own files keeps the room mode',
+      'a run that deletes only its own file also waits for a click',
+    );
+    assert.false(
+      RunRealmCodeTool.neverAutoExecutesFor({
+        code: `await realm.fs.writeText('a.md', 'x');`,
+      }),
+      'a run that deletes nothing keeps the room mode',
     );
   });
 
-  test('realm.fs.deleteExisting deletes files that were there before the run, and the result reports them', async function (assert) {
+  test('realm.fs.delete deletes files that were there before the run, and the result reports them', async function (assert) {
     let toolService = getService('tool-service');
     let cardService = getService('card-service');
     let command = new RunRealmCodeTool(toolService.toolContext);
@@ -994,15 +958,15 @@ try {
 await realm.fs.replace('task.json', '"Old title"', '"New title"');
 await realm.fs.writeText('plan.md', '# Plan\\n');
 let deleted = [
-  await realm.fs.deleteExisting('notes/first.md'),
-  await realm.fs.deleteExisting('task.json'),
-  await realm.fs.deleteExisting('images/existing.png'),
-  await realm.fs.deleteExisting('plan.md'),
+  await realm.fs.delete('notes/first.md'),
+  await realm.fs.delete('task.json'),
+  await realm.fs.delete('images/existing.png'),
+  await realm.fs.delete('plan.md'),
 ];
 let refused = [];
-try { await realm.fs.deleteExisting('notes/first.md'); } catch (e) { refused.push(e.message); }
-try { await realm.fs.deleteExisting('missing.md'); } catch (e) { refused.push(e.message); }
-try { await realm.fs.deleteExisting('notes/'); } catch (e) { refused.push(e.message); }
+try { await realm.fs.delete('notes/first.md'); } catch (e) { refused.push(e.message); }
+try { await realm.fs.delete('missing.md'); } catch (e) { refused.push(e.message); }
+try { await realm.fs.delete('notes/'); } catch (e) { refused.push(e.message); }
 return { deleted, refused };`,
     });
 
@@ -1056,7 +1020,7 @@ return { deleted, refused };`,
     }
   });
 
-  test('realm.fs.deleteExisting refuses a file someone changed after the script read it', async function (assert) {
+  test('realm.fs.delete refuses a file someone changed after the script read it', async function (assert) {
     let toolService = getService('tool-service');
     let cardService = getService('card-service');
     let network = getService('network');
@@ -1089,7 +1053,7 @@ return { deleted, refused };`,
       roomId: '!room:example.com',
       code: `await realm.fs.readText('notes/first.md');
 try {
-  await realm.fs.deleteExisting('notes/first.md');
+  await realm.fs.delete('notes/first.md');
   return 'deleted';
 } catch (e) {
   return e.message;
@@ -1107,10 +1071,10 @@ try {
     assert.strictEqual(source.content, '# Changed\n', 'the change is kept');
   });
 
-  test('a script that reaches realm.fs.deleteExisting another way is refused', async function (assert) {
+  test('a script that reaches realm.fs.delete another way is refused', async function (assert) {
     let cardService = getService('card-service');
     let command = new RunRealmCodeTool(getService('tool-service').toolContext);
-    let code = `await realm.fs['delete' + 'Existing']('notes/first.md');`;
+    let code = `await realm.fs['de' + 'lete']('notes/first.md');`;
 
     assert.false(
       RunRealmCodeTool.neverAutoExecutesFor({ code }),
@@ -1138,7 +1102,7 @@ try {
       command.execute({
         realm: testRealmURL,
         roomId: '!room:example.com',
-        code: `await realm.fs.deleteExisting('notes/first.md');
+        code: `await realm.fs.delete('notes/first.md');
 await realm.fs.readText('missing.md');`,
       }),
       /Files that existed before this run and that it already deleted: .*notes\/first\.md/,
