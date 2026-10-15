@@ -4,7 +4,7 @@
  * the theme switch, and each tile handing its demo card to the host to open.
  */
 import { htmlSafe } from '@ember/template';
-import { click, render, waitFor } from '@ember/test-helpers';
+import { click, render, waitFor, waitUntil } from '@ember/test-helpers';
 
 import { live, liveAll } from '@cardstack/choreo/test-support';
 
@@ -146,6 +146,34 @@ module('Integration | Choreo gallery | site', function (hooks) {
     assert.true(picker('wide').open, 'and that one is open too');
   });
 
+  test('the headline sizes to its site, not the window, as in a host stack', async function (assert) {
+    let demos = await gallery.demos(['keyframes']);
+    let { ChoreoGallery } = await gallery.import<{
+      ChoreoGallery: new (attrs: object) => CardAPI.CardDef;
+    }>('gallery');
+    let { getComponent } = (await gallery.loader.import(
+      '@cardstack/base/card-api',
+    )) as typeof CardAPI;
+    let Gallery = getComponent(new ChoreoGallery({ demos }));
+    let narrow = htmlSafe('width: 420px;');
+    await render(
+      <template>
+        <div class='narrow' style={{narrow}}>
+          <Gallery @format='isolated' />
+        </div>
+      </template>,
+    );
+    let hero = document.querySelector<HTMLElement>('.narrow .hero')!;
+    let size = parseFloat(getComputedStyle(hero.querySelector('h1')!).fontSize);
+
+    // the condensed face sets 'Choreographed.' about 5.5em wide, so at 17.5%
+    // of the hero's width the word fits it
+    assert.true(
+      size <= hero.clientWidth * 0.175 + 0.5,
+      `the headline is ${size}px in a ${hero.clientWidth}px hero`,
+    );
+  });
+
   test('a tile hands its demo card to the host, which opens it', async function (assert) {
     let opened = gallery.provideViewCard();
     await gallery.renderGallery();
@@ -247,7 +275,7 @@ module('Integration | Choreo gallery | site', function (hooks) {
     assert.dom('.roomy .guide-link').exists('and its guide');
   });
 
-  test('a tile’s name too long for it takes two lines and ends in an ellipsis', async function (assert) {
+  test('a tile’s name too long for it ends in an ellipsis on a whole line, at every short size the host draws', async function (assert) {
     let [keyframes] = await gallery.demos(['keyframes']);
     keyframes!.title =
       'A demo with a name far too long for any tile the host draws';
@@ -255,23 +283,58 @@ module('Integration | Choreo gallery | site', function (hooks) {
       '@cardstack/base/card-api',
     )) as typeof CardAPI;
     let Fitted = getComponent(keyframes!);
-    let small = htmlSafe('position: relative; width: 180px; height: 120px;');
+    // the host's badges and strips, and a box a little taller
+    let sizes = [
+      [150, 40],
+      [250, 40],
+      [150, 65],
+      [250, 65],
+      [400, 65],
+      [150, 105],
+      [250, 105],
+      [180, 120],
+    ];
+    let boxes = sizes.map(([width, height]) =>
+      htmlSafe(`position: relative; width: ${width}px; height: ${height}px;`),
+    );
     await render(
       <template>
-        <div class='small' style={{small}}><Fitted @format='fitted' /></div>
+        {{#each boxes as |box|}}
+          <div class='box' style={{box}}><Fitted @format='fitted' /></div>
+        {{/each}}
       </template>,
     );
 
-    let title = document.querySelector<HTMLElement>('.small .tile-title')!;
-    let lineHeight = parseFloat(getComputedStyle(title).lineHeight);
-    assert.true(
-      title.scrollHeight > title.clientHeight,
-      'the name runs past what the tile shows',
+    // a tile measures itself before it settles on what it shows
+    await waitUntil(
+      () => document.querySelectorAll('.box .tile.is-tiny').length === 2,
     );
-    assert.true(
-      Math.abs(title.clientHeight - 2 * lineHeight) < 2,
-      `it shows two whole lines (${title.clientHeight}px at ${lineHeight}px a line)`,
-    );
+    let rendered = Array.from(document.querySelectorAll<HTMLElement>('.box'));
+    for (let [index, box] of rendered.entries()) {
+      let [width, height] = sizes[index]!;
+      let title = box.querySelector<HTMLElement>('.tile-title')!;
+      let lineHeight = parseFloat(getComputedStyle(title).lineHeight);
+      let lines = Math.max(1, Math.round(title.clientHeight / lineHeight));
+      // positions as the screen shows them, since the test container is scaled
+      let scale = box.getBoundingClientRect().height / box.offsetHeight;
+      let bottom =
+        (title.getBoundingClientRect().bottom -
+          box.getBoundingClientRect().top) /
+        scale;
+
+      assert.true(
+        title.scrollHeight > title.clientHeight,
+        `${width}×${height}: the name runs past what the tile shows`,
+      );
+      assert.true(
+        Math.abs(title.clientHeight - lines * lineHeight) < 2,
+        `${width}×${height}: it shows ${lines} whole line(s) (${title.clientHeight}px at ${lineHeight}px a line)`,
+      );
+      assert.true(
+        bottom <= height + 0.5,
+        `${width}×${height}: the last line ends inside the tile (${bottom}px)`,
+      );
+    }
   });
 
   test('where the host opens cards on a click, the tile leaves the click to it', async function (assert) {
