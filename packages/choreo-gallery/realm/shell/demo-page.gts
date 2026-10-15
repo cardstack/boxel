@@ -1,6 +1,7 @@
 import { array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
+import { modifier } from 'ember-modifier';
 
 import type { GalleryDemo, Near } from '../demo';
 import { FilmLink } from '../lib/film-link';
@@ -70,6 +71,22 @@ export class DemoPage extends Component<Signature> {
     this.args.theater.enter(false);
   };
 
+  /**
+   * Escape in theater leaves theater, as it leaves a full-screen video, and
+   * goes no further: the host would otherwise take it as Escape for the card.
+   */
+  escapeTheater = modifier((element: HTMLElement) => {
+    let keydown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented && this.inTheater) {
+        event.preventDefault();
+        event.stopPropagation();
+        this.leaveTheater();
+      }
+    };
+    element.addEventListener('keydown', keydown);
+    return () => element.removeEventListener('keydown', keydown);
+  });
+
   /** whether there is a neighbour for the pager to open */
   get paged(): boolean {
     return Boolean(this.args.near?.prev || this.args.near?.next);
@@ -95,6 +112,7 @@ export class DemoPage extends Component<Signature> {
         class='demo-body {{if this.inTheater "is-theater"}}'
         data-test-demo-body
         data-test-theater={{this.inTheater}}
+        {{this.escapeTheater}}
       >
         <article class='demo-head' data-demo={{slug}}>
           {{#if @onOpen}}
