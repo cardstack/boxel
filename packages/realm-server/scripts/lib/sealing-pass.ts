@@ -7,6 +7,11 @@
 // private address can be another machine, a tunnel to a deployed database
 // also answers on localhost, and a secret sealed under the public local key
 // is no secret.
+//
+// A row whose sealed value fails to open under a loaded key, or opens to a
+// value other than its plain text, is reported and left as it is. Passing
+// `--reseal-tampered` seals such rows again from their plain text, once an
+// operator has inspected them and accepts what they say.
 
 import { PgAdapter } from '@cardstack/postgres';
 import {
@@ -26,15 +31,22 @@ function isDevelopmentDatabase(): boolean {
   );
 }
 
+export interface SealingPassOptions {
+  resealTampered: boolean;
+}
+
 export function runSealingPass(
   description: string,
-  pass: (dbAdapter: PgAdapter) => Promise<unknown>,
+  pass: (dbAdapter: PgAdapter, options: SealingPassOptions) => Promise<unknown>,
 ): void {
+  let options: SealingPassOptions = {
+    resealTampered: process.argv.includes('--reseal-tampered'),
+  };
   (async () => {
     await startSecretsAtRest({ deployed: !isDevelopmentDatabase() });
     let adapter = new PgAdapter({ autoMigrate: false });
     try {
-      await pass(adapter);
+      await pass(adapter, options);
       await reportPlaintextCensus(adapter);
     } finally {
       await adapter.close();

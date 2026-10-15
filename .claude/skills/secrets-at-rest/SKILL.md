@@ -237,7 +237,20 @@ Every write keeps the plain-text column in step, so it is the source the
 sealed columns are checked against. Reads go through
 `openWithPlainTextFallback`, which serves the plain-text value whenever the
 two disagree. Backfills go through `backfillDecision`, which decides
-seal / unchanged / unloadedKey the same way for every table.
+seal / unchanged / unloadedKey / tampered the same way for every table.
+
+A sealed value that fails to open under a data key the process has loaded,
+or opens to a value other than the plain text, is **tampered**. Every
+application write keeps the binding's columns, the plain text and the sealed
+value in step, so only an edit outside the application produces either
+state. The binding's `owner` and `id` are what stop a sealed secret being
+moved to another user or row, so the backfill never re-seals a tampered row
+on its own: that would make the edit permanent and leave it looking like an
+application write. It logs an error naming the row (never the secret),
+reports it to Sentry, and leaves the row as it is. Reads keep serving the
+plain-text value meanwhile. Once an operator has inspected the row and
+accepts what it says, the on-demand command with `--reseal-tampered`
+seals it again; otherwise the operator restores the edited columns.
 
 ## Proxy endpoint keys
 
@@ -271,8 +284,9 @@ Grafana and Claude read-only database users), has no `SELECT` on the table.
 
   Each case except the first is logged once per sealed value, as a warning
   on the `proxy-endpoint-keys` channel:
-  `the sealed key for proxy endpoint <url> … so its plain-text key is used until the backfill seals it again`.
-  The next startup's backfill, or the on-demand command, seals it again.
+  `the sealed key for proxy endpoint <url> … so its plain-text key is used`.
+  A row with a loaded data key is tampered (see above): the backfill reports
+  it and leaves it for an operator.
 
 - **Writes** go through `saveProxyEndpoint`, which writes both forms
   together.
@@ -283,15 +297,14 @@ Grafana and Claude read-only database users), has no `SELECT` on the table.
 every time the realm server starts, before the census, and logs one line:
 
 ```
-proxy endpoint keys: sealed=0 cleared=0 unchanged=3 unloadedKey=0 skipped=0
+proxy endpoint keys: sealed=0 cleared=0 unchanged=3 unloadedKey=0 tampered=0 skipped=0
 ```
 
 - `sealed`: rows sealed from `api_key` because their sealed key was
-  missing, didn't open, or opened to a value other than `api_key` (for
-  example, a key edited by hand). A key that didn't open is logged as a
-  warning naming its url. This count also includes rows that a process
-  sealing with KMS found sealed under the public `local-development` key: it
-  seals them again, and logs a warning for each.
+  missing. This count also includes rows that a process sealing with KMS
+  found sealed under the public `local-development` key: it seals them
+  again, and logs a warning for each. With `--reseal-tampered` it also
+  includes tampered rows.
 - `cleared`: rows with no `api_key` whose sealed columns were emptied.
 - `unchanged`: rows that were already correct. A second run reports every
   row here.
@@ -301,6 +314,10 @@ proxy endpoint keys: sealed=0 cleared=0 unchanged=3 unloadedKey=0 skipped=0
   a row back onto an older data key. A rotation loads a new data key
   everywhere before any process seals with it, so a nonzero count means a
   rotation step was skipped or a data key was retired too early.
+- `tampered`: rows whose sealed key fails to open under a loaded data key,
+  or opens to a value other than `api_key` (for example, a `url` or key
+  edited by hand). Each is logged as an error naming its url, reported to
+  Sentry, and left as it is.
 - `skipped`: rows that changed between the read and the update. Those rows
   are left to whatever changed them.
 
@@ -321,7 +338,10 @@ also answers on `localhost`. Against a deployed database it needs
 decrypt with that key, which in practice means running it inside a
 realm-server task. If rows do end up sealed under the local key, the next
 realm-server start seals them again under KMS. The command logs the
-backfill line, then the census.
+backfill line, then the census. With `--reseal-tampered`
+(`pnpm seal-proxy-endpoint-keys --reseal-tampered`) it also seals tampered
+rows again from their plain-text key; run it only after inspecting the rows
+the `tampered` count reported.
 
 ## Incoming webhook signing secrets
 
@@ -355,15 +375,17 @@ the table.
   Whenever the sealed and plain-text secrets disagree, it verifies against
   `signing_secret` and logs a warning once per sealed value on the
   `incoming-webhook-secrets` channel:
-  `the sealed signing secret of incoming webhook <id> … so its plain-text secret is used until the backfill seals it again`.
+  `the sealed signing secret of incoming webhook <id> … so its plain-text secret is used`.
   A changed `username` or `id`, a data key this process hasn't loaded, or a
-  secret edited by hand all lead here.
+  secret edited by hand all lead here. A changed `username` changes who a
+  verified delivery's commands run as, which is why the backfill treats such
+  a row as tampered and leaves its binding for an operator.
 - **The backfill.** `sealIncomingWebhookSecrets` runs at every realm-server
   start, right after the proxy endpoint backfill and before the census, and
   logs one line:
 
   ```
-  incoming webhook secrets: sealed=0 unchanged=12 unloadedKey=0 skipped=0
+  incoming webhook secrets: sealed=0 unchanged=12 unloadedKey=0 tampered=0 skipped=0
   ```
 
   The counts mean what they do for proxy endpoint keys. There is no
@@ -378,4 +400,5 @@ the table.
   census cover it.
 - **On demand.** `pnpm seal-incoming-webhook-secrets` in
   `packages/realm-server` runs the same pass and then the census. It takes
-  its database and data key exactly as `pnpm seal-proxy-endpoint-keys` does.
+  its database and data key exactly as `pnpm seal-proxy-endpoint-keys` does,
+  and takes the same `--reseal-tampered` flag.

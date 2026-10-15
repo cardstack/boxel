@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { logger, type DBAdapter } from '@cardstack/runtime-common';
 import {
   backfillDecision,
+  reportTamperedSecret,
   openWithPlainTextFallback,
   sealedColumnBindings,
   sealedColumnsSelect,
@@ -79,7 +80,7 @@ function reportDrift(row: IncomingWebhookSecretRow, reason: string): void {
   }
   reportedDrift.add(drift);
   log.warn(
-    `the sealed signing secret of incoming webhook ${row.id} ${reason}, so its plain-text secret is used until the backfill seals it again`,
+    `the sealed signing secret of incoming webhook ${row.id} ${reason}, so its plain-text secret is used`,
   );
 }
 
@@ -204,6 +205,9 @@ export interface IncomingWebhookSecretSealing {
   // Rows sealed under a data key this process hasn't loaded, left as they
   // are.
   unloadedKey: number;
+  // Rows whose sealed value fails to open under a loaded key or opens to a
+  // value other than the plain text, reported and left as they are.
+  tampered: number;
   // Rows that changed between the read and the update, left to whoever
   // changed them.
   skipped: number;
@@ -219,6 +223,7 @@ export interface IncomingWebhookSecretSealing {
 export async function sealIncomingWebhookSecrets(
   dbAdapter: DBAdapter,
   keyring: SecretsKeyring = secretsKeyring(),
+  { resealTampered = false }: { resealTampered?: boolean } = {},
 ): Promise<IncomingWebhookSecretSealing> {
   let rows = (await dbAdapter.execute(
     `SELECT id, username, ${INCOMING_WEBHOOK_SECRET_COLUMNS} FROM incoming_webhooks`,
@@ -227,6 +232,7 @@ export async function sealIncomingWebhookSecrets(
     sealed: 0,
     unchanged: 0,
     unloadedKey: 0,
+    tampered: 0,
     skipped: 0,
   };
   for (let row of rows) {
@@ -238,6 +244,8 @@ export async function sealIncomingWebhookSecrets(
       keyring,
       subject: `the signing secret of incoming webhook ${row.id}`,
       warn: (message) => log.warn(message),
+      reportTampered: (message) => reportTamperedSecret(log, message),
+      resealTampered,
     });
     if (decision !== 'seal') {
       result[decision]++;
@@ -266,7 +274,7 @@ export async function sealIncomingWebhookSecrets(
     result[updated.length > 0 ? 'sealed' : 'skipped']++;
   }
   log.info(
-    `incoming webhook secrets: sealed=${result.sealed} unchanged=${result.unchanged} unloadedKey=${result.unloadedKey} skipped=${result.skipped}`,
+    `incoming webhook secrets: sealed=${result.sealed} unchanged=${result.unchanged} unloadedKey=${result.unloadedKey} tampered=${result.tampered} skipped=${result.skipped}`,
   );
   return result;
 }

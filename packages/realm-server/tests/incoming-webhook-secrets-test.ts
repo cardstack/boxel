@@ -6,6 +6,10 @@ import { inspect } from 'util';
 import { setupDB } from './helpers/index.ts';
 import { logLinesDuring } from './helpers/log-capture.ts';
 import {
+  startSentryCapture,
+  type SentryEvent,
+} from './helpers/sentry-capture.ts';
+import {
   installSecretsKeyring,
   LocalKeyProvider,
   reportPlaintextCensus,
@@ -106,6 +110,7 @@ module(basename(import.meta.filename), function () {
         sealed: 2,
         unchanged: 0,
         unloadedKey: 0,
+        tampered: 0,
         skipped: 0,
       });
       let row = await secretRow(FIRST_ID);
@@ -142,6 +147,7 @@ module(basename(import.meta.filename), function () {
         sealed: 0,
         unchanged: 1,
         unloadedKey: 0,
+        tampered: 0,
         skipped: 0,
       });
       assert.deepEqual(
@@ -163,7 +169,7 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a sealed secret that does not open is reported and read from plain text, and the backfill seals it again', async function (assert) {
+    test('a sealed secret whose owner was edited outside the application is read from plain text, and the backfill reports it and leaves it for an operator', async function (assert) {
       await insertPlainTextRow(FIRST_ID, FIRST_SECRET);
       await sealIncomingWebhookSecrets(dbAdapter);
       let newOwner = '@new-owner:localhost';
@@ -194,18 +200,58 @@ module(basename(import.meta.filename), function () {
         'the report never carries the secret',
       );
 
-      let result = await sealIncomingWebhookSecrets(dbAdapter);
+      let edited = await secretRow(FIRST_ID);
+      let result: Awaited<ReturnType<typeof sealIncomingWebhookSecrets>>;
+      let sentry = startSentryCapture({ tracing: false });
+      let events: SentryEvent[];
+      let backfillLines: Awaited<ReturnType<typeof logLinesDuring>>;
+      try {
+        backfillLines = await logLinesDuring(
+          ['incoming-webhook-secrets'],
+          async () => {
+            result = await sealIncomingWebhookSecrets(dbAdapter);
+          },
+        );
+        events = await sentry.flushedEvents();
+      } finally {
+        await sentry.stop();
+      }
+      assert.strictEqual(result!.tampered, 1);
+      assert.strictEqual(result!.sealed, 0);
+      assert.deepEqual(
+        await secretRow(FIRST_ID),
+        edited,
+        'the backfill does not seal the secret to its new owner',
+      );
+      let errors = backfillLines!.filter(({ level }) => level === 'error');
+      assert.strictEqual(errors.length, 1, 'the backfill logs the row');
+      assert.true(errors[0].message.includes(FIRST_ID));
+      assert.false(
+        errors[0].message.includes(FIRST_SECRET),
+        'the log line never carries the secret',
+      );
+      assert.strictEqual(events!.length, 1, 'the backfill reports to Sentry');
+      let reported = JSON.stringify(events![0]);
+      assert.true(reported.includes(FIRST_ID));
+      assert.false(
+        reported.includes(FIRST_SECRET),
+        'the Sentry event never carries the secret',
+      );
+
+      result = await sealIncomingWebhookSecrets(dbAdapter, undefined, {
+        resealTampered: true,
+      });
       assert.strictEqual(result.sealed, 1);
+      assert.strictEqual(result.tampered, 0);
       let row = await secretRow(FIRST_ID);
-      assert.strictEqual(row.username, newOwner);
       assert.strictEqual(
         openedFrom(row),
         FIRST_SECRET,
-        'the secret is sealed to its new owner',
+        'an operator re-seals the secret to its new owner',
       );
     });
 
-    test('a secret whose plain text was edited outside the application is read at once, and the backfill seals it again', async function (assert) {
+    test('a secret whose plain text was edited outside the application is read at once, and the backfill reports it and leaves it for an operator', async function (assert) {
       await insertPlainTextRow(FIRST_ID, FIRST_SECRET);
       await sealIncomingWebhookSecrets(dbAdapter);
       await dbAdapter.execute(
@@ -226,8 +272,27 @@ module(basename(import.meta.filename), function () {
       assert.false(warnings[0].message.includes('edited-by-hand'));
       assert.false(warnings[0].message.includes(FIRST_SECRET));
 
-      let result = await sealIncomingWebhookSecrets(dbAdapter);
+      let edited = await secretRow(FIRST_ID);
+      let result: Awaited<ReturnType<typeof sealIncomingWebhookSecrets>>;
+      let backfillLines = await logLinesDuring(
+        ['incoming-webhook-secrets'],
+        async () => {
+          result = await sealIncomingWebhookSecrets(dbAdapter);
+        },
+      );
 
+      assert.strictEqual(result!.tampered, 1);
+      assert.strictEqual(result!.sealed, 0);
+      assert.deepEqual(await secretRow(FIRST_ID), edited);
+      let errors = backfillLines.filter(({ level }) => level === 'error');
+      assert.strictEqual(errors.length, 1, 'the backfill reports the row');
+      assert.true(errors[0].message.includes(FIRST_ID));
+      assert.false(errors[0].message.includes('edited-by-hand'));
+      assert.false(errors[0].message.includes(FIRST_SECRET));
+
+      result = await sealIncomingWebhookSecrets(dbAdapter, undefined, {
+        resealTampered: true,
+      });
       assert.strictEqual(result.sealed, 1);
       assert.strictEqual(
         openedFrom(await secretRow(FIRST_ID)),

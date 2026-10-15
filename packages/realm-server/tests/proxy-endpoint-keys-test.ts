@@ -116,6 +116,7 @@ module(basename(import.meta.filename), function () {
         cleared: 0,
         unchanged: 0,
         unloadedKey: 0,
+        tampered: 0,
         skipped: 0,
       });
       let row = await keyRow(OPENROUTER_URL);
@@ -154,6 +155,7 @@ module(basename(import.meta.filename), function () {
         cleared: 0,
         unchanged: 2,
         unloadedKey: 0,
+        tampered: 0,
         skipped: 0,
       });
       assert.deepEqual(
@@ -174,7 +176,7 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a sealed key that does not open is reported and served from its plain-text key, and the backfill seals it again', async function (assert) {
+    test('a sealed key whose url was edited outside the application is served from its plain-text key, and the backfill reports it and leaves it for an operator', async function (assert) {
       await insertPlainTextRow(OPENROUTER_URL, OPENROUTER_KEY);
       await sealProxyEndpointKeys(dbAdapter);
       let movedUrl = 'https://openrouter.ai/api/v1/moved';
@@ -202,13 +204,38 @@ module(basename(import.meta.filename), function () {
         'the report never carries the key',
       );
 
-      let result = await sealProxyEndpointKeys(dbAdapter);
+      let edited = await keyRow(movedUrl);
+      let result: Awaited<ReturnType<typeof sealProxyEndpointKeys>>;
+      let backfillLines = await logLinesDuring(
+        ['proxy-endpoint-keys'],
+        async () => {
+          result = await sealProxyEndpointKeys(dbAdapter);
+        },
+      );
+      assert.strictEqual(result!.tampered, 1);
+      assert.strictEqual(result!.sealed, 0);
+      assert.deepEqual(
+        await keyRow(movedUrl),
+        edited,
+        'the backfill does not seal the key to its new url',
+      );
+      let errors = backfillLines.filter(({ level }) => level === 'error');
+      assert.strictEqual(errors.length, 1, 'the backfill reports the row');
+      assert.true(errors[0].message.includes(movedUrl));
+      assert.false(
+        errors[0].message.includes(OPENROUTER_KEY),
+        'the report never carries the key',
+      );
+
+      result = await sealProxyEndpointKeys(dbAdapter, undefined, {
+        resealTampered: true,
+      });
       assert.strictEqual(result.sealed, 1);
       let row = await keyRow(movedUrl);
       assert.strictEqual(
         keyring.open(sealedOf(row), proxyEndpointKeyBinding(row)),
         OPENROUTER_KEY,
-        'the key is sealed to its new url',
+        'an operator re-seals the key to its new url',
       );
     });
 
@@ -244,7 +271,7 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a key whose plain text was edited outside the application is served at once, and the backfill seals it again', async function (assert) {
+    test('a key whose plain text was edited outside the application is served at once, and the backfill reports it and leaves it for an operator', async function (assert) {
       await insertPlainTextRow(OPENROUTER_URL, OPENROUTER_KEY);
       await sealProxyEndpointKeys(dbAdapter);
       await dbAdapter.execute(
@@ -266,8 +293,16 @@ module(basename(import.meta.filename), function () {
       assert.false(warnings[0].message.includes('sk-or-v1-edited-by-hand'));
       assert.false(warnings[0].message.includes(OPENROUTER_KEY));
 
+      let edited = await keyRow(OPENROUTER_URL);
       let result = await sealProxyEndpointKeys(dbAdapter);
 
+      assert.strictEqual(result.tampered, 1);
+      assert.strictEqual(result.sealed, 0);
+      assert.deepEqual(await keyRow(OPENROUTER_URL), edited);
+
+      result = await sealProxyEndpointKeys(dbAdapter, undefined, {
+        resealTampered: true,
+      });
       assert.strictEqual(result.sealed, 1);
       let row = await keyRow(OPENROUTER_URL);
       assert.strictEqual(

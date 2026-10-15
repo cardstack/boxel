@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { logger, type DBAdapter } from '@cardstack/runtime-common';
 import {
   backfillDecision,
+  reportTamperedSecret,
   hasSealedColumns,
   openWithPlainTextFallback,
   PLATFORM_SECRET_OWNER,
@@ -67,7 +68,7 @@ function reportDrift(row: ProxyEndpointKeyRow, reason: string): void {
   }
   reportedDrift.add(drift);
   log.warn(
-    `the sealed key for proxy endpoint ${row.url} ${reason}, so its plain-text key is used until the backfill seals it again`,
+    `the sealed key for proxy endpoint ${row.url} ${reason}, so its plain-text key is used`,
   );
 }
 
@@ -174,6 +175,9 @@ export interface ProxyEndpointKeySealing {
   // Rows sealed under a data key this process hasn't loaded, left as they
   // are.
   unloadedKey: number;
+  // Rows whose sealed value fails to open under a loaded key or opens to a
+  // value other than the plain text, reported and left as they are.
+  tampered: number;
   // Rows that changed between the read and the update, left to whoever
   // changed them.
   skipped: number;
@@ -189,6 +193,7 @@ export interface ProxyEndpointKeySealing {
 export async function sealProxyEndpointKeys(
   dbAdapter: DBAdapter,
   keyring: SecretsKeyring = secretsKeyring(),
+  { resealTampered = false }: { resealTampered?: boolean } = {},
 ): Promise<ProxyEndpointKeySealing> {
   let rows = (await dbAdapter.execute(
     `SELECT id, url, ${PROXY_ENDPOINT_KEY_COLUMNS} FROM proxy_endpoints`,
@@ -198,6 +203,7 @@ export async function sealProxyEndpointKeys(
     cleared: 0,
     unchanged: 0,
     unloadedKey: 0,
+    tampered: 0,
     skipped: 0,
   };
   for (let row of rows) {
@@ -226,6 +232,8 @@ export async function sealProxyEndpointKeys(
       keyring,
       subject: `the key for proxy endpoint ${row.url}`,
       warn: (message) => log.warn(message),
+      reportTampered: (message) => reportTamperedSecret(log, message),
+      resealTampered,
     });
     if (decision !== 'seal') {
       result[decision]++;
@@ -254,7 +262,7 @@ export async function sealProxyEndpointKeys(
     result[updated.length > 0 ? 'sealed' : 'skipped']++;
   }
   log.info(
-    `proxy endpoint keys: sealed=${result.sealed} cleared=${result.cleared} unchanged=${result.unchanged} unloadedKey=${result.unloadedKey} skipped=${result.skipped}`,
+    `proxy endpoint keys: sealed=${result.sealed} cleared=${result.cleared} unchanged=${result.unchanged} unloadedKey=${result.unloadedKey} tampered=${result.tampered} skipped=${result.skipped}`,
   );
   return result;
 }

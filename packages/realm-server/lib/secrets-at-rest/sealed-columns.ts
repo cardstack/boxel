@@ -3,6 +3,7 @@ import type {
   SecretBinding,
   SecretsKeyring,
 } from './envelope.ts';
+import * as Sentry from '@sentry/node';
 import { LOCAL_DATA_KEY_ID } from './providers.ts';
 
 // A table that seals a secret with the helper while its plain-text column
@@ -10,8 +11,8 @@ import { LOCAL_DATA_KEY_ID } from './providers.ts';
 // plain-text one: `<column>_ciphertext`, `<column>_nonce`, `<column>_tag`
 // (bytea) and `<column>_key_id`. Every write keeps the plain-text column in
 // step, so it is the source the sealed columns are checked against: reads
-// serve the plain-text value whenever the two disagree, and a backfill seals
-// it again.
+// serve the plain-text value whenever the two disagree, and `backfillDecision`
+// decides whether a backfill seals it again.
 
 type SealedColumnsRow = Record<string, unknown>;
 
@@ -108,12 +109,15 @@ export function openWithPlainTextFallback({
   return opened;
 }
 
-export type BackfillDecision = 'seal' | 'unchanged' | 'unloadedKey';
+export type BackfillDecision =
+  | 'seal'
+  | 'unchanged'
+  | 'unloadedKey'
+  | 'tampered';
 
 // What a backfill does with a row that has a plain-text value. A row whose
-// sealed value is missing, doesn't open under its binding, or opens to a
-// different value is sealed from its plain text; one whose sealed value opens
-// to its plain text is left alone, so a second run changes nothing.
+// sealed value is missing is sealed from its plain text; one whose sealed value
+// opens to its plain text is left alone, so a second run changes nothing.
 //
 // A row sealed under a data key this process hasn't loaded is left alone:
 // re-sealing it under this process's current key would move it back onto an
@@ -121,7 +125,17 @@ export type BackfillDecision = 'seal' | 'unchanged' | 'unloadedKey';
 // the public local development key: a process sealing with any other key seals
 // such a row again, since anyone can open it.
 //
-// `subject` names the secret in the warnings, as in "the signing secret of
+// A sealed value that fails to open under a loaded key, or opens to a value
+// other than the plain text, is tampered: every application write keeps the
+// binding's columns, the plain text and the sealed value in step, so only an
+// edit outside the application produces either state. The binding's owner and
+// id are what stop a sealed secret being moved to another row or user, so
+// re-sealing such a row from what it says would make the edit permanent and
+// indistinguishable from an application write. The row is left as it is and
+// reported through `reportTampered`, unless `resealTampered` is set, which an
+// operator does once they have looked at the row.
+//
+// `subject` names the secret in the reports, as in "the signing secret of
 // webhook <id>"; it never carries the secret.
 export function backfillDecision({
   plainText,
@@ -130,6 +144,8 @@ export function backfillDecision({
   keyring,
   subject,
   warn,
+  reportTampered,
+  resealTampered = false,
 }: {
   plainText: string;
   sealed: SealedSecret | undefined;
@@ -137,6 +153,8 @@ export function backfillDecision({
   keyring: SecretsKeyring;
   subject: string;
   warn: (message: string) => void;
+  reportTampered: (message: string) => void;
+  resealTampered?: boolean;
 }): BackfillDecision {
   if (!sealed) {
     return 'seal';
@@ -157,12 +175,34 @@ export function backfillDecision({
     return 'unloadedKey';
   }
   let opened: string | undefined;
+  let problem: string | undefined;
   try {
     opened = keyring.open(sealed, binding);
   } catch {
-    warn(
-      `${subject} does not open under its binding, so it is sealed again from its plain-text value`,
-    );
+    problem = 'does not open under its binding';
   }
-  return opened === plainText ? 'unchanged' : 'seal';
+  if (problem === undefined && opened === plainText) {
+    return 'unchanged';
+  }
+  problem ??= 'opens to a value other than its plain-text value';
+  if (resealTampered) {
+    warn(
+      `${subject} ${problem}, so it is sealed again from its plain-text value`,
+    );
+    return 'seal';
+  }
+  reportTampered(
+    `${subject} ${problem}, which only an edit outside the application produces, so it is left as it is for an operator to inspect`,
+  );
+  return 'tampered';
+}
+
+// Reports a tampered row to the log and to Sentry. The message names the row,
+// never the secret.
+export function reportTamperedSecret(
+  log: { error: (message: string) => void },
+  message: string,
+): void {
+  log.error(message);
+  Sentry.captureMessage(message, 'error');
 }
