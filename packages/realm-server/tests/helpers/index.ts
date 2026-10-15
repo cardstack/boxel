@@ -2192,8 +2192,10 @@ export function mtimes(
         traverseDir(fullPath);
       } else if (entry.isFile()) {
         const stats = statSync(fullPath);
+        // Floored from `mtimeMs`, as the realm adapter reports it. `Stats.mtime`
+        // is rounded to the millisecond and can land a second later.
         mtimes[paths.fileURL(fullPath.substring(path.length)).href] = unixTime(
-          stats.mtime.getTime(),
+          stats.mtimeMs,
         );
       }
     }

@@ -74,6 +74,17 @@ function statIfExists(absolutePath: string): Stats | undefined {
   }
 }
 
+// A file's modification time in whole seconds, floored from `mtimeMs`.
+// `Stats.mtime` is a `Date` that Node rounds to the nearest millisecond, so
+// flooring it puts an mtime in the last half-millisecond of a second into the
+// next second — a second later than the one `mtimeMs` names, which is what an
+// open descriptor's stat reports and what a `Last-Modified` formatted from it
+// says. Every whole-second time this adapter reports comes from here, so a
+// write's reported time, `lastModified`, and a read of the file agree.
+function lastModifiedSeconds(stat: Stats): number {
+  return unixTime(stat.mtimeMs);
+}
+
 export class NodeAdapter implements RealmAdapter {
   private realmDir: string;
   private enableFileWatcher?: boolean;
@@ -197,7 +208,7 @@ export class NodeAdapter implements RealmAdapter {
       return undefined;
     }
 
-    return unixTime(stat.mtime.getTime());
+    return lastModifiedSeconds(stat);
   }
 
   async openFile(path: string): Promise<FileRef | undefined> {
@@ -261,7 +272,7 @@ export class NodeAdapter implements RealmAdapter {
         return open().content;
       },
       openContent: open,
-      lastModified: unixTime(stat.mtime.getTime()),
+      lastModified: lastModifiedSeconds(stat),
       lastModifiedMs: stat.mtimeMs,
       size: stat.size,
       createRangeStream: (start: number, end: number) =>
@@ -292,10 +303,9 @@ export class NodeAdapter implements RealmAdapter {
     } finally {
       removeSync(stagedPath);
     }
-    let { mtime } = statSync(absolutePath);
     return {
       path: absolutePath,
-      lastModified: unixTime(mtime.getTime()),
+      lastModified: lastModifiedSeconds(statSync(absolutePath)),
     };
   }
 
@@ -314,11 +324,11 @@ export class NodeAdapter implements RealmAdapter {
     let absolutePath = join(this.realmDir, path);
     ensureFileSync(absolutePath);
     appendFileSync(absolutePath, contents);
-    let { mtime, size } = statSync(absolutePath);
+    let stat = statSync(absolutePath);
     return {
       path: absolutePath,
-      lastModified: unixTime(mtime.getTime()),
-      size,
+      lastModified: lastModifiedSeconds(stat),
+      size: stat.size,
     };
   }
 
@@ -347,10 +357,9 @@ export class NodeAdapter implements RealmAdapter {
     } finally {
       removeSync(stagedPath);
     }
-    let { mtime } = statSync(absolutePath);
     return {
       path: absolutePath,
-      lastModified: unixTime(mtime.getTime()),
+      lastModified: lastModifiedSeconds(statSync(absolutePath)),
     };
   }
 
