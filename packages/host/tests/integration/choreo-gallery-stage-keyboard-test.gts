@@ -13,10 +13,22 @@ import { setupChoreoGalleryTest } from '../helpers/choreo-gallery-stage';
 /** the focus ring the browser draws on `el` once it has keyboard focus */
 async function ringOn(el: HTMLElement) {
   await focus(el);
+  let style = getComputedStyle(el);
   return {
     focusVisible: el.matches(':focus-visible'),
-    outline: getComputedStyle(el).outlineStyle,
+    outline: style.outlineStyle,
+    color: style.outlineColor,
   };
+}
+
+/** the theme's focus color, `--ring`, as it resolves where `el` sits */
+function themeRing(el: HTMLElement) {
+  let probe = document.createElement('i');
+  probe.style.color = 'var(--ring)';
+  el.parentElement!.append(probe);
+  let color = getComputedStyle(probe).color;
+  probe.remove();
+  return color;
 }
 
 /** the keydown that reaches the document, if a stage lets it through */
@@ -41,6 +53,11 @@ module('Integration | Choreo gallery | stage keyboard', function (hooks) {
     let ring = await ringOn(print);
     assert.true(ring.focusVisible, 'the print has keyboard focus');
     assert.notStrictEqual(ring.outline, 'none', 'the print draws a ring');
+    assert.strictEqual(
+      ring.color,
+      themeRing(print),
+      "the ring is drawn in the theme's --ring",
+    );
   });
 
   test('Escape backs out of a camera dive and returns focus to the print', async function (assert) {
