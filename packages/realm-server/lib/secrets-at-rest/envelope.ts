@@ -8,8 +8,8 @@ import {
 // Seals a secret with AES-256-GCM under a data key the process holds in
 // memory, so sealing and opening never leave the process. Each sealed value is
 // bound to where it is stored and where it goes: the field it lives in, the
-// owner, the row id and, once it has one, the destination the secret is sent
-// to go into the additional authenticated data. A database writer who moves a
+// owner, the row id and, for a secret sent to one place, the destination it
+// is sent to go into the additional authenticated data. A database writer who moves a
 // ciphertext to another column or row, or re-pairs it with another
 // destination, gets a value that no longer opens.
 
@@ -31,9 +31,8 @@ export interface DataKey {
 // in, as `<table>.<column>`, so two secrets on one row (an OAuth client secret
 // and its refresh token, say) can't be swapped for each other. `destination`
 // is the place the secret is sent (for example an endpoint's URL); a secret
-// that has no destination yet, such as a key added before its first approval,
-// is bound to field, owner and id only and is re-sealed with its destination
-// later.
+// with no destination of its own, such as a user's key, is bound to field,
+// owner and id only.
 export interface SecretBinding {
   field: string;
   owner: string;
