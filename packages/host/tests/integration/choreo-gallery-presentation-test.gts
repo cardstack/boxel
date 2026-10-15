@@ -31,6 +31,11 @@ function run(): ChoreoRun | null {
 const opacityOf = (sel: string) =>
   parseFloat(getComputedStyle(document.querySelector(sel)!).opacity);
 
+/** the deck's key cue: the Space / ‹ › hint shows only while it is lit */
+const keyCueShows = () =>
+  getComputedStyle(document.querySelector('.pres-keys')!).visibility ===
+  'visible';
+
 module('Integration | Choreo gallery | presentation', function (hooks) {
   let gallery = setupChoreoGalleryTest(hooks);
   let Presentation: ComponentLike;
@@ -276,6 +281,7 @@ module('Integration | Choreo gallery | presentation', function (hooks) {
       '[data-test-pres-restart]',
     )!;
     await focus(restart);
+    assert.false(keyCueShows(), 'focus on a bar control leaves the cue dark');
     await triggerKeyEvent(restart, 'keydown', ' ');
     await triggerKeyEvent(restart, 'keydown', 'ArrowRight');
     await frames(1);
@@ -290,6 +296,7 @@ module('Integration | Choreo gallery | presentation', function (hooks) {
       fwd,
       'a keyboard press leaves focus on the control',
     );
+    assert.false(keyCueShows(), 'a keyboard press leaves the cue dark');
     await animationsSettled();
 
     await click(fwd, { detail: 1 });
@@ -298,6 +305,7 @@ module('Integration | Choreo gallery | presentation', function (hooks) {
       deck,
       'a pointer press hands focus to the deck',
     );
+    assert.true(keyCueShows(), 'the deck that takes the keys lights the cue');
     await animationsSettled();
   });
 });

@@ -444,7 +444,6 @@ export class Presentation extends Component {
   };
 
   tap = (event?: Event) => {
-    this.setHot(true);
     this.take(event);
     if (!this.live) {
       this.live = true;
@@ -477,7 +476,6 @@ export class Presentation extends Component {
    */
   stepBack = (event?: Event) => {
     event?.stopPropagation();
-    this.setHot(true);
     this.take(event);
     const plate = this.plate();
     const inner = plate?.innerCtx?.run ?? this.inner?.run ?? null;
@@ -539,6 +537,7 @@ export class Presentation extends Component {
     if (event instanceof MouseEvent && event.detail === 0) {
       return;
     }
+    this.setHot(true);
     this.deck?.focus({ preventScroll: true });
   }
 
@@ -547,8 +546,10 @@ export class Presentation extends Component {
     (event.currentTarget as HTMLElement).focus({ preventScroll: true });
   };
 
-  onFocus = () => {
-    this.setHot(true);
+  /** the key cue lights only while the deck itself holds focus: a bar
+   *  control keeps its keys, so focus on one leaves the cue dark */
+  onFocus = (event: Event) => {
+    this.setHot(event.target === event.currentTarget);
   };
 
   onBlur = (e: Event) => {
@@ -580,7 +581,6 @@ export class Presentation extends Component {
 
   go = (n: number, event?: Event) => {
     event?.stopPropagation();
-    this.setHot(true);
     this.take(event);
     if (n === this.slide || n < 0 || n > LAST) {
       return;
@@ -596,7 +596,6 @@ export class Presentation extends Component {
   /** back to slide 01, unbuilt — a new pass through the same deck */
   restart = (event?: Event) => {
     event?.stopPropagation();
-    this.setHot(true);
     this.take(event);
     this.arrive = 'fwd';
     this.inner = null;
