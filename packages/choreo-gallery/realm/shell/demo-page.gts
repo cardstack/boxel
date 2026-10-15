@@ -512,6 +512,13 @@ export class DemoPage extends Component<Signature> {
         margin-inline: calc((100% - var(--site-w, 100%)) / 2);
       }
 
+      /* a stage scrolled away, or one waiting to be asked to move, holds its
+         animations where they stand */
+      .stage-wrap.is-resting,
+      .stage-wrap.is-resting :deep(*) {
+        animation-play-state: paused !important;
+      }
+
       /* THE WELL'S ASPECT IS FOR A WELL. In theater the frame is as tall as
          what the viewer can see of the card — the element that scrolls it,
          published as --view-h, which in the host sits under the host's chrome
@@ -522,13 +529,6 @@ export class DemoPage extends Component<Signature> {
          way: the scroller is the nearest ancestor set to scroll, and one that
          grows with its content would publish the whole page's height. The
          picture reframes to this box. */
-      /* a stage scrolled away, or one waiting to be asked to move, holds its
-         animations where they stand */
-      .stage-wrap.is-resting,
-      .stage-wrap.is-resting :deep(*) {
-        animation-play-state: paused !important;
-      }
-
       .demo-body.is-theater .stage-wrap {
         height: min(100vh, 100cqi);
         height: min(var(--view-h, 100dvh), 100dvh, 100cqi);
