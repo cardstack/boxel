@@ -1340,8 +1340,11 @@ async function toResultMessages(
   // model the write passed and to finish, next to the instruction to fix it.
   // Checks that end the same way share one note, so the model reads the same
   // instruction once, not once per file.
+  // A request to fix warnings displaces it the same way.
   let anyCheckNotPassed = toolResultEntries.some(
-    (entry) => entry?.checkPassed === false,
+    (entry) =>
+      entry?.checkPassed === false ||
+      entry?.followUpMessage?.content === CORRECTNESS_WARNINGS_FIX_INSTRUCTION,
   );
   let followUpMessages = uniqBy(
     toolResultEntries
@@ -1383,6 +1386,7 @@ function buildCheckCorrectnessResultContent(
       formattedSummary,
       correctnessCheckPassed(toolResult),
       attemptNumber,
+      isCardCorrectnessTarget(request),
     );
   }
   if (read.kind === 'unreadable' && status === 'applied') {
@@ -1405,6 +1409,17 @@ function buildCheckCorrectnessResultContent(
   return {
     toolMessage: `Check correctness was marked as ${status} for ${targetDescription}.`,
   };
+}
+
+// Card-instance checks report warnings about what was written (undeclared
+// fields, invalid options, dangling links), so only those ask for a fix.
+// A card can be written as its .json file, so that counts too.
+function isCardCorrectnessTarget(request?: ToolRequest): boolean {
+  let { targetType, targetRef } = extractCheckCorrectnessTargetParts(request);
+  return (
+    targetType === 'card' ||
+    (typeof targetRef === 'string' && targetRef.endsWith('.json'))
+  );
 }
 
 function describeCheckCorrectnessTarget(request?: ToolRequest) {
@@ -1437,6 +1452,7 @@ type CheckCorrectnessResultContent = {
 type FormattedCorrectnessSummary = {
   summary: string;
   hasErrors: boolean;
+  hasWarnings: boolean;
 };
 
 // Sent after a correctness check fails. The runner can edit source immediately
@@ -1454,6 +1470,15 @@ const CODE_FIX_INSTRUCTION = `1. Fix the errors above by re-reading the failing 
 // model back to the user's message to finish.
 const CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION =
   'The write above passed its checks. Note that in at most one line of your reply, including any warnings listed above. Then finish your answer to the user: cover everything their last message asked for that you have not yet answered, any closing line your skills require, and any change you made that they did not ask for. If work you already described remains unfinished, carry straight on with it in the same reply. This is a note on what just landed, not a request to stop. Do not mention correctness, automated checks or tool calls.';
+
+// Warnings never fail the check, but they often name a mistake in what was
+// just written (a misnamed field, an invalid option, a dangling link) that
+// left the card silently incomplete. Sent in place of the success note while
+// attempts remain; these rounds count toward MAX_CORRECTNESS_FIX_ATTEMPTS, and
+// at the cap the success note (which already asks the model to mention the
+// warnings) takes over.
+const CORRECTNESS_WARNINGS_FIX_INSTRUCTION =
+  'The write above passed its checks, but the warnings above may point at mistakes in what you just wrote: a misnamed field, a value outside the allowed options, data written in the wrong place, or a link to a card that does not exist. Fix the ones that are mistakes now by re-reading the file and using the run-realm-code tool. If none are mistakes, note the warnings in at most one line and finish your answer to the user. Do not mention correctness, automated checks or tool calls.';
 
 const CORRECTNESS_FAILURE_LIMIT_INSTRUCTION = `Automated correctness fixes have already been attempted ${MAX_CORRECTNESS_FIX_ATTEMPTS} times and the target is still failing validation. Stop proposing further automated patches; instead, summarize the remaining errors and ask the user how they want to proceed. Do not mention correctness or automated checks or tool calls.`;
 
@@ -1544,6 +1569,16 @@ function correctnessCheckPassed(toolResult: ToolResultEvent): boolean {
   );
 }
 
+function correctnessCheckHasWarnings(toolResult: ToolResultEvent): boolean {
+  let read = readCorrectnessResult(toolResult);
+  return (
+    read.kind === 'card' &&
+    read.summary.warnings.some(
+      (entry) => typeof entry === 'string' && entry.trim().length > 0,
+    )
+  );
+}
+
 function formatCorrectnessResultSummary(
   targetDescription: string,
   result: CorrectnessResultSummary,
@@ -1573,6 +1608,7 @@ function formatCorrectnessResultSummary(
   return {
     summary,
     hasErrors: errorLines.length > 0,
+    hasWarnings: warningLines.length > 0,
   };
 }
 
@@ -1630,6 +1666,7 @@ function extractCheckCorrectnessTargetParts(
 
 function getCheckCorrectnessTargetKey(
   request?: ToolRequest,
+  { withEvent = true }: { withEvent?: boolean } = {},
 ): string | undefined {
   let { targetRef, targetType, targetEventId } =
     extractCheckCorrectnessTargetParts(request);
@@ -1639,7 +1676,7 @@ function getCheckCorrectnessTargetKey(
   return formatCorrectnessTargetKeyWithEvent(
     targetType,
     targetRef,
-    targetEventId,
+    withEvent ? targetEventId : undefined,
   );
 }
 
@@ -1663,9 +1700,18 @@ type CorrectnessCheckAttemptInfo = { attempt: number; succeeded: boolean };
 function getLatestCorrectnessCheckAttemptInfo(
   history: DiscreteMatrixEvent[],
   targetKey: string,
+  opts: {
+    // match on the target alone, across the patch events that wrote it
+    ignoreEvent?: boolean;
+    // stop looking back at (and don't look past) an event matching this
+    stopAt?: (event: DiscreteMatrixEvent) => boolean;
+  } = {},
 ): CorrectnessCheckAttemptInfo | undefined {
   for (let index = history.length - 1; index >= 0; index--) {
     let event = history[index];
+    if (opts.stopAt?.(event)) {
+      return undefined;
+    }
     if (!isToolResultEventType(event.type)) {
       continue;
     }
@@ -1680,23 +1726,47 @@ function getLatestCorrectnessCheckAttemptInfo(
     if (!sourceRequest) {
       continue;
     }
-    if (getCheckCorrectnessTargetKey(sourceRequest) !== targetKey) {
+    if (
+      getCheckCorrectnessTargetKey(sourceRequest, {
+        withEvent: !opts.ignoreEvent,
+      }) !== targetKey
+    ) {
       continue;
     }
     let attempt = Math.max(
       1,
       getCorrectnessCheckAttemptFromRequest(sourceRequest),
     );
-    return { attempt, succeeded: correctnessCheckPassed(toolResult) };
+    // A pass that still carries warnings asks for a fix, so it keeps the
+    // attempt count running rather than resetting it.
+    return {
+      attempt,
+      succeeded:
+        correctnessCheckPassed(toolResult) &&
+        !correctnessCheckHasWarnings(toolResult),
+    };
   }
   return undefined;
 }
 
+// Attempts count consecutive automated rounds on one target. Each fix the AI
+// sends arrives in a new message, so a target with no check yet under this
+// patch event continues the count from its last check under an earlier
+// event — unless the user has spoken since, which starts a fresh run.
 function getNextCorrectnessCheckAttempt(
   history: DiscreteMatrixEvent[],
   targetKey: string,
+  targetKeyWithoutEvent: string | undefined,
+  aiBotUserId: string,
 ): number {
-  let latest = getLatestCorrectnessCheckAttemptInfo(history, targetKey);
+  let latest =
+    getLatestCorrectnessCheckAttemptInfo(history, targetKey) ??
+    (targetKeyWithoutEvent
+      ? getLatestCorrectnessCheckAttemptInfo(history, targetKeyWithoutEvent, {
+          ignoreEvent: true,
+          stopAt: (event) => isUserChatMessage(event, aiBotUserId),
+        })
+      : undefined);
   if (!latest) {
     return 1;
   }
@@ -1710,6 +1780,7 @@ function toCheckCorrectnessResultContent(
   formattedSummary: FormattedCorrectnessSummary,
   passed: boolean,
   attemptNumber = 0,
+  isCardTarget = false,
 ): CheckCorrectnessResultContent {
   let attemptNote =
     formattedSummary.hasErrors && attemptNumber > 0
@@ -1720,6 +1791,16 @@ function toCheckCorrectnessResultContent(
     .join('\n\n');
 
   if (passed) {
+    if (
+      isCardTarget &&
+      formattedSummary.hasWarnings &&
+      attemptNumber < MAX_CORRECTNESS_FIX_ATTEMPTS
+    ) {
+      return {
+        toolMessage,
+        followUpUserMessage: CORRECTNESS_WARNINGS_FIX_INSTRUCTION,
+      };
+    }
     return {
       toolMessage,
       followUpUserMessage: CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION,
@@ -1987,6 +2068,7 @@ function collectPendingCodePatchCorrectnessCheck(
       event as CardMessageEvent,
       edits,
       history,
+      aiBotUserId,
     );
     if (correctnessCheck) {
       return correctnessCheck;
@@ -2039,6 +2121,7 @@ function buildCodePatchCorrectnessMessage(
   messageEvent: CardMessageEvent,
   { content, relevantTools, toolResults }: ResolvedCodeEdits,
   history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
 ): PendingCodePatchCorrectnessCheck | undefined {
   if (
     history.some((event) =>
@@ -2059,6 +2142,7 @@ function buildCodePatchCorrectnessMessage(
     history,
     files,
     cards,
+    aiBotUserId,
     messageEvent.event_id,
   );
 
@@ -2162,32 +2246,42 @@ function buildCorrectnessCheckAttemptMap(
   history: DiscreteMatrixEvent[],
   files: CodePatchCorrectnessFile[],
   cards: CodePatchCorrectnessCard[],
+  aiBotUserId: string,
   targetEventId?: string,
 ): Record<string, number> {
   let attempts: Record<string, number> = {};
-  for (let file of files) {
+  let targets = [
+    ...files.map((file) => ({
+      type: 'file',
+      ref: file.sourceUrl || file.displayName,
+    })),
+    ...cards.map((card) => ({ type: 'card', ref: card.cardId })),
+  ];
+  for (let { type, ref } of targets) {
     let targetKey = formatCorrectnessTargetKeyWithEvent(
-      'file',
-      file.sourceUrl || file.displayName,
+      type,
+      ref,
       targetEventId,
     );
     if (!targetKey) {
       continue;
     }
-    attempts[targetKey] = getNextCorrectnessCheckAttempt(history, targetKey);
-  }
-  for (let card of cards) {
-    let targetKey = formatCorrectnessTargetKeyWithEvent(
-      'card',
-      card.cardId,
-      targetEventId,
+    attempts[targetKey] = getNextCorrectnessCheckAttempt(
+      history,
+      targetKey,
+      formatCorrectnessTargetKeyWithEvent(type, ref),
+      aiBotUserId,
     );
-    if (!targetKey) {
-      continue;
-    }
-    attempts[targetKey] = getNextCorrectnessCheckAttempt(history, targetKey);
   }
   return attempts;
+}
+
+function isUserChatMessage(event: DiscreteMatrixEvent, aiBotUserId: string) {
+  return (
+    event.type === 'm.room.message' &&
+    event.sender !== aiBotUserId &&
+    event.content?.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
+  );
 }
 
 function extractCardIdFromCommandRequest(
