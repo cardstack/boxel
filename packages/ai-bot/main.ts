@@ -608,16 +608,21 @@ Common issues are:
               pendingReleasedCalls,
             );
             if (unreleased === 'missing') {
-              let message = `approval of ${triggerCommandRequestId} matches no held call in the history of ${room.roomId}`;
-              log.warn(`[${eventId}] ${message}`);
-              Sentry.captureMessage(message, {
-                level: 'warning',
-                extra: {
-                  roomId: room.roomId,
-                  eventId,
-                  commandRequestId: triggerCommandRequestId,
+              log.warn(
+                `[${eventId}] approval of ${triggerCommandRequestId} matches no held call in the history of ${room.roomId}`,
+              );
+              // A constant message, so every occurrence groups as one issue.
+              Sentry.captureMessage(
+                'approval matches no held call in the history',
+                {
+                  level: 'warning',
+                  extra: {
+                    roomId: room.roomId,
+                    eventId,
+                    commandRequestId: triggerCommandRequestId,
+                  },
                 },
-              });
+              );
             } else if (unreleased) {
               log.debug(
                 `[${eventId}] approval of ${triggerCommandRequestId} released no call to run in ${room.roomId}: ${unreleased}`,

@@ -87,7 +87,14 @@ function streamedBotMessage(
     type: 'm.room.message',
     event_id: id,
     sender: BOT,
-    content: { body: '', isStreamingFinished: false },
+    content: {
+      body: '',
+      msgtype: 'app.boxel.message',
+      format: 'org.matrix.custom.html',
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [],
+      isStreamingFinished: false,
+      data: JSON.stringify({ context: {} }),
+    },
     unsigned: {
       'm.relations': {
         'm.replace': {
@@ -293,28 +300,6 @@ module('readUrl approval', () => {
       ]),
       [['held-a', '$bot']],
       'the unsettled call is released against the message it belongs to',
-    );
-  });
-
-  test('an edit whose replacement content is in m.new_content releases its approved call', () => {
-    let message = streamedBotMessage([]);
-    let edit = (message as any).unsigned['m.relations']['m.replace'];
-    edit.content = {
-      body: '* ',
-      'm.new_content': {
-        body: '',
-        [APP_BOXEL_TOOL_REQUESTS_KEY]: [
-          readUrlRequest('held', 'https://a.example/', true),
-        ],
-      },
-      'm.relates_to': { rel_type: 'm.replace', event_id: '$bot' },
-    };
-    let history = [message, result('held', 'approved', USER)];
-    assert.deepEqual(
-      readUrlCallsReleasedByApprovals(history, BOT).map(
-        (entry) => entry.call.id,
-      ),
-      ['held'],
     );
   });
 

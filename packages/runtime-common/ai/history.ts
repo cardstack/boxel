@@ -22,7 +22,6 @@ import {
   getToolRequests,
   isToolResultEventType,
   isToolResultWithOutputMsgtype,
-  latestEventContent,
 } from '../matrix-constants.ts';
 
 import { downloadFile } from './matrix-utils.ts';
@@ -152,8 +151,7 @@ function getAggregatedReplacement(event: IRoomEvent) {
    * section of the event.
    *
    * Here we extract any replacement and return the
-   * latest version, but with *the original id* and the
-   * content `latestEventContent` reads from it
+   * latest version, but with *the original id*
    */
   let finalRawEvent: IRoomEvent;
   const originalEventId = event.event_id;
@@ -162,7 +160,6 @@ function getAggregatedReplacement(event: IRoomEvent) {
   if (replacedRawEvent) {
     finalRawEvent = replacedRawEvent;
     finalRawEvent.event_id = originalEventId;
-    finalRawEvent.content = latestEventContent(event) ?? {};
   } else {
     finalRawEvent = event;
   }
