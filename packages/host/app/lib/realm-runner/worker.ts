@@ -62,6 +62,7 @@ const BOOTSTRAP = `
         copy: (fromPath, toPath) => call('fs.copy', [fromPath, toPath]),
         writeBytes: (path, base64) => call('fs.writeBytes', [path, base64]),
         delete: (path) => call('fs.delete', [path]),
+        deleteExisting: (path) => call('fs.deleteExisting', [path]),
         download: (sourceUrl, path) =>
           call('fs.download', [sourceUrl, path]),
       }),
@@ -169,6 +170,7 @@ const METHODS = new Set<RealmRunnerCallMethod>([
   'cards.update',
   'entries.search',
   'fs.delete',
+  'fs.deleteExisting',
   'capture',
   'images.generate',
   'workspaces.create',
