@@ -3,6 +3,7 @@
  * stage waits to be asked. Tiles and demo pages hold their stages, touching a
  * stage wakes it, and a demo page offers the demo's full motion.
  */
+import { htmlSafe } from '@ember/template';
 import { click, render, settled, waitFor } from '@ember/test-helpers';
 
 import { live, liveAll } from '@cardstack/choreo/test-support';
@@ -17,9 +18,12 @@ import {
 import type * as HoldModule from '../../../choreo-gallery/realm/lib/motion-hold';
 import type * as OnStageModule from '../../../choreo-gallery/realm/lib/onstage';
 
+/** a stage with a box, so the observer has something to see */
+const stageSize = htmlSafe('width: 100px; height: 100px');
+
 module('Integration | Choreo gallery | reduced motion', function (hooks) {
   let gallery = setupChoreoGalleryTest(hooks);
-  let preference: HoldModule['motionPreference'];
+  let preference: typeof HoldModule.motionPreference;
   let asked = false;
 
   hooks.beforeEach(async function () {
@@ -39,7 +43,7 @@ module('Integration | Choreo gallery | reduced motion', function (hooks) {
     await render(
       <template>
         <div data-motion-hold='held' data-test-holder>
-          <div data-test-held-stage style='width: 100px; height: 100px'></div>
+          <div data-test-held-stage style={{stageSize}}></div>
         </div>
       </template>,
     );
