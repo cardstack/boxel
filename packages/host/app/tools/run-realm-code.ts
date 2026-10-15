@@ -1001,10 +1001,11 @@ class RealmFsSession {
     }
     let bytes = decodeBase64(image.base64.replace(/\s+/g, ''));
     await this.writeBinaryFile(savedURL, bytes);
+    this.binaryDigests.set(savedURL, await sha256(bytes));
     // An earlier lookup may have recorded the file as missing.
     this.known.delete(savedURL);
     this.binary.add(savedURL);
-    this.saved.add(savedURL);
+    this.markCreated(savedURL);
     return {
       path: this.relative(savedURL),
       contentType: image.mimeType,

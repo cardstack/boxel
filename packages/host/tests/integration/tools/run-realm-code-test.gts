@@ -2299,6 +2299,30 @@ module('Integration | tools | run-realm-code | images', function (hooks) {
     );
   });
 
+  test('realm.fs.delete removes an image the same run generated', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.images.generate({ prompt: 'A small dot', path: 'images/dot.png' });
+return {
+  deleted: await realm.fs.delete('images/dot.png'),
+  exists: await realm.fs.exists('images/dot.png'),
+};`,
+    });
+
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      deleted: { path: 'images/dot.png', deleted: true },
+      exists: false,
+    });
+    assert.deepEqual(
+      result.files.map((file) => [file.fileUrl, file.status]),
+      [[`${testRealmURL}images/dot.png`, 'deleted']],
+    );
+  });
+
   test('realm.images.generate saves the image and returns its path', async function (assert) {
     let toolService = getService('tool-service');
     let network = getService('network');
