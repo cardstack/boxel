@@ -1387,13 +1387,13 @@ export class PretUISpec extends Spec {
                     aria-hidden='true'
                   /><VisuallyHidden>Featured: a flagship component</VisuallyHidden></span>{{/if}}
             </div>
-            <div class='fit-sub' data-test-pretui-fit-sub>
+            <div class='fit-sub'>
               {{#if @model.category}}<span>{{@model.category}}</span>{{/if}}
               {{#if (isInUse @model.adoptionStatus)}}
                 <span>{{if @model.version @model.version '0.0.0'}}</span>
               {{/if}}
             </div>
-            <div class='fit-extra' data-test-pretui-fit-extra>
+            <div class='fit-extra'>
               {{#let
                 (statusLabel @model.adoptionStatus @model.implementationStatus)
                 as |label|

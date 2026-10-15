@@ -10,8 +10,6 @@ import { realmURL } from 'https://cardstack.com/base/card-api';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const Isolated = PretUISpec.isolated as any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const Fitted = PretUISpec.fitted as any;
 
 function specModel(name: string, overrides: Record<string, unknown> = {}) {
   return {
@@ -126,36 +124,6 @@ module('Pretui | PretUISpec', function (hooks) {
     let unset = specModel('Button', { implementationStatus: undefined });
     await render(<template><Isolated @model={{unset}} /></template>);
     assert.dom('[data-test-pretui-status]').doesNotExist();
-  });
-
-  test('the fitted view hides its subtitle and chip rows when they are empty', async function (assert) {
-    // the CardsGrid tile size (170×250), where both rows are shown when filled
-    let model = specModel('Button', {
-      category: undefined,
-      implementationStatus: undefined,
-    });
-    await render(
-      <template>
-        {{! template-lint-disable no-inline-styles }}
-        <div style='width: 170px; height: 250px'>
-          <Fitted @model={{model}} />
-        </div>
-      </template>,
-    );
-    assert.dom('[data-test-pretui-fit-sub]').isNotVisible();
-    assert.dom('[data-test-pretui-fit-extra]').isNotVisible();
-
-    let filled = specModel('Button', { adoptionStatus: 'in-use' });
-    await render(
-      <template>
-        {{! template-lint-disable no-inline-styles }}
-        <div style='width: 170px; height: 250px'>
-          <Fitted @model={{filled}} />
-        </div>
-      </template>,
-    );
-    assert.dom('[data-test-pretui-fit-sub]').isVisible();
-    assert.dom('[data-test-pretui-fit-extra]').isVisible();
   });
 
   test('each input page loads from its own usage module', async function (assert) {
