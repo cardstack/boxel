@@ -1,3 +1,4 @@
+import GlimmerComponent from '@glimmer/component';
 import { modifier } from 'ember-modifier';
 import { hasNothingToShow } from '@cardstack/runtime-common';
 import {
@@ -489,10 +490,71 @@ export class RunRealmCodeInput extends CardDef {
   @field roomId = contains(StringField);
 }
 
+// One file a run changed: its name, linked to the file, with what happened to
+// it and why.
+class RealmCodeFileRow extends GlimmerComponent<{
+  Args: { file: Partial<RealmCodeFileResult> };
+  Element: HTMLLIElement;
+}> {
+  <template>
+    <li class='file' data-test-realm-code-file={{@file.fileUrl}} ...attributes>
+      <span class='status'>{{@file.status}}</span>
+      <span class='file-info'>
+        <a href={{@file.fileUrl}} title={{@file.fileUrl}}>
+          {{lastPathSegment @file.fileUrl}}
+        </a>
+        {{#if @file.detail}}
+          <span class='detail' data-test-realm-code-file-detail>
+            {{@file.detail}}
+          </span>
+        {{/if}}
+      </span>
+    </li>
+    <style scoped>
+      .file {
+        display: flex;
+        gap: var(--boxel-sp-xs);
+      }
+      .status {
+        flex-shrink: 0;
+        color: var(--muted-foreground);
+        text-transform: capitalize;
+      }
+      .file-info {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        overflow-wrap: break-word;
+      }
+      .detail {
+        color: var(--muted-foreground);
+        font-size: var(--boxel-font-size-xs);
+      }
+    </style>
+  </template>
+}
+
 export class RealmCodeFileResult extends FieldDef {
   @field fileUrl = contains(StringField);
   @field status = contains(StringField);
   @field detail = contains(StringField);
+
+  static embedded = class Embedded extends Component<
+    typeof RealmCodeFileResult
+  > {
+    <template>
+      <ul class='file-list'>
+        <RealmCodeFileRow @file={{@model}} />
+      </ul>
+      <style scoped>
+        .file-list {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+        }
+      </style>
+    </template>
+  };
 }
 
 // A capture the assistant looked at, already uploaded to the room's media.
@@ -518,8 +580,145 @@ export class RealmCodeUiActionResult extends FieldDef {
   @field detail = contains(StringField);
 }
 
+// What a run changed and what it looked at, shared by the embedded and
+// isolated views.
+class RealmCodeResultBody extends GlimmerComponent<{
+  Args: {
+    model: Partial<RunRealmCodeResult>;
+    loadRoomMedia: CardContext['loadRoomMedia'] | undefined;
+  };
+}> {
+  <template>
+    <div class='realm-code-result'>
+      {{#if @model.files.length}}
+        <ul class='files'>
+          {{#each @model.files as |file|}}
+            <RealmCodeFileRow @file={{file}} />
+          {{/each}}
+        </ul>
+      {{else}}
+        <p class='no-files'>No files were changed.</p>
+      {{/if}}
+      {{#if @model.uiActions.length}}
+        <ul class='ui-actions'>
+          {{#each @model.uiActions as |uiAction|}}
+            <li
+              class='ui-action'
+              data-test-realm-code-ui-action={{uiAction.action}}
+            >
+              <span class='status'>{{uiAction.status}}</span>
+              <span>{{uiAction.action}} {{uiAction.target}}</span>
+              {{#if uiAction.detail}}
+                <span class='status'>{{uiAction.detail}}</span>
+              {{/if}}
+            </li>
+          {{/each}}
+        </ul>
+      {{/if}}
+      {{#if @model.roomChanges.length}}
+        <ul class='room-changes'>
+          {{#each @model.roomChanges as |change|}}
+            <li data-test-realm-code-room-change>{{change}}</li>
+          {{/each}}
+        </ul>
+      {{/if}}
+      {{#if @model.shownCard}}
+        <p class='shown-card' data-test-realm-code-shown-card>
+          Opened
+          <a href={{@model.shownCard}}>{{@model.shownCard}}</a>
+        </p>
+      {{/if}}
+      {{#if @model.showError}}
+        <p class='show-error' data-test-realm-code-show-error>
+          {{@model.showError}}
+        </p>
+      {{/if}}
+      {{#if @model.captures.length}}
+        <div class='captures'>
+          {{#each @model.captures as |capture|}}
+            <img
+              class='capture'
+              alt={{capture.name}}
+              title={{capture.name}}
+              {{roomMediaSrc capture.url @loadRoomMedia}}
+              data-test-realm-code-capture
+            />
+          {{/each}}
+        </div>
+      {{/if}}
+    </div>
+    <style scoped>
+      .realm-code-result {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-sm);
+        font-size: var(--boxel-font-size-sm);
+      }
+      .files,
+      .room-changes,
+      .ui-actions {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xxxs);
+      }
+      .ui-action {
+        display: flex;
+        gap: var(--boxel-sp-xs);
+        min-width: 0;
+        overflow-wrap: break-word;
+      }
+      .status {
+        flex-shrink: 0;
+        color: var(--muted-foreground);
+        text-transform: capitalize;
+      }
+      .no-files {
+        color: var(--muted-foreground);
+      }
+      .shown-card,
+      .show-error {
+        overflow-wrap: break-word;
+      }
+      .show-error {
+        color: var(--destructive-ink);
+      }
+      .captures {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-xs);
+      }
+      .capture {
+        max-width: 8rem;
+        max-height: 8rem;
+        object-fit: contain;
+        border: 1px solid var(--border);
+        border-radius: var(--boxel-border-radius);
+      }
+    </style>
+  </template>
+}
+
 export class RunRealmCodeResult extends CardDef {
   static displayName = 'Realm Code Result';
+
+  // What the run did to files, such as "3 files saved, 1 deleted".
+  @field cardTitle = contains(StringField, {
+    computeVia: function (this: RunRealmCodeResult) {
+      let count = (status: string) =>
+        (this.files ?? []).filter((file) => file.status === status).length;
+      let parts = [
+        ['saved', count('saved')],
+        ['deleted', count('deleted')],
+      ]
+        .filter(([, n]) => n)
+        .map(([status, n]) => `${n} ${n === 1 ? 'file' : 'files'} ${status}`);
+      return parts.length ? parts.join(', ') : 'No files changed';
+    },
+  });
 
   @field files = containsMany(RealmCodeFileResult);
   @field scriptResult = contains(StringField);
@@ -563,119 +762,55 @@ export class RunRealmCodeResult extends CardDef {
     typeof RunRealmCodeResult
   > {
     <template>
-      <div class='realm-code-result'>
-        {{#if @model.files.length}}
-          <ul class='files'>
-            {{#each @model.files as |file|}}
-              <li class='file' data-test-realm-code-file={{file.fileUrl}}>
-                <span class='status'>{{file.status}}</span>
-                <a href={{file.fileUrl}}>{{file.fileUrl}}</a>
-              </li>
-            {{/each}}
-          </ul>
-        {{else}}
-          <p class='no-files'>No files were changed.</p>
+      <RealmCodeResultBody
+        @model={{@model}}
+        @loadRoomMedia={{@context.loadRoomMedia}}
+      />
+    </template>
+  };
+
+  // The isolated view adds the script's own result, for someone inspecting
+  // the run.
+  static isolated = class Isolated extends Component<
+    typeof RunRealmCodeResult
+  > {
+    <template>
+      <section class='realm-code-result-isolated'>
+        <RealmCodeResultBody
+          @model={{@model}}
+          @loadRoomMedia={{@context.loadRoomMedia}}
+        />
+        {{#if @model.scriptResult}}
+          <section class='script-result' data-test-realm-code-script-result>
+            <h3>Script result</h3>
+            <pre>{{@model.scriptResult}}</pre>
+          </section>
         {{/if}}
-        {{#if @model.uiActions.length}}
-          <ul class='ui-actions'>
-            {{#each @model.uiActions as |uiAction|}}
-              <li
-                class='ui-action'
-                data-test-realm-code-ui-action={{uiAction.action}}
-              >
-                <span class='status'>{{uiAction.status}}</span>
-                <span>{{uiAction.action}} {{uiAction.target}}</span>
-                {{#if uiAction.detail}}
-                  <span class='status'>{{uiAction.detail}}</span>
-                {{/if}}
-              </li>
-            {{/each}}
-          </ul>
-        {{/if}}
-        {{#if @model.roomChanges.length}}
-          <ul class='room-changes'>
-            {{#each @model.roomChanges as |change|}}
-              <li data-test-realm-code-room-change>{{change}}</li>
-            {{/each}}
-          </ul>
-        {{/if}}
-        {{#if @model.shownCard}}
-          <p class='shown-card' data-test-realm-code-shown-card>
-            Opened
-            <a href={{@model.shownCard}}>{{@model.shownCard}}</a>
-          </p>
-        {{/if}}
-        {{#if @model.showError}}
-          <p class='show-error' data-test-realm-code-show-error>
-            {{@model.showError}}
-          </p>
-        {{/if}}
-        {{#if @model.captures.length}}
-          <div class='captures'>
-            {{#each @model.captures as |capture|}}
-              <img
-                class='capture'
-                alt={{capture.name}}
-                title={{capture.name}}
-                {{roomMediaSrc capture.url @context.loadRoomMedia}}
-                data-test-realm-code-capture
-              />
-            {{/each}}
-          </div>
-        {{/if}}
-      </div>
+      </section>
       <style scoped>
-        .realm-code-result {
+        .realm-code-result-isolated {
+          height: 100%;
+          overflow-y: auto;
+          display: flex;
+          flex-direction: column;
+          gap: var(--boxel-sp);
+          padding: var(--boxel-sp);
+        }
+        .script-result {
           display: flex;
           flex-direction: column;
           gap: var(--boxel-sp-xs);
+        }
+        pre {
+          margin: 0;
           padding: var(--boxel-sp-sm);
-          font: var(--boxel-font-sm);
-        }
-        .files,
-        .room-changes,
-        .ui-actions {
-          margin: 0;
-          padding: 0;
-          list-style: none;
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp-xxxs);
-        }
-        .file,
-        .ui-action {
-          display: flex;
-          gap: var(--boxel-sp-xs);
-          word-break: break-all;
-        }
-        .status {
-          flex-shrink: 0;
-          color: var(--boxel-450);
-          text-transform: capitalize;
-        }
-        .no-files {
-          margin: 0;
-          color: var(--boxel-450);
-        }
-        .shown-card,
-        .show-error {
-          margin: 0;
-          word-break: break-all;
-        }
-        .show-error {
-          color: var(--boxel-error-200);
-        }
-        .captures {
-          display: flex;
-          flex-wrap: wrap;
-          gap: var(--boxel-sp-xs);
-        }
-        .capture {
-          max-width: 8rem;
-          max-height: 8rem;
-          object-fit: contain;
-          border: 1px solid var(--boxel-200);
+          background-color: var(--muted);
+          color: var(--foreground);
           border-radius: var(--boxel-border-radius);
+          font-family: var(--font-mono);
+          font-size: var(--boxel-font-size-xs);
+          white-space: pre-wrap;
+          overflow-wrap: break-word;
         }
       </style>
     </template>

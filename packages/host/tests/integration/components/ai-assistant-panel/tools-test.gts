@@ -4273,7 +4273,9 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       requestId: 'run-realm-code-result',
       toolName: 'run-realm-code',
       resultDoc: baseCommandResultDoc('RunRealmCodeResult', {
-        files: [{ fileUrl: savedFile, status: 'saved' }],
+        files: [
+          { fileUrl: savedFile, status: 'saved', detail: 'Source saved.' },
+        ],
         scriptResult: 'done',
         captures: [
           {
@@ -4288,7 +4290,8 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     await waitFor('[data-test-realm-code-capture][src^="blob:"]');
     assert
       .dom(`[data-test-realm-code-file="${savedFile}"]`)
-      .containsText('saved', 'the saved file is listed with its status');
+      .containsText('saved', 'the saved file is listed with its status')
+      .containsText('Source saved.', 'the saved file shows its detail');
     assert
       .dom('[data-test-boxel-tool-call-result]')
       .doesNotContainText(
