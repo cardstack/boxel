@@ -258,7 +258,6 @@ export function installFlakyDepFetchPatch(opts: {
   let originalGetPage = PagePool.prototype.getPage;
   let patchedPages = new WeakSet<object>();
   let sessions: any[] = [];
-  let bypassedPages: any[] = [];
   let pageListeners: { page: any; event: string; listener: any }[] = [];
   let remainingFailures = opts.failuresBeforeSuccess;
   let failuresInjected = 0;
@@ -319,26 +318,47 @@ export function installFlakyDepFetchPatch(opts: {
       });
       observe(page, 'console', (message: any) => {
         try {
-          if (message.type() === 'error' || message.type() === 'warn') {
-            record(`CONSOLE ${message.type()}: ${message.text()}`);
-          }
+          record(`CONSOLE ${message.type()}: ${message.text()}`);
         } catch {
           // ignore — the message outlived its page
         }
+      });
+      // A fetch Chrome reports as net::ERR_ABORTED was cancelled by the page
+      // (an abort signal) or by a navigation of its frame. These events tell
+      // the two apart.
+      observe(page, 'request', (request: any) => {
+        try {
+          let url: string = request.url();
+          if (isNoise(url)) {
+            return;
+          }
+          let chain = request
+            .redirectChain()
+            .map((r: any) => r.url())
+            .join(' -> ');
+          record(
+            `REQUEST ${request.method()} ${url} (${request.resourceType()}${
+              chain ? `, redirected from ${chain}` : ''
+            })`,
+          );
+        } catch {
+          record('REQUEST (request could not be inspected)');
+        }
+      });
+      observe(page, 'framenavigated', (frame: any) => {
+        try {
+          record(`NAVIGATED ${frame.url()}`);
+        } catch {
+          record('NAVIGATED (frame could not be inspected)');
+        }
+      });
+      observe(page, 'pageerror', (error: any) => {
+        record(`PAGEERROR ${error?.message ?? String(error)}`);
       });
 
       // Fail fast: a session that can't enable interception would leave the
       // test asserting on a fetch it never touched, so let the error
       // propagate and crash the test at setup with a clear stack instead.
-      // The host registers its auth service worker in the shared browser, so
-      // after earlier test files a pooled tab can be controlled by it. With
-      // the worker in the path and this session intercepting, Chrome aborts
-      // the card document fetch after its redirect (net::ERR_ABORTED), and
-      // the render fails before it fetches the module this patch targets.
-      // Bypassing the worker keeps the tab's fetches on the path intercepted
-      // below.
-      await page.setBypassServiceWorker(true);
-      bypassedPages.push(page);
       let session = await page.createCDPSession();
       sessions.push(session);
       session.on('Fetch.requestPaused', (event: any) => {
@@ -418,14 +438,6 @@ export function installFlakyDepFetchPatch(opts: {
         }
       }
       sessions = [];
-      for (let page of bypassedPages) {
-        try {
-          await page.setBypassServiceWorker(false);
-        } catch {
-          // best-effort: page may already be closed
-        }
-      }
-      bypassedPages = [];
     },
   };
 }
