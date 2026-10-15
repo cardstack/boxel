@@ -1,13 +1,12 @@
 import type Koa from 'koa';
 import { randomBytes } from 'crypto';
 import {
-  dbExpression,
   param,
   query,
   SupportedMimeType,
-  type PgPrimitive,
   uuidv4,
 } from '@cardstack/runtime-common';
+import { validate as uuidValidate } from 'uuid';
 import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
 import {
   fetchRequestFromContext,
@@ -19,6 +18,11 @@ import {
 } from '../middleware/index.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
+import {
+  INCOMING_WEBHOOK_ATTRIBUTE_COLUMNS,
+  insertIncomingWebhook,
+  rotateIncomingWebhookSecret,
+} from '../lib/incoming-webhook-secrets.ts';
 
 const SUPPORTED_VERIFICATION_TYPES = ['HMAC_SHA256_HEADER'] as const;
 
@@ -36,8 +40,36 @@ function generateWebhookPath(): string {
   return `whk_${randomBytes(16).toString('hex')}`;
 }
 
-function generateSigningSecret(): string {
-  return randomBytes(32).toString('hex');
+// A webhook as the API reports it. The signing secret appears only in the
+// response that issues it, when the webhook is created or its secret rotated;
+// every other read reports only when the current secret was issued.
+function incomingWebhookResource(
+  row: Record<string, any>,
+  signingSecret?: string,
+) {
+  return {
+    type: 'incoming-webhook',
+    id: row.id,
+    attributes: {
+      username: row.username,
+      webhookPath: row.webhook_path,
+      verificationType: row.verification_type,
+      verificationConfig: row.verification_config,
+      ...(signingSecret === undefined ? {} : { signingSecret }),
+      signingSecretCreatedAt: row.signing_secret_created_at,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    },
+  };
+}
+
+function incomingWebhookResponse(data: unknown, status: number): Response {
+  return new Response(JSON.stringify({ data }, null, 2), {
+    status,
+    headers: {
+      'content-type': SupportedMimeType.JSONAPI,
+    },
+  });
 }
 
 export function handleCreateIncomingWebhookRequest({
@@ -119,42 +151,19 @@ export function handleCreateIncomingWebhookRequest({
       }
     }
 
-    let webhookPath = generateWebhookPath();
-    let signingSecret = generateSigningSecret();
-
-    let rows;
+    let created;
     try {
-      rows = await query(dbAdapter, [
-        `INSERT INTO incoming_webhooks`,
-        `(id, username, webhook_path, verification_type, verification_config, signing_secret, created_at, updated_at) VALUES (`,
-        param(uuidv4()),
-        `,`,
-        param(createdBy),
-        `,`,
-        param(webhookPath),
-        `,`,
-        param(verificationType),
-        `,`,
-        param(verificationConfig as unknown as PgPrimitive),
-        `,`,
-        param(signingSecret),
-        `,`,
-        dbExpression({ pg: 'NOW()', sqlite: 'CURRENT_TIMESTAMP' }),
-        `,`,
-        dbExpression({ pg: 'NOW()', sqlite: 'CURRENT_TIMESTAMP' }),
-        `) `,
-        `RETURNING id, username, webhook_path, verification_type, verification_config, signing_secret, created_at, updated_at`,
-      ]);
-    } catch (error) {
-      await sendResponseForSystemError(
-        ctxt,
-        'failed to create incoming webhook',
+      created = await insertIncomingWebhook(
+        dbAdapter,
+        {
+          username: createdBy,
+          webhookPath: generateWebhookPath(),
+          verificationType,
+          verificationConfig,
+        },
+        { id: uuidv4() },
       );
-      return;
-    }
-
-    let row = rows[0];
-    if (!row) {
+    } catch (error) {
       await sendResponseForSystemError(
         ctxt,
         'failed to create incoming webhook',
@@ -164,32 +173,9 @@ export function handleCreateIncomingWebhookRequest({
 
     await setContextResponse(
       ctxt,
-      new Response(
-        JSON.stringify(
-          {
-            data: {
-              type: 'incoming-webhook',
-              id: row.id,
-              attributes: {
-                username: row.username,
-                webhookPath: row.webhook_path,
-                verificationType: row.verification_type,
-                verificationConfig: row.verification_config,
-                signingSecret: row.signing_secret,
-                createdAt: row.created_at,
-                updatedAt: row.updated_at,
-              },
-            },
-          },
-          null,
-          2,
-        ),
-        {
-          status: 201,
-          headers: {
-            'content-type': SupportedMimeType.JSONAPI,
-          },
-        },
+      incomingWebhookResponse(
+        incomingWebhookResource(created.row, created.signingSecret),
+        201,
       ),
     );
   };
@@ -217,11 +203,11 @@ export function handleListIncomingWebhooksRequest({
     let rows;
     try {
       rows = await query(dbAdapter, [
-        `SELECT iw.id, iw.username, iw.webhook_path, iw.verification_type, iw.verification_config, iw.signing_secret, iw.created_at, iw.updated_at`,
-        `FROM incoming_webhooks iw`,
-        `WHERE iw.username = `,
+        `SELECT ${INCOMING_WEBHOOK_ATTRIBUTE_COLUMNS}`,
+        `FROM incoming_webhooks`,
+        `WHERE username = `,
         param(username),
-        `ORDER BY iw.created_at ASC`,
+        `ORDER BY created_at ASC`,
       ]);
     } catch (error) {
       await sendResponseForSystemError(
@@ -233,32 +219,9 @@ export function handleListIncomingWebhooksRequest({
 
     await setContextResponse(
       ctxt,
-      new Response(
-        JSON.stringify(
-          {
-            data: rows.map((row: any) => ({
-              type: 'incoming-webhook',
-              id: row.id,
-              attributes: {
-                username: row.username,
-                webhookPath: row.webhook_path,
-                verificationType: row.verification_type,
-                verificationConfig: row.verification_config,
-                signingSecret: row.signing_secret,
-                createdAt: row.created_at,
-                updatedAt: row.updated_at,
-              },
-            })),
-          },
-          null,
-          2,
-        ),
-        {
-          status: 200,
-          headers: {
-            'content-type': SupportedMimeType.JSONAPI,
-          },
-        },
+      incomingWebhookResponse(
+        rows.map((row) => incomingWebhookResource(row)),
+        200,
       ),
     );
   };
@@ -340,6 +303,108 @@ export function handleDeleteIncomingWebhookRequest({
     }
 
     await setContextResponse(ctxt, new Response(null, { status: 204 }));
+  };
+}
+
+// Issues a new signing secret for one of the user's webhooks and returns it
+// in the response, the one time it is shown. A signature made with the old
+// secret stops verifying as soon as this responds.
+export function handleRotateIncomingWebhookSecretRequest({
+  dbAdapter,
+}: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+  return async function (ctxt: Koa.Context, _next: Koa.Next) {
+    let token = ctxt.state.token as RealmServerTokenClaim;
+    if (!token) {
+      await sendResponseForSystemError(
+        ctxt,
+        'token is required to rotate an incoming webhook signing secret',
+      );
+      return;
+    }
+
+    let { user: requestingUserId } = token;
+    if (!(await getUserByMatrixUserId(dbAdapter, requestingUserId))) {
+      await sendResponseForNotFound(ctxt, 'user is not found');
+      return;
+    }
+
+    let request = await fetchRequestFromContext(ctxt);
+    let rawBody = await request.text();
+    let json: Record<string, any>;
+    try {
+      json = JSON.parse(rawBody);
+    } catch (_error) {
+      await sendResponseForBadRequest(
+        ctxt,
+        'Request body is not valid JSON-API - invalid JSON',
+      );
+      return;
+    }
+
+    let incomingWebhookId = json?.data?.id;
+    if (typeof incomingWebhookId !== 'string' || !incomingWebhookId.trim()) {
+      await sendResponseForBadRequest(ctxt, 'incomingWebhookId is required');
+      return;
+    }
+    if (!uuidValidate(incomingWebhookId)) {
+      await sendResponseForBadRequest(ctxt, 'incomingWebhookId must be a UUID');
+      return;
+    }
+
+    let webhookRows;
+    try {
+      webhookRows = await query(dbAdapter, [
+        `SELECT username FROM incoming_webhooks WHERE id = `,
+        param(incomingWebhookId),
+        ` LIMIT 1`,
+      ]);
+    } catch (error) {
+      await sendResponseForSystemError(
+        ctxt,
+        'failed to lookup incoming webhook',
+      );
+      return;
+    }
+
+    let webhookUsername = webhookRows[0]?.username;
+    if (!webhookUsername) {
+      await sendResponseForNotFound(ctxt, 'incoming webhook not found');
+      return;
+    }
+    if (webhookUsername !== requestingUserId) {
+      await sendResponseForForbiddenRequest(
+        ctxt,
+        'incoming webhook belongs to a different user',
+      );
+      return;
+    }
+
+    let rotated;
+    try {
+      rotated = await rotateIncomingWebhookSecret(dbAdapter, {
+        id: incomingWebhookId,
+        username: requestingUserId,
+      });
+    } catch (error) {
+      await sendResponseForSystemError(
+        ctxt,
+        'failed to rotate incoming webhook signing secret',
+      );
+      return;
+    }
+    if (!rotated) {
+      // Deleted between the lookup and the update.
+      await sendResponseForNotFound(ctxt, 'incoming webhook not found');
+      return;
+    }
+
+    await setContextResponse(
+      ctxt,
+      incomingWebhookResponse(
+        incomingWebhookResource(rotated.row, rotated.signingSecret),
+        200,
+      ),
+    );
   };
 }
 

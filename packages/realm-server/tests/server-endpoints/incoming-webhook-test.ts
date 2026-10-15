@@ -2,13 +2,79 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import { createJWT as createRealmServerJWT } from '../../utils/jwt.ts';
-import { realmSecretSeed, insertUser } from '../helpers/index.ts';
+import { createHmac } from 'crypto';
+import {
+  realmSecretSeed,
+  insertUser,
+  setupSecretsKeyring,
+} from '../helpers/index.ts';
 import { param, query, uuidv4 } from '@cardstack/runtime-common';
 import { setupServerEndpointsTest } from './helpers.ts';
+import {
+  INCOMING_WEBHOOK_SECRET_COLUMNS,
+  incomingWebhookSecretBinding,
+} from '../../lib/incoming-webhook-secrets.ts';
+import {
+  sealedFromColumns,
+  secretsKeyring,
+} from '../../lib/secrets-at-rest/index.ts';
 
 module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module('Incoming Webhook Endpoints', function (hooks) {
     let context = setupServerEndpointsTest(hooks);
+    setupSecretsKeyring(hooks);
+
+    function jwtFor(user: string) {
+      return `Bearer ${createRealmServerJWT(
+        { user, sessionRoom: 'session-room-test' },
+        realmSecretSeed,
+      )}`;
+    }
+
+    async function createWebhook(user: string) {
+      let response = await context.request
+        .post('/_incoming-webhooks')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set('Authorization', jwtFor(user))
+        .send({
+          data: {
+            type: 'incoming-webhook',
+            attributes: {
+              verificationType: 'HMAC_SHA256_HEADER',
+              verificationConfig: {
+                header: 'X-Hub-Signature-256',
+                encoding: 'hex',
+              },
+            },
+          },
+        });
+      return response.body.data;
+    }
+
+    function rotate(user: string, id: string) {
+      return context.request
+        .post('/_incoming-webhooks/rotate-signing-secret')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set('Authorization', jwtFor(user))
+        .send({ data: { type: 'incoming-webhook', id } });
+    }
+
+    function deliver(webhookPath: string, signingSecret: string) {
+      let payload = JSON.stringify({ event: 'push' });
+      return context.request
+        .post(`/_webhooks/${webhookPath}`)
+        .set('Content-Type', 'application/json')
+        .set(
+          'X-Hub-Signature-256',
+          'sha256=' +
+            createHmac('sha256', signingSecret)
+              .update(payload, 'utf8')
+              .digest('hex'),
+        )
+        .send(payload);
+    }
 
     test('requires auth to create incoming webhook', async function (assert) {
       let response = await context.request.post('/_incoming-webhooks').send({});
@@ -98,6 +164,10 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         'signingSecret is 64 hex chars',
       );
       assert.ok(
+        response.body.data.attributes.signingSecretCreatedAt,
+        'response includes when the secret was issued',
+      );
+      assert.ok(
         response.body.data.attributes.createdAt,
         'response includes createdAt',
       );
@@ -118,6 +188,21 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       );
       assert.ok(rows[0].webhook_path, 'webhook_path is persisted');
       assert.ok(rows[0].signing_secret, 'signing_secret is persisted');
+
+      let [secretRow] = await context.dbAdapter.execute(
+        `SELECT id, username, ${INCOMING_WEBHOOK_SECRET_COLUMNS} FROM incoming_webhooks`,
+      );
+      assert.strictEqual(
+        secretsKeyring().open(
+          sealedFromColumns(secretRow, 'signing_secret')!,
+          incomingWebhookSecretBinding({
+            id: String(secretRow.id),
+            username: matrixUserId,
+          }),
+        ),
+        response.body.data.attributes.signingSecret,
+        'the secret is sealed under its field, its owner and its id',
+      );
     });
 
     test('rejects unsupported verificationType', async function (assert) {
@@ -299,6 +384,164 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         matrixUserId,
         'returns webhook for authenticated user',
       );
+      assert.false(
+        'signingSecret' in response.body.data[0].attributes,
+        'a read never returns the secret',
+      );
+      assert.ok(
+        response.body.data[0].attributes.signingSecretCreatedAt,
+        'a read reports when the secret was issued',
+      );
+    });
+
+    test('a webhook created through the API is listed without its secret', async function (assert) {
+      let matrixUserId = '@user:localhost';
+      await insertUser(
+        context.dbAdapter,
+        matrixUserId,
+        'cus_123',
+        'user@example.com',
+      );
+      let created = await createWebhook(matrixUserId);
+
+      let response = await context.request
+        .get('/_incoming-webhooks')
+        .set('Authorization', jwtFor(matrixUserId));
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let [listed] = response.body.data;
+      assert.strictEqual(listed.id, created.id);
+      assert.false('signingSecret' in listed.attributes);
+      assert.strictEqual(
+        listed.attributes.signingSecretCreatedAt,
+        created.attributes.signingSecretCreatedAt,
+      );
+      assert.false(
+        JSON.stringify(response.body).includes(
+          created.attributes.signingSecret,
+        ),
+        'the secret appears nowhere in the response',
+      );
+    });
+
+    test('rotating a signing secret returns a new one once, and the old one stops verifying', async function (assert) {
+      let matrixUserId = '@user:localhost';
+      await insertUser(
+        context.dbAdapter,
+        matrixUserId,
+        'cus_123',
+        'user@example.com',
+      );
+      let created = await createWebhook(matrixUserId);
+      let { webhookPath, signingSecret: oldSecret } = created.attributes;
+      assert.strictEqual(
+        (await deliver(webhookPath, oldSecret)).status,
+        200,
+        'the issued secret verifies',
+      );
+
+      let response = await rotate(matrixUserId, created.id);
+
+      assert.strictEqual(response.status, 200, 'HTTP 200 status');
+      let rotated = response.body.data;
+      assert.strictEqual(rotated.id, created.id);
+      assert.strictEqual(rotated.attributes.webhookPath, webhookPath);
+      let newSecret = rotated.attributes.signingSecret;
+      assert.strictEqual(newSecret.length, 64, 'a new 64-hex-char secret');
+      assert.notStrictEqual(newSecret, oldSecret);
+      assert.ok(rotated.attributes.signingSecretCreatedAt);
+
+      assert.strictEqual(
+        (await deliver(webhookPath, oldSecret)).status,
+        401,
+        'the old secret stops verifying',
+      );
+      assert.strictEqual(
+        (await deliver(webhookPath, newSecret)).status,
+        200,
+        'the new secret verifies',
+      );
+
+      let listed = await context.request
+        .get('/_incoming-webhooks')
+        .set('Authorization', jwtFor(matrixUserId));
+      assert.false('signingSecret' in listed.body.data[0].attributes);
+      assert.strictEqual(
+        listed.body.data[0].attributes.signingSecretCreatedAt,
+        rotated.attributes.signingSecretCreatedAt,
+        'reads report when the rotated secret was issued',
+      );
+
+      let [row] = await context.dbAdapter.execute(
+        `SELECT id, username, ${INCOMING_WEBHOOK_SECRET_COLUMNS} FROM incoming_webhooks`,
+      );
+      assert.strictEqual(row.signing_secret, newSecret, 'plain text in step');
+      assert.strictEqual(
+        secretsKeyring().open(
+          sealedFromColumns(row, 'signing_secret')!,
+          incomingWebhookSecretBinding({
+            id: created.id,
+            username: matrixUserId,
+          }),
+        ),
+        newSecret,
+        'the new secret is sealed',
+      );
+    });
+
+    test('requires auth to rotate a signing secret', async function (assert) {
+      let response = await context.request
+        .post('/_incoming-webhooks/rotate-signing-secret')
+        .send({ data: { type: 'incoming-webhook', id: uuidv4() } });
+      assert.strictEqual(response.status, 401, 'HTTP 401 status');
+    });
+
+    test("rejects rotating another user's signing secret", async function (assert) {
+      let matrixUserId = '@user:localhost';
+      let otherMatrixUserId = '@other-user:localhost';
+      await insertUser(
+        context.dbAdapter,
+        matrixUserId,
+        'cus_123',
+        'user@example.com',
+      );
+      await insertUser(
+        context.dbAdapter,
+        otherMatrixUserId,
+        'cus_124',
+        'other@example.com',
+      );
+      let created = await createWebhook(matrixUserId);
+
+      let response = await rotate(otherMatrixUserId, created.id);
+
+      assert.strictEqual(response.status, 403, 'HTTP 403 status');
+      assert.strictEqual(
+        (
+          await deliver(
+            created.attributes.webhookPath,
+            created.attributes.signingSecret,
+          )
+        ).status,
+        200,
+        "the owner's secret still verifies",
+      );
+    });
+
+    test('rotating the secret of a webhook that does not exist is not found', async function (assert) {
+      let matrixUserId = '@user:localhost';
+      await insertUser(
+        context.dbAdapter,
+        matrixUserId,
+        'cus_123',
+        'user@example.com',
+      );
+
+      let response = await rotate(matrixUserId, uuidv4());
+      assert.strictEqual(response.status, 404, 'HTTP 404 status');
+
+      let invalid = await rotate(matrixUserId, 'not-a-uuid');
+      assert.strictEqual(invalid.status, 400, 'HTTP 400 for a non-UUID id');
     });
 
     test('can delete own incoming webhook', async function (assert) {

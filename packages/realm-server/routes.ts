@@ -83,6 +83,7 @@ import {
   handleCreateIncomingWebhookRequest,
   handleListIncomingWebhooksRequest,
   handleDeleteIncomingWebhookRequest,
+  handleRotateIncomingWebhookSecretRequest,
 } from './handlers/handle-incoming-webhook.ts';
 import {
   handleCreateWebhookCommandRequest,
@@ -544,6 +545,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_incoming-webhooks',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleDeleteIncomingWebhookRequest(args),
+  );
+  router.post(
+    '/_incoming-webhooks/rotate-signing-secret',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleRotateIncomingWebhookSecretRequest(args),
   );
   router.post(
     '/_webhook-commands',
