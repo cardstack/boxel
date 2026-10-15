@@ -46,7 +46,7 @@ class Fitted extends Component<typeof GuideStudy> {
         font-size: 9px;
         letter-spacing: 0.16em;
         text-transform: uppercase;
-        color: var(--ember-hot);
+        color: var(--eyebrow);
       }
 
       .fitted-title {

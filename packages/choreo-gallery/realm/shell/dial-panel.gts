@@ -398,7 +398,7 @@ export class DialPanel extends Component<Signature> {
       }
 
       .dial-tune-x:hover {
-        color: var(--ember);
+        color: var(--ember-ink);
         opacity: 1;
       }
 
