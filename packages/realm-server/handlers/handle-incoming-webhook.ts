@@ -227,72 +227,103 @@ export function handleListIncomingWebhooksRequest({
   };
 }
 
+// The checks a request naming one of the user's webhooks passes before its
+// handler acts on it: an authenticated, known user, a JSON body whose
+// `data.id` is a UUID, and a webhook that, if it exists, belongs to that user.
+// Answers the request and returns undefined when a check fails. `exists` is
+// false when no webhook has that id, which each caller answers in its own way.
+async function checkIncomingWebhookRequest(
+  ctxt: Koa.Context,
+  dbAdapter: CreateRoutesArgs['dbAdapter'],
+  action: string,
+): Promise<
+  | { requestingUserId: string; incomingWebhookId: string; exists: boolean }
+  | undefined
+> {
+  let token = ctxt.state.token as RealmServerTokenClaim;
+  if (!token) {
+    await sendResponseForSystemError(ctxt, `token is required to ${action}`);
+    return undefined;
+  }
+
+  let { user: requestingUserId } = token;
+  if (!(await getUserByMatrixUserId(dbAdapter, requestingUserId))) {
+    await sendResponseForNotFound(ctxt, 'user is not found');
+    return undefined;
+  }
+
+  let request = await fetchRequestFromContext(ctxt);
+  let rawBody = await request.text();
+  let json: Record<string, any>;
+  try {
+    json = JSON.parse(rawBody);
+  } catch (_error) {
+    await sendResponseForBadRequest(
+      ctxt,
+      'Request body is not valid JSON-API - invalid JSON',
+    );
+    return undefined;
+  }
+
+  let incomingWebhookId = json?.data?.id;
+  if (typeof incomingWebhookId !== 'string' || !incomingWebhookId.trim()) {
+    await sendResponseForBadRequest(ctxt, 'incomingWebhookId is required');
+    return undefined;
+  }
+  // The id column is a Postgres uuid, so an id of any other shape would fail
+  // the lookup's cast rather than match no row.
+  if (!uuidValidate(incomingWebhookId)) {
+    await sendResponseForBadRequest(ctxt, 'incomingWebhookId must be a UUID');
+    return undefined;
+  }
+
+  let webhookRows;
+  try {
+    webhookRows = await query(dbAdapter, [
+      `SELECT username FROM incoming_webhooks WHERE id = `,
+      param(incomingWebhookId),
+      ` LIMIT 1`,
+    ]);
+  } catch (error) {
+    await sendResponseForSystemError(ctxt, 'failed to lookup incoming webhook');
+    return undefined;
+  }
+
+  let webhookUsername = webhookRows[0]?.username;
+  if (webhookUsername && webhookUsername !== requestingUserId) {
+    await sendResponseForForbiddenRequest(
+      ctxt,
+      'incoming webhook belongs to a different user',
+    );
+    return undefined;
+  }
+
+  return {
+    requestingUserId,
+    incomingWebhookId,
+    exists: Boolean(webhookUsername),
+  };
+}
+
+// Deleting a webhook that does not exist succeeds, so a retried delete
+// answers the same as the first.
 export function handleDeleteIncomingWebhookRequest({
   dbAdapter,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
-    let token = ctxt.state.token as RealmServerTokenClaim;
-    if (!token) {
-      await sendResponseForSystemError(
-        ctxt,
-        'token is required to delete incoming webhook',
-      );
-      return;
-    }
-
-    let { user: requestingUserId } = token;
-    if (!(await getUserByMatrixUserId(dbAdapter, requestingUserId))) {
-      await sendResponseForNotFound(ctxt, 'user is not found');
-      return;
-    }
-
-    let request = await fetchRequestFromContext(ctxt);
-    let rawBody = await request.text();
-    let json: Record<string, any>;
-    try {
-      json = JSON.parse(rawBody);
-    } catch (_error) {
-      await sendResponseForBadRequest(
-        ctxt,
-        'Request body is not valid JSON-API - invalid JSON',
-      );
-      return;
-    }
-
-    let incomingWebhookId = json?.data?.id;
-    if (typeof incomingWebhookId !== 'string' || !incomingWebhookId.trim()) {
-      await sendResponseForBadRequest(ctxt, 'incomingWebhookId is required');
-      return;
-    }
-
-    let webhookRows;
-    try {
-      webhookRows = await query(dbAdapter, [
-        `SELECT username FROM incoming_webhooks WHERE id = `,
-        param(incomingWebhookId),
-        ` LIMIT 1`,
-      ]);
-    } catch (error) {
-      await sendResponseForSystemError(
-        ctxt,
-        'failed to lookup incoming webhook',
-      );
-      return;
-    }
-
-    let webhookUsername = webhookRows[0]?.username;
-    if (webhookUsername && webhookUsername !== requestingUserId) {
-      await sendResponseForForbiddenRequest(
-        ctxt,
-        'incoming webhook belongs to a different user',
-      );
+    let checked = await checkIncomingWebhookRequest(
+      ctxt,
+      dbAdapter,
+      'delete incoming webhook',
+    );
+    if (!checked) {
       return;
     }
 
     try {
       await query(dbAdapter, [
         `DELETE FROM incoming_webhooks WHERE id = `,
-        param(incomingWebhookId),
+        param(checked.incomingWebhookId),
       ]);
     } catch (error) {
       await sendResponseForSystemError(
@@ -313,77 +344,24 @@ export function handleRotateIncomingWebhookSecretRequest({
   dbAdapter,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
-    let token = ctxt.state.token as RealmServerTokenClaim;
-    if (!token) {
-      await sendResponseForSystemError(
-        ctxt,
-        'token is required to rotate an incoming webhook signing secret',
-      );
+    let checked = await checkIncomingWebhookRequest(
+      ctxt,
+      dbAdapter,
+      'rotate an incoming webhook signing secret',
+    );
+    if (!checked) {
       return;
     }
-
-    let { user: requestingUserId } = token;
-    if (!(await getUserByMatrixUserId(dbAdapter, requestingUserId))) {
-      await sendResponseForNotFound(ctxt, 'user is not found');
-      return;
-    }
-
-    let request = await fetchRequestFromContext(ctxt);
-    let rawBody = await request.text();
-    let json: Record<string, any>;
-    try {
-      json = JSON.parse(rawBody);
-    } catch (_error) {
-      await sendResponseForBadRequest(
-        ctxt,
-        'Request body is not valid JSON-API - invalid JSON',
-      );
-      return;
-    }
-
-    let incomingWebhookId = json?.data?.id;
-    if (typeof incomingWebhookId !== 'string' || !incomingWebhookId.trim()) {
-      await sendResponseForBadRequest(ctxt, 'incomingWebhookId is required');
-      return;
-    }
-    if (!uuidValidate(incomingWebhookId)) {
-      await sendResponseForBadRequest(ctxt, 'incomingWebhookId must be a UUID');
-      return;
-    }
-
-    let webhookRows;
-    try {
-      webhookRows = await query(dbAdapter, [
-        `SELECT username FROM incoming_webhooks WHERE id = `,
-        param(incomingWebhookId),
-        ` LIMIT 1`,
-      ]);
-    } catch (error) {
-      await sendResponseForSystemError(
-        ctxt,
-        'failed to lookup incoming webhook',
-      );
-      return;
-    }
-
-    let webhookUsername = webhookRows[0]?.username;
-    if (!webhookUsername) {
+    if (!checked.exists) {
       await sendResponseForNotFound(ctxt, 'incoming webhook not found');
-      return;
-    }
-    if (webhookUsername !== requestingUserId) {
-      await sendResponseForForbiddenRequest(
-        ctxt,
-        'incoming webhook belongs to a different user',
-      );
       return;
     }
 
     let rotated;
     try {
       rotated = await rotateIncomingWebhookSecret(dbAdapter, {
-        id: incomingWebhookId,
-        username: requestingUserId,
+        id: checked.incomingWebhookId,
+        username: checked.requestingUserId,
       });
     } catch (error) {
       await sendResponseForSystemError(
