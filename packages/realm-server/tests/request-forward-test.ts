@@ -1990,6 +1990,32 @@ module(basename(import.meta.filename), function () {
         assert.strictEqual(vendor.requests[0].body, '{"hello":"vendor"}');
       });
 
+      test('a credential slot in a forward is sent as the text it is, never filled', async function (assert) {
+        let response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt()}`)
+          .send({
+            url: `${vendor.url}/echo`,
+            method: 'POST',
+            requestBody: JSON.stringify({ token: '{{apiKey}}' }),
+            headers: { 'X-Vendor-Key': '{{userKey}}' },
+          });
+
+        assert.strictEqual(response.status, 200);
+        assert.strictEqual(
+          vendor.requests[0].headers['x-vendor-key'],
+          '{{userKey}}',
+          'the header carries the slot as written',
+        );
+        assert.strictEqual(
+          vendor.requests[0].body,
+          '{"token":"{{apiKey}}"}',
+          'the body carries the slot as written',
+        );
+      });
+
       // The same forward with the endpoint's key sealed into its sealed
       // columns, as the startup backfill leaves it.
       module('with the key sealed', function (hooks) {
@@ -2964,6 +2990,63 @@ module(basename(import.meta.filename), function () {
             new URL(recorded!.url!).search,
             '',
             'the URL has no query string',
+          );
+          for (let [name, value] of Object.entries(planted)) {
+            assert.false(
+              sent.includes(value),
+              `no envelope carries the ${name}`,
+            );
+          }
+        });
+
+        test("a forward's transaction keeps its route, method and status and none of its query strings", async function (assert) {
+          sentry = startSentryCapture({
+            tracing: true,
+            incomingRequests: true,
+          });
+          let planted = markers();
+          let response = await failingForward(planted);
+          let sent = await sentry.flushed();
+          let transactions = await sentry.flushedTransactions();
+
+          assert.strictEqual(response.status, 500, 'the forward failed');
+          let transaction = transactions.find(
+            (t) => t.transaction === 'POST /_request-forward',
+          );
+          assert.ok(transaction, 'the forward was recorded as a transaction');
+          let contexts = transaction!.contexts as {
+            trace: { data: Record<string, unknown> };
+            response?: { status_code?: number };
+          };
+          let data = contexts.trace.data;
+          assert.strictEqual(data['http.method'], 'POST', 'the method is kept');
+          assert.strictEqual(
+            data['http.target'],
+            '/_request-forward',
+            'the target keeps its path and no query string',
+          );
+          assert.strictEqual(
+            new URL(data['http.url'] as string).pathname,
+            '/_request-forward',
+            'the URL keeps its path',
+          );
+          assert.strictEqual(
+            new URL(data['http.url'] as string).search,
+            '',
+            'the URL has no query string',
+          );
+          assert.false('http.query' in data, 'the query string is dropped');
+          assert.strictEqual(
+            contexts.response?.status_code,
+            500,
+            'the status is kept',
+          );
+          assert.strictEqual(typeof transaction!.start_timestamp, 'number');
+          assert.strictEqual(typeof transaction!.timestamp, 'number');
+          let spanURLs = JSON.stringify(transaction!.spans ?? []);
+          assert.false(
+            spanURLs.includes(vendor.alternateUrl),
+            'the guarded call to the vendor records no span',
           );
           for (let [name, value] of Object.entries(planted)) {
             assert.false(

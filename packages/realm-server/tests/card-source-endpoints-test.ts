@@ -1207,10 +1207,14 @@ module(basename(import.meta.filename), function () {
           let stat = statSync(
             join(dir.name, 'realm_server_1', 'test', 'last-modified-probe.gts'),
           );
+          // The sub-second mtime is in the message because the second a
+          // file's time is reported in is decided by its fraction: one in the
+          // last half-millisecond of a second is where a time taken from the
+          // millisecond-rounded `Stats.mtime` disagrees with `mtimeMs`.
           assert.strictEqual(
             new Date(lastModified).getTime(),
             Math.floor(stat.mtimeMs / 1000) * 1000,
-            'last-modified is the modification time of the file on disk',
+            `last-modified is the modification time of the file on disk (last-modified ${lastModified}, mtimeMs ${stat.mtimeMs})`,
           );
         });
 

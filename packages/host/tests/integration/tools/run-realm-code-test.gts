@@ -4,9 +4,11 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
+import { SupportedMimeType } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  CAPTURE_SOURCE_URL_PREFIX,
   DEFAULT_FALLBACK_MODELS,
 } from '@cardstack/runtime-common/matrix-constants';
 
@@ -14,6 +16,8 @@ import runRealmCode from '@cardstack/host/lib/realm-runner/runner';
 import RunRealmCodeTool from '@cardstack/host/tools/run-realm-code';
 
 import {
+  createJWT,
+  testRealmSecretSeed,
   testRealmURL,
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -27,6 +31,27 @@ import { setupRenderingTest } from '../../helpers/setup';
 import type { CardDef } from '@cardstack/base/card-api';
 
 const otherRealmURL = 'http://test-realm/test2/';
+
+// Makes the realm service know a workspace the user can read under
+// `identifier`, without a realm behind it: the capture endpoint is stubbed,
+// so only the realm service's view of the workspace matters.
+function knowReadableWorkspace(identifier: string) {
+  getService('realm').getOrCreateRealmResource(
+    identifier,
+    createJWT(
+      {
+        user: '@testuser:localhost',
+        realm: identifier,
+        sessionRoom: 'boxel-session-room-id',
+        permissions: ['read'],
+        realmServerURL: 'http://test-realm/',
+      },
+      '1d',
+      testRealmSecretSeed,
+    ),
+    { exact: true },
+  );
+}
 
 // A card instance written out by hand, so a test can match its exact text.
 function recipeJSON(
@@ -57,6 +82,9 @@ function recipeJSON(
   )}\n`;
 }
 
+const PNG_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+
 module('Integration | tools | run-realm-code', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
@@ -68,8 +96,6 @@ module('Integration | tools | run-realm-code', function (hooks) {
   // `realm.capture` captures through the realm server; this answers every
   // capture with a 1×1 PNG and records what was asked for.
   let captureRequests: any[] = [];
-  const PNG_BASE64 =
-    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
   setupRealmServerEndpoints(hooks, [
     {
       route: '_capture',
@@ -150,6 +176,21 @@ boxel:
               type: 'card',
               attributes: { name: 'Mango' },
               meta: { adoptsFrom: { module: '../pet', name: 'Pet' } },
+            },
+          },
+          'Spec/pet.json': {
+            data: {
+              type: 'card',
+              attributes: {
+                cardTitle: 'Pet',
+                cardDescription: 'A pet with a name',
+                specType: 'card',
+                readMe: '# Pet\n\nUse Pet for any animal with a name.',
+                ref: { module: '../pet', name: 'Pet' },
+              },
+              meta: {
+                adoptsFrom: { module: '@cardstack/base/spec', name: 'Spec' },
+              },
             },
           },
           'Plain/base-typed.json': {
@@ -323,6 +364,10 @@ return await realm.capture('seen.json');`,
       result.captures[0].url,
       'the capture rides as the media already uploaded',
     );
+    assert.true(
+      attachments[1].sourceUrl.startsWith(CAPTURE_SOURCE_URL_PREFIX),
+      `the capture is named by a capture source URL, which keeps it out of correctness checks: ${attachments[1].sourceUrl}`,
+    );
   });
 
   test('opens the card the script returns to show', async function (assert) {
@@ -427,7 +472,44 @@ return { show: 'Pet/missing' };`,
     assert.strictEqual(captureRequests.length, 3, 'three captures were taken');
   });
 
-  test('realm.capture refuses a path outside the realm', async function (assert) {
+  test('realm.capture captures a card by its path or its id, with the options it is given', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `return [
+  await realm.capture('Pet/mango'),
+  await realm.capture('${testRealmURL}Pet/mango', {
+    format: 'embedded',
+    viewportWidth: 600,
+    viewportHeight: 400,
+  }),
+];`,
+    });
+
+    assert.strictEqual(captureRequests.length, 2, 'two capture requests');
+    let [byPath, byId] = captureRequests.map((r) => r.data.attributes);
+    assert.strictEqual(byPath.cardId, `${testRealmURL}Pet/mango`);
+    assert.strictEqual(byId.cardId, `${testRealmURL}Pet/mango`);
+    assert.strictEqual(byId.format, 'embedded');
+    assert.deepEqual(byId.captureSpec, {
+      viewport: { width: 600, height: 400 },
+    });
+    let [first, second] = JSON.parse(result.scriptResult!);
+    assert.strictEqual(first.path, 'Pet/mango');
+    assert.strictEqual(first.kind, 'card');
+    assert.strictEqual(
+      second.path,
+      'Pet/mango',
+      'a URL in the run realm is named by its path',
+    );
+    assert.strictEqual(second.format, 'embedded');
+    assert.strictEqual(result.captures.length, 2);
+  });
+
+  test('realm.capture refuses a URL outside every workspace', async function (assert) {
     let toolService = getService('tool-service');
     let command = new RunRealmCodeTool(toolService.toolContext);
 
@@ -437,9 +519,69 @@ return { show: 'Pet/missing' };`,
         roomId: '!room:example.com',
         code: `await realm.capture('https://example.com/page.html');`,
       }),
-      /Path is outside this realm/,
+      /not in a workspace the user can read/,
     );
     assert.strictEqual(captureRequests.length, 0, 'no capture is attempted');
+  });
+
+  test('realm.capture finds the workspace of a prefixed id, whatever form the workspace is known by', async function (assert) {
+    let { virtualNetwork } = getService('network');
+    virtualNetwork.addRealmMapping(
+      '@test/mapped/',
+      'http://test-realm/mapped/',
+    );
+    try {
+      knowReadableWorkspace('@test/mapped/');
+      let toolService = getService('tool-service');
+      let command = new RunRealmCodeTool(toolService.toolContext);
+
+      let result = await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `return await realm.capture('@test/mapped/Pet/mango');`,
+      });
+
+      assert.strictEqual(captureRequests.length, 1, 'one capture request');
+      let { realmURL, cardId } = captureRequests[0].data.attributes;
+      assert.strictEqual(realmURL, 'http://test-realm/mapped/');
+      assert.strictEqual(cardId, 'http://test-realm/mapped/Pet/mango');
+      assert.strictEqual(
+        JSON.parse(result.scriptResult!).path,
+        '@test/mapped/Pet/mango',
+        'the capture is named by the id the script gave',
+      );
+    } finally {
+      virtualNetwork.removeRealmMapping('@test/mapped/');
+    }
+  });
+
+  test('realm.capture asks a workspace nested under the run realm for its own card, and names it by its URL', async function (assert) {
+    let nestedRealmURL = `${testRealmURL}nested/`;
+    knowReadableWorkspace(nestedRealmURL);
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `return [
+  await realm.capture('${nestedRealmURL}Pet/mango'),
+  await realm.capture('${testRealmURL}Pet/mango'),
+];`,
+    });
+
+    assert.deepEqual(
+      captureRequests.map((r) => r.data.attributes.realmURL),
+      [nestedRealmURL, testRealmURL],
+      'each capture is asked of the deepest workspace that holds it',
+    );
+    let [nested, own] = JSON.parse(result.scriptResult!);
+    assert.strictEqual(
+      nested.path,
+      `${nestedRealmURL}Pet/mango`,
+      'a card in the nested workspace keeps its URL',
+    );
+    assert.strictEqual(own.path, 'Pet/mango');
   });
 
   test('realm.cards.get returns a card as data, with computed fields and absolute URLs', async function (assert) {
@@ -677,6 +819,168 @@ return { saved, exists: await realm.fs.exists('images/dot.png') };`,
     );
   });
 
+  test('realm.fs.delete deletes a file the same run created, and the result reports it', async function (assert) {
+    let toolService = getService('tool-service');
+    let cardService = getService('card-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.writeText('plan.md', '# Plan\\n');
+await realm.fs.writeText('kept.md', '# Kept\\n');
+await realm.fs.writeBytes('dot.png', ${JSON.stringify(PNG_BASE64)});
+let deleted = [
+  await realm.fs.delete('plan.md'),
+  await realm.fs.delete('dot.png'),
+];
+return {
+  deleted,
+  planExists: await realm.fs.exists('plan.md'),
+  dotExists: await realm.fs.exists('dot.png'),
+};`,
+    });
+
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      deleted: [
+        { path: 'plan.md', deleted: true },
+        { path: 'dot.png', deleted: true },
+      ],
+      planExists: false,
+      dotExists: false,
+    });
+    assert.deepEqual(
+      result.files.map((file) => [file.fileUrl, file.status]),
+      [
+        [`${testRealmURL}kept.md`, 'saved'],
+        [`${testRealmURL}plan.md`, 'deleted'],
+        [`${testRealmURL}dot.png`, 'deleted'],
+      ],
+    );
+    assert.deepEqual(
+      command
+        .resultAttachments(result)
+        .map((attachment) => attachment.sourceUrl),
+      [`${testRealmURL}kept.md`],
+      'a deleted file is not attached to the result',
+    );
+    for (let path of ['plan.md', 'dot.png']) {
+      let source = await cardService.getSource(new URL(path, testRealmURL));
+      assert.strictEqual(source.status, 404, `${path} is not in the realm`);
+    }
+  });
+
+  test('realm.fs.delete refuses a file the run did not create', async function (assert) {
+    let toolService = getService('tool-service');
+    let cardService = getService('card-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `let refused = [];
+try { await realm.fs.delete('notes/first.md'); } catch (e) { refused.push(e.message); }
+await realm.fs.replace('task.json', '"Old title"', '"New title"');
+try { await realm.fs.delete('task.json'); } catch (e) { refused.push(e.message); }
+await realm.fs.writeText('scratch.md', 'x');
+await realm.fs.delete('scratch.md');
+try { await realm.fs.delete('scratch.md'); } catch (e) { refused.push(e.message); }
+return refused;`,
+    });
+
+    let refused: string[] = JSON.parse(result.scriptResult!);
+    assert.strictEqual(refused.length, 3, 'each delete is refused');
+    assert.true(
+      /deletes only a file this run created: .*notes\/first\.md/.test(
+        refused[0]!,
+      ),
+      `a file the run did not touch: ${refused[0]}`,
+    );
+    assert.true(
+      /deletes only a file this run created: .*task\.json/.test(refused[1]!),
+      `a file the run edited but did not create: ${refused[1]}`,
+    );
+    assert.true(
+      /this run already deleted it/.test(refused[2]!),
+      `a file the run already deleted: ${refused[2]}`,
+    );
+    for (let path of ['notes/first.md', 'task.json']) {
+      let source = await cardService.getSource(new URL(path, testRealmURL));
+      assert.strictEqual(source.status, 200, `${path} is still in the realm`);
+    }
+  });
+
+  test('realm.fs.delete refuses a binary file the run created when someone replaced it', async function (assert) {
+    let toolService = getService('tool-service');
+    let network = getService('network');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+    let dotURL = `${testRealmURL}dot.png`;
+    let replacement = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe]);
+
+    // A collaborator saves other bytes to the file right after the run
+    // creates it.
+    let real = network.authedFetch;
+    Object.defineProperty(network, 'authedFetch', {
+      configurable: true,
+      value: async (url: string, init?: RequestInit) => {
+        let response = await real(url, init);
+        if (url === dotURL && init?.method === 'POST' && response.ok) {
+          let replaced = await real(dotURL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/octet-stream' },
+            body: new Blob([replacement as BlobPart]),
+          });
+          assert.true(replaced.ok, 'the collaborator replaced the file');
+        }
+        return response;
+      },
+    });
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.writeBytes('dot.png', ${JSON.stringify(PNG_BASE64)});
+try {
+  await realm.fs.delete('dot.png');
+  return 'deleted';
+} catch (e) {
+  return e.message;
+}`,
+    });
+
+    assert.true(
+      /File changed while the script ran: .*dot\.png/.test(
+        JSON.parse(result.scriptResult!),
+      ),
+      `the delete is refused: ${result.scriptResult}`,
+    );
+    let response = await real(dotURL, {
+      headers: { Accept: SupportedMimeType.CardSource },
+    });
+    assert.strictEqual(response.status, 200, 'dot.png is still in the realm');
+    assert.deepEqual(
+      Array.from(new Uint8Array(await response.arrayBuffer())),
+      Array.from(replacement),
+      "the collaborator's bytes are kept",
+    );
+  });
+
+  test('a failed run names the files it created and deleted', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.fs.writeText('plan.md', 'x');
+await realm.fs.delete('plan.md');
+await realm.fs.readText('missing.md');`,
+      }),
+      /No file was saved\. Files this run created and already deleted: .*plan\.md/,
+    );
+  });
+
   test('realm.fs.copy copies a file and leaves the source as it was', async function (assert) {
     let toolService = getService('tool-service');
     let cardService = getService('card-service');
@@ -840,6 +1144,248 @@ await realm.fs.copy('unformatted.gts', 'unformatted-copy.gts');`,
       run(`await realm.fs.writeText('images/existing.png', 'text');`),
       /File already exists; use realm\.fs\.replace/,
     );
+  });
+
+  module('realm.fs.download', function (hooks) {
+    // A source outside any realm, served by the virtual network so no real
+    // network is used.
+    const sourceURL = 'https://media.example/images/pet.png';
+    let pngBytes = Uint8Array.from(atob(PNG_BASE64), (char) =>
+      char.charCodeAt(0),
+    );
+    let sourceRequests: string[];
+
+    hooks.beforeEach(function () {
+      sourceRequests = [];
+      getService('network').virtualNetwork.mount(
+        async (req: Request) => {
+          if (!req.url.startsWith('https://media.example/')) {
+            return null;
+          }
+          sourceRequests.push(req.url);
+          if (req.url === sourceURL) {
+            return new Response(pngBytes, {
+              status: 200,
+              headers: { 'Content-Type': 'image/png' },
+            });
+          }
+          if (req.url.endsWith('/nine.bin')) {
+            return new Response(new Uint8Array(9_000_000), {
+              status: 200,
+              headers: { 'Content-Type': 'application/octet-stream' },
+            });
+          }
+          if (req.url.endsWith('/large.bin')) {
+            return new Response(new Uint8Array(10_000_001), {
+              status: 200,
+              headers: { 'Content-Type': 'application/octet-stream' },
+            });
+          }
+          return new Response('Not found', { status: 404 });
+        },
+        { prepend: true },
+      );
+    });
+
+    test('saves the file at a URL into the realm', async function (assert) {
+      let command = new RunRealmCodeTool(
+        getService('tool-service').toolContext,
+      );
+      let code = `return await realm.fs.download('${sourceURL}', 'images/pet.png');`;
+      assert.true(
+        RunRealmCodeTool.neverAutoExecutesFor({ code }),
+        'a run that names realm.fs.download waits for a click',
+      );
+
+      let result = await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code,
+      });
+
+      assert.deepEqual(JSON.parse(result.scriptResult!), {
+        path: 'images/pet.png',
+        size: pngBytes.byteLength,
+        saved: true,
+      });
+      assert.deepEqual(
+        result.files.map((file) => [file.fileUrl, file.status, file.detail]),
+        [[`${testRealmURL}images/pet.png`, 'saved', 'Binary file saved.']],
+      );
+      let response = await getService('network').authedFetch(
+        new URL('images/pet.png', testRealmURL),
+      );
+      assert.strictEqual(response.status, 200);
+      assert.deepEqual(
+        Array.from(new Uint8Array(await response.arrayBuffer())),
+        Array.from(pngBytes),
+        'the realm holds the downloaded bytes',
+      );
+    });
+
+    test('realm.fs.delete removes a file the same run downloaded', async function (assert) {
+      let command = new RunRealmCodeTool(
+        getService('tool-service').toolContext,
+      );
+
+      let result = await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.fs.download('${sourceURL}', 'images/pet.png');
+return {
+  deleted: await realm.fs.delete('images/pet.png'),
+  exists: await realm.fs.exists('images/pet.png'),
+};`,
+      });
+
+      assert.deepEqual(JSON.parse(result.scriptResult!), {
+        deleted: { path: 'images/pet.png', deleted: true },
+        exists: false,
+      });
+      assert.deepEqual(
+        result.files.map((file) => [file.fileUrl, file.status]),
+        [[`${testRealmURL}images/pet.png`, 'deleted']],
+      );
+    });
+
+    test('refuses an existing file, a path with no extension, a source that is not http, and a failed download', async function (assert) {
+      let command = new RunRealmCodeTool(
+        getService('tool-service').toolContext,
+      );
+      let run = (code: string) =>
+        command.execute({
+          realm: testRealmURL,
+          roomId: '!room:example.com',
+          code,
+        });
+
+      await assert.rejects(
+        run(`await realm.fs.download('${sourceURL}', 'task.json');`),
+        /File already exists/,
+      );
+      await assert.rejects(
+        run(`await realm.fs.download('${sourceURL}', 'images/pet');`),
+        /needs a path with a file extension/,
+      );
+      await assert.rejects(
+        run(`await realm.fs.download('file:///etc/hosts', 'hosts.txt');`),
+        /downloads only http and https URLs/,
+      );
+      assert.deepEqual(sourceRequests, [], 'nothing was fetched so far');
+      await assert.rejects(
+        run(
+          `await realm.fs.download('https://media.example/missing.png', 'missing.png');`,
+        ),
+        /Unable to download https:\/\/media\.example\/missing\.png: 404.*No file was saved/,
+      );
+    });
+
+    test('refuses a file over the size limit', async function (assert) {
+      let command = new RunRealmCodeTool(
+        getService('tool-service').toolContext,
+      );
+
+      await assert.rejects(
+        command.execute({
+          realm: testRealmURL,
+          roomId: '!room:example.com',
+          code: `await realm.fs.download('https://media.example/large.bin', 'large.bin');`,
+        }),
+        /at most 10000000 bytes per file.*No file was saved/,
+      );
+    });
+
+    test('a download whose save fails still counts toward the per-run limit', async function (assert) {
+      // Every save under failing/ fails after the download has arrived.
+      getService('network').virtualNetwork.mount(
+        async (req: Request) => {
+          if (
+            req.method === 'POST' &&
+            req.url.startsWith(`${testRealmURL}failing/`)
+          ) {
+            return new Response('Server error', { status: 500 });
+          }
+          return null;
+        },
+        { prepend: true },
+      );
+      let command = new RunRealmCodeTool(
+        getService('tool-service').toolContext,
+      );
+
+      let result = await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `let errors = [];
+for (let name of ['a', 'b', 'c']) {
+  try {
+    await realm.fs.download('https://media.example/nine.bin', 'failing/' + name + '.bin');
+  } catch (error) {
+    errors.push(error.message);
+  }
+}
+return errors;`,
+      });
+
+      let errors = JSON.parse(result.scriptResult!) as string[];
+      assert.strictEqual(errors.length, 3, 'no save succeeded');
+      assert.notOk(/per run/.test(errors[0]), errors[0]);
+      assert.notOk(/per run/.test(errors[1]), errors[1]);
+      assert.ok(
+        /at most 25000000 bytes per run/.test(errors[2]),
+        'the third download is over the bytes the failed saves left',
+      );
+    });
+
+    test('a download the script did not await is not fetched after the run ends', async function (assert) {
+      // Holds the destination lookup until the run has ended.
+      getService('network').virtualNetwork.mount(
+        async (req: Request) => {
+          if (req.method === 'GET' && req.url === `${testRealmURL}late.png`) {
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+          }
+          return null;
+        },
+        { prepend: true },
+      );
+      let command = new RunRealmCodeTool(
+        getService('tool-service').toolContext,
+      );
+
+      await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `realm.fs.download('${sourceURL}', 'late.png');
+return 'done';`,
+      });
+
+      assert.deepEqual(sourceRequests, [], 'nothing is fetched');
+      let response = await getService('network').authedFetch(
+        new URL('late.png', testRealmURL),
+      );
+      assert.strictEqual(response.status, 404, 'nothing is saved');
+    });
+
+    test('a script that reaches realm.fs.download another way is refused', async function (assert) {
+      let command = new RunRealmCodeTool(
+        getService('tool-service').toolContext,
+      );
+      let code = `await realm.fs['down' + 'load']('${sourceURL}', 'pet.png');`;
+
+      assert.false(
+        RunRealmCodeTool.neverAutoExecutesFor({ code }),
+        'this run would not wait for a click',
+      );
+      await assert.rejects(
+        command.execute({
+          realm: testRealmURL,
+          roomId: '!room:example.com',
+          code,
+        }),
+        /realm\.fs\.download must be called by that name/,
+      );
+      assert.deepEqual(sourceRequests, [], 'nothing is fetched');
+    });
   });
 
   test('resolves paths against the realm root', async function (assert) {
@@ -1086,6 +1632,104 @@ return found;`,
         code: `await realm.fs.list('missing');`,
       }),
       /Directory not found/,
+    );
+  });
+
+  test('realm.entries.search runs several searches in one script and returns only what the script keeps', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `const found = {};
+for (const title of ['Pet', 'Unicorn']) {
+  const { entries, total, truncated, incomplete } = await realm.entries.search(
+    {
+      filter: {
+        on: { module: 'https://cardstack.com/base/spec', name: 'Spec' },
+        eq: { cardTitle: title },
+      },
+    },
+    { realms: [realm.current.url] },
+  );
+  found[title] = {
+    total,
+    truncated,
+    incomplete,
+    entries: entries.map((entry) => ({
+      url: entry.url,
+      kind: entry.kind,
+      specType: entry.specType,
+      refName: entry.ref?.name,
+      readMe: entry.readMe,
+    })),
+  };
+}
+return found;`,
+    });
+
+    assert.deepEqual(result.files, [], 'a search saves nothing');
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      Pet: {
+        total: 1,
+        truncated: false,
+        incomplete: false,
+        entries: [
+          {
+            url: `${testRealmURL}Spec/pet`,
+            kind: 'card',
+            specType: 'card',
+            refName: 'Pet',
+            readMe: '# Pet\n\nUse Pet for any animal with a name.',
+          },
+        ],
+      },
+      Unicorn: { total: 0, truncated: false, incomplete: false, entries: [] },
+    });
+  });
+
+  test('realm.entries.search caps the entries at the limit and reports the rest', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `const { entries, total, truncated } = await realm.entries.search(
+  {},
+  { realms: [realm.current.url], scope: 'cards', limit: 1 },
+);
+return { count: entries.length, kind: entries[0].kind, more: total > 1, truncated };`,
+    });
+
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      count: 1,
+      kind: 'card',
+      more: true,
+      truncated: true,
+    });
+  });
+
+  test('realm.entries.search refuses a page and an unknown scope', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.entries.search({ page: { number: 1 } });`,
+      }),
+      /does not page; pass \{ limit \}/,
+    );
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.entries.search({}, { scope: 'modules' });`,
+      }),
+      /Invalid scope "modules"/,
     );
   });
 
@@ -1338,6 +1982,166 @@ await workspaces['del' + 'ete']('${oldWorkspace}');`;
       /must be called by that name/,
     );
     assert.deepEqual(deleteRealmCalls, [], 'no realm is deleted');
+  });
+
+  // The realm server does the indexing; these record what the run asked for.
+  function stubIndexing() {
+    let calls: { action: string; realm: string; urls?: string[] }[] = [];
+    let realmService = getService('realm');
+    realmService.invalidateUrls = async (realm, urls) => {
+      calls.push({ action: 'invalidate', realm, urls });
+    };
+    realmService.reindex = async (realm) => {
+      calls.push({ action: 'reindex', realm });
+    };
+    realmService.fullReindex = async (realm) => {
+      calls.push({ action: 'fullReindex', realm });
+    };
+    realmService.cancelIndexingJob = async (realm) => {
+      calls.push({ action: 'cancelJob', realm });
+    };
+    return calls;
+  }
+
+  test('realm.index.invalidate and realm.index.reindex refresh the index of the run realm without a click', async function (assert) {
+    let calls = stubIndexing();
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+    let code = `return {
+  invalidated: await realm.index.invalidate(['Pet/mango.json', '${testRealmURL}pet.gts']),
+  one: await realm.index.invalidate('task.json'),
+  reindex: await realm.index.reindex(),
+};`;
+
+    assert.false(
+      RunRealmCodeTool.neverAutoExecutesFor({ code }),
+      'the run keeps the room mode',
+    );
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code,
+    });
+
+    assert.deepEqual(calls, [
+      {
+        action: 'invalidate',
+        realm: testRealmURL,
+        urls: [`${testRealmURL}Pet/mango.json`, `${testRealmURL}pet.gts`],
+      },
+      {
+        action: 'invalidate',
+        realm: testRealmURL,
+        urls: [`${testRealmURL}task.json`],
+      },
+      { action: 'reindex', realm: testRealmURL },
+    ]);
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      invalidated: { invalidated: ['Pet/mango.json', 'pet.gts'] },
+      one: { invalidated: ['task.json'] },
+      reindex: { reindex: 'started' },
+    });
+    assert.deepEqual(result.indexActions, [
+      'invalidate Pet/mango.json, pet.gts',
+      'invalidate task.json',
+      'reindex',
+    ]);
+  });
+
+  test('realm.index.invalidate refuses a path outside the realm and an empty list', async function (assert) {
+    let calls = stubIndexing();
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `let refused = [];
+try { await realm.index.invalidate(['http://other-realm/a.json']); } catch (e) { refused.push(e.message); }
+try { await realm.index.invalidate([]); } catch (e) { refused.push(e.message); }
+return refused;`,
+    });
+
+    let [outside, empty] = JSON.parse(result.scriptResult!);
+    assert.true(/Path is outside this realm/.test(outside), outside);
+    assert.true(/expects a path or an array/.test(empty), empty);
+    assert.deepEqual(calls, [], 'nothing is invalidated');
+  });
+
+  test('a script that starts a full reindex or cancels an indexing job always waits for the user', async function (assert) {
+    let calls = stubIndexing();
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    for (let code of [
+      `await realm.index.fullReindex();`,
+      `await realm.index.cancelJob();`,
+    ]) {
+      assert.true(
+        RunRealmCodeTool.neverAutoExecutesFor({ code }),
+        `waits for a click: ${code}`,
+      );
+    }
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `return {
+  cancel: await realm.index.cancelJob(),
+  full: await realm.index.fullReindex(),
+};`,
+    });
+
+    assert.deepEqual(calls, [
+      { action: 'cancelJob', realm: testRealmURL },
+      { action: 'fullReindex', realm: testRealmURL },
+    ]);
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      cancel: { cancelled: true },
+      full: { fullReindex: 'started' },
+    });
+  });
+
+  test('a failed run names the index actions it already started', async function (assert) {
+    let calls = stubIndexing();
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.index.invalidate('task.json');
+await realm.index.fullReindex();
+throw new Error('boom');`,
+      }),
+      /boom\. No file was saved\. Index actions already started by this run: invalidate task\.json; fullReindex/,
+    );
+    assert.deepEqual(calls, [
+      {
+        action: 'invalidate',
+        realm: testRealmURL,
+        urls: [`${testRealmURL}task.json`],
+      },
+      { action: 'fullReindex', realm: testRealmURL },
+    ]);
+  });
+
+  test('a script that reaches realm.index.fullReindex another way is refused', async function (assert) {
+    let calls = stubIndexing();
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+    let code = `let index = realm.index;
+await index['full' + 'Reindex']();`;
+
+    assert.false(
+      RunRealmCodeTool.neverAutoExecutesFor({ code }),
+      'this run would not wait for a click',
+    );
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code,
+      }),
+      /realm\.index\.fullReindex must be called by that name/,
+    );
+    assert.deepEqual(calls, [], 'no reindex starts');
   });
 
   module('room actions', function (hooks) {
@@ -1790,6 +2594,8 @@ return found;`);
   });
 });
 
+const readOnlyRealmURL = 'http://test-realm/other/';
+
 module(
   'Integration | tools | run-realm-code | read-only workspace',
   function (hooks) {
@@ -1797,11 +2603,52 @@ module(
     setupLocalIndexing(hooks);
     let mockMatrixUtils = setupMockMatrix(hooks, {
       autostart: true,
-      realmPermissions: { [testRealmURL]: ['read'] },
+      activeRealms: [testRealmURL, readOnlyRealmURL],
+      realmPermissions: {
+        [testRealmURL]: ['read'],
+        [readOnlyRealmURL]: ['read'],
+      },
     });
+    let captureRequests: any[] = [];
+    setupRealmServerEndpoints(hooks, [
+      {
+        route: '_capture',
+        getResponse: async (req: Request) => {
+          captureRequests.push(await req.clone().json());
+          return new Response(
+            JSON.stringify({
+              data: {
+                type: 'capture-result',
+                attributes: {
+                  status: 'ready',
+                  base64: PNG_BASE64,
+                  width: 1,
+                  height: 1,
+                  contentType: 'image/png',
+                },
+              },
+            }),
+            {
+              status: 201,
+              headers: { 'Content-Type': 'application/vnd.api+json' },
+            },
+          );
+        },
+      },
+    ]);
     setupRealmCacheTeardown(hooks);
 
     hooks.beforeEach(async function () {
+      captureRequests = [];
+      await setupIntegrationTestRealm({
+        mockMatrixUtils,
+        realmURL: readOnlyRealmURL,
+        enforcePermissions: true,
+        permissions: { '*': ['read'] },
+        contents: {
+          'brand.md': '# Brand\n',
+        },
+      });
       await setupIntegrationTestRealm({
         mockMatrixUtils,
         enforcePermissions: true,
@@ -1828,6 +2675,37 @@ module(
         },
       });
       await getService('realm').login(testRealmURL);
+      await getService('realm').login(readOnlyRealmURL);
+    });
+
+    test('realm.capture captures in a workspace the user can only read, and in another workspace by URL', async function (assert) {
+      let toolService = getService('tool-service');
+      let command = new RunRealmCodeTool(toolService.toolContext);
+
+      let result = await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `return [
+  await realm.capture('notes/first.md'),
+  await realm.capture('${readOnlyRealmURL}brand.md'),
+];`,
+      });
+
+      assert.deepEqual(
+        captureRequests.map((r) => r.data.attributes.fileURL),
+        [`${testRealmURL}notes/first.md`, `${readOnlyRealmURL}brand.md`],
+      );
+      assert.deepEqual(
+        captureRequests.map((r) => r.data.attributes.realmURL),
+        [testRealmURL, readOnlyRealmURL],
+        'each capture is asked of the workspace that holds it',
+      );
+      assert.deepEqual(
+        JSON.parse(result.scriptResult!).map((c: { path: string }) => c.path),
+        ['notes/first.md', `${readOnlyRealmURL}brand.md`],
+        'a capture in another workspace is named by its URL',
+      );
+      assert.strictEqual(result.captures.length, 2);
     });
 
     test('a script reads a workspace the user can only read', async function (assert) {
@@ -1919,5 +2797,345 @@ return { refused, text: await realm.fs.readText('task.json') };`,
         /You can only read this workspace.*No file was saved/,
       );
     });
+
+    test('realm.index calls are refused', async function (assert) {
+      let toolService = getService('tool-service');
+      let command = new RunRealmCodeTool(toolService.toolContext);
+
+      let result = await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `let refused = [];
+try { await realm.index.invalidate('task.json'); } catch (e) { refused.push(e.message); }
+try { await realm.index.reindex(); } catch (e) { refused.push(e.message); }
+return refused;`,
+      });
+
+      let refused = JSON.parse(result.scriptResult!);
+      assert.strictEqual(refused.length, 2, 'both calls are refused');
+      for (let message of refused) {
+        assert.true(
+          /You can only read this workspace/.test(message),
+          `the refusal says why: ${message}`,
+        );
+      }
+    });
   },
 );
+
+// `realm.images.generate` sends its request through the realm server's proxy,
+// which needs a realm server session, so these tests sign a user in.
+module('Integration | tools | run-realm-code | images', function (hooks) {
+  setupRenderingTest(hooks);
+  setupLocalIndexing(hooks);
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [testRealmURL],
+    autostart: true,
+  });
+
+  const PNG_BASE64 =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  // `realm.images.generate` asks the image model through the realm server's
+  // proxy; this answers every request with the same PNG and records the
+  // request it forwarded. A request whose prompt is `never answers` gets no
+  // answer until it is aborted, or until a fallback long after any test
+  // timing.
+  let imageRequests: any[] = [];
+  let abortedImageRequests = 0;
+  setupRealmServerEndpoints(hooks, [
+    {
+      route: '_request-forward',
+      getResponse: async (req: Request) => {
+        let body = await req.clone().json();
+        let request = JSON.parse(body.requestBody);
+        imageRequests.push({ url: body.url, request });
+        if (request.messages[0].content[0].text === 'never answers') {
+          await new Promise<void>((resolve, reject) => {
+            let fallback = setTimeout(resolve, 20_000);
+            let onAbort = () => {
+              clearTimeout(fallback);
+              abortedImageRequests += 1;
+              reject(new DOMException('aborted', 'AbortError'));
+            };
+            if (req.signal.aborted) {
+              onAbort();
+            }
+            req.signal.addEventListener('abort', onAbort, { once: true });
+          });
+        }
+        return new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: '',
+                  images: [
+                    {
+                      type: 'image_url',
+                      image_url: { url: `data:image/png;base64,${PNG_BASE64}` },
+                    },
+                  ],
+                },
+              },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      },
+    },
+  ]);
+
+  setupRealmCacheTeardown(hooks);
+
+  hooks.beforeEach(async function () {
+    imageRequests = [];
+    abortedImageRequests = 0;
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'task.json': '{ "title": "Old title" }\n',
+        'photos/cat.jpg': 'not really a jpeg',
+      },
+    });
+  });
+
+  test('a script that generates images always waits for the user, and gets more time', function (assert) {
+    let code = `await realm.images.generate({ prompt: 'a cat', path: 'cat.png' });`;
+    assert.true(
+      RunRealmCodeTool.neverAutoExecutesFor({ code }),
+      'a run that names realm.images.generate waits for a click',
+    );
+    assert.true(
+      RunRealmCodeTool.extraExecuteTimeMsFor({ code }) > 0,
+      'the tool service gives the run more time',
+    );
+    assert.strictEqual(
+      RunRealmCodeTool.extraExecuteTimeMsFor({
+        code: `await realm.fs.writeText('a.json', '{}');`,
+      }),
+      0,
+      'other runs keep the usual execute timeout',
+    );
+  });
+
+  test('realm.fs.delete removes an image the same run generated', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.images.generate({ prompt: 'A small dot', path: 'images/dot.png' });
+return {
+  deleted: await realm.fs.delete('images/dot.png'),
+  exists: await realm.fs.exists('images/dot.png'),
+};`,
+    });
+
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      deleted: { path: 'images/dot.png', deleted: true },
+      exists: false,
+    });
+    assert.deepEqual(
+      result.files.map((file) => [file.fileUrl, file.status]),
+      [[`${testRealmURL}images/dot.png`, 'deleted']],
+    );
+  });
+
+  test('realm.images.generate saves the image and returns its path', async function (assert) {
+    let toolService = getService('tool-service');
+    let network = getService('network');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    // The source image the request names is in the realm.
+    await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.writeBytes('source.png', ${JSON.stringify(PNG_BASE64)});`,
+    });
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `return await realm.images.generate({
+  prompt: 'A small dot',
+  path: 'images/dot',
+  sourceImageUrl: 'source.png',
+  llmModel: 'test/image-model',
+});`,
+    });
+
+    let expected = Uint8Array.from(atob(PNG_BASE64), (char) =>
+      char.charCodeAt(0),
+    );
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      path: 'images/dot.png',
+      contentType: 'image/png',
+      size: expected.byteLength,
+      saved: true,
+    });
+    assert.deepEqual(
+      result.files.map((file) => [file.fileUrl, file.status]),
+      [[`${testRealmURL}images/dot.png`, 'saved']],
+    );
+    assert.strictEqual(imageRequests.length, 1, 'one image was requested');
+    let [{ request }] = imageRequests;
+    assert.strictEqual(request.model, 'test/image-model');
+    assert.deepEqual(request.messages[0].content, [
+      { type: 'text', text: 'A small dot' },
+      {
+        type: 'image_url',
+        image_url: { url: `data:image/png;base64,${PNG_BASE64}` },
+      },
+    ]);
+    let response = await network.authedFetch(
+      new URL('images/dot.png', testRealmURL),
+    );
+    assert.deepEqual(
+      Array.from(new Uint8Array(await response.arrayBuffer())),
+      Array.from(expected),
+      'the realm holds the image bytes',
+    );
+  });
+
+  test('realm.images.generate refuses a fifth image in one run', async function (assert) {
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `for (let i = 1; i <= 5; i++) {
+  await realm.images.generate({ prompt: 'dot ' + i, path: 'dots/' + i + '.png' });
+}`,
+      }),
+      /at most 4 images.*Files already saved by this run: .*dots\/4\.png/,
+    );
+    assert.strictEqual(imageRequests.length, 4, 'four images were requested');
+  });
+
+  test('realm.images.generate refuses an existing file before it asks the model', async function (assert) {
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.images.generate({ prompt: 'a task', path: 'task.json' });`,
+      }),
+      /File already exists/,
+    );
+    assert.strictEqual(imageRequests.length, 0, 'no image was requested');
+  });
+
+  test('realm.images.generate refuses a path whose image may be saved over an existing file, before it asks the model', async function (assert) {
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    // The model may answer with a JPEG, which would be saved as cat.jpg.
+    for (let path of ['photos/cat', 'photos/cat.png']) {
+      await assert.rejects(
+        command.execute({
+          realm: testRealmURL,
+          roomId: '!room:example.com',
+          code: `await realm.images.generate({ prompt: 'a cat', path: '${path}' });`,
+        }),
+        /File already exists: .*photos\/cat\.jpg/,
+        `${path} is refused`,
+      );
+    }
+    assert.strictEqual(imageRequests.length, 0, 'no image was requested');
+  });
+
+  test('realm.images.generate takes one file slot per image', async function (assert) {
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    // 16 files read plus 4 extensionless images is the 20-file limit.
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `for (let i = 1; i <= 16; i++) {
+  await realm.fs.exists('missing-' + i + '.json');
+}
+let paths = [];
+for (let i = 1; i <= 4; i++) {
+  paths.push((await realm.images.generate({ prompt: 'dot ' + i, path: 'dots/' + i })).path);
+}
+return paths;`,
+    });
+    assert.deepEqual(JSON.parse(result.scriptResult!), [
+      'dots/1.png',
+      'dots/2.png',
+      'dots/3.png',
+      'dots/4.png',
+    ]);
+  });
+
+  test('realm.images.generate refuses a source image outside this realm', async function (assert) {
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.images.generate({
+  prompt: 'a dot',
+  path: 'dot.png',
+  sourceImageUrl: 'http://other-realm.example/private/photo.png',
+});`,
+      }),
+      /Path is outside this realm/,
+    );
+    assert.strictEqual(imageRequests.length, 0, 'no image was requested');
+  });
+
+  test('an image request still in flight when the run ends is stopped', async function (assert) {
+    let cardService = getService('card-service');
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    let started = Date.now();
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `realm.images.generate({ prompt: 'never answers', path: 'late.png' });`,
+      }),
+      /await every realm call/,
+    );
+    assert.true(
+      Date.now() - started < 15_000,
+      'the run reports without waiting for the image',
+    );
+    if (imageRequests.length > 0) {
+      assert.strictEqual(
+        abortedImageRequests,
+        1,
+        'the image request was aborted',
+      );
+    }
+    await settled();
+    let source = await cardService.getSource(
+      new URL(`${testRealmURL}late.png`),
+    );
+    assert.strictEqual(source.status, 404, 'no image was saved');
+  });
+
+  test('a script that reaches realm.images.generate another way is refused', async function (assert) {
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+    let code = `let images = realm['ima' + 'ges'];
+await images.generate({ prompt: 'a dot', path: 'dot.png' });`;
+
+    assert.false(
+      RunRealmCodeTool.neverAutoExecutesFor({ code }),
+      'this run would not wait for a click',
+    );
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code,
+      }),
+      /realm\.images\.generate must be called by that name/,
+    );
+    assert.strictEqual(imageRequests.length, 0, 'no image was requested');
+  });
+});

@@ -483,12 +483,94 @@ export interface OutboundRequest {
   sizePath: ResponseSizePath;
   // The credential to attach. A redirect to another origin drops it.
   credential?: OutboundCredential;
+  // Values filled into the request where their tokens stand, once the request
+  // as given has passed the destination check. A request carrying any is not
+  // followed across a redirect to another origin: the redirect itself is the
+  // response, since a filled value can sit in the body or a header that a
+  // redirect would carry on.
+  substitutions?: OutboundSubstitution[];
   // Every form of the attached credential is registered here, and the
   // response comes back with each registered value removed. A caller that
   // sends a credential some other way (substituted into the body, or a
   // transform of one) registers it here itself. A caller that keeps handling
   // the call after `outboundFetch` returns passes its own and scrubs with it.
   scrubber?: CredentialScrubber;
+}
+
+// A value the client fills into a request at send time. `token` is text the
+// request carries in the URL, a header value or the body wherever the value
+// goes, chosen from characters every one of those encodings leaves alone, so
+// it reads the same in each. The value is encoded for where it lands: as a
+// URL component in the URL, as a JSON string's contents in the body, and as
+// itself in a header.
+export interface OutboundSubstitution {
+  token: string;
+  value: string;
+}
+
+const SUBSTITUTION_TOKEN = /^[A-Za-z0-9_]+$/;
+
+function substituteInto(
+  text: string,
+  substitutions: OutboundSubstitution[],
+  encode: (value: string) => string,
+): string {
+  let result = text;
+  for (let { token, value } of substitutions) {
+    result = result.split(token).join(encode(value));
+  }
+  return result;
+}
+
+// Fills every substitution into the request, registering each value with the
+// scrubber first so nothing the response echoes carries one back. The URL is
+// filled after it was checked as given, and has to keep its origin: a value
+// may fill a path segment or a query value, never the destination.
+function applySubstitutions(
+  url: URL,
+  headers: Record<string, string>,
+  body: BodyInit | undefined,
+  substitutions: OutboundSubstitution[] | undefined,
+  scrubber: CredentialScrubber,
+): { url: URL; body: BodyInit | undefined } {
+  if (!substitutions || substitutions.length === 0) {
+    return { url, body };
+  }
+  for (let { token, value } of substitutions) {
+    if (!SUBSTITUTION_TOKEN.test(token)) {
+      throw new Error(`A substitution token must be letters, digits and _`);
+    }
+    scrubber.register(value);
+  }
+  let filled: URL;
+  try {
+    filled = new URL(
+      substituteInto(url.href, substitutions, encodeURIComponent),
+    );
+  } catch {
+    throw new OutboundRefusedError('invalid-url', 'The URL is not valid');
+  }
+  if (filled.origin !== url.origin) {
+    throw new OutboundRefusedError(
+      'invalid-url',
+      `A filled value may not change where ${normalizeHost(url.hostname)} is reached`,
+    );
+  }
+  for (let [name, value] of Object.entries(headers)) {
+    headers[name] = substituteInto(value, substitutions, (v) => v);
+  }
+  if (body !== undefined && typeof body !== 'string') {
+    throw new Error(`A request with substitutions carries a string body`);
+  }
+  return {
+    url: filled,
+    body:
+      body === undefined
+        ? undefined
+        : substituteInto(body, substitutions, (v) =>
+            JSON.stringify(v).slice(1, -1),
+          ),
+  };
 }
 
 const FORBIDDEN_HEADER_PREFIX = 'x-boxel-';
@@ -616,14 +698,23 @@ async function send(
 
   let method = request.method;
   let headers = { ...request.headers };
-  let body = request.body;
+  let checked = checkDestination(request.url);
+  let filled = applySubstitutions(
+    checked,
+    headers,
+    request.body,
+    request.substitutions,
+    scrubber,
+  );
+  let body = filled.body;
   let attached = attachCredential(
-    checkDestination(request.url),
+    filled.url,
     headers,
     request.credential,
     scrubber,
   );
   let url = attached.url;
+  let carriesSubstitutions = (request.substitutions?.length ?? 0) > 0;
 
   for (let hop = 0; ; hop++) {
     let current = checkDestination(url);
@@ -647,7 +738,11 @@ async function send(
     }
 
     let location = response.headers.get('location');
-    if (!REDIRECT_STATUSES.has(response.status) || !location) {
+    if (
+      !REDIRECT_STATUSES.has(response.status) ||
+      !location ||
+      (carriesSubstitutions && leavesOrigin(location, current))
+    ) {
       let observed = observeResponseSize(response, {
         destination: recordedURL(request.url),
         sizePath: request.sizePath,
@@ -694,6 +789,16 @@ async function send(
       headers = withoutHeaders(headers, ['content-type', 'content-length']);
     }
     url = next.href;
+  }
+}
+
+// Whether a redirect's `location` names another origin. One that does not
+// parse is judged as leaving: following it is refused below either way.
+function leavesOrigin(location: string, current: URL): boolean {
+  try {
+    return new URL(location, current).origin !== current.origin;
+  } catch {
+    return true;
   }
 }
 

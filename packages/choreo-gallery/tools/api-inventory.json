@@ -940,6 +940,14 @@
     },
     {
       "entrypoint": "glimmer-motion",
+      "symbol": "retime",
+      "source": "packages/glimmer-motion/src/node.ts",
+      "kind": "value",
+      "guide": "core-tempo",
+      "declaration": "packages/glimmer-motion/src/index.ts"
+    },
+    {
+      "entrypoint": "glimmer-motion",
       "symbol": "scaleTransition",
       "source": "packages/glimmer-motion/src/speed.ts",
       "kind": "value",

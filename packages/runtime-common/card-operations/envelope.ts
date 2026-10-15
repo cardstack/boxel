@@ -7,6 +7,7 @@ import {
   isExplainResult,
   isOperationFailure,
   isValidateResult,
+  isCallApiResult,
   isWrite,
   type BaseOperation,
   type EntryPosition,
@@ -1153,6 +1154,11 @@ export function readResult(
   }
   if (isValidateResult(result)) {
     return result.validation as unknown as Record<string, unknown>;
+  }
+  // A callApi answers with the vendor's response, or what its `output` maps
+  // that to, as the card reads it back.
+  if (isCallApiResult(result)) {
+    return result.callApi as Record<string, unknown>;
   }
   if (!isDocumentResult(result)) {
     throw new OperationFailure({

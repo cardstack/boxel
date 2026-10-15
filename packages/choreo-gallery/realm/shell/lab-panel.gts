@@ -19,9 +19,9 @@ interface Signature {
 /**
  * The demo lab: a DialKit panel over every value the demo declares through
  * `demoTuning`, with the demo's authored looks as its shipped tunes and a
- * replay for the stage beside it. An edit reaches the demo as it renders;
- * motion already running keeps its timing until the demo moves again, so
- * replay runs it from the start with the new values.
+ * replay for the stage beside it. An edit reaches the demo as it renders,
+ * and motion already running takes the new timing where it is; replay runs
+ * the demo from the start with the new values.
  */
 export class LabPanel extends Component<Signature> {
   readonly lab = new DemoLab(this.args.slug, this.title);
@@ -48,9 +48,9 @@ export class LabPanel extends Component<Signature> {
           Replay ↻
         </button>
         <p class='lab-note'>
-          These values feed the live demo. Wear a tune, or move a control and
-          replay to see the whole motion with it. Copy puts your values on the
-          clipboard.
+          These values feed the live demo as you move them. Wear a tune, or
+          replay to see the whole motion from the start. Copy puts your values
+          on the clipboard.
         </p>
       </div>
     </section>

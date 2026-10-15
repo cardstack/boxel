@@ -118,11 +118,6 @@ export class FilmStage extends Component<Signature> {
       : undefined;
   }
 
-  /** the page is leaving: the film has stood down and its poster flies */
-  get curtain() {
-    return this.args.theater?.curtain === true;
-  }
-
   get frameStyle() {
     let size = this.sized;
     let ground = `--film-ground:${this.args.ground}`;
@@ -228,8 +223,7 @@ export class FilmStage extends Component<Signature> {
           {{this.well}}
         >
           {{! the poster is the film's still, under the frame: it is what
-            shows while the film loads, and what the crossing flies — a frame
-            can't ride the crossing out, because moving an iframe reloads it }}
+            shows while the film loads }}
           <img
             class='film-poster'
             src={{@poster}}
@@ -237,14 +231,12 @@ export class FilmStage extends Component<Signature> {
             style={{this.posterStyle}}
             data-test-film-poster
           />
-          {{#unless this.curtain}}
-            <FilmFrame
-              class='film-frame'
-              @film={{@film}}
-              @link={{@filmLink}}
-              @title={{@title}}
-            />
-          {{/unless}}
+          <FilmFrame
+            class='film-frame'
+            @film={{@film}}
+            @link={{@filmLink}}
+            @title={{@title}}
+          />
           {{#if @theater}}
             {{#unless this.inTheater}}
               {{! UPPER RIGHT, where the mark stands in theater: the way in and

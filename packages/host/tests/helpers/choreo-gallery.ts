@@ -49,3 +49,36 @@ export function choreoGalleryGuides(): Record<string, string> {
   }
   return guides;
 }
+
+/**
+ * The gallery realm cut down to a gallery of the given demos, for a test that
+ * indexes the realm: every module, the theme, those demos' instances, and an
+ * index card that links them in the order given. The realm's other card
+ * instances stay out, so indexing renders only what the test opens.
+ */
+export function choreoGalleryRealmOf(demos: string[]): RealmContents {
+  let contents: RealmContents = {};
+  for (let [file, source] of Object.entries(choreoGalleryContents())) {
+    if (
+      !file.endsWith('.json') ||
+      file === 'theme.json' ||
+      demos.some((slug) => file === `demos/${slug}.json`)
+    ) {
+      contents[file] = source;
+    }
+  }
+  contents['index.json'] = {
+    data: {
+      type: 'card',
+      attributes: {},
+      relationships: Object.fromEntries(
+        demos.map((slug, index) => [
+          `demos.${index}`,
+          { links: { self: `./demos/${slug}` } },
+        ]),
+      ),
+      meta: { adoptsFrom: { module: './gallery', name: 'ChoreoGallery' } },
+    },
+  };
+  return contents;
+}

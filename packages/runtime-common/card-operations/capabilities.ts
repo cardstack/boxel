@@ -25,7 +25,7 @@ import { principalQueryScope, type SearchPrincipal } from './policy-query.ts';
 import {
   OperationFailure,
   isOperationFailure,
-  isWrite,
+  travelsAsWrite,
   type OperationErrorCode,
   type OperationTarget,
 } from './types.ts';
@@ -261,7 +261,7 @@ async function decide(
     if (definition.base === 'query' && target.kind === 'instance') {
       return refused('wrong-entry-point');
     }
-    if (who.writesRefused && isWrite(definition.base)) {
+    if (who.writesRefused && travelsAsWrite(definition.base)) {
       return refused(who.writesRefused);
     }
     // An operation that reads `actor()` has no actor to read for a caller

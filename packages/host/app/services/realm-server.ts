@@ -1354,7 +1354,8 @@ export default class RealmServerService
   // call, so a model call nobody is reading any more still delays that user's
   // next one. Aborting the request is what releases it, hence a real signal on
   // the fetch rather than a race against a timer. Omitting `timeoutMs` sends
-  // no signal at all and waits indefinitely.
+  // no deadline and waits indefinitely. A caller's `signal` aborts the request
+  // too, including the read of the response body.
   async requestForward(args: {
     url: string;
     method: string;
@@ -1362,16 +1363,21 @@ export default class RealmServerService
     headers?: Record<string, string>;
     multipart?: boolean;
     timeoutMs?: number;
+    signal?: AbortSignal;
   }) {
     await this.login();
 
-    let { timeoutMs, ...forwardedRequest } = args;
+    let { timeoutMs, signal: callerSignal, ...forwardedRequest } = args;
     let deadline: AbortController | undefined;
     let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
     if (timeoutMs != null && timeoutMs > 0) {
       deadline = new AbortController();
       deadlineTimer = setTimeout(() => deadline!.abort(), timeoutMs);
     }
+    let signal =
+      deadline && callerSignal
+        ? AbortSignal.any([deadline.signal, callerSignal])
+        : (deadline?.signal ?? callerSignal);
 
     let responded = false;
     try {
@@ -1385,7 +1391,7 @@ export default class RealmServerService
             Authorization: `Bearer ${this.token}`,
           },
           body: JSON.stringify(forwardedRequest),
-          signal: deadline?.signal,
+          signal,
         },
       );
       // The budget covers time-to-response, so it stops the moment a response

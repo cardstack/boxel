@@ -51,6 +51,7 @@ import {
   OperationFailure,
   isDefinitionFreeBaseOperation,
   isWrite,
+  travelsAsWrite,
   type BaseOperation,
   type OperationDefinition,
   type OperationTarget,
@@ -1967,7 +1968,7 @@ async function recordedChain(
 function declines(scope: GateScope, base: BaseOperation): boolean {
   return (
     scope.coarseDeclined === 'all' ||
-    (scope.coarseDeclined === 'writes' && isWrite(base))
+    (scope.coarseDeclined === 'writes' && travelsAsWrite(base))
   );
 }
 
