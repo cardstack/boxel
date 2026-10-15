@@ -21,6 +21,8 @@ import { PrerenderCancelledError } from '../prerender/prerender-cancel.ts';
 //      than waiting out its budget on the same stalled refill a second time.
 //   4. A caller's abort rejects its wait at once, while the refill runs on
 //      and hands its standby to a caller that is still waiting.
+//   5. A waiting caller takes each standby the moment it is created, not
+//      when the refill pass that made it settles.
 
 interface Gate {
   promise: Promise<void>;
@@ -39,11 +41,55 @@ function makeBrowserStub(opts: { hangFrom?: number } = {}) {
   let gate = makeGate();
   let created = 0;
   let hangFrom = opts.hangFrom ?? Infinity;
-  let browser = {
-    async createBrowserContext() {
+  return {
+    browserManager: makeBrowserManager(async () => {
       if (created++ >= hangFrom) {
         await gate.promise;
       }
+    }),
+    gate,
+    hangNext() {
+      hangFrom = created;
+    },
+  };
+}
+
+// Each `createBrowserContext` call waits on its own gate, `gateFor(n)` for the
+// n-th call, so a test can let one standby through while the next hangs.
+// `gate` opens every one of them, including those of calls still to come.
+function makeSteppedBrowserStub() {
+  let callGates: Gate[] = [];
+  let allOpen = false;
+  let gateFor = (n: number) => {
+    let gate = (callGates[n] ??= makeGate());
+    if (allOpen) {
+      gate.open();
+    }
+    return gate;
+  };
+  let created = 0;
+  return {
+    browserManager: makeBrowserManager(async () => {
+      await gateFor(created++).promise;
+    }),
+    gateFor,
+    gate: {
+      promise: Promise.resolve(),
+      open() {
+        allOpen = true;
+        for (let gate of callGates) {
+          gate.open();
+        }
+      },
+    } as Gate,
+  };
+}
+
+// A browser whose `createBrowserContext` first awaits `beforeCreate`.
+function makeBrowserManager(beforeCreate: () => Promise<void>) {
+  let browser = {
+    async createBrowserContext() {
+      await beforeCreate();
       let context: any = {
         async newPage() {
           return {
@@ -67,19 +113,13 @@ function makeBrowserStub(opts: { hangFrom?: number } = {}) {
       return context;
     },
   };
-  let browserManager = {
+  return {
     async getBrowser() {
       return browser as any;
     },
     async cleanupUserDataDirs() {},
   };
-  return {
-    browserManager,
-    gate,
-    hangNext() {
-      hangFrom = created;
-    },
-  };
+  return browserManager;
 }
 
 // Resolves to the promise's value, or to `'timeout'` if it hasn't settled in
@@ -413,5 +453,28 @@ module(basename(import.meta.filename), function (hooks) {
       [a.pageId, b.pageId, c.pageId].includes(e.pageId),
       'E did not take another affinity’s tab',
     );
+  });
+
+  test('a waiting caller takes a standby as soon as it is created, while the refill that made it is still running', async function (assert) {
+    assert.timeout(10_000);
+    let stub = makeSteppedBrowserStub();
+    let pool = makePool({
+      maxPages: 4,
+      browserManager: stub.browserManager,
+      gate: stub.gate,
+      // Long enough that only a standby ends the wait.
+      standbyRefillWaitMs: 60_000,
+    });
+
+    // The pool starts empty, so A waits on the refill's first creation.
+    let pending = pool.getPage('A');
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    // The first standby is made; the refill's next creation hangs, so the
+    // refill pass never settles.
+    stub.gateFor(0).open();
+    let a = settled(await within(pending), "A's standby");
+    a.release();
+    assert.false(a.reused, 'A got a fresh standby');
   });
 });
