@@ -99,15 +99,16 @@ export function getToolRequests<T = unknown>(
 
 // An event's latest content. Room history fetched without edits keeps a
 // streamed bot message's placeholder content; the server carries the latest
-// edit, whose content holds the final body and tool requests, under
-// `unsigned['m.relations']['m.replace']`.
+// edit under `unsigned['m.relations']['m.replace']`. An edit's replacement
+// content is its `m.new_content` when it has one (its top level is then a
+// fallback for clients that don't apply edits); ai-bot's own edits carry the
+// full content at the top level and no `m.new_content`.
 export function latestEventContent(event: {
   content?: Record<string, any>;
   unsigned?: Record<string, any>;
 }): Record<string, any> | undefined {
-  return (
-    event.unsigned?.['m.relations']?.['m.replace']?.content ?? event.content
-  );
+  let replacement = event.unsigned?.['m.relations']?.['m.replace']?.content;
+  return replacement?.['m.new_content'] ?? replacement ?? event.content;
 }
 
 // Reads the room-skills state event's tool definitions under either key.

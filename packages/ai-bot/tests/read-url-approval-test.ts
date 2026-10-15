@@ -20,7 +20,11 @@ import {
 } from '../lib/bot-tools/read-url/read.ts';
 import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 import { toCommandRequest } from '../lib/matrix/response-publisher.ts';
-import { releasedToolCalls } from '../lib/bot-tools/approval.ts';
+import {
+  ApprovalClaims,
+  releasedToolCalls,
+  unreleasedApproval,
+} from '../lib/bot-tools/approval.ts';
 import type { BotToolTurn } from '../lib/bot-tools/index.ts';
 
 const BOT_TOOL_NAMES = new Set([READ_URL_TOOL_NAME]);
@@ -94,11 +98,6 @@ function streamedBotMessage(
             body,
             isStreamingFinished: true,
             [APP_BOXEL_TOOL_REQUESTS_KEY]: requests,
-            'm.new_content': {
-              body,
-              isStreamingFinished: true,
-              [APP_BOXEL_TOOL_REQUESTS_KEY]: requests,
-            },
             'm.relates_to': { rel_type: 'm.replace', event_id: id },
           },
         },
@@ -294,6 +293,85 @@ module('readUrl approval', () => {
       ]),
       [['held-a', '$bot']],
       'the unsettled call is released against the message it belongs to',
+    );
+  });
+
+  test('an edit whose replacement content is in m.new_content releases its approved call', () => {
+    let message = streamedBotMessage([]);
+    let edit = (message as any).unsigned['m.relations']['m.replace'];
+    edit.content = {
+      body: '* ',
+      'm.new_content': {
+        body: '',
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+          readUrlRequest('held', 'https://a.example/', true),
+        ],
+      },
+      'm.relates_to': { rel_type: 'm.replace', event_id: '$bot' },
+    };
+    let history = [message, result('held', 'approved', USER)];
+    assert.deepEqual(
+      readUrlCallsReleasedByApprovals(history, BOT).map(
+        (entry) => entry.call.id,
+      ),
+      ['held'],
+    );
+  });
+
+  test('an approval that releases no call says why', () => {
+    let held = readUrlRequest('held', 'https://a.example/', true);
+    let history = [
+      streamedBotMessage([held]),
+      result('held', 'approved', USER),
+    ];
+    let claims = new ApprovalClaims();
+    let released = readUrlCallsReleasedByApprovals(history, BOT);
+    assert.strictEqual(
+      unreleasedApproval(
+        history,
+        'held',
+        released,
+        claims.claim(history, released),
+      ),
+      undefined,
+      'the first handler runs the call',
+    );
+    assert.strictEqual(
+      unreleasedApproval(
+        history,
+        'held',
+        released,
+        claims.claim(history, released),
+      ),
+      'claimed',
+      'a later handler finds it already taken on',
+    );
+
+    let settled = [...history, result('held', 'applied', BOT)];
+    assert.strictEqual(
+      unreleasedApproval(
+        settled,
+        'held',
+        readUrlCallsReleasedByApprovals(settled, BOT),
+        [],
+      ),
+      'settled',
+      'a redelivered approval of a finished call',
+    );
+
+    let placeholderOnly = [
+      { ...streamedBotMessage([held]), unsigned: {} },
+      result('held', 'approved', USER),
+    ] as DiscreteMatrixEvent[];
+    assert.strictEqual(
+      unreleasedApproval(
+        placeholderOnly,
+        'held',
+        readUrlCallsReleasedByApprovals(placeholderOnly, BOT),
+        [],
+      ),
+      'missing',
+      'the approved call cannot be found',
     );
   });
 
