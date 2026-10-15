@@ -138,10 +138,13 @@ type WriteFile = (
 // Saves one binary file that did not exist.
 type WriteBinaryFile = (url: string, bytes: Uint8Array) => Promise<void>;
 
-// Deletes one file. `expected` is the text the run last saved to it, or
-// undefined for a binary file; the delete refuses if the realm no longer
-// matches it.
-type DeleteFile = (url: string, expected: string | undefined) => Promise<void>;
+// Deletes one file. `expected` is the text the run last saved to it, or the
+// SHA-256 of the bytes it saved to a binary file; the delete refuses if the
+// realm no longer matches it.
+type DeleteFile = (
+  url: string,
+  expected: { content: string } | { sha256: string },
+) => Promise<void>;
 
 // What `lookup` finds for a file that is not UTF-8 text.
 const BINARY = Symbol('binary');
@@ -277,6 +280,9 @@ class RealmFsSession {
   // realm.fs.writeBytes. They are not in `known`, since their content is not
   // text, but they count toward MAX_FILES.
   readonly binary = new Set<string>();
+  // The SHA-256 of the bytes realm.fs.writeBytes saved, for each binary file
+  // this run created, so a delete can tell the file is still the run's.
+  private binaryDigests = new Map<string, string>();
   private binaryBytes = 0;
   // What `realm.capture` takes in this run.
   readonly captures: RealmCaptures;
@@ -481,6 +487,7 @@ class RealmFsSession {
         let bytes = decodeBase64(base64);
         await this.writeBinaryFile(url, bytes);
         this.binaryBytes += bytes.byteLength;
+        this.binaryDigests.set(url, await sha256(bytes));
         // The lookup above recorded the file as missing.
         this.known.delete(url);
         this.binary.add(url);
@@ -537,13 +544,17 @@ class RealmFsSession {
           this.refused += 1;
           throw new Error(`The run has ended; ${url} was not deleted`);
         }
+        let digest = this.binaryDigests.get(url);
         await this.deleteFile(
           url,
-          this.binary.has(url) ? undefined : this.known.get(url),
+          digest !== undefined
+            ? { sha256: digest }
+            : { content: this.known.get(url) ?? '' },
         );
         this.created.delete(url);
         this.saved.delete(url);
         this.binary.delete(url);
+        this.binaryDigests.delete(url);
         this.known.set(url, undefined);
         this.deleted.add(url);
         return { path: this.relative(url), deleted: true };
@@ -1040,6 +1051,13 @@ class RealmFsSession {
 }
 
 const UTF8 = new TextDecoder('utf-8', { fatal: true });
+
+async function sha256(bytes: Uint8Array): Promise<string> {
+  let digest = await crypto.subtle.digest('SHA-256', bytes as BufferSource);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+}
 
 // Accepts plain base64, with or without line breaks, or a base64 data URL.
 // The base64 content of a writeBytes call, without a `data:` URL prefix or
@@ -1715,16 +1733,37 @@ export default class RunRealmCodeTool extends HostBaseTool<
   // Checks the realm still holds what the run saved, and deletes the file.
   private async deleteFile(
     url: string,
-    expected: string | undefined,
+    expected: { content: string } | { sha256: string },
   ): Promise<void> {
-    let current = await this.readSource(url);
-    if (
-      current.status !== 200 ||
-      (expected !== undefined && current.content !== expected)
-    ) {
+    let unchanged =
+      'sha256' in expected
+        ? (await this.readBinaryDigest(url)) === expected.sha256
+        : await this.readSource(url).then(
+            (current) =>
+              current.status === 200 &&
+              !current.binary &&
+              current.content === expected.content,
+          );
+    if (!unchanged) {
       throw new Error(`File changed while the script ran: ${url}`);
     }
     await this.cardService.deleteSource(new URL(url));
+  }
+
+  // The SHA-256 of a binary file's bytes, or undefined for a file that does
+  // not exist or is larger than any file realm.fs.writeBytes saves.
+  private async readBinaryDigest(url: string): Promise<string | undefined> {
+    let response = await this.network.authedFetch(url, {
+      headers: { Accept: SupportedMimeType.CardSource },
+    });
+    if (
+      response.status !== 200 ||
+      Number(response.headers.get('content-length')) > MAX_BINARY_FILE_SIZE
+    ) {
+      await response.body?.cancel();
+      return undefined;
+    }
+    return await sha256(new Uint8Array(await response.arrayBuffer()));
   }
 
   private async listDirectory(

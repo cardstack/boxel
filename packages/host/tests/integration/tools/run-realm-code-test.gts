@@ -4,6 +4,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
+import { SupportedMimeType } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
@@ -786,6 +787,61 @@ return refused;`,
       let source = await cardService.getSource(new URL(path, testRealmURL));
       assert.strictEqual(source.status, 200, `${path} is still in the realm`);
     }
+  });
+
+  test('realm.fs.delete refuses a binary file the run created when someone replaced it', async function (assert) {
+    let toolService = getService('tool-service');
+    let network = getService('network');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+    let dotURL = `${testRealmURL}dot.png`;
+    let replacement = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe]);
+
+    // A collaborator saves other bytes to the file right after the run
+    // creates it.
+    let real = network.authedFetch;
+    Object.defineProperty(network, 'authedFetch', {
+      configurable: true,
+      value: async (url: string, init?: RequestInit) => {
+        let response = await real(url, init);
+        if (url === dotURL && init?.method === 'POST' && response.ok) {
+          let replaced = await real(dotURL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/octet-stream' },
+            body: new Blob([replacement as BlobPart]),
+          });
+          assert.true(replaced.ok, 'the collaborator replaced the file');
+        }
+        return response;
+      },
+    });
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.writeBytes('dot.png', ${JSON.stringify(PNG_BASE64)});
+try {
+  await realm.fs.delete('dot.png');
+  return 'deleted';
+} catch (e) {
+  return e.message;
+}`,
+    });
+
+    assert.true(
+      /File changed while the script ran: .*dot\.png/.test(
+        JSON.parse(result.scriptResult!),
+      ),
+      `the delete is refused: ${result.scriptResult}`,
+    );
+    let response = await real(dotURL, {
+      headers: { Accept: SupportedMimeType.CardSource },
+    });
+    assert.strictEqual(response.status, 200, 'dot.png is still in the realm');
+    assert.deepEqual(
+      Array.from(new Uint8Array(await response.arrayBuffer())),
+      Array.from(replacement),
+      "the collaborator's bytes are kept",
+    );
   });
 
   test('a failed run names the files it created and deleted', async function (assert) {
