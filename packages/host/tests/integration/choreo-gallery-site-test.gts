@@ -138,6 +138,18 @@ module('Integration | Choreo gallery | site', function (hooks) {
         menu.right <= bar.right,
         `${site}: the menu ends inside the bar (${menu.right} against ${bar.right})`,
       );
+      if (site === 'narrow') {
+        // the window is wide, so the bar keeps its wide padding: the menu
+        // spanning the bar lines up with it
+        let topbar = document.querySelector<HTMLElement>('.narrow .topbar')!;
+        let scale = bar.width / topbar.offsetWidth;
+        let gutter = parseFloat(getComputedStyle(topbar).paddingLeft);
+        let inset = (menu.left - bar.left) / scale;
+        assert.true(
+          Math.abs(inset - gutter) < 1,
+          `the menu is inset ${inset}px, the bar's ${gutter}px gutter`,
+        );
+      }
     }
     assert.true(
       picker('narrow').open,
