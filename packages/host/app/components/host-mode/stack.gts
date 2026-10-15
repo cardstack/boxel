@@ -88,8 +88,9 @@ export default class HostModeStack extends Component<Signature> {
   }
 
   @action
-  onKeydown(event: KeyboardEvent) {
+  onKeydown(event: Event) {
     if (
+      !(event instanceof KeyboardEvent) ||
       event.key !== 'Escape' ||
       event.defaultPrevented ||
       isTextEntry(event.target)
