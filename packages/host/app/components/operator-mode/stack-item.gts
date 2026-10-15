@@ -57,6 +57,7 @@ import {
   cardTypeIcon,
   isRealmIndexCardId,
   realmURL,
+  rri,
   localId as localIdSymbol,
   CardContextName,
   CardCrudFunctionsContextName,
@@ -284,7 +285,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
 
   private get isIndexCard() {
     return isRealmIndexCardId(
-      this.url,
+      this.url ? rri(this.url) : undefined,
       this.realmURL,
       this.network.virtualNetwork,
     );

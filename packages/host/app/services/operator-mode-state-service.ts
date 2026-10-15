@@ -509,8 +509,8 @@ export default class OperatorModeStateService extends Service {
     if (this._state.stacks.length === 0) {
       const realmURL = this.getRealmURLFromItemId(item.id);
       const isIndexCard = isRealmIndexCardId(
-        item.id,
-        realmURL,
+        rri(item.id),
+        ri(realmURL),
         this.network.virtualNetwork,
       );
       if (isIndexCard) {
