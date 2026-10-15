@@ -62,7 +62,7 @@ let result = await client.runCommand(
   realmServerUrl,
   realmUrl,
   '@cardstack/boxel-host/commands/get-card-type-schema/default',
-  { codeRef: { module: '<absolute-module-url>', name: 'StickyNote' } },
+  { codeRef: { module: '<absolute-module-identifier>', name: 'StickyNote' } },
 );
 ```
 
