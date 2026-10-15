@@ -20,7 +20,6 @@ import {
   identifyCard,
   isCardInstance,
   RealmPaths,
-  ri,
   rri,
   THIS_INTERPOLATION_PREFIX,
   THIS_REALM_TOKEN,
@@ -882,19 +881,16 @@ function resolveQueryAndRealm(
     // A card definition never holds the realm mappings, so the store answers
     // which realm a reference belongs to — the same boundary `resolveURL` and
     // `canonicalizeId` sit on. A reference the store can't place falls back to
-    // the containing realm only when it actually lives there, written either as
-    // the realm's URL or in the canonical form the store folds it to; otherwise
-    // the normalizer drops it rather than searching the wrong realm.
+    // the containing realm only when it actually lives there; otherwise the
+    // normalizer drops it rather than searching the wrong realm. A prefix-form
+    // reference never reaches this fallback: the store places it whenever it
+    // holds the prefix mapping.
     resolveRealmForReference: (reference) => {
       let realm = store.realmForId(reference);
       if (realm) {
         return realm;
       }
-      let containing = [
-        new RealmPaths(realmURL),
-        new RealmPaths(ri(store.canonicalizeId(realmURL.href))),
-      ];
-      return containing.some((paths) => paths.inRealm(rri(reference)))
+      return new RealmPaths(realmURL).inRealm(rri(reference))
         ? realmURL.href
         : undefined;
     },
