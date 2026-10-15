@@ -68,6 +68,25 @@ module('Unit | isRealmIndexCardId', function () {
     );
   });
 
+  test('it recognizes a prefix-form index card against a virtual alias of the realm', function (assert) {
+    let aliasedNetwork = new VirtualNetwork();
+    aliasedNetwork.addRealmMapping(
+      '@test/cards/',
+      'https://cardstack.com/test-realm/',
+    );
+    aliasedNetwork.addURLMapping(
+      new URL('https://alias.example/test-realm/'),
+      new URL('https://cardstack.com/test-realm/'),
+    );
+    assert.true(
+      isRealmIndexCardId(
+        rri('@test/cards/index'),
+        new URL('https://alias.example/test-realm/'),
+        aliasedNetwork,
+      ),
+    );
+  });
+
   test('it does not match a prefix-form index card nested in a directory', function (assert) {
     assert.false(
       isRealmIndexCardId(rri('@test/cards/dir/index'), ri('@test/cards/')),
