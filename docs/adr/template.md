@@ -1,7 +1,8 @@
 ---
 status: proposed
 date: YYYY-MM-DD
-scope: [] # globs this decision governs, on one line, e.g. [packages/postgres/**]
+scope: # globs this decision governs, one per line
+  - packages/example/**
 # supersedes: NNN
 # retroactive: true
 # recorded: YYYY-MM-DD

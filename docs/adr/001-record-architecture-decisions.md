@@ -1,7 +1,9 @@
 ---
 status: proposed
 date: 2026-10-15
-scope: [docs/adr/**, .claude/skills/adr/**]
+scope:
+  - docs/adr/**
+  - .claude/skills/adr/**
 ---
 
 # 001. Record architecture decisions as short, normative ADRs
@@ -37,7 +39,8 @@ The frontmatter MUST contain:
 
 - `status`: `proposed`, `accepted`, `superseded`, or `deprecated`.
 - `date`: the date of the decision.
-- `scope`: a single-line list of globs for the code the decision governs.
+- `scope`: a YAML list of globs for the code the decision governs, one glob
+  per line. `scripts/adr-for.mjs` reads it.
 
 A superseding ADR MUST set `supersedes`, and the ADR it replaces MUST set
 `superseded-by`. A retroactive ADR (§1.7) MUST set `retroactive: true` and
