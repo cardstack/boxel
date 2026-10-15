@@ -56,12 +56,14 @@ import {
   isDeployedServerURL,
   startOutboundGuard,
 } from './lib/outbound/client.ts';
+import { callApiSender } from './lib/outbound/call-api-sender.ts';
 import {
   reportPlaintextCensus,
   reportSealedCensus,
   secretsKeyring,
   startSecretsAtRest,
 } from './lib/secrets-at-rest/index.ts';
+import { sealProxyEndpointKeys } from './lib/proxy-endpoint-keys.ts';
 import { buildLinkShapePolicy } from './search-inflight.ts';
 import { startEventLoopHeartbeat } from './liveness/event-loop-heartbeat.ts';
 import { startLivenessResponder } from './liveness/index.ts';
@@ -601,6 +603,16 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   let realms: Realm[] = [];
   let dbAdapter = new PgAdapter({ autoMigrate });
   let queue = new PgQueuePublisher(dbAdapter);
+  // Seals any proxy endpoint key still held only in plain text, so every
+  // deploy converges with no operator step. The pass is idempotent and safe
+  // for replicas to run at once; if it fails, the proxy keeps serving those
+  // keys from the plain-text column.
+  try {
+    await sealProxyEndpointKeys(dbAdapter);
+  } catch (e: any) {
+    Sentry.captureException(e);
+    console.error(`Sealing proxy endpoint keys failed: ${e?.message ?? e}`);
+  }
   await reportPlaintextCensus(dbAdapter);
   await reportSealedCensus(dbAdapter, secretsKeyring());
   // DB-backed job-scoped search cache, shared across replicas via Postgres.
@@ -804,6 +816,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
             reconciler
               ? findRealm(url, { realms, reconciler, dbAdapter })
               : Promise.resolve(undefined),
+          callApi: callApiSender,
         },
         {
           ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),

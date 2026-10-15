@@ -603,6 +603,8 @@ INSERT INTO proxy_endpoints (
 );
 ```
 
+The realm server seals the key into the row's encrypted columns the next time it starts. To seal it straight away, run `pnpm seal-proxy-endpoint-keys` from `packages/realm-server`. If you later change a row's `api_key` or `url` by hand, start the realm server again or run that command, so the sealed key matches the edit.
+
 Typically, it is needed for our openrouter setup which is used widely throughout our codebase. But, additionally you can add in your own proxy.
 
 #### Configuration Options

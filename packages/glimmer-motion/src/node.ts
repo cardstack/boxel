@@ -7,14 +7,19 @@
  * plus `presence` (from <Presence>) instead of React context.
  */
 import type {
+  AnimationDefinition,
   IProjectionNode,
   MotionNodeOptions,
   MotionValue,
   PresenceContextProps,
+  TargetAndTransition,
   VisualElement,
 } from 'motion-dom';
 import {
+  animateVisualElement,
   frame,
+  getValueTransition,
+  getVariantContext,
   HTMLProjectionNode,
   HTMLVisualElement,
   isAnimationControls,
@@ -23,7 +28,9 @@ import {
   isSVGElement,
   isVariantLabel,
   isVariantNode,
+  NativeAnimation,
   resolveMotionValue,
+  resolveVariant,
   resolveVariantFromProps,
   scrapeHTMLMotionValuesFromProps,
   scrapeSVGMotionValuesFromProps,
@@ -372,6 +379,174 @@ function describe(el: Element | undefined): string {
 
 let layoutPresenceId = 0;
 
+/** the props that say what an element animates to, and how */
+const ANIMATION_PROPS = [
+  'animate',
+  'custom',
+  'transition',
+  'variants',
+  'whileDrag',
+  'whileFocus',
+  'whileHover',
+  'whileInView',
+  'whileTap',
+] as const;
+
+/** the animation types an element can be running, lowest priority first */
+const ACTIVE_TYPES = [
+  'animate',
+  'whileInView',
+  'whileFocus',
+  'whileHover',
+  'whileTap',
+  'whileDrag',
+] as const;
+
+const printIds = new WeakMap<object, number>();
+let nextPrintId = 0;
+
+const identityPrint = (value: object) => {
+  let id = printIds.get(value);
+  if (id === undefined) {
+    printIds.set(value, (id = ++nextPrintId));
+  }
+  return `#${id}`;
+};
+
+/**
+ * An element's animation props as a string, every `transition` in them
+ * included. Functions, motion values, animation controls and `custom` print
+ * by identity: `custom` is whatever the app hands its variants, and need not
+ * serialise. Undefined when the rest cannot be printed, which retime takes
+ * as "unknown" and leaves alone.
+ */
+function timingPrint(props: MotionNodeOptions): string | undefined {
+  const picked: Record<string, unknown> = {};
+  for (const key of ANIMATION_PROPS) {
+    picked[key] = (props as Record<string, unknown>)[key];
+  }
+  try {
+    return JSON.stringify(picked, function (key, value: unknown) {
+      if (typeof value === 'number' && !Number.isFinite(value)) {
+        return String(value);
+      }
+      if (
+        typeof value === 'function' ||
+        isMotionValue(value) ||
+        isAnimationControls(value) ||
+        (this === picked &&
+          key === 'custom' &&
+          value !== null &&
+          typeof value === 'object')
+      ) {
+        return identityPrint(value as object);
+      }
+      return value;
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+/** a running animation's clock, when it has one: a value following a target does not */
+function timelineOf(value: MotionValue) {
+  const animation = value.animation as
+    | { duration?: number; time?: number }
+    | undefined;
+  return animation &&
+    typeof animation.duration === 'number' &&
+    typeof animation.time === 'number' &&
+    animation.duration > 0 &&
+    Number.isFinite(animation.duration)
+    ? (animation as { duration: number; time: number })
+    : undefined;
+}
+
+type ValueTiming = {
+  delay?: number;
+  repeat?: number;
+  repeatDelay?: number;
+  repeatType?: string;
+};
+
+/**
+ * One full turn of a loop, in seconds: an iteration and its repeat delay,
+ * twice over for a loop that comes back the way it went, so a point in it
+ * says which way the loop is heading as well as where it is.
+ */
+function periodOf(iteration: number, timing: ValueTiming) {
+  const turn = iteration + (timing.repeatDelay ?? 0);
+  return timing.repeatType === 'reverse' || timing.repeatType === 'mirror'
+    ? turn * 2
+    : turn;
+}
+
+/** a finite animation's whole length, in seconds: every play and the repeat delays between */
+function totalOf(iteration: number, timing: ValueTiming) {
+  const repeats = timing.repeat ?? 0;
+  return iteration * (repeats + 1) + (timing.repeatDelay ?? 0) * repeats;
+}
+
+/**
+ * How long a value's animation has been past its delay, in seconds, or
+ * undefined while it is still waiting out the delay.
+ *
+ * The two drivers report time differently. A platform animation's time is
+ * its browser animation's, which counts the delay. A JS animation rebases
+ * its time on the delay every frame, so it reads from zero once the delay
+ * is over and holds at zero through it.
+ */
+function elapsedOf(
+  value: MotionValue,
+  clock: { time: number },
+  timing: ValueTiming,
+): number | undefined {
+  const delay = timing.delay ?? 0;
+  const animation = value.animation as { animation?: unknown } | undefined;
+  const platform =
+    animation instanceof NativeAnimation ||
+    animation?.animation instanceof NativeAnimation;
+  if (platform) {
+    const elapsed = clock.time - delay;
+    return elapsed < 0 ? undefined : elapsed;
+  }
+  return delay > 0 && clock.time <= 0 ? undefined : clock.time;
+}
+
+/** the transition a target animates under: its own, else the element's */
+function transitionOf(
+  target: TargetAndTransition | undefined,
+  props: MotionNodeOptions,
+) {
+  return target?.transition ?? props.transition;
+}
+
+/**
+ * Retime the motion already running at and under `root`.
+ *
+ * Motion reads a transition when an animation starts, so an element whose
+ * `transition` changes while its target stays put keeps running on the old
+ * timing: a spring keeps its old stiffness, an infinite loop its old
+ * duration. That is right for an app and wrong for a tuning tool, where the
+ * edit is the point. For each element whose timing has changed since it
+ * mounted or was last retimed, `retime` restarts the values still animating
+ * toward the targets they are already headed for. A value past its delay
+ * does not wait for it again, and an infinite loop goes back to the same
+ * point of its turn, direction and repeat delay included. A value that has
+ * finished stays where it settled, and an element whose timing is
+ * unchanged, or that is leaving, is not touched.
+ *
+ * Call it after the render that delivered the new transitions.
+ */
+export function retime(root: Element) {
+  for (const element of [root, ...root.querySelectorAll('*')]) {
+    const ve = visualElementStore.get(element);
+    if (ve) {
+      nodeOf.get(ve)?.retime();
+    }
+  }
+}
+
 export class MotionNode implements MotionParticipant, PopMeasurable {
   private ve?: HTMLVisualElement;
   private destroyed = false;
@@ -381,6 +556,12 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
   private latest?: { ownPresence?: PresenceHandle; props: MotionNodeOptions };
   private lastPresent?: boolean;
   private config: MotionConfigContext = {};
+  /**
+   * The props this element was mounted or last retimed under, and their
+   * print. Kept as they are and printed only by retime, so an element nobody
+   * retimes pays nothing.
+   */
+  private timedBy?: { print?: string; props: MotionNodeOptions };
 
   /** React: configAndProps = { ...MotionConfigContext, ...props }. Looked up when used, not when the args
    *  arrive: modifiers install children-first, so a <MotionConfig> above has not registered yet at update time */
@@ -678,6 +859,7 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
       }
       // React: useEffect right after commit — synchronous here, the DOM is already in place
       ve.animationState?.animateChanges();
+      this.timedBy = { props };
       ve.enteringChildren = undefined;
       if (mountContext !== presenceContext) {
         // …and now the flip that happened while we were waiting to mount
@@ -932,6 +1114,143 @@ export class MotionNode implements MotionParticipant, PopMeasurable {
     }
     this.ve = undefined;
     ve.unmount();
+  }
+
+  /** restart this element's running animation under its current timing, when that has changed (see retime) */
+  retime() {
+    const ve = this.ve;
+    if (!ve?.current || this.destroyed || !this.timedBy) {
+      return;
+    }
+    const props = ve.getProps() as MotionNodeOptions;
+    const timing = timingPrint(props);
+    const before = this.timedBy;
+    before.print ??= timingPrint(before.props);
+    if (timing === undefined || timing === before.print) {
+      return;
+    }
+    const state = ve.animationState?.getState();
+    if (this.lastPresent === false || state?.exit?.isActive) {
+      return;
+    }
+    this.timedBy = { print: timing, props };
+    // a label this element does not set itself comes from the variant
+    // context above it, as the engine's own animation state resolves it
+    const context =
+      props.inherit === false
+        ? undefined
+        : (getVariantContext(ve.parent) as
+            | Record<string, AnimationDefinition | boolean | undefined>
+            | undefined);
+    // every active type, lowest priority first, so a gesture's targets win
+    // over `animate`'s on the values both name, as they do in the engine
+    for (const type of ACTIVE_TYPES) {
+      const definition = (
+        props[type] !== undefined ? props[type] : context?.[type]
+      ) as AnimationDefinition | boolean | undefined;
+      if (
+        !state?.[type]?.isActive ||
+        !definition ||
+        typeof definition === 'boolean' ||
+        isAnimationControls(definition)
+      ) {
+        continue;
+      }
+      // a label resolves to its own target here, so this element restarts
+      // alone: its children retime by their own timing, not by orchestration
+      for (const each of Array.isArray(definition)
+        ? definition
+        : [definition]) {
+        this.restart(
+          resolveVariant(ve, each as AnimationDefinition, props.custom),
+          transitionOf(
+            typeof each === 'string'
+              ? resolveVariantFromProps(before.props, each, before.props.custom)
+              : (before.props[type] as TargetAndTransition | undefined),
+            before.props,
+          ),
+          props,
+        );
+      }
+    }
+  }
+
+  /**
+   * Restart the values of `target` that are still animating, under the
+   * timing they have now. A value already past its delay starts again
+   * without one. An infinite loop goes back to the same point of its turn,
+   * and a keyframe path to the same point of its whole length, since a new
+   * animation would start it at its first keyframe; a single target simply
+   * carries on from the value it stands at. A value that has finished is
+   * left where it settled.
+   */
+  private restart(
+    target: TargetAndTransition | undefined,
+    previous: unknown,
+    props: MotionNodeOptions,
+  ) {
+    const ve = this.ve!;
+    if (!target) {
+      return;
+    }
+    const { transition: _transition, transitionEnd, ...values } = target;
+    const transition = (transitionOf(target, props) ?? {}) as Record<
+      string,
+      unknown
+    >;
+    const restarted: Record<string, unknown> = {};
+    const timed: Record<string, unknown> = { ...transition };
+    /** where each value stood, as a fraction of its turn or of its whole length */
+    const places = new Map<string, { fraction: number; loop: boolean }>();
+    for (const key of Object.keys(values)) {
+      const value = ve.values.get(key);
+      if (!value?.isAnimating()) {
+        continue;
+      }
+      const goal = values[key as keyof typeof values];
+      restarted[key] = goal;
+      const clock = timelineOf(value);
+      const was = (getValueTransition(previous, key) ?? {}) as ValueTiming;
+      const elapsed = clock && elapsedOf(value, clock, was);
+      if (!clock || elapsed === undefined) {
+        // not started yet: it begins again, delay and all
+        continue;
+      }
+      const now = getValueTransition(transition, key) ?? {};
+      timed[key] = { ...now, delay: 0 };
+      if (was.repeat === Infinity && now.repeat === Infinity) {
+        const period = periodOf(clock.duration, was);
+        places.set(key, { fraction: (elapsed % period) / period, loop: true });
+      } else if (
+        Array.isArray(goal) &&
+        goal.length > 1 &&
+        was.repeat !== Infinity &&
+        now.repeat !== Infinity
+      ) {
+        const total = totalOf(clock.duration, was);
+        places.set(key, {
+          fraction: Math.min(elapsed / total, 1),
+          loop: false,
+        });
+      }
+    }
+    if (!Object.keys(restarted).length) {
+      return;
+    }
+    void animateVisualElement(ve, {
+      ...restarted,
+      transition: timed,
+      transitionEnd,
+    } as TargetAndTransition);
+    for (const [key, { fraction, loop }] of places) {
+      const clock = timelineOf(ve.values.get(key)!);
+      if (clock) {
+        const now = getValueTransition(transition, key) as ValueTiming;
+        clock.time =
+          fraction *
+          (loop ? periodOf(clock.duration, now) : totalOf(clock.duration, now));
+      }
+    }
   }
 
   /** re-run the update pass with the latest args (a context or presence change above us) */

@@ -21,6 +21,7 @@ import type { QueryDefinition } from './query.ts';
 import {
   isOperationFailure,
   isWrite,
+  travelsAsWrite,
   type BaseOperation,
   type NamedQueryInvocation,
 } from './types.ts';
@@ -509,6 +510,8 @@ const SCOPE: Readonly<Record<BaseOperation, 'instance' | 'type'>> = {
   validate: 'instance',
   create: 'type',
   query: 'type',
+  // Invocable in both scopes; see `carriesMember`.
+  callApi: 'instance',
 };
 
 // The behaviors reached somewhere other than a batch, which therefore have no
@@ -531,9 +534,10 @@ const NEEDS_DECLARATION: readonly BaseOperation[] = ['transform', 'query'];
 
 // Whether a name is invocable on a bucket built for this subject.
 //
-// A declared create is the one behavior invocable in both scopes: invoked on
-// the class it mints a card outright, and invoked on an instance that instance
-// is the context its declaration reads.
+// A declared create is invocable in both scopes: invoked on the class it mints
+// a card outright, and invoked on an instance that instance is the context its
+// declaration reads. A callApi is too: invoked on an instance its request may
+// read the card's fields, and invoked on the class it reads the payload alone.
 function carriesMember(
   subject: OperationsSubject,
   info: CarriedOperationInfo,
@@ -546,6 +550,9 @@ function carriesMember(
   }
   if (info.base === 'create') {
     return subject.scope === 'type' || info.declared;
+  }
+  if (info.base === 'callApi') {
+    return info.declared;
   }
   return SCOPE[info.base] === subject.scope;
 }
@@ -639,7 +646,7 @@ async function invokeOne(
   let skipIndexWait = isWrite(info.base) && env.options?.skipIndexWait;
   let answer = await env.transport.send(
     realmURL,
-    isWrite(info.base) ? 'POST' : 'QUERY',
+    travelsAsWrite(info.base) ? 'POST' : 'QUERY',
     { 'boxel:operations': [entry] },
     optimistic || skipIndexWait
       ? {
@@ -1527,7 +1534,7 @@ function entryMembers(
       return registerEntry(scope, {
         name,
         kind: resultKindOf(info.base),
-        writes: isWrite(info.base),
+        writes: travelsAsWrite(info.base),
         href: instanceHref(subject, name),
         data:
           data === undefined ? undefined : linkHandles(data, name, scope.batch),

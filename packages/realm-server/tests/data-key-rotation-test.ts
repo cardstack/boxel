@@ -475,6 +475,9 @@ module(basename(import.meta.filename), function () {
     });
 
     let keyrings: ReturnType<typeof rotationKeyrings>;
+    // The registered columns while a test runs are this module's own, so
+    // what the endpoints report is the test table alone.
+    let registeredColumns: SealedColumn[] = [];
 
     // The forward reaches a real socket, the stub vendor on loopback, so it
     // passes through the outbound guard as a deployed forward does.
@@ -516,7 +519,11 @@ module(basename(import.meta.filename), function () {
         });
 
         await createTable(dbAdapter);
-        SEALED_COLUMNS.push(COLUMN);
+        registeredColumns = SEALED_COLUMNS.splice(
+          0,
+          SEALED_COLUMNS.length,
+          COLUMN,
+        );
         keyrings = rotationKeyrings();
         for (let i = 1; i <= 6; i++) {
           await writeSecret(dbAdapter, keyrings.before, rowId(i));
@@ -531,7 +538,7 @@ module(basename(import.meta.filename), function () {
       },
       afterEach: async () => {
         await resetResealPass();
-        SEALED_COLUMNS.splice(SEALED_COLUMNS.indexOf(COLUMN), 1);
+        SEALED_COLUMNS.splice(0, SEALED_COLUMNS.length, ...registeredColumns);
         resetSecretsAtRest();
         resetOutbound();
         await stopRealmServer();

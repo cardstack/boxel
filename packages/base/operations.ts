@@ -2,6 +2,7 @@ import {
   assertQuery,
   buildOperations,
   codeRefForDef,
+  type CallApiResponse,
   getOperationsTransport,
   identifyCard,
   InvalidQueryError,
@@ -113,6 +114,7 @@ export const BASE_OPERATIONS = [
   'appendLine',
   'explain',
   'validate',
+  'callApi',
 ] as const;
 
 export type BaseOperationName = (typeof BASE_OPERATIONS)[number];
@@ -148,6 +150,7 @@ const CARRIED_BY: Record<BaseOperationName, readonly DefFamily[]> = {
   // Carried by nothing on its own. See `DECLARATION_ONLY`.
   explain: [],
   validate: [],
+  callApi: [],
 };
 
 // The behaviors a def reaches only by declaring an operation built on them.
@@ -159,11 +162,15 @@ const CARRIED_BY: Record<BaseOperationName, readonly DefFamily[]> = {
 // means something on a policy card, or for `validate` on the realm's config
 // card that names one. Implied on every card, either would be a member on
 // every card whose every invocation is refused.
+//
+// A `callApi` is a request to a service outside the realm, and only a card
+// that declares one has a request to send.
 const DECLARATION_ONLY: Partial<
   Record<BaseOperationName, readonly DefFamily[]>
 > = {
   explain: ['card'],
   validate: ['card'],
+  callApi: ['card'],
 };
 
 function operationsCarriedBy(family: DefFamily): readonly BaseOperationName[] {
@@ -760,6 +767,79 @@ export interface ValidateOperationDeclaration extends OperationCommon {
   readonly nonGrantable: true;
 }
 
+// The HTTP methods a declared request may use.
+export const CALL_API_METHODS = [
+  'GET',
+  'POST',
+  'PUT',
+  'PATCH',
+  'DELETE',
+] as const;
+export type CallApiMethod = (typeof CALL_API_METHODS)[number];
+
+// A request to a service outside the realm, declared as data and sent by the
+// realm server. Nothing of the card runs when it is invoked: the realm builds
+// the request from this declaration as it was lowered when the card's module
+// was indexed, fills in the invocation's values, and sends it through the
+// server's guarded outbound client.
+//
+//   @operation static openIssues = {
+//     base: 'callApi',
+//     label: 'List the open issues in a repository',
+//     params: { owner: StringField, repo: StringField },
+//     url: 'https://api.github.com/repos/{owner}/{repo}/issues',
+//     path: { owner: params('owner'), repo: params('repo') },
+//     query: { state: 'open' },
+//     headers: { authorization: 'Bearer {{userKey}}' },
+//   } satisfies OperationDeclaration;
+//
+// Invoked on an instance, a value may read the card's indexed fields with
+// `instance('field')`; invoked on the type, it reads only the payload, and the
+// realm the request is made for is the one the invocation names. Either way
+// the answer is the vendor's response — its status, the headers that are safe
+// to carry, and its body with every credential removed — whatever the status
+// is. A 404 from the vendor is an answer, not a refusal. An `output` maps that
+// response to an object of the card's choosing.
+//
+// A credential is written as a slot in a string where it goes:
+//
+//   * `{{userKey}}` — the invoking user's own key for the service;
+//   * `{{apiKey}}` — a key the realm holds for the service;
+//   * `{{apiKey:token}}` — a slot with a name, for a request that carries more
+//     than one credential;
+//   * `{{apiKey|basic}}` — the value transformed before it is sent; `basic`
+//     is the base64 of `user:password` that HTTP Basic authentication takes.
+//
+// A slot may appear in a header value, a query value, a path value or a string
+// in the JSON body, and once in the request. It is filled at send time, after
+// the destination has been checked against the request as declared, and it is
+// never carried across a redirect to another destination. Nothing that
+// records the request — logs, errors, telemetry — ever sees a filled one.
+export interface CallApiOperationDeclaration extends OperationCommon {
+  readonly base: 'callApi';
+  // Absent, `GET` for a request with no body and `POST` for one with a body.
+  readonly method?: CallApiMethod;
+  // An absolute URL. A path segment written `{name}` is filled from `path`,
+  // and nothing else in the URL is filled at all — its host, port and query
+  // string are what the declaration says.
+  readonly url: string;
+  // The value for each `{name}` segment in `url`. Each value fills exactly one
+  // segment: it is percent-encoded whole, so a `/` or a `..` in it stays
+  // inside the segment.
+  readonly path?: { readonly [name: string]: OperationValue };
+  readonly headers?: { readonly [name: string]: OperationValue };
+  // Query-string parameters, appended to `url` and encoded.
+  readonly query?: { readonly [name: string]: OperationValue };
+  // A JSON body, sent as `application/json`.
+  readonly json?: OperationValue;
+  // A GraphQL request, sent as a JSON body. The document is a fixed string,
+  // and every value it takes is passed as a variable, never written into it.
+  readonly graphql?: {
+    readonly document: string;
+    readonly variables?: { readonly [name: string]: OperationValue };
+  };
+}
+
 export type OperationDeclaration =
   | TransformOperationDeclaration
   | CreateOperationDeclaration
@@ -770,7 +850,8 @@ export type OperationDeclaration =
   | AppendLineOperationDeclaration
   | AppendContainsManyOperationDeclaration
   | ExplainOperationDeclaration
-  | ValidateOperationDeclaration;
+  | ValidateOperationDeclaration
+  | CallApiOperationDeclaration;
 
 // A base operation a def carries with nothing declared on it. It is not a
 // declaration and the union above deliberately cannot express one: an author
@@ -865,6 +946,8 @@ const CLAUSE_KEYS: Record<BaseOperationName, readonly string[]> = {
   explain: [],
   // Nor a validate: the card it is invoked on is the whole question.
   validate: [],
+  // The parts of the request it sends.
+  callApi: ['method', 'url', 'path', 'headers', 'query', 'json', 'graphql'],
 };
 
 // Keys that shape how a base operation answers rather than describing work for
@@ -892,6 +975,7 @@ const MODIFIER_KEYS: Partial<Record<BaseOperationName, readonly string[]>> = {
 const REQUIRED_CLAUSE: Partial<Record<BaseOperationName, string>> = {
   create: 'of',
   query: 'query',
+  callApi: 'url',
 };
 
 // Clauses that name a type rather than describe work. A raw program replaces
@@ -1185,6 +1269,9 @@ function noProgramReason(
   }
   if (base === 'validate') {
     return `a "validate" operation reports what the policy card compiles to rather than running a program over a document`;
+  }
+  if (base === 'callApi') {
+    return `a "callApi" operation sends the request it declares rather than running a program over a document`;
   }
   return undefined;
 }
@@ -1592,6 +1679,9 @@ function assertValidClauses(
       );
     }
   }
+  if (base === 'callApi') {
+    assertDeclaresARequest(label, declaration);
+  }
   if (base === 'appendLine') {
     assertAppendsALine(label, declaration);
   }
@@ -1662,6 +1752,61 @@ function assertValidClauses(
         );
       }
     }
+  }
+}
+
+// The shape of a declared request. What its values may hold — where a slot
+// may stand, how a path segment is filled, what a GraphQL document may be
+// built from — is lowering's to judge, since a stored entry outlives the
+// module that declared it and is judged there either way.
+function assertDeclaresARequest(
+  label: string,
+  declaration: Record<string, unknown>,
+) {
+  let { method, url, json, graphql } = declaration;
+  if (typeof url !== 'string' || url.length === 0) {
+    throw new Error(
+      `${label}: \`url\` must be the absolute URL the request is sent to, with each path segment the payload fills written \`{name}\``,
+    );
+  }
+  if (
+    method !== undefined &&
+    !CALL_API_METHODS.includes(method as CallApiMethod)
+  ) {
+    throw new Error(
+      `${label}: \`method\` must be one of ${quoteList(CALL_API_METHODS)}`,
+    );
+  }
+  for (let part of ['path', 'headers', 'query'] as const) {
+    let value = declaration[part];
+    if (value !== undefined && !isPlainObject(value)) {
+      throw new Error(
+        `${label}: \`${part}\` must be an object mapping each name to its value`,
+      );
+    }
+  }
+  if (json !== undefined && graphql !== undefined) {
+    throw new Error(
+      `${label}: a request carries one body — \`json\` or \`graphql\`, not both`,
+    );
+  }
+  if (graphql !== undefined) {
+    if (!isPlainObject(graphql)) {
+      throw new Error(
+        `${label}: \`graphql\` must be an object with the \`document\` to send and its \`variables\``,
+      );
+    }
+    assertOnlyKeys(label, 'graphql', graphql, ['document', 'variables']);
+    if (graphql.variables !== undefined && !isPlainObject(graphql.variables)) {
+      throw new Error(
+        `${label}: \`graphql.variables\` must be an object mapping each variable to its value`,
+      );
+    }
+  }
+  if (method === 'GET' && (json !== undefined || graphql !== undefined)) {
+    throw new Error(
+      `${label}: a GET request carries no body, so it takes no \`${json !== undefined ? 'json' : 'graphql'}\``,
+    );
   }
 }
 
@@ -1920,7 +2065,13 @@ function assertReferencesResolve(
         walk(
           value,
           path === '' ? key : `${path}.${key}`,
-          positionUnder(position, key),
+          // A request's `query` is its query string, which is data; only a
+          // saved search's is the realm's query grammar.
+          position === 'declaration' &&
+            key === 'query' &&
+            declaration.base !== 'query'
+            ? 'value'
+            : positionUnder(position, key),
         );
       }
     }
@@ -2270,8 +2421,9 @@ type PayloadArgs<Declaration> = Declaration extends {
 // reports the identity and version of what it wrote, a delete reports that
 // there is nothing left to describe, a read reports its document, an explain
 // reports what the policy decided and why — or, for one whose params ask for a
-// `list`, one page of explanations — and a validate reports what the policy
-// compiles to.
+// `list`, one page of explanations — a validate reports what the policy
+// compiles to, and a callApi reports the vendor's response, or what its
+// `output` maps that response to.
 type ResultOf<Declaration> = Declaration extends { base: 'delete' }
   ? null
   : Declaration extends { base: 'read' }
@@ -2282,7 +2434,11 @@ type ResultOf<Declaration> = Declaration extends { base: 'delete' }
         ? PolicyExplanation
         : Declaration extends { base: 'validate' }
           ? PolicyValidation
-          : OperationWriteResult;
+          : Declaration extends { base: 'callApi'; output: unknown }
+            ? unknown
+            : Declaration extends { base: 'callApi' }
+              ? CallApiResponse
+              : OperationWriteResult;
 
 // The behaviors invocable on an instance, and the one invocable on a class.
 // A declared `create` appears in both: invoked on the class it mints a card
@@ -2297,8 +2453,9 @@ type InstanceScopedBase =
   | 'appendContainsMany'
   | 'explain'
   | 'validate'
-  | 'create';
-type TypeScopedBase = 'create' | 'query';
+  | 'create'
+  | 'callApi';
+type TypeScopedBase = 'create' | 'query' | 'callApi';
 
 type ScopedBase<Scope extends 'instance' | 'type'> = Scope extends 'instance'
   ? InstanceScopedBase

@@ -176,6 +176,17 @@ function scheduleRest(
   });
 }
 
+/**
+ * Something restarted animations inside `el` without rendering: the lab,
+ * retiming a stage. A resting card has to hear about it, because the
+ * animations it paused were cancelled and their replacements are running.
+ */
+const RESTARTED = 'choreo-gallery:animations-restarted';
+
+export function announceRestartedAnimations(el: Element) {
+  el.dispatchEvent(new CustomEvent(RESTARTED, { bubbles: true }));
+}
+
 export const restWhenOff = modifier((el: HTMLElement) => {
   const room = !!roomOwner(el);
   let active = false;
@@ -222,10 +233,13 @@ export const restWhenOff = modifier((el: HTMLElement) => {
     attributeFilter: room ? ['style'] : undefined,
   });
   el.addEventListener('animationstart', settle);
+  // …and animations restarted in place, which change no DOM
+  el.addEventListener(RESTARTED, settle);
   return () => {
     observer.disconnect();
     changes.disconnect();
     el.removeEventListener('animationstart', settle);
+    el.removeEventListener(RESTARTED, settle);
     pendingRest.delete(el);
     active = true;
     apply([]);

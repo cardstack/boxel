@@ -2,6 +2,16 @@ export const APP_BOXEL_STOP_GENERATING_EVENT_TYPE = 'app.boxel.stopGenerating';
 export const APP_BOXEL_MESSAGE_MSGTYPE = 'app.boxel.message';
 export const APP_BOXEL_CARD_FORMAT = 'app.boxel.card';
 
+// Leads the source URL of a file attached to a message that is not in any
+// workspace: one the user attached from their computer, or an image a tool
+// captured. Its content is uploaded from the bytes the host holds, never
+// fetched from its source URL.
+export const LOCAL_SOURCE_URL_PREFIX = 'boxel-local://';
+// Leads the source URL of an image a tool captured for the model, such as one
+// `realm.capture` took in a run-realm-code script. The capture is a picture of
+// a render, not a file in a workspace.
+export const CAPTURE_SOURCE_URL_PREFIX = `${LOCAL_SOURCE_URL_PREFIX}capture/`;
+
 // ─── Tool wire keys (command → tool rename) ───
 //
 // New events are written ONLY with the tool-named keys. The LEGACY_* spellings
@@ -94,6 +104,20 @@ export function getToolRequests<T = unknown>(
   return (
     content?.[APP_BOXEL_TOOL_REQUESTS_KEY] ??
     content?.[LEGACY_APP_BOXEL_COMMAND_REQUESTS_KEY]
+  );
+}
+
+// An event's latest content. Room history fetched without edits keeps a
+// streamed bot message's placeholder content; the server carries the latest
+// edit, whose content holds the final body and tool requests, under
+// `unsigned['m.relations']['m.replace']`. ai-bot's edits carry their full
+// content at the top level, which is what this reads.
+export function latestEventContent(event: {
+  content?: Record<string, any>;
+  unsigned?: Record<string, any>;
+}): Record<string, any> | undefined {
+  return (
+    event.unsigned?.['m.relations']?.['m.replace']?.content ?? event.content
   );
 }
 

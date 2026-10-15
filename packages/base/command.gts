@@ -531,6 +531,9 @@ export class RunRealmCodeResult extends CardDef {
   @field createdWorkspaces = containsMany(StringField);
   // URLs of the workspaces the script deleted with `realm.workspaces.delete`.
   @field deletedWorkspaces = containsMany(StringField);
+  // The `realm.index` calls the script made, in order, such as `reindex` or
+  // `invalidate <paths>`. The realm server does the indexing after each call.
+  @field indexActions = containsMany(StringField);
   // What the run changed in the room with `room.*`, one line per change, made
   // after the script finished.
   @field roomChanges = containsMany(StringField);

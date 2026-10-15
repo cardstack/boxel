@@ -183,6 +183,23 @@
    PRIMARY KEY ( realm_url, staging_id, url, type ) 
 );
 
+ CREATE TABLE IF NOT EXISTS rate_limit_buckets (
+   bucket_key TEXT NOT NULL,
+   tokens NOT NULL,
+   refilled_at NOT NULL,
+   expires_at NOT NULL,
+   PRIMARY KEY ( bucket_key ) 
+);
+
+ CREATE TABLE IF NOT EXISTS rate_limit_budgets (
+   budget_key TEXT NOT NULL,
+   period TEXT NOT NULL,
+   period_start NOT NULL,
+   count NOT NULL,
+   expires_at NOT NULL,
+   PRIMARY KEY ( budget_key, period, period_start ) 
+);
+
  CREATE TABLE IF NOT EXISTS realm_file_meta (
    realm_url TEXT NOT NULL,
    file_path TEXT NOT NULL,

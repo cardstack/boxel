@@ -1,6 +1,6 @@
 ---
 name: secrets-at-rest
-description: Operate and diagnose the realm server's secrets-at-rest helper (`packages/realm-server/lib/secrets-at-rest/`) — AES-256-GCM sealing of stored secrets (API keys, OAuth client secrets and refresh tokens, service-account files, endpoint keys, webhook signing secrets) under a 32-byte data key that KMS wraps, bound to its field (table and column), owner, row id and destination. Covers the two providers (KMS and the local development key), the startup self-check the realm server and the worker manager run (workers take their keys from the manager) and what its log line reports, why a deployed server refuses to start, the KMS encryption contexts involved, key ids, re-sealing a secret with its destination, rotating the data key (`boxel realm-server data-keys status | reseal`, `SECRETS_ADDITIONAL_WRAPPED_DATA_KEYS`, the re-seal pass, retiring an old data key, the sealed census), and the plaintext census. Use when the realm server or a worker won't boot with "Secrets-at-rest self-check failed", when reading the `secrets-at-rest` boot line, when a stored secret fails to open with SecretDecryptionError, when a table starts sealing its secrets with the helper, or when rotating the data key.
+description: Operate and diagnose the realm server's secrets-at-rest helper (`packages/realm-server/lib/secrets-at-rest/`) — AES-256-GCM sealing of stored secrets (API keys, OAuth client secrets and refresh tokens, service-account files, endpoint keys, webhook signing secrets) under a 32-byte data key that KMS wraps, bound to its field (table and column), owner, row id and destination. Covers the two providers (KMS and the local development key), the startup self-check the realm server and the worker manager run (workers take their keys from the manager) and what its log line reports, why a deployed server refuses to start, the KMS encryption contexts involved, key ids, re-sealing a secret with its destination, rotating the data key (`boxel realm-server data-keys status | reseal`, `SECRETS_ADDITIONAL_WRAPPED_DATA_KEYS`, the re-seal pass, retiring an old data key, the sealed census), the plaintext census, and sealing the proxy endpoint (system) keys in `proxy_endpoints`, with the backfill that seals them and how to run it on demand. Use when the realm server or a worker won't boot with "Secrets-at-rest self-check failed", when reading the `secrets-at-rest` boot line, when a stored secret fails to open with SecretDecryptionError, when a table starts sealing its secrets with the helper, when rotating the data key, or when the census reports `proxy_endpoints.api_key` rows still in plain text.
 ---
 
 # Secrets at rest (operators)
@@ -220,3 +220,92 @@ plaintext census: proxy_endpoints.api_key plaintextRows=0
 
 With no entries it logs `plaintext census: no table seals its secrets with
 this helper`. A count that fails logs a warning and doesn't stop startup.
+
+Reading the census: `plaintextRows` is the number of rows whose secret
+hasn't been sealed yet. It should read 0 on every startup after the first
+one following a deploy. A row added by hand reads 1 until the next startup
+or until the backfill is run on demand.
+
+## Proxy endpoint keys
+
+`proxy_endpoints` holds the platform's own vendor keys (OpenRouter's among
+them), which `_request-forward` attaches. Each key is sealed into
+`api_key_ciphertext`, `api_key_nonce`, `api_key_tag` and `api_key_key_id`
+(`packages/realm-server/lib/proxy-endpoint-keys.ts`), bound to:
+
+| Binding       | Value                                                                  |
+| ------------- | ---------------------------------------------------------------------- |
+| `field`       | `proxy_endpoints.api_key`                                              |
+| `owner`       | `boxel-platform` (`PLATFORM_SECRET_OWNER`), the owner of platform keys |
+| `id`          | the row's `id`                                                         |
+| `destination` | the row's `url`, exactly as stored                                     |
+
+Every write keeps the plain-text `api_key` column in step with the sealed
+columns, so rolling back to a revision that reads only `api_key` keeps
+working. While that column exists, it is the source the sealed columns are
+checked against. `readonly_role`, and every role that is a member of it (the
+Grafana and Claude read-only database users), has no `SELECT` on the table.
+
+- **Reads** open the sealed key and serve it when it matches `api_key`.
+  Whenever the two disagree, `api_key` is served, so a key edited by hand
+  reaches the proxy within the five-second endpoint cache, with no restart.
+  That covers:
+  - a row with no sealed key yet;
+  - a sealed key that doesn't open, because the row's `url` or `id` was
+    edited by hand, or because it was sealed under a data key this process
+    hasn't loaded;
+  - a plain-text key edited by hand.
+
+  Each case except the first is logged once per sealed value, as a warning
+  on the `proxy-endpoint-keys` channel:
+  `the sealed key for proxy endpoint <url> … so its plain-text key is used until the backfill seals it again`.
+  The next startup's backfill, or the on-demand command, seals it again.
+
+- **Writes** go through `saveProxyEndpoint`, which writes both forms
+  together.
+
+### The backfill
+
+`sealProxyEndpointKeys` seals every row from its plain-text key. It runs
+every time the realm server starts, before the census, and logs one line:
+
+```
+proxy endpoint keys: sealed=0 cleared=0 unchanged=3 unloadedKey=0 skipped=0
+```
+
+- `sealed`: rows sealed from `api_key` because their sealed key was
+  missing, didn't open, or opened to a value other than `api_key` (for
+  example, a key edited by hand). A key that didn't open is logged as a
+  warning naming its url. This count also includes rows that a process
+  sealing with KMS found sealed under the public `local-development` key: it
+  seals them again, and logs a warning for each.
+- `cleared`: rows with no `api_key` whose sealed columns were emptied.
+- `unchanged`: rows that were already correct. A second run reports every
+  row here.
+- `unloadedKey`: rows sealed under a data key, other than the local
+  development key, that this process hasn't loaded.
+  Each is left as it is and logged as a warning, so the backfill never moves
+  a row back onto an older data key. A rotation loads a new data key
+  everywhere before any process seals with it, so a nonzero count means a
+  rotation step was skipped or a data key was retired too early.
+- `skipped`: rows that changed between the read and the update. Those rows
+  are left to whatever changed them.
+
+The backfill is idempotent, and every replica can run it at once. A failure
+is reported to Sentry and logged as `Sealing proxy endpoint keys failed: …`.
+It doesn't stop startup: the proxy keeps serving the affected keys from
+`api_key`.
+
+To run it on demand, use `pnpm seal-proxy-endpoint-keys` from
+`packages/realm-server`. It defaults to the local `boxel` database on port
+5435; `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER` and `PGPASSWORD` point it
+elsewhere. It takes the data key from the environment, as the realm server
+does. It accepts the local development key only for the development
+database, on this machine's loopback or a local socket at port 5435. A
+private address can be another machine, and a tunnel to a deployed database
+also answers on `localhost`. Against a deployed database it needs
+`SECRETS_KMS_KEY_ARN` and `SECRETS_WRAPPED_DATA_KEY`, and a role that can
+decrypt with that key, which in practice means running it inside a
+realm-server task. If rows do end up sealed under the local key, the next
+realm-server start seals them again under KMS. The command logs the
+backfill line, then the census.

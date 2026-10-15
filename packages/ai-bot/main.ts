@@ -53,6 +53,7 @@ import { INTERRUPTED_TOOL_CALL_REASON } from './lib/bot-tools/results.ts';
 import {
   ApprovalClaims,
   releasedToolCalls,
+  unreleasedApproval,
   type ReleasedToolCall,
 } from './lib/bot-tools/approval.ts';
 import { RoomTurns, type RoomTurn } from './lib/room-turns.ts';
@@ -587,14 +588,12 @@ Common issues are:
           // earlier run of the same call is in flight doesn't run it again.
           // The runs happen after the room lock is released; each result
           // starts the continuation as any bot tool result does.
-          pendingReleasedCalls = approvalClaims.claim(
+          let releasedCalls = releasedToolCalls(
             eventList,
-            releasedToolCalls(
-              eventList,
-              aiBotUserId,
-              new Set(botTools.map((tool) => tool.name)),
-            ),
+            aiBotUserId,
+            new Set(botTools.map((tool) => tool.name)),
           );
+          pendingReleasedCalls = approvalClaims.claim(eventList, releasedCalls);
           pendingReleasedAgentId = agentId;
           if (pendingReleasedCalls.length > 0) {
             botToolTurns = await startTurns();
@@ -602,6 +601,33 @@ Common issues are:
           // An approval is not a turn of its own (getShouldRespond ignores
           // it), so its handler stops here.
           if (isApprovalResult({ content: event.getContent() })) {
+            let unreleased = unreleasedApproval(
+              eventList,
+              triggerCommandRequestId,
+              releasedCalls,
+              pendingReleasedCalls,
+            );
+            if (unreleased === 'missing') {
+              log.warn(
+                `[${eventId}] approval of ${triggerCommandRequestId} matches no held call in the history of ${room.roomId}`,
+              );
+              // A constant message, so every occurrence groups as one issue.
+              Sentry.captureMessage(
+                'approval matches no held call in the history',
+                {
+                  level: 'warning',
+                  extra: {
+                    roomId: room.roomId,
+                    eventId,
+                    commandRequestId: triggerCommandRequestId,
+                  },
+                },
+              );
+            } else if (unreleased) {
+              log.debug(
+                `[${eventId}] approval of ${triggerCommandRequestId} released no call to run in ${room.roomId}: ${unreleased}`,
+              );
+            }
             return;
           }
           // Route to-device streaming previews (see AI_BOT_STREAMING_MODE
