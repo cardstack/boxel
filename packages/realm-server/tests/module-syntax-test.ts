@@ -1606,6 +1606,25 @@ module(basename(import.meta.filename), function () {
         ].sort(),
       );
     });
+    test('keys a prefix-form self-import of a realm served under a virtual URL', function (assert) {
+      let network = new VirtualNetwork();
+      network.addURLMapping(
+        new URL('https://example.test/virtual-realm/'),
+        new URL(testRealm),
+      );
+      network.addRealmMapping('@test/realm/', testRealm);
+      let paths = new RealmPaths(
+        new URL('https://example.test/virtual-realm/'),
+        network,
+      );
+      let deps = extractModuleDependencyKeys(
+        `import { Pet } from '@test/realm/pets/pet';`,
+        'dir/main.gts',
+        paths,
+        network,
+      );
+      assert.deepEqual([...deps], [moduleDependencyKey('pets/pet')]);
+    });
   });
   module('gjs-to-placeholder', function () {
     const examples = [
