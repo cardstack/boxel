@@ -41,6 +41,15 @@ Retyping the card-service write APIs to accept RRIs.
 - `Acceptance | AI Assistant tests`: code mode on `index.json` (a CardsGrid
   adopting from `@cardstack/base/cards-grid`) auto-attaches the base realm's
   `cards-grid.gts`.
-- `Integration | tools | write-text-file`, `write-binary-file`,
-  `migrate-skill`: each writes into the test realm registered under a
-  temporary realm prefix, and reports the prefix-form identifier.
+- `Integration | tools | write-text-file` and `write-binary-file`: each
+  writes into the test realm registered under a temporary realm prefix, and
+  reports the prefix-form identifier.
+- migrate-skill has no prefix-realm test: its `store.search` over a realm the
+  test knows only in prefix form fails before the write path runs, and
+  covering it would mean mocking the store.
+
+## Downstream of the write tools
+
+The write tools report a prefix-form `fileIdentifier` for a realm registered
+in prefix form, and show-file takes that identifier next, so show-file passes
+it to `updateCodePath` as an RRI instead of parsing it with `new URL()`.
