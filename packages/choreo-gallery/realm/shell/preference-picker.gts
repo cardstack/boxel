@@ -175,8 +175,8 @@ export class PreferencePicker<T extends string> extends Component<
         }
 
         .header-picker-menu {
-          left: 16px;
-          right: 16px;
+          left: var(--bar-gutter, 16px);
+          right: var(--bar-gutter, 16px);
           top: calc(100% + 6px);
           width: auto;
         }
