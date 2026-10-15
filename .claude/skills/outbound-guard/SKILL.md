@@ -122,6 +122,44 @@ stack, but not what the caller sent. The log line logged with it
 (`Error in request forward handler (key=<name> url=<url>)`) names the key and
 the origin and path of the destination.
 
+### Transactions
+
+With tracing on, each incoming request is also a transaction, and a
+transaction records the URL in more places than `event.request`. The server
+span's attributes (`http.url`, `http.target`, `http.query`, and the like)
+become the trace context's `data`, and each child span carries its own.
+Sentry's fetch instrumentation also records an outgoing request's URL and
+query as a breadcrumb's `data` (`url`, `http.query`). The same hook applies the
+table above to every one of these URL attributes:
+
+- On a transaction or event for a proxy route or the secure origin, each keeps
+  only its origin and path. `http.query`, `url.query` and the fragment
+  attributes are dropped.
+- On any other, each keeps its query with a `token` parameter masked as
+  `REDACTED`.
+- A URL attribute that itself names a proxy route or the secure origin keeps
+  only its origin and path either way.
+
+The transaction's name and each span's description are the method and path
+alone (`POST /_request-forward`), and its status, op and timing are untouched.
+So a transaction still says which route was hit, how it ended and how long it
+took. A guarded request records no span at all (`guardedFetchIntegration`, as
+above), so the destination URL a caller asked to forward to never appears as a
+child span.
+
+The rules key on attribute names, listed in `lib/request-telemetry.ts`
+(`fullURLAttributes`, `pathAndQueryAttributes`, `queryAttributes`,
+`fragmentAttributes`). An instrumentation that records a URL under a new name
+needs that name added there. Any other string attribute only loses a proxy
+route's query string, the same as a breadcrumb message.
+
+`tests/helpers/sentry-capture.ts` with `tracing: true` and
+`incomingRequests: true` records real incoming transactions in a test. The
+tracer provider it needs is registered once per process and stays: the HTTP
+instrumentation keeps the first tracer it is given. Its sampler samples only
+while a capture with both options is running, so every other capture, before
+or after, still records no spans.
+
 ## Finding a send-path error by key name
 
 Every error from a send carries the key's name and the origin and path of the
