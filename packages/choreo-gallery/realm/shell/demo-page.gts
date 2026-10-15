@@ -505,13 +505,14 @@ export class DemoPage extends Component<Signature> {
         border-radius: 999px;
         border: 1px solid rgba(255, 255, 255, 0.16);
         background: rgba(14, 12, 10, 0.55);
-        /* the pill is dark in either theme, so the mark wears its dark-palette
-           colors on it */
-        --mark-tail: rgba(255, 59, 31, 0.35);
-        --mark-orbit: rgba(139, 150, 156, 0.75);
-        /* and its button's ring is light, the one color that clears 3:1 on
-           the pill over any frame from black to white */
-        --focus-ring: #fffaf2;
+        /* the pill is dark in either theme, so the mark wears its dark
+           colors on it, and the type and its button's ring are light: the
+           one color that clears 3:1 on the pill over any frame from black
+           to white */
+        --mark-tail: var(--mark-tail-dark);
+        --mark-orbit: var(--mark-orbit-dark);
+        --pill-ink: rgba(255, 250, 242, 0.96);
+        --focus-ring: var(--pill-ink);
         backdrop-filter: blur(10px);
         -webkit-backdrop-filter: blur(10px);
         opacity: 0.9;
@@ -535,8 +536,7 @@ export class DemoPage extends Component<Signature> {
         padding: 0;
         border: 0;
         background: none;
-        /* the pill is dark in either theme, so the type on it is light */
-        color: rgba(255, 250, 242, 0.96);
+        color: var(--pill-ink);
         font-family: var(--font-mono);
         font-size: 10px;
         letter-spacing: 0.16em;

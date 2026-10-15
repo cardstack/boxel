@@ -93,9 +93,12 @@ export const ChoreoRoot: TOC<Signature> = <template>
       /* a focus indicator needs 3:1 against whatever it is drawn over */
       --focus-ring: var(--ember-hot);
       --glow: rgba(255, 59, 31, 0.38);
-      /* the mark's fading tail and its inner orbit */
-      --mark-tail: rgba(255, 59, 31, 0.35);
-      --mark-orbit: rgba(139, 150, 156, 0.75);
+      /* the mark's fading tail and its inner orbit. The -dark pair holds in
+         either theme, for a mark that sits on a dark ground. */
+      --mark-tail-dark: rgba(255, 59, 31, 0.35);
+      --mark-orbit-dark: rgba(139, 150, 156, 0.75);
+      --mark-tail: var(--mark-tail-dark);
+      --mark-orbit: var(--mark-orbit-dark);
       --syn-string: #ffb36a;
       --gradient-tail: var(--ink);
       --font-display: 'Syne', 'Avenir Next', sans-serif;
