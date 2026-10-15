@@ -14,6 +14,7 @@ import { parseLenientJson } from '../../lenient-json.ts';
 import {
   getToolRequests,
   isToolResultEventType,
+  latestEventContent,
 } from '@cardstack/runtime-common/matrix-constants';
 
 let log = logger('ai-bot:read-url');
@@ -511,7 +512,7 @@ export async function collectPreapprovedUrls(
     let content = event.content as Record<string, any>;
     if (event.sender === aiBotUserId) {
       for (let request of getToolRequests<{ id?: string; name?: string }>(
-        content,
+        latestEventContent(event),
       ) ?? []) {
         if (request?.name === READ_URL_TOOL_NAME && request.id) {
           readUrlRequestIds.add(request.id);
