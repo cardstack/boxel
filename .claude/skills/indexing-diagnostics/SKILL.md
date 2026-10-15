@@ -1095,6 +1095,14 @@ The key schema is `env/realm/jobId/card/step/<timestamp>-<seq>.<suffix>` — eve
 
 A healthy render finishes well under 30s; the render-level timeout (`RENDER_TIMEOUT_MS`, default 60s) fires before the request-level abort (render + 60s overhead), so these are captured and logged before the worker gives up on the visit. (If a wedge ever rejects with no timeout line at all, the diagnostic block itself was starved — that is itself the `<debugger-enable-timeout>` signal below.)
 
+The captures behind the timeout line run under a Node-side budget (`RENDER_TIMEOUT_DIAGNOSTICS_BUDGET_MS`, default 20s), because each one asks Chrome for something and the render holds its tab until they finish. A tab that failed the responsiveness probe gets the debugger pause first, then the CPU captures; `--prof` uploads alongside them. Three fields on the line say how the budget went:
+
+- **`diagnosticsMs=`** — how long the captures held the tab past the render timeout. At most the budget.
+- **`diagnosticsBudgetExceeded=true`** — the budget ran out with a capture still waiting on Chrome. Fields that capture would have filled are `<unknown>` or missing, and a `v8ProfLog:` of `still uploading at the diagnostics budget` means the upload finishes in the background.
+- **`cdpSessionAttachTimedOut=true`** — attaching a CDP session to the tab timed out (`pausedStack: <cdp-session-timeout>`). Also persisted in `diagnostics` as `cdpSessionAttachTimedOut`.
+
+Timeouts on unresponsive tabs also feed the browser-recycle decision. Timed-out attaches in two distinct realms within five minutes, or unresponsive tabs in three distinct realms within five minutes, kill and restart the prerender server's Chrome, at most once every fifteen minutes. Reports count by realm, so one card wedging the indexer's, a user's and an anonymous render of its realm counts once. A recycle also fails any command in flight on the server, and commands are not retried. Look for `Recycling prerender browser (recycle N): <reason>` in the **prerender-server** log. A climbing `N` on one task means the recycles aren't fixing anything: look for a definition shared across realms that pegs every renderer it touches, or for host CPU saturation.
+
 ### `pausedStack` — a one-shot debugger pause (always on, can't mask)
 
 ```

@@ -28,6 +28,10 @@ import {
 import { PrerenderCancelledError, throwIfAborted } from './prerender-cancel.ts';
 import { AffinityActivityTracker } from './affinity-activity.ts';
 import { AsyncSemaphore } from './async-semaphore.ts';
+import {
+  UnresponsiveTabTracker,
+  type UnresponsiveTabReport,
+} from './unresponsive-tab-tracker.ts';
 import { formatHeapTelemetry, heapTelemetry } from './heap-telemetry.ts';
 import { maybeAutoCaptureHeapSnapshot } from './heap-snapshot.ts';
 import {
@@ -76,6 +80,9 @@ export class Prerenderer {
   // visit following a cancelled render must acquire a fresh page rather
   // than detour through the restart recovery lane.
   #browserRestartCount = 0;
+  // Decides when timeouts on unresponsive tabs call for a browser recycle
+  // rather than just the tab retirements their evictions already do.
+  #unresponsiveTabs = new UnresponsiveTabTracker();
   // `clearCache` batch ownership. Maps affinityKey to the batches holding the
   // affinity's warm loader, batch id → when each last started a visit there.
   // Several at once is normal: index passes of one realm run one per writer
@@ -148,6 +155,7 @@ export class Prerenderer {
     this.#renderRunner = new RenderRunner({
       pagePool: this.#pagePool,
       boxelHostURL,
+      onUnresponsiveTab: (report) => this.#noteUnresponsiveTab(report),
     });
     this.#affinitySnapshotSampler = new AffinitySnapshotSampler({
       pagePool: this.#pagePool,
@@ -1085,6 +1093,36 @@ export class Prerenderer {
     return this.#restartInFlight;
   }
 
+  // Reports that arrive while a restart is in flight describe tabs of the
+  // browser being replaced, so they are dropped rather than counted against
+  // its successor.
+  //
+  // The recycle kills Chrome before tearing the pool down. The restart path
+  // closes every tab and context over CDP before closing the browser, which
+  // fails fast against a crashed browser but waits out the protocol timeout,
+  // call by call, against one that is connected and hung. Once the process
+  // is gone every pending call rejects, the renders holding tabs on it fail
+  // and release them, and the teardown runs through.
+  //
+  // Not awaited by the reporter: the report comes from inside a render that
+  // still holds its tab, and the restart's `closeAll` waits for that tab.
+  #noteUnresponsiveTab(report: UnresponsiveTabReport): void {
+    if (this.#stopped || this.#restartInFlight) {
+      return;
+    }
+    let reason = this.#unresponsiveTabs.record(report);
+    if (!reason) {
+      return;
+    }
+    log.warn(
+      `Recycling prerender browser (recycle ${this.#unresponsiveTabs.recycleCount}): ${reason}`,
+    );
+    this.#browserManager.killBrowserProcess();
+    void this.#restartBrowser().catch((e) => {
+      log.error('Failed to recycle prerender browser:', e);
+    });
+  }
+
   async #runRestart(): Promise<void> {
     log.warn('Restarting prerender browser');
     this.#browserRestartCount++;
@@ -1097,6 +1135,8 @@ export class Prerenderer {
       return;
     }
     await this.#browserManager.restartBrowser();
+    // Every tab counted so far belonged to the browser just replaced.
+    this.#unresponsiveTabs.reset();
     await this.#pagePool.warmStandbys().catch((e) => {
       log.error('Failed to warm standby pages after browser restart:', e);
     });

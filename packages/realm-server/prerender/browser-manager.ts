@@ -101,6 +101,21 @@ export class BrowserManager {
     return this.#browser;
   }
 
+  // SIGKILLs the running Chrome without waiting on it. Used when Chrome has
+  // stopped answering CDP, where a graceful close would wait out the protocol
+  // timeout. The browser handle stays until `restartBrowser` replaces it, and
+  // its close then has no live process to wait on.
+  killBrowserProcess(): void {
+    let proc = this.#browser?.process();
+    if (proc && proc.exitCode === null && !proc.killed) {
+      try {
+        proc.kill('SIGKILL');
+      } catch (e) {
+        log.warn('Error killing browser process:', e);
+      }
+    }
+  }
+
   async restartBrowser(): Promise<void> {
     await this.#closeBrowser();
     await this.cleanupUserDataDirs();
