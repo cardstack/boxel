@@ -226,14 +226,21 @@ module(basename(import.meta.filename), function () {
       }
     });
 
-    // A system-key route's body carries a key value, so it is logged as a
-    // proxy route is.
+    // A system-key route's body carries a key value, and a key route's body a
+    // key's value or a key write ticket, so each is logged as a proxy route is.
+    // A key route takes nothing in its query string, so whatever a client put
+    // there stays out of the log too.
     for (let [route, path] of [
       ['a proxy route', '/_request-forward'],
       [
         'a system-key route',
         '/_system-keys/6c1f3f8e-4a0e-4b9e-9a51-3c1d2b7a9e10',
       ],
+      [
+        'a key route',
+        '/_user-keys/3f0e8f4a-8d6b-4c55-9b6f-0d7e0c3f9a11?ticket=ticket-marker-61c2ae',
+      ],
+      ['the key write tickets route', '/_key-write-tickets'],
     ]) {
       test(`lists only header names on ${route}`, async function (assert) {
         sentry = startSentryCapture({ tracing: false, incomingRequests: true });
@@ -274,6 +281,7 @@ module(basename(import.meta.filename), function () {
           'session-jwt-0c5f72',
           'request-id-unlisted-4be1d8',
           'referer-marker-97a3c0',
+          ...(path.includes('?') ? [path.split('?')[1]] : []),
         ]) {
           assert.false(
             lines.some((line) => line.message.includes(value)),
@@ -521,6 +529,105 @@ module(basename(import.meta.filename), function () {
         },
         { message: 'GET https://app.telemetry.test/test/card?filter=kept' },
       ]);
+    });
+
+    test('a key route keeps only its method and path, whatever its case and however deep', function (assert) {
+      for (let url of [
+        'https://app.telemetry.test/_user-keys',
+        'https://app.telemetry.test/_user-keys/',
+        'https://app.telemetry.test/_user-keys/3f0e8f4a-8d6b-4c55-9b6f-0d7e0c3f9a11',
+        'https://app.telemetry.test/_USER-KEYS/3f0e8f4a-8d6b-4c55-9b6f-0d7e0c3f9a11',
+        'https://app.telemetry.test/_key-write-tickets',
+      ]) {
+        let event = scrubRequestTelemetry({
+          request: {
+            method: 'POST',
+            url: `${url}?a=b`,
+            headers: {
+              host: 'app.telemetry.test',
+              'x-other': 'kept elsewhere',
+            },
+            data: '{"data":{"attributes":{"value":"sk-value-marker"}},"meta":{"ticket":"ticket-marker"}}',
+            query_string: 'a=b',
+          },
+        });
+        assert.deepEqual(
+          event.request as unknown,
+          { method: 'POST', url },
+          `${url} keeps only its method and path`,
+        );
+      }
+    });
+
+    test('a path that only starts with a key route keeps its context', function (assert) {
+      let event = scrubRequestTelemetry({
+        request: {
+          method: 'GET',
+          url: 'https://app.telemetry.test/_user-keys-status',
+          query_string: 'a=b',
+        },
+      });
+      assert.deepEqual(event.request as unknown, {
+        method: 'GET',
+        url: 'https://app.telemetry.test/_user-keys-status',
+        query_string: 'a=b',
+      });
+    });
+
+    test("a breadcrumb loses a key route's query string", function (assert) {
+      let event = scrubRequestTelemetry({
+        breadcrumbs: [
+          {
+            message:
+              '<-- GET */* https://app.telemetry.test/_user-keys/3f0e8f4a-8d6b-4c55-9b6f-0d7e0c3f9a11?ticket=ticket-marker',
+          },
+          {
+            message:
+              '<-- POST */* https://app.telemetry.test/_KEY-WRITE-TICKETS?value=value-marker [job: 1]',
+          },
+        ],
+      });
+      assert.deepEqual(
+        event.breadcrumbs?.map((breadcrumb) => breadcrumb.message),
+        [
+          '<-- GET */* https://app.telemetry.test/_user-keys/3f0e8f4a-8d6b-4c55-9b6f-0d7e0c3f9a11',
+          '<-- POST */* https://app.telemetry.test/_KEY-WRITE-TICKETS [job: 1]',
+        ],
+      );
+    });
+
+    test("a transaction for a key route keeps only the origin and path of its spans' URLs", function (assert) {
+      let event = scrubRequestTelemetry({
+        contexts: {
+          trace: {
+            data: {
+              'http.host': 'app.telemetry.test',
+              'http.url':
+                'https://app.telemetry.test/_user-keys/3f0e8f4a-8d6b-4c55-9b6f-0d7e0c3f9a11?ticket=ticket-marker',
+              'http.target':
+                '/_user-keys/3f0e8f4a-8d6b-4c55-9b6f-0d7e0c3f9a11?ticket=ticket-marker',
+              'http.query': 'ticket=ticket-marker',
+            },
+          },
+        },
+        spans: [
+          {
+            data: {
+              'http.url':
+                'https://app.telemetry.test/_KEY-WRITE-TICKETS?value=value-marker',
+            },
+          },
+        ],
+      });
+      assert.deepEqual(event.contexts.trace.data as unknown, {
+        'http.host': 'app.telemetry.test',
+        'http.url':
+          'https://app.telemetry.test/_user-keys/3f0e8f4a-8d6b-4c55-9b6f-0d7e0c3f9a11',
+        'http.target': '/_user-keys/3f0e8f4a-8d6b-4c55-9b6f-0d7e0c3f9a11',
+      });
+      assert.deepEqual(event.spans[0].data as unknown, {
+        'http.url': 'https://app.telemetry.test/_KEY-WRITE-TICKETS',
+      });
     });
 
     test("a transaction for a proxy route keeps only the origin and path of its spans' URLs", function (assert) {

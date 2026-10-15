@@ -74,6 +74,23 @@ export const SEALED_COLUMNS: SealedColumn[] = [
       id: String(row.id),
     }),
   },
+  // Keys that belong to people, bound to their row and their owner
+  // (`lib/user-keys.ts` seals them the same way).
+  {
+    field: 'user_keys.value',
+    table: 'user_keys',
+    idColumn: 'id',
+    keyIdColumn: 'value_key_id',
+    nonceColumn: 'value_nonce',
+    ciphertextColumn: 'value_ciphertext',
+    tagColumn: 'value_tag',
+    bindingColumns: ['owner'],
+    binding: (row) => ({
+      field: 'user_keys.value',
+      owner: String(row.owner),
+      id: String(row.id),
+    }),
+  },
 ];
 
 const IDENTIFIER = /^[a-z_][a-z0-9_]*$/;

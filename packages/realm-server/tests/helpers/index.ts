@@ -3410,15 +3410,17 @@ export async function startSimpleRealmServer({
   publisher,
   runner,
   domainsForPublishedRealms,
+  secureOriginURL,
 }: {
   dbAdapter: PgAdapter;
   publisher: QueuePublisher;
   runner: QueueRunner;
-  // Changes how the server answers, not what it indexes, so every caller
+  // These change how the server answers, not what it indexes, so every caller
   // shares the one template `setupSimpleRealmServerTemplate` builds.
   domainsForPublishedRealms?: Parameters<
     typeof runTestRealmServer
   >[0]['domainsForPublishedRealms'];
+  secureOriginURL?: URL;
 }): Promise<Server> {
   let realmsRootPath = join(dirSync().name, 'realm_server_simple');
   let testRealmDir = join(realmsRootPath, 'test');
@@ -3434,6 +3436,7 @@ export async function startSimpleRealmServer({
     runner,
     matrixURL,
     domainsForPublishedRealms,
+    secureOriginURL,
   });
   return testRealmHttpServer;
 }

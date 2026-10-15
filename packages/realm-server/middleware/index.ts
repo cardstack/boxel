@@ -25,8 +25,9 @@ import {
 } from '../utils/operator-token.ts';
 import { knownRealmURL, type RealmRoutingDeps } from '../lib/realm-routing.ts';
 import {
-  withCredentialHeadersMasked,
+  isKeyRoutePath,
   keepsMethodAndPathOnly,
+  withCredentialHeadersMasked,
 } from '../lib/request-telemetry.ts';
 import {
   AuthenticationError,
@@ -206,6 +207,11 @@ export function healthCheck(ctxt: Koa.Context, next: Koa.Next) {
 // the mitigation there.)
 function loggableRequestURL(ctxt: Koa.Context): string {
   let url = fullRequestURL(ctxt);
+  // A key route takes nothing in its query string, so whatever a client put
+  // there (a misplaced ticket or value) is left out.
+  if (url.search && isKeyRoutePath(url.pathname)) {
+    return `${url.origin}${url.pathname}`;
+  }
   if (!url.searchParams.has('token')) {
     return url.href;
   }
@@ -217,8 +223,9 @@ function loggableRequestURL(ctxt: Koa.Context): string {
 // The request's headers as the debug line prints them. The line goes to Loki,
 // and Sentry's console integration keeps it as a breadcrumb on any event raised
 // during the request, so it carries no more than that event may:
-// - On the secure origin and the proxy routes, where an event keeps only the
-//   method and path, the line lists the header names alone.
+// - On the secure origin, the proxy routes, the system-key routes and the key
+//   routes, where an event keeps only the method and path, the line lists the
+//   header names alone.
 // - Elsewhere, a credential header (the session token, cookies, a signature)
 //   keeps its name with its value masked, and every other header is printed as
 //   sent, so the line still shows what the caller sent for diagnosis.
