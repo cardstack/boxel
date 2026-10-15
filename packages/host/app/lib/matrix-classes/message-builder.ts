@@ -459,9 +459,7 @@ export default class MessageBuilder {
         : undefined,
       getOwner(this)!,
       toolResultEvent?.content.failureReason,
-      false,
-      undefined,
-      (request) => this.resolveTool(request),
+      { resolver: (request) => this.resolveTool(request) },
     );
   }
 

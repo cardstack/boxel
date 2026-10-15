@@ -1537,12 +1537,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
   // room it has joined.
   static bindsToInvokingRoom = true;
 
-  static neverAutoExecutesFor(
-    attributes: Record<string, unknown> | undefined,
-  ): boolean {
-    return clickRequiredCallsIn(attributes?.code).size > 0;
-  }
-
+  // A run waits for the click when its script names a click-required call.
   static clickReasonsFor(
     attributes: Record<string, unknown> | undefined,
   ): ClickReason[] {

@@ -354,20 +354,22 @@ export default class RoomMessageTool extends Component<Signature> {
     return typeof reason === 'string' && reason.trim() ? reason.trim() : '';
   }
 
-  // The calls that hold this call for the user's click, shown above the
-  // code while a click can still run it (Run, Retry or Try Anyway), so the
-  // user knows what the click allows.
+  // Why this call waits for the user's click, shown above the code while
+  // this tab offers the click that runs it (Run, Retry or Try Anyway), so the
+  // user knows what the click allows. A call another agent sent is run from
+  // that agent's tab, not this one.
+  @cached
   private get clickReasons() {
-    let { status } = this.args.messageTool;
-    if (
-      status !== undefined &&
-      status !== 'ready' &&
-      status !== 'invalid' &&
-      status !== 'failed'
-    ) {
+    let { messageTool } = this.args;
+    if (messageTool.message.agentId !== this.matrixService.agentId) {
       return [];
     }
-    return this.args.messageTool.clickReasons;
+    let offersClick =
+      this.applyButtonState === 'ready' ||
+      Boolean(this.failedToolState) ||
+      this.failedToolCallState ||
+      this.invalidToolCallState;
+    return offersClick ? messageTool.clickReasons : [];
   }
 
   // Until its command is resolved a call can't say how it will run (its
@@ -438,8 +440,8 @@ export default class RoomMessageTool extends Component<Signature> {
       {{else}}
         {{#if this.clickReasons.length}}
           <div class='click-reasons' data-test-tool-call-click-reasons>
-            <p class='click-reasons-intro'>This waits for your click because the
-              script contains:</p>
+            <p class='click-reasons-intro'>This waits for your click because it
+              contains:</p>
             <ul class='click-reasons-list'>
               {{#each this.clickReasons as |clickReason|}}
                 <li data-test-tool-call-click-reason={{clickReason.call}}>

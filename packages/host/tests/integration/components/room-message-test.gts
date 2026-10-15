@@ -25,6 +25,7 @@ import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type { RoomResource } from '@cardstack/host/resources/room';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
 import RunRealmCodeTool from '@cardstack/host/tools/run-realm-code';
 
@@ -560,7 +561,17 @@ module('Integration | Component | RoomMessage', function (hooks) {
     scenario.getActiveLLMModeForMessage = () => 'ask';
     scenario.isDisplayingCode = () => false;
     scenario.monacoSDK = { editor: { getEditors: () => [] } };
-    let runCall = (id: string, code: string) =>
+    // The calls are this tab's own, so this tab offers their click.
+    scenario.message.agentId = (
+      this.owner.lookup('service:matrix-service') as MatrixService
+    ).agentId;
+    let deleteCode = `await realm.workspaces.delete('http://test-realm/testuser/old/');`;
+    let runCall = (
+      id: string,
+      code: string,
+      status: 'ready' | 'applied' | 'invalid' = 'ready',
+      failureReason?: string,
+    ) =>
       new MessageTool(
         scenario.message,
         {
@@ -572,20 +583,18 @@ module('Integration | Component | RoomMessage', function (hooks) {
         'event-1',
         true,
         'Run',
-        'ready',
+        status,
         undefined,
         this.owner,
-        undefined,
-        false,
-        RunRealmCodeTool.neverAutoExecutesFor,
-        undefined,
-        RunRealmCodeTool.clickReasonsFor,
+        failureReason,
+        {
+          neverAutoExecutesFor:
+            RunRealmCodeTool.neverAutoExecutesFor.bind(RunRealmCodeTool),
+          clickReasonsFor: RunRealmCodeTool.clickReasonsFor,
+        },
       );
     scenario.message.tools = [
-      runCall(
-        'one-call',
-        `await realm.workspaces.delete('http://test-realm/testuser/old/');`,
-      ),
+      runCall('one-call', deleteCode),
       runCall(
         'two-calls',
         [
@@ -594,6 +603,8 @@ module('Integration | Component | RoomMessage', function (hooks) {
         ].join('\n'),
       ),
       runCall('no-calls', `await realm.fs.writeText('a.json', '{}');`),
+      runCall('applied-call', deleteCode, 'applied'),
+      runCall('invalid-call', deleteCode, 'invalid', 'Unexpected argument'),
     ];
     await renderRoomMessageComponent(testScenario);
 
@@ -619,6 +630,15 @@ module('Integration | Component | RoomMessage', function (hooks) {
       .containsText('outside URL');
 
     assert.dom(reasons('no-calls')).doesNotExist();
+
+    assert
+      .dom(reasons('applied-call'))
+      .doesNotExist('a call that already ran offers no click');
+    assert
+      .dom(
+        `${reasons('invalid-call')} [data-test-tool-call-click-reason="realm.workspaces.delete"]`,
+      )
+      .exists('a call that offers Try Anyway still says what the click allows');
   });
 
   test('a message carrying only bot-executed tool calls is marked bot-tools-only', async function (assert) {

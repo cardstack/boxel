@@ -21,8 +21,10 @@ function runRealmCodeCall(args: Record<string, unknown>) {
     undefined,
     {} as Owner,
     undefined,
-    false,
-    RunRealmCodeTool.neverAutoExecutesFor,
+    {
+      neverAutoExecutesFor:
+        RunRealmCodeTool.neverAutoExecutesFor.bind(RunRealmCodeTool),
+    },
   );
 }
 

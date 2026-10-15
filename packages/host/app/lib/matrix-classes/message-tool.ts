@@ -3,7 +3,7 @@ import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 
 import { waitForPromise } from '@ember/test-waiters';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import {
   isCardInstance,
@@ -75,8 +75,12 @@ export interface ToolResolution {
   codeRef: ResolvedCodeRef | undefined;
   requiresApproval: boolean;
   actionVerb: string;
+  // The tool class declares that it must always wait for the user's click,
+  // whatever the room's mode (see HostBaseTool.neverAutoExecutes).
   neverAutoExecutes: boolean;
+  // The same, for one call's input (see HostBaseTool.neverAutoExecutesFor).
   neverAutoExecutesFor?: NeverAutoExecutesFor;
+  // Why a call waits for the click (see HostBaseTool.clickReasonsFor).
   clickReasonsFor?: ClickReasonsFor;
 }
 
@@ -103,17 +107,22 @@ export default class MessageTool {
     toolResultFileDef: SerializedFile | undefined,
     owner: Owner,
     public failureReason?: string | undefined,
-    // The tool class declares that it must always wait for the user's
-    // click, whatever the room's mode (see HostBaseTool.neverAutoExecutes).
-    neverAutoExecutes: boolean = false,
-    // The same, for this call's input (see
-    // HostBaseTool.neverAutoExecutesFor).
-    neverAutoExecutesFor?: NeverAutoExecutesFor,
-    // Resolves the tool from its name. Without one, the values above are the
-    // tool's fixed resolution (a call ai-bot runs has nothing to resolve).
-    resolver?: ToolResolver,
-    // Why this call waits for the click (see HostBaseTool.clickReasonsFor).
-    clickReasonsFor?: ClickReasonsFor,
+    {
+      neverAutoExecutes = false,
+      neverAutoExecutesFor,
+      clickReasonsFor,
+      resolver,
+    }: Partial<
+      Pick<
+        ToolResolution,
+        'neverAutoExecutes' | 'neverAutoExecutesFor' | 'clickReasonsFor'
+      >
+    > & {
+      // Resolves the tool from its name. Without one, the values given here
+      // are the tool's fixed resolution (a call ai-bot runs has nothing to
+      // resolve).
+      resolver?: ToolResolver;
+    } = {},
   ) {
     setOwner(this, owner);
 
@@ -254,27 +263,23 @@ export default class MessageTool {
     if (resolution?.neverAutoExecutes) {
       return true;
     }
-    let attributes = this.arguments?.attributes;
-    return (
-      resolution?.neverAutoExecutesFor?.(
-        attributes && typeof attributes === 'object'
-          ? (attributes as Record<string, unknown>)
-          : undefined,
-      ) === true
-    );
+    return resolution?.neverAutoExecutesFor?.(this.#callAttributes) === true;
   }
 
   // Why this call waits for the user's click, read from the current
   // arguments like `neverAutoExecutes`. Empty for a call that needs no click.
+  // Cached, as a tool may scan a long input to find them.
+  @cached
   get clickReasons(): ClickReason[] {
+    return this.resolution?.clickReasonsFor?.(this.#callAttributes) ?? [];
+  }
+
+  // The call's input attributes as the click rules read them.
+  get #callAttributes(): Record<string, unknown> | undefined {
     let attributes = this.arguments?.attributes;
-    return (
-      this.resolution?.clickReasonsFor?.(
-        attributes && typeof attributes === 'object'
-          ? (attributes as Record<string, unknown>)
-          : undefined,
-      ) ?? []
-    );
+    return attributes && typeof attributes === 'object'
+      ? (attributes as Record<string, unknown>)
+      : undefined;
   }
 
   get argumentsError() {
