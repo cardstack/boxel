@@ -50,10 +50,9 @@ import OpenWorkspaceTool from './open-workspace';
 import PreviewFormatTool from './preview-format';
 import {
   composeSearchEntriesQuery,
-  resolveSearchEntryScope,
-  SEARCH_ENTRY_PROJECTION_FIELDS,
-  summarizeEntries,
+  searchEntrySummaries,
   type EntrySummary,
+  type SearchEntriesFn,
 } from './search-entries';
 import SetActiveLLMTool from './set-active-llm';
 import ShowCardTool from './show-card';
@@ -135,13 +134,6 @@ type WriteFile = (
   expected: string | undefined,
   options?: { lint?: boolean },
 ) => Promise<string>;
-
-// Runs one entry search across `realms`, or across every realm the user can
-// read when `realms` is undefined.
-type SearchEntries = (
-  query: SearchEntryWireQuery,
-  realms: string[] | undefined,
-) => Promise<EntryCollectionDocument>;
 
 // Saves one binary file that did not exist.
 type WriteBinaryFile = (url: string, bytes: Uint8Array) => Promise<void>;
@@ -297,7 +289,7 @@ class RealmFsSession {
     private search: SearchCards,
     private resolveURL: ResolveURL,
     private readCard: ReadCard,
-    private searchEntries: SearchEntries,
+    private searchEntries: SearchEntriesFn,
     captureURL: CaptureURL,
     private createWorkspace: CreateWorkspace,
     private deleteWorkspace: DeleteWorkspace,
@@ -701,9 +693,6 @@ class RealmFsSession {
     return url;
   }
 
-  // A directory path takes the same forms as a file path, with or without a
-  // trailing slash. No path, or an empty one, is the realm root; a missing
-  // argument arrives as null, since the call's arguments cross as JSON.
   // Finds cards, specs and files across realms, the catalog among them, and
   // answers with a summary of each: no live card and no file content.
   private async searchEntriesFor(
@@ -756,31 +745,11 @@ class RealmFsSession {
         : Math.min(Math.max(Math.floor(limit), 1), MAX_ENTRY_RESULTS);
     let query = pruneEmptyQueryParts(rawQuery as Query);
     assertQuery(query);
-    let resolvedScope = resolveSearchEntryScope(scope);
-    let composed = composeSearchEntriesQuery(query, resolvedScope);
-    let wireQuery = searchEntryWireQueryFromQuery(composed.query, {
-      fields: SEARCH_ENTRY_PROJECTION_FIELDS,
-      scope: resolvedScope,
-    });
-    wireQuery.page = { ...wireQuery.page, size };
-    let doc = await this.searchEntries(
-      wireQuery,
-      (realms as string[] | undefined)?.length
-        ? [...(realms as string[])]
-        : undefined,
+    let { rows, total, incomplete } = await searchEntrySummaries(
+      this.searchEntries,
+      query,
+      { scope, limit: size, realms: realms as string[] | undefined },
     );
-
-    let rows = summarizeEntries(doc);
-    if (composed.addedRelevanceSort) {
-      // Each realm ranks its own rows; the merged rows are ranked again so the
-      // best match across realms comes first.
-      rows = [...rows].sort(
-        (a, b) => (b.matchRelevance ?? -1) - (a.matchRelevance ?? -1),
-      );
-    }
-    // Each realm answers with up to `size` rows, so the merged rows are cut to
-    // the limit the script asked for.
-    rows = rows.slice(0, size);
     let resultSize = 0;
     for (let [index, row] of rows.entries()) {
       resultSize += JSON.stringify(row).length;
@@ -792,7 +761,6 @@ class RealmFsSession {
         );
       }
     }
-    let total = doc.meta.page.total;
     return {
       entries: rows,
       total,
@@ -800,10 +768,13 @@ class RealmFsSession {
       truncated: rows.length < total,
       // A realm that failed to answer is reported here, not thrown: the realms
       // that answered still count, and this keeps their answer marked partial.
-      incomplete: doc.meta.incomplete === true,
+      incomplete,
     };
   }
 
+  // A directory path takes the same forms as a file path, with or without a
+  // trailing slash. No path, or an empty one, is the realm root; a missing
+  // argument arrives as null, since the call's arguments cross as JSON.
   private resolveDirectory(path: unknown): string {
     if (path === undefined || path === null || path === '') {
       return this.realmURL;

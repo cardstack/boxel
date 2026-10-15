@@ -14,6 +14,7 @@ import {
   type Query,
   type Saved,
   type SearchEntryScope,
+  type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
 
 import HostBaseTool from '../lib/host-base-tool';
@@ -145,6 +146,68 @@ export function summarizeEntries(doc: EntryCollectionDocument): EntrySummary[] {
   return summaries;
 }
 
+// Runs one entry search across `realms`, or across every realm the user can
+// read when `realms` is undefined.
+export type SearchEntriesFn = (
+  query: SearchEntryWireQuery,
+  realms: string[] | undefined,
+) => Promise<EntryCollectionDocument>;
+
+// Searches for entries and answers with at most `limit` summaries, best match
+// first unless the query names its own sort. `query` is a checked query; the
+// caller keeps its own limits and the shape of its answer.
+export async function searchEntrySummaries(
+  searchEntries: SearchEntriesFn,
+  requestQuery: Query,
+  {
+    scope,
+    limit,
+    realms,
+  }: { scope: string | undefined; limit: number; realms?: string[] },
+): Promise<{ rows: EntrySummary[]; total: number; incomplete: boolean }> {
+  let resolvedScope = resolveSearchEntryScope(scope);
+  let { query, addedRelevanceSort } = composeSearchEntriesQuery(
+    requestQuery,
+    resolvedScope,
+  );
+  let wireQuery = searchEntryWireQueryFromQuery(query, {
+    fields: SEARCH_ENTRY_PROJECTION_FIELDS,
+    scope: resolvedScope,
+  });
+  wireQuery.page = { ...wireQuery.page, size: limit };
+
+  let doc = await searchEntries(
+    wireQuery,
+    realms?.length ? [...realms] : undefined,
+  );
+
+  let rows = summarizeEntries(doc);
+  if (addedRelevanceSort) {
+    // The federated merge concatenates per-realm results without re-ranking
+    // across realms; relevance rides each entry so the merged page can be.
+    // Only the default ordering added here is re-imposed — a caller's
+    // explicit sort (which may itself include `_matchRelevance`) stands.
+    rows = [...rows].sort(
+      (a, b) => (b.matchRelevance ?? -1) - (a.matchRelevance ?? -1),
+    );
+  }
+  // `page.size` bounds each realm's own search, and the federated merge
+  // concatenates those pages without truncating — so N realms answering a
+  // `limit` of 10 hand back up to 10N summaries, each carrying a full
+  // `readMe`. The caller was promised a maximum, so impose it here. `total`
+  // still reports the real summed match count, which is what tells a caller
+  // the page is partial.
+  rows = rows.slice(0, limit);
+  return {
+    rows,
+    total: doc.meta.page.total,
+    // A realm that fails (or never resolves) during the federated fan-out is
+    // reported through this flag rather than a thrown error — the realms
+    // that answered still return; the flag keeps their partiality visible.
+    incomplete: doc.meta.incomplete === true,
+  };
+}
+
 export default class SearchEntriesTool extends HostBaseTool<
   typeof BaseToolModule.SearchEntriesInput,
   typeof BaseToolModule.SearchEntriesResult
@@ -185,53 +248,23 @@ export default class SearchEntriesTool extends HostBaseTool<
   ): Promise<BaseToolModule.SearchEntriesResult> {
     let requestQuery = pruneEmptyQueryParts(input.query);
     assertQuery(requestQuery);
-    let scope = resolveSearchEntryScope(input.scope);
     let limit = Math.min(
       Math.max(Math.floor(input.limit ?? DEFAULT_LIMIT), 1),
       MAX_LIMIT,
     );
 
-    let { query, addedRelevanceSort } = composeSearchEntriesQuery(
+    let { rows, total, incomplete } = await searchEntrySummaries(
+      (wireQuery, realms) => this.store.searchEntries(wireQuery, realms),
       requestQuery,
-      scope,
+      { scope: input.scope, limit, realms: input.realms },
     );
-    let wireQuery = searchEntryWireQueryFromQuery(query, {
-      fields: SEARCH_ENTRY_PROJECTION_FIELDS,
-      scope,
-    });
-    wireQuery.page = { ...wireQuery.page, size: limit };
-
-    let realms = input.realms?.length ? [...input.realms] : undefined;
-    let doc = await this.store.searchEntries(wireQuery, realms);
-
-    let rows = summarizeEntries(doc);
-    if (addedRelevanceSort) {
-      // The federated merge concatenates per-realm results without re-ranking
-      // across realms; relevance rides each entry so the merged page can be.
-      // Only the tool's own default ordering is re-imposed here — a caller's
-      // explicit sort (which may itself include `_matchRelevance`) stands.
-      rows = [...rows].sort(
-        (a, b) => (b.matchRelevance ?? -1) - (a.matchRelevance ?? -1),
-      );
-    }
-    // `page.size` bounds each realm's own search, and the federated merge
-    // concatenates those pages without truncating — so N realms answering a
-    // `limit` of 10 hand back up to 10N summaries, each carrying a full
-    // `readMe`. That is the response size the fixed projection exists to
-    // bound, and the caller was promised a maximum, so impose it here.
-    // `total` still reports the real summed match count, which is what tells
-    // a caller the page is partial.
-    rows = rows.slice(0, limit);
 
     let commandModule = await this.loadToolModule();
     let { SearchEntriesResult, SearchEntrySummaryField } = commandModule;
     return new SearchEntriesResult({
       results: rows.map((row) => new SearchEntrySummaryField(row)),
-      total: doc.meta.page.total,
-      // A realm that fails (or never resolves) during the federated fan-out is
-      // reported through this flag rather than a thrown error — the realms
-      // that answered still return; the flag keeps their partiality visible.
-      incomplete: doc.meta.incomplete === true,
+      total,
+      incomplete,
       cardDescription: `Query: ${JSON.stringify(requestQuery.filter ?? {})}`,
     });
   }
