@@ -4,6 +4,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
+import { SupportedMimeType } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
@@ -694,6 +695,168 @@ return { saved, exists: await realm.fs.exists('images/dot.png') };`,
         code: `await realm.fs.writeBytes('big.bin', 'AAAA'.repeat(700000));`,
       }),
       /at most 2000000 bytes per file.*No file was saved/,
+    );
+  });
+
+  test('realm.fs.delete deletes a file the same run created, and the result reports it', async function (assert) {
+    let toolService = getService('tool-service');
+    let cardService = getService('card-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.writeText('plan.md', '# Plan\\n');
+await realm.fs.writeText('kept.md', '# Kept\\n');
+await realm.fs.writeBytes('dot.png', ${JSON.stringify(PNG_BASE64)});
+let deleted = [
+  await realm.fs.delete('plan.md'),
+  await realm.fs.delete('dot.png'),
+];
+return {
+  deleted,
+  planExists: await realm.fs.exists('plan.md'),
+  dotExists: await realm.fs.exists('dot.png'),
+};`,
+    });
+
+    assert.deepEqual(JSON.parse(result.scriptResult!), {
+      deleted: [
+        { path: 'plan.md', deleted: true },
+        { path: 'dot.png', deleted: true },
+      ],
+      planExists: false,
+      dotExists: false,
+    });
+    assert.deepEqual(
+      result.files.map((file) => [file.fileUrl, file.status]),
+      [
+        [`${testRealmURL}kept.md`, 'saved'],
+        [`${testRealmURL}plan.md`, 'deleted'],
+        [`${testRealmURL}dot.png`, 'deleted'],
+      ],
+    );
+    assert.deepEqual(
+      command
+        .resultAttachments(result)
+        .map((attachment) => attachment.sourceUrl),
+      [`${testRealmURL}kept.md`],
+      'a deleted file is not attached to the result',
+    );
+    for (let path of ['plan.md', 'dot.png']) {
+      let source = await cardService.getSource(new URL(path, testRealmURL));
+      assert.strictEqual(source.status, 404, `${path} is not in the realm`);
+    }
+  });
+
+  test('realm.fs.delete refuses a file the run did not create', async function (assert) {
+    let toolService = getService('tool-service');
+    let cardService = getService('card-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `let refused = [];
+try { await realm.fs.delete('notes/first.md'); } catch (e) { refused.push(e.message); }
+await realm.fs.replace('task.json', '"Old title"', '"New title"');
+try { await realm.fs.delete('task.json'); } catch (e) { refused.push(e.message); }
+await realm.fs.writeText('scratch.md', 'x');
+await realm.fs.delete('scratch.md');
+try { await realm.fs.delete('scratch.md'); } catch (e) { refused.push(e.message); }
+return refused;`,
+    });
+
+    let refused: string[] = JSON.parse(result.scriptResult!);
+    assert.strictEqual(refused.length, 3, 'each delete is refused');
+    assert.true(
+      /deletes only a file this run created: .*notes\/first\.md/.test(
+        refused[0]!,
+      ),
+      `a file the run did not touch: ${refused[0]}`,
+    );
+    assert.true(
+      /deletes only a file this run created: .*task\.json/.test(refused[1]!),
+      `a file the run edited but did not create: ${refused[1]}`,
+    );
+    assert.true(
+      /this run already deleted it/.test(refused[2]!),
+      `a file the run already deleted: ${refused[2]}`,
+    );
+    for (let path of ['notes/first.md', 'task.json']) {
+      let source = await cardService.getSource(new URL(path, testRealmURL));
+      assert.strictEqual(source.status, 200, `${path} is still in the realm`);
+    }
+  });
+
+  test('realm.fs.delete refuses a binary file the run created when someone replaced it', async function (assert) {
+    let toolService = getService('tool-service');
+    let network = getService('network');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+    let dotURL = `${testRealmURL}dot.png`;
+    let replacement = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe]);
+
+    // A collaborator saves other bytes to the file right after the run
+    // creates it.
+    let real = network.authedFetch;
+    Object.defineProperty(network, 'authedFetch', {
+      configurable: true,
+      value: async (url: string, init?: RequestInit) => {
+        let response = await real(url, init);
+        if (url === dotURL && init?.method === 'POST' && response.ok) {
+          let replaced = await real(dotURL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/octet-stream' },
+            body: new Blob([replacement as BlobPart]),
+          });
+          assert.true(replaced.ok, 'the collaborator replaced the file');
+        }
+        return response;
+      },
+    });
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.writeBytes('dot.png', ${JSON.stringify(PNG_BASE64)});
+try {
+  await realm.fs.delete('dot.png');
+  return 'deleted';
+} catch (e) {
+  return e.message;
+}`,
+    });
+
+    assert.true(
+      /File changed while the script ran: .*dot\.png/.test(
+        JSON.parse(result.scriptResult!),
+      ),
+      `the delete is refused: ${result.scriptResult}`,
+    );
+    let response = await real(dotURL, {
+      headers: { Accept: SupportedMimeType.CardSource },
+    });
+    assert.strictEqual(response.status, 200, 'dot.png is still in the realm');
+    assert.deepEqual(
+      Array.from(new Uint8Array(await response.arrayBuffer())),
+      Array.from(replacement),
+      "the collaborator's bytes are kept",
+    );
+  });
+
+  test('a failed run names the files it created and deleted', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.fs.writeText('plan.md', 'x');
+await realm.fs.delete('plan.md');
+await realm.fs.readText('missing.md');`,
+      }),
+      /No file was saved\. Files this run created and already deleted: .*plan\.md/,
     );
   });
 
