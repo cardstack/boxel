@@ -500,41 +500,17 @@ function start(form) {
     send({ type: 'result', id, ...redact(result) });
   }
 
-  // Each operation makes one Matrix request, with the passwords filled in
+  // Each operation makes its Matrix requests with the passwords filled in
   // from the fields and the parts that aren't secret taken from the app.
   const OPERATIONS = {
-    // Tries the name as a Matrix username, then as an email address.
     async login() {
-      let password = value('password');
-      let username = value('username');
-      let asUser = await matrixRequest('login', {
-        body: { user: username, password, type: 'm.login.password' },
-      });
-      if (asUser.ok) {
-        return asUser;
-      }
-      let asEmail = await matrixRequest('login', {
-        body: {
-          identifier: {
-            type: 'm.id.thirdparty',
-            medium: 'email',
-            address: username,
-          },
-          password,
-          type: 'm.login.password',
-        },
-      });
-      return asEmail.ok ? asEmail : asUser;
+      return await passwordLogin((username) => ({ user: username }));
     },
 
     async 'cli-login'() {
-      return await matrixRequest('login', {
-        body: {
-          type: 'm.login.password',
-          identifier: { type: 'm.id.user', user: value('username') },
-          password: value('password'),
-        },
-      });
+      return await passwordLogin((username) => ({
+        identifier: { type: 'm.id.user', user: username },
+      }));
     },
 
     async register({ username, auth }) {
@@ -571,6 +547,33 @@ function start(form) {
       });
     },
   };
+
+  // Signs in with the username field as a Matrix username, then, if that
+  // fails, as an email address. `asUser` gives the part of the request that
+  // names the account as a username. When neither signs in, the username
+  // attempt's response is returned.
+  async function passwordLogin(asUser) {
+    let password = value('password');
+    let username = value('username');
+    let byUsername = await matrixRequest('login', {
+      body: { ...asUser(username), password, type: 'm.login.password' },
+    });
+    if (byUsername.ok) {
+      return byUsername;
+    }
+    let byEmail = await matrixRequest('login', {
+      body: {
+        identifier: {
+          type: 'm.id.thirdparty',
+          medium: 'email',
+          address: username,
+        },
+        password,
+        type: 'm.login.password',
+      },
+    });
+    return byEmail.ok ? byEmail : byUsername;
+  }
 
   // An interactive-auth dict for the password stage carries the account's
   // current password, which is in a field here, never in the app's dict.
