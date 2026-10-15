@@ -11,6 +11,7 @@ import {
   settled,
   visit,
   waitFor,
+  waitUntil,
 } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
@@ -99,6 +100,36 @@ module(
         .dom(`${stackCard(0, 0)}[data-test-stack-card="${gallery}"]`)
         .exists('the gallery is back on top');
       assert.dom(`${stackCard(0, 0)} ${tile('enter')}`).exists('with its grid');
+    });
+
+    test('closing the demo returns to the grid at the place it was left', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: gallery, format: 'isolated' }]],
+      });
+      await waitFor(`${stackCard(0, 0)} ${tile('stagger')}`);
+      // down to the tile, so the click lands on what the viewer can see
+      let grid = scrollerOf(`${stackCard(0, 0)} [data-gallery-tile]`);
+      let scrolled = new Promise((resolve) =>
+        grid.addEventListener('scroll', resolve, { once: true }),
+      );
+      document
+        .querySelector(`${stackCard(0, 0)} ${tile('stagger')}`)!
+        .scrollIntoView({ block: 'center' });
+      await scrolled;
+      let left = grid.scrollTop;
+      assert.true(left > 0, `the grid is scrolled (${left}px)`);
+
+      await click(`${stackCard(0, 0)} ${tile('stagger')}`);
+      await waitFor(`${stackCard(0, 1)} .demo-head h1`);
+      await click(`${stackCard(0, 1)} [data-test-close-button]`);
+      await waitFor(stackCard(0, 1), { count: 0 });
+      await waitUntil(() => grid.scrollTop === left, {
+        timeout: 3000,
+        timeoutMessage: `the grid stays at ${grid.scrollTop}px`,
+      });
+      await settled();
+
+      assert.strictEqual(grid.scrollTop, left, 'the grid is where it was left');
     });
 
     test('with two stacks, a tile opens its demo in its own stack', async function (assert) {
