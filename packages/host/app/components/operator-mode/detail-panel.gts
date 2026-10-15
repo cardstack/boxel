@@ -223,7 +223,10 @@ export default class DetailPanel extends Component<Signature> {
     return (
       this.isModule &&
       this.args.selectedDeclaration &&
-      isComponentDeclaration(this.args.selectedDeclaration)
+      isComponentDeclaration(
+        this.args.selectedDeclaration,
+        this.network.virtualNetwork,
+      )
     );
   }
 
@@ -251,7 +254,10 @@ export default class DetailPanel extends Component<Signature> {
     // so the only definition action it supports is being published as a listing.
     if (
       this.args.selectedDeclaration &&
-      isComponentDeclaration(this.args.selectedDeclaration)
+      isComponentDeclaration(
+        this.args.selectedDeclaration,
+        this.network.virtualNetwork,
+      )
     ) {
       return this.realm.canWrite(this.args.readyFile.url) &&
         this.args.selectedDeclaration.exportName
@@ -480,7 +486,7 @@ export default class DetailPanel extends Component<Signature> {
       let decl = this.args.selectedDeclaration;
       if (
         decl &&
-        isComponentDeclaration(decl) &&
+        isComponentDeclaration(decl, this.network.virtualNetwork) &&
         codeRef.name === 'default' &&
         decl.localName
       ) {

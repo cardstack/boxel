@@ -10,9 +10,9 @@ import { and, cn, not } from '@cardstack/boxel-ui/helpers';
 import { CheckMark, IconPlus } from '@cardstack/boxel-ui/icons';
 
 import {
+  baseCardRef,
   cardTypeDisplayName,
   cardTypeIcon,
-  rri,
   type RenderableSearchEntryLike,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
@@ -92,10 +92,7 @@ interface Signature {
 
 // The render type for the URL-paste live card — the CardDef fitted template,
 // matching the prerendered tiles' default native rendering.
-const defaultResultsCardRef: ResolvedCodeRef = {
-  name: 'CardDef',
-  module: rri('https://cardstack.com/base/card-api'),
-};
+const defaultResultsCardRef: ResolvedCodeRef = baseCardRef;
 
 export default class SearchResultTile extends Component<Signature> {
   // The tile element, captured so the shared positionAdornLabel modifier can
