@@ -52,6 +52,6 @@ The keyboard contract, **read out of the engine bundle rather than assumed**:
 
 Retinted through the engine's `--xy-*` custom-property channel from `<style scoped>`: node surfaces, edge strokes, handle fills, background pattern, controls and minimap all map onto Pretui tokens. Node depth uses `--card`, `--border` and the kit's shadow tokens instead of the stock border. `--pretui-canvas-*` and the pattern's `@gap`/`@patternSize` are graph-space args, not tokens.
 
-The injected skin sheet covers only what the channel cannot reach — the focus ring and the reduced-motion guard — and is anchored under `.pretui-node-canvas`, so the skin sheet cannot accidentally restyle another canvas.
+The injected skin sheet covers only what the channel cannot reach — the focus ring and the reduced-motion guard — and is anchored under `.pretui-node-canvas`, so it cannot accidentally restyle another canvas.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
