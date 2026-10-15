@@ -11,6 +11,7 @@ import {
   isCredentialHeader,
   registerSecureOriginHost,
   scrubRequestTelemetry,
+  withCredentialHeadersMasked,
 } from '../lib/request-telemetry.ts';
 import { httpLogging } from '../middleware/index.ts';
 import {
@@ -357,6 +358,27 @@ module(basename(import.meta.filename), function () {
       assert.true(isCredentialHeader('X-Api-Key'));
       assert.false(isCredentialHeader('x-boxel-client-request-id'));
       assert.false(isCredentialHeader('x-boxel-assume-user'));
+    });
+
+    test('a header dump keeps every header name and masks only the credential values', function (assert) {
+      assert.deepEqual(
+        withCredentialHeadersMasked({
+          authorization: 'Bearer session-jwt',
+          cookie: 'a=b',
+          'x-hub-signature-256': 'sha256=abc',
+          accept: 'application/json',
+          'x-boxel-client-request-id': 'req-1',
+          'set-cookie': ['a=b', 'c=d'],
+        }),
+        {
+          authorization: 'REDACTED',
+          cookie: 'REDACTED',
+          'x-hub-signature-256': 'REDACTED',
+          accept: 'application/json',
+          'x-boxel-client-request-id': 'req-1',
+          'set-cookie': 'REDACTED',
+        },
+      );
     });
 
     test('a proxy route is recognised with a trailing slash', function (assert) {

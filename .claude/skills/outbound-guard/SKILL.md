@@ -125,6 +125,10 @@ than an event raised during the request may:
 The line is masked when it is written, not by the `beforeSend` hook, so the
 token and cookies never reach Loki, or a breadcrumb on an event raised after
 the line. `request-telemetry-test.ts` pins this for the log and for Sentry.
+The prerender server, the prerender manager and the worker manager write the
+same debug header line through `withCredentialHeadersMasked`, so a credential
+header sent to any of them is masked too. A new log line that dumps request
+headers goes through it as well.
 
 Why: a proxy route's body is the caller's own content — a forwarded request's
 URL (query string included), headers and body, or a whole prompt — and its

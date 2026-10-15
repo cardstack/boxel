@@ -25,7 +25,7 @@ import {
 } from '../utils/operator-token.ts';
 import { knownRealmURL, type RealmRoutingDeps } from '../lib/realm-routing.ts';
 import {
-  isCredentialHeader,
+  withCredentialHeadersMasked,
   keepsMethodAndPathOnly,
 } from '../lib/request-telemetry.ts';
 import {
@@ -224,16 +224,12 @@ function loggableRequestURL(ctxt: Koa.Context): string {
 //   sent, so the line still shows what the caller sent for diagnosis.
 function loggableRequestHeaders(
   ctxt: Koa.Context,
-): http.IncomingHttpHeaders | string[] {
+): Record<string, string | string[] | undefined> | string[] {
   let headers = ctxt.req.headers;
   if (keepsMethodAndPathOnly({ url: fullRequestURL(ctxt).href, headers })) {
     return Object.keys(headers);
   }
-  let loggable: http.IncomingHttpHeaders = {};
-  for (let [name, value] of Object.entries(headers)) {
-    loggable[name] = isCredentialHeader(name) ? 'REDACTED' : value;
-  }
-  return loggable;
+  return withCredentialHeadersMasked(headers);
 }
 
 export function httpLogging(ctxt: Koa.Context, next: Koa.Next) {

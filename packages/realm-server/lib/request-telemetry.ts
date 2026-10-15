@@ -53,7 +53,8 @@ const proxyRoutePaths = new Set([
 // replayable with its body, so it is treated like a token. The names are
 // spelled out here, not imported, to keep this module free of imports. The
 // request log's header line masks these, and an event's request context drops
-// them.
+// them, and every server's debug header line masks them
+// (`withCredentialHeadersMasked`).
 const credentialHeaders = new Set([
   'authorization',
   'proxy-authorization',
@@ -69,6 +70,19 @@ export function isCredentialHeader(name: string): boolean {
   return (
     credentialHeaders.has(name.toLowerCase()) || credentialHeaderName.test(name)
   );
+}
+
+// A request's headers with each credential header's value printed as
+// `REDACTED`, for a log line that dumps them. Every other header is kept as
+// sent, so the line still shows what the caller sent.
+export function withCredentialHeadersMasked<
+  V extends string | string[] | undefined,
+>(headers: Record<string, V>): Record<string, V | 'REDACTED'> {
+  let masked: Record<string, V | 'REDACTED'> = {};
+  for (let [name, value] of Object.entries(headers)) {
+    masked[name] = isCredentialHeader(name) ? 'REDACTED' : value;
+  }
+  return masked;
 }
 
 const secureOriginHosts = new Set<string>();
