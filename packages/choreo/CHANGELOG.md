@@ -16,6 +16,10 @@ versions may change behavior until `1.0.0`.
 
 ### Fixed
 
+- **An ambient loop keeps its place when its run is replaced.** A `@repeat={{Infinity}}` Tween's
+  loop restarted from the top of its cycle whenever its region compiled a new run — an edited
+  `@duration`, or any arrival in the region. The new run now carries the same loop on the same
+  sprite on from where it was, at its new timing.
 - **No `@glimmer/tracking` peer dependency.** Declaring it made pnpm and npm install the
   standalone `@glimmer/tracking` 1.x package, whose `tracked` doesn't reach Ember's renderer.
   ember-source provides the module.

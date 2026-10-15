@@ -61,12 +61,22 @@ const BOOTSTRAP = `
         writeText: (path, content) => call('fs.writeText', [path, content]),
         copy: (fromPath, toPath) => call('fs.copy', [fromPath, toPath]),
         writeBytes: (path, base64) => call('fs.writeBytes', [path, base64]),
+        delete: (path) => call('fs.delete', [path]),
+        download: (sourceUrl, path) =>
+          call('fs.download', [sourceUrl, path]),
       }),
       cards: Object.freeze({
         search: (query) => call('cards.search', [query]),
         get: (path) => call('cards.get', [path]),
       }),
+      entries: Object.freeze({
+        search: (query, options) =>
+          call('entries.search', [query, options ?? {}]),
+      }),
       capture: (path, options) => call('capture', [path, options ?? {}]),
+      images: Object.freeze({
+        generate: (options) => call('images.generate', [options ?? {}]),
+      }),
       workspaces: Object.freeze({
         create: (options) => call('workspaces.create', [options ?? {}]),
         delete: (url) => call('workspaces.delete', [url]),
@@ -77,6 +87,12 @@ const BOOTSTRAP = `
         previewFormat: (path, format) =>
           call('ui.previewFormat', [path, format]),
         openWorkspace: () => call('ui.openWorkspace', []),
+      }),
+      index: Object.freeze({
+        invalidate: (paths) => call('index.invalidate', [paths]),
+        reindex: () => call('index.reindex', []),
+        fullReindex: () => call('index.fullReindex', []),
+        cancelJob: () => call('index.cancelJob', []),
       }),
     });
     globalThis.room = Object.freeze({
@@ -145,9 +161,13 @@ const METHODS = new Set<RealmRunnerCallMethod>([
   'fs.writeText',
   'fs.copy',
   'fs.writeBytes',
+  'fs.download',
   'cards.search',
   'cards.get',
+  'entries.search',
+  'fs.delete',
   'capture',
+  'images.generate',
   'workspaces.create',
   'workspaces.delete',
   'room.enableSkills',
@@ -157,6 +177,10 @@ const METHODS = new Set<RealmRunnerCallMethod>([
   'ui.openFile',
   'ui.previewFormat',
   'ui.openWorkspace',
+  'index.invalidate',
+  'index.reindex',
+  'index.fullReindex',
+  'index.cancelJob',
 ]);
 
 // A worker runs one script. These hold that run's open host calls so a

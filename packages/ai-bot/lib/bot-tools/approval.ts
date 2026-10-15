@@ -2,6 +2,7 @@ import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-
 import {
   getToolRequests,
   isToolResultEventType,
+  latestEventContent,
 } from '@cardstack/runtime-common/matrix-constants';
 
 // The approval flow every bot tool shares. A tool's turn may mark a call
@@ -82,7 +83,7 @@ export function releasedToolCalls(
       name?: string;
       arguments?: unknown;
       approvalRequired?: boolean;
-    }>(event.content as Record<string, any>) ?? []) {
+    }>(latestEventContent(event)) ?? []) {
       if (
         !request?.id ||
         !request.name ||
@@ -112,6 +113,29 @@ export function releasedToolCalls(
     }
   }
   return released;
+}
+
+// Why an approval released no call for this handler to run: an earlier
+// handler already took the call on ('claimed'), the call's outcome is
+// already in the room ('settled'), or no held request for it can be found in
+// the history ('missing'), which means the approved call will never run.
+// Undefined when the approval's call is among the calls this handler runs.
+export function unreleasedApproval(
+  history: DiscreteMatrixEvent[],
+  approvedId: string | undefined,
+  released: ReleasedToolCall[],
+  claimed: ReleasedToolCall[],
+): 'claimed' | 'settled' | 'missing' | undefined {
+  if (claimed.some((entry) => entry.call.id === approvedId)) {
+    return undefined;
+  }
+  if (released.some((entry) => entry.call.id === approvedId)) {
+    return 'claimed';
+  }
+  if (approvedId && settledToolCallIds(history).has(approvedId)) {
+    return 'settled';
+  }
+  return 'missing';
 }
 
 // The approved calls this process has taken on running, so a call runs once

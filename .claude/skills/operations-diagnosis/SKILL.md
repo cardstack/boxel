@@ -421,6 +421,7 @@ So: use the logs to find the realm, the actor, the operation, the grant path and
 
 - **`policy-performance`** — what the policy costs: `evaluationMs`, `predicateMs`, compile durations, the before/after method, and asserting on these records in realm-server tests through their sinks.
 - **`realm-policy-authoring`** (boxel-skills) — explain and validate, for one actor and one card.
+- **`call-api`** — a `callApi` refused or answering unexpectedly: which stage refused it, and the `boxel:key-use` line each invocation writes.
 - **`realm-auth`** — a 401, or a 403 with no decision line: tokens, sessions, the ACL itself.
 - **`indexing-diagnostics`** — a policy card that won't index, or a target whose error row makes it unmatchable.
 - **`search-shape-diagnosis`** — the federated search's own line, including `incomplete`, for a search missing rows.

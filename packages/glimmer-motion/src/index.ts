@@ -41,7 +41,7 @@ export type { MotionEl, MotionProps } from './motion.ts';
 export { default as motion, MotionModifier } from './motion.ts';
 export type { MotionConfigContext } from './motion-config.gts';
 export { closestMotionConfig, MotionConfig } from './motion-config.gts';
-export { flushPendingMounts, MotionNode } from './node.ts';
+export { flushPendingMounts, MotionNode, retime } from './node.ts';
 export type {
   MotionParticipant,
   ParticipantArgs,

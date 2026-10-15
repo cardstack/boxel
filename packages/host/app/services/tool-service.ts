@@ -106,15 +106,41 @@ async function withTimeout<T>(
   ms: number,
   label: string,
 ): Promise<T> {
+  return await withExtendableTimeout(() => promise, ms, label);
+}
+
+// The same, for work that may learn it needs longer once it has started:
+// `extend` pushes the end out by that many ms.
+async function withExtendableTimeout<T>(
+  run: (extend: (ms: number) => void) => Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
   let timer: ReturnType<typeof setTimeout>;
-  let timedOut = new Promise<never>((_, reject) => {
+  let total = ms;
+  let reject: (error: Error) => void;
+  let arm = (delay: number) => {
+    clearTimeout(timer);
     timer = setTimeout(
-      () => reject(new Error(`${label} did not complete within ${ms}ms`)),
-      ms,
+      () => reject(new Error(`${label} did not complete within ${total}ms`)),
+      delay,
     );
+  };
+  let started = Date.now();
+  let timedOut = new Promise<never>((_, r) => {
+    reject = r;
   });
+  arm(ms);
   try {
-    return await Promise.race([promise, timedOut]);
+    return await Promise.race([
+      run((extra) => {
+        if (extra > 0) {
+          total += extra;
+          arm(total - (Date.now() - started));
+        }
+      }),
+      timedOut,
+    ]);
   } finally {
     clearTimeout(timer!);
   }
@@ -961,7 +987,9 @@ export default class ToolService extends Service {
         // blocked on a card that never becomes loadable), and the result event
         // that un-sticks the UI and the waiting ai-bot is only sent once this
         // settles.
-        let performTool = async (): Promise<CardDef | undefined> => {
+        let performTool = async (
+          extendTimeout: (ms: number) => void,
+        ): Promise<CardDef | undefined> => {
           // A manual run can start before the tool's command is resolved, or
           // after it resolved to no command while its declaring skill was still
           // loading.
@@ -988,6 +1016,16 @@ export default class ToolService extends Service {
                 .bindsToInvokingRoom
             ) {
               attributes = { ...attributes, roomId: command.message.roomId };
+            }
+            let extraTimeFor = (
+              toolToRun.constructor as {
+                extraExecuteTimeMsFor?: (
+                  attributes: Record<string, unknown> | undefined,
+                ) => number;
+              }
+            ).extraExecuteTimeMsFor;
+            if (typeof extraTimeFor === 'function') {
+              extendTimeout(extraTimeFor(attributes));
             }
             let typedInput = await this.instantiateToolInput(
               toolToRun,
@@ -1039,8 +1077,8 @@ export default class ToolService extends Service {
             : TOOL_EXECUTE_TIMEOUT_MS;
 
         [resultCard] = await all([
-          withTimeout(
-            performTool(),
+          withExtendableTimeout(
+            performTool,
             executeTimeoutMs,
             `Tool "${command.name}"`,
           ),

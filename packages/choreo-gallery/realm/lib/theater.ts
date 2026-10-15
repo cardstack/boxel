@@ -2,7 +2,6 @@ import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 
 import { scrollRoot } from './onstage';
-import { factor } from './tempo';
 
 const GLIDE = 0.5;
 const GLIDE_EASE = 'cubic-bezier(0.2, 0, 0, 1)';
@@ -29,9 +28,7 @@ function boxOf(el: HTMLElement): Box {
  * off on the way in nor pops back on the way out.
  */
 function glide(el: HTMLElement, from: Box) {
-  let duration = GLIDE * factor();
   if (
-    duration === 0 ||
     matchMedia('(prefers-reduced-motion: reduce)').matches ||
     !el.isConnected
   ) {
@@ -60,7 +57,7 @@ function glide(el: HTMLElement, from: Box) {
         borderWidth: to.border,
       },
     ],
-    { duration: duration * 1000, easing: GLIDE_EASE },
+    { duration: GLIDE * 1000, easing: GLIDE_EASE },
   );
 }
 
@@ -101,20 +98,15 @@ export const theaterView = modifier((el: HTMLElement) => {
  * page re-orders around it instead, and the stage glides between the two
  * boxes.
  *
- * The state belongs to whoever renders the page: the gallery card, or a demo
- * card opened on its own. It is never written to the host's URL.
+ * The state belongs to the demo card's page. It is never written to the
+ * host's URL: a film's page opens out of theater unless a tile asked for it.
  */
 export class Theater {
-  @tracked on = false;
+  @tracked on: boolean;
 
-  /**
-   * The curtain is down: the page is about to leave, its film has stopped
-   * and its poster stands in the frame's place. The crossing flies the stage
-   * out, and an iframe can't ride a crossing — the region lifts what leaves
-   * into a layer of its own, and an iframe that moves reloads, mid-flight and
-   * on the page's own thread.
-   */
-  @tracked curtain = false;
+  constructor(on = false) {
+    this.on = on;
+  }
 
   private stageEl?: HTMLElement;
 
@@ -144,13 +136,28 @@ export class Theater {
   };
 
   toggle = () => this.enter(!this.on);
+}
 
-  /**
-   * Set the mode for a page that is arriving, with no glide: the crossing
-   * animates a page swap, and the curtain goes back up for the new page.
-   */
-  reset = (on = false) => {
-    this.on = on;
-    this.curtain = false;
-  };
+/** how long a tile's request for theater waits for its page to open */
+const REQUEST_MS = 10_000;
+
+let requested: { at: number; slug: string } | null = null;
+
+/**
+ * A film's tile asks for its page in theater just before it opens the demo
+ * card. The host opens the card, so the request can't travel with it; the
+ * page takes it up as it renders, and a request no page takes up lapses.
+ */
+export function requestTheater(slug: string): void {
+  requested = { at: Date.now(), slug };
+}
+
+/** whether this film's page was asked to open in theater, which answers it */
+export function takeTheaterRequest(slug: string | undefined): boolean {
+  let request = requested;
+  if (!slug || !request || request.slug !== slug) {
+    return false;
+  }
+  requested = null;
+  return Date.now() - request.at < REQUEST_MS;
 }

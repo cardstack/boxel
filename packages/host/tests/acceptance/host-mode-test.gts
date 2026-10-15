@@ -924,6 +924,59 @@ module('Acceptance | host mode tests', function (hooks) {
     );
   });
 
+  test('Back and Forward move the stack with the URL', async function (assert) {
+    let primary = `${testHostModeRealmURL}ViewCardDemo/index`;
+    let second = `${testHostModeRealmURL}ViewCardDemo/secondary`;
+    let third = `${testHostModeRealmURL}ViewCardDemo/tertiary`;
+    let stackItem = (id: string) => `[data-test-host-mode-stack-item="${id}"]`;
+    let stackParam = () =>
+      new URL(currentURL()!, 'http://localhost').searchParams.get(
+        'hostModeStack',
+      );
+
+    await visit('/test/ViewCardDemo/index.json');
+    await waitFor(
+      `[data-test-host-mode-card="${primary}"] [data-test-view-card-demo-button]`,
+    );
+    await click(
+      `[data-test-host-mode-card="${primary}"] [data-test-view-card-demo-button]`,
+    );
+    await waitFor(`${stackItem(second)} [data-test-view-card-demo-button]`);
+    await click(`${stackItem(second)} [data-test-view-card-demo-button]`);
+    await waitFor(stackItem(third));
+    assert.strictEqual(stackParam(), JSON.stringify([second, third]));
+    let twoDeep = currentURL()!;
+
+    // Back and Forward are transitions to the URLs either side of this one,
+    // and the stack follows each of them
+    let oneDeep = `/test/ViewCardDemo/index.json?hostModeStack=${encodeURIComponent(
+      JSON.stringify([second]),
+    )}`;
+    await visit(oneDeep);
+    await waitFor(stackItem(third), { count: 0 });
+    assert.dom(stackItem(second)).exists('Back leaves the card below');
+    assert.dom(stackItem(third)).doesNotExist('and takes the top one away');
+
+    await visit(twoDeep);
+    await waitFor(stackItem(third));
+    assert.dom(stackItem(second)).exists('Forward keeps the card below');
+    assert.dom(stackItem(third)).exists('and brings the top one back');
+    assert.strictEqual(stackParam(), JSON.stringify([second, third]));
+  });
+
+  test('a hostModeStack that is not a list of card ids is no stack', async function (assert) {
+    let mango = `[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`;
+    for (let value of ['{}', '5', '"abc"', '[1, 2]']) {
+      await visit(
+        `/test/Pet/mango.json?hostModeStack=${encodeURIComponent(value)}`,
+      );
+      assert.dom(mango).exists(`${value}: the page loads`);
+      assert
+        .dom('[data-test-host-mode-stack-item]')
+        .doesNotExist(`${value}: with no stack`);
+    }
+  });
+
   test('clicking on a stack card does not close it', async function (assert) {
     let hostModeStackValue = encodeURIComponent(
       JSON.stringify([`${testHostModeRealmURL}index`]),
@@ -1132,6 +1185,30 @@ module('Acceptance | host mode tests', function (hooks) {
       assert
         .dom(`[data-test-host-mode-card="${testHostModeRealmURL}Pet/mango"]`)
         .exists();
+    });
+
+    test('at the site root, an opened card is written to the URL, and Back closes it', async function (assert) {
+      let mango = `${testHostModeRealmURL}Pet/mango`;
+      let stackItem = `[data-test-host-mode-stack-item="${mango}"]`;
+
+      await visit('/');
+      await click('[data-test-boxel-filter-list-button="All Cards"]');
+      await waitFor(`[data-test-cards-grid-item="${mango}"]`);
+      await click(`[data-test-cards-grid-item="${mango}"]`);
+      await waitFor(stackItem);
+
+      let url = new URL(currentURL()!, 'http://localhost');
+      assert.strictEqual(url.pathname, '/', 'still the root page');
+      assert.strictEqual(
+        url.searchParams.get('hostModeStack'),
+        JSON.stringify([mango]),
+        'the URL names the opened card',
+      );
+
+      // Back is a transition to the URL before the card was opened
+      await visit('/');
+      await waitFor(stackItem, { count: 0 });
+      assert.dom(stackItem).doesNotExist('Back closes the card');
     });
   });
 });

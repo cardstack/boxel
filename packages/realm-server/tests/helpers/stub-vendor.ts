@@ -112,7 +112,11 @@ function numberParam(url: URL, name: string, fallback: number): number {
   return Number.isFinite(value) && value >= 0 ? value : fallback;
 }
 
-export async function startStubVendor(): Promise<StubVendor> {
+// `port` fixes the port, for a test whose vendor URL is written into a card
+// module before the vendor starts. Absent, any free one.
+export async function startStubVendor({
+  port = 0,
+}: { port?: number } = {}): Promise<StubVendor> {
   let requests: StubVendorRequest[] = [];
   let held: (() => void)[] = [];
   let abandoned = 0;
@@ -231,12 +235,12 @@ export async function startStubVendor(): Promise<StubVendor> {
     });
   });
   await new Promise<void>((resolve) =>
-    server.listen(0, '127.0.0.1', () => resolve()),
+    server.listen(port, '127.0.0.1', () => resolve()),
   );
-  let { port } = server.address() as AddressInfo;
+  let { port: bound } = server.address() as AddressInfo;
   return {
-    url: `http://127.0.0.1:${port}`,
-    alternateUrl: `http://localhost:${port}`,
+    url: `http://127.0.0.1:${bound}`,
+    alternateUrl: `http://localhost:${bound}`,
     requests,
     abandonedResponses: () => abandoned,
     releaseHeld: () => {

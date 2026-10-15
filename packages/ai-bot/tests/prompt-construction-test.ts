@@ -18,6 +18,7 @@ import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  CAPTURE_SOURCE_URL_PREFIX,
   LEGACY_APP_BOXEL_COMMAND_REQUESTS_KEY,
   LEGACY_APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   LEGACY_APP_BOXEL_COMMAND_RESULT_REL_TYPE,
@@ -4281,6 +4282,115 @@ ${patchedFileSource}
     );
   });
 
+  test('getPromptParts does not check the captures a run-realm-code result attaches', async function () {
+    const roomId = 'room-checks-captures';
+    const aiMessageId = 'ai-message';
+    const savedFile = 'http://localhost:4201/test/reading-list/dune.json';
+
+    const eventList: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: aiMessageId,
+        origin_server_ts: 1,
+        room_id: roomId,
+        sender: '@aibot:localhost',
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Saving the book and looking at it.',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              realmUrl: 'http://localhost:4201/test',
+              tools: [],
+              functions: [],
+            },
+          },
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+            {
+              id: 'save-and-capture',
+              name: 'run-realm-code_6b92',
+              arguments: JSON.stringify({
+                description: 'Save the book and capture it',
+                attributes: {
+                  code: "await realm.fs.write(...); await realm.capture('reading-list/dune')",
+                },
+              }),
+            },
+          ],
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: aiMessageId,
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+        event_id: 'save-and-capture-result',
+        origin_server_ts: 2,
+        room_id: roomId,
+        sender: '@user:localhost',
+        content: {
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+          'm.relates_to': {
+            event_id: aiMessageId,
+            key: 'applied',
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+          },
+          commandRequestId: 'save-and-capture',
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+            attachedFiles: [
+              {
+                sourceUrl: savedFile,
+                url: 'mxc://mock-server/dune-json',
+                name: 'dune.json',
+                contentType: 'application/vnd.card+json',
+              },
+              {
+                sourceUrl: `${CAPTURE_SOURCE_URL_PREFIX}3f9a1c/dune%20(isolated).png`,
+                url: 'mxc://mock-server/dune-isolated',
+                name: 'dune (isolated).png',
+                contentType: 'image/png',
+              },
+              // The host always uploads a capture as an image, so it never
+              // sends one without a content type. This entry checks that the
+              // source URL alone keeps a capture out, which the content-type
+              // filter would not.
+              {
+                sourceUrl: `${CAPTURE_SOURCE_URL_PREFIX}b27e44/dune%20(embedded).png`,
+                url: 'mxc://mock-server/dune-embedded',
+                name: 'dune (embedded).png',
+                contentType: '',
+              },
+            ],
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: 'save-and-capture-result',
+        },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const { pendingCodePatchCorrectnessChecks } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+
+    assert.deepEqual(
+      pendingCodePatchCorrectnessChecks?.files.map((file) => file.sourceUrl),
+      [savedFile],
+      'Only the saved file is checked, whether or not a capture names its content type',
+    );
+  });
+
   test('getPromptParts ignores cancelled patch commands when collecting pending correctness checks', async function () {
     const roomId = 'room-checks-cancelled';
     const aiMessageId = 'ai-message';
@@ -4821,6 +4931,361 @@ ${patchedFileSource}
     );
   });
 
+  test('warning-only passes ask for fixes and count toward the attempt cap', async function () {
+    const roomId = '!room:localhost';
+    const targetRef = 'http://localhost/cards/Ticket/1';
+
+    function buildAiMessage(index: number, requestId: string) {
+      return {
+        type: 'm.room.message',
+        event_id: `ai-message-${index}`,
+        room_id: roomId,
+        sender: '@aibot:localhost',
+        origin_server_ts: index * 10 + 2,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: `Attempt ${index}`,
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+            {
+              id: `check-${requestId}`,
+              name: 'checkCorrectness',
+              arguments: JSON.stringify({
+                description: `Check attempt ${index}`,
+                attributes: {
+                  targetType: 'card',
+                  targetRef,
+                  roomId,
+                  correctnessCheckAttempt: index,
+                },
+              }),
+            },
+          ],
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: `ai-message-${index}`,
+        },
+        status: EventStatus.SENT,
+      } as DiscreteMatrixEvent;
+    }
+
+    function buildCommandResult(
+      index: number,
+      requestId: string,
+      relatesToId: string,
+      warningText: string,
+    ): DiscreteMatrixEvent {
+      return {
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+        event_id: `command-result-${index}`,
+        room_id: roomId,
+        sender: '@command:localhost',
+        origin_server_ts: index * 10 + 3,
+        content: {
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+          commandRequestId: requestId,
+          'm.relates_to': {
+            event_id: relatesToId,
+            key: 'applied',
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+          },
+          data: {
+            card: {
+              sourceUrl: `http://localhost/correctness/${index}.json`,
+              url: `http://localhost/correctness/${index}.json`,
+              name: `correctness-${index}.json`,
+              contentType: 'application/json',
+              content: JSON.stringify({
+                data: {
+                  attributes: {
+                    correct: true,
+                    errors: [],
+                    warnings: [warningText],
+                  },
+                },
+              }),
+            },
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: `command-result-${index}`,
+        },
+        status: EventStatus.SENT,
+      };
+    }
+
+    const eventList: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: 'user-message',
+        room_id: roomId,
+        sender: '@user:localhost',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Please fix the file and run correctness checks.',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: 'user-message',
+        },
+        status: EventStatus.SENT,
+      },
+      buildAiMessage(1, '1'),
+      buildCommandResult(1, 'check-1', 'ai-message-1', 'first warning'),
+      buildAiMessage(2, '2'),
+      buildCommandResult(2, 'check-2', 'ai-message-2', 'second warning'),
+      buildAiMessage(3, '3'),
+      buildCommandResult(3, 'check-3', 'ai-message-3', 'still warning'),
+    ];
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+
+    assert.ok(messages, 'Expected prompt messages to be constructed');
+
+    let userMessages =
+      messages?.filter((message) => message.role === 'user') ?? [];
+    let fixRequests = userMessages.filter((message) =>
+      messageText(message).includes('Fix the ones that are mistakes now'),
+    );
+    assert.strictEqual(
+      fixRequests.length,
+      2,
+      'The first two warning-only passes ask for fixes',
+    );
+    let successNotes = userMessages.filter((message) =>
+      messageText(message).includes('Note that in at most one line'),
+    );
+    assert.strictEqual(
+      successNotes.length,
+      1,
+      'The third warning-only pass stops asking for fixes and gets the success note, which mentions the warnings',
+    );
+    assert.notOk(
+      userMessages.some((message) =>
+        messageText(message).includes('Fix the errors above'),
+      ),
+      'Warnings never trigger the error-fix instruction',
+    );
+  });
+
+  test('attempt counts carry across fix messages until the user speaks', async function () {
+    const roomId = '!room:localhost';
+    const cardId = 'http://localhost/cards/Ticket/1';
+    let ts = 0;
+    let events: DiscreteMatrixEvent[] = [];
+
+    function addPatch(index: number) {
+      let eventId = `ai-patch-${index}`;
+      events.push(
+        {
+          type: 'm.room.message',
+          event_id: eventId,
+          room_id: roomId,
+          sender: '@aibot:localhost',
+          origin_server_ts: ++ts,
+          content: {
+            msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+            body: `Patch ${index}`,
+            format: 'org.matrix.custom.html',
+            isStreamingFinished: true,
+            data: { context: { tools: [], functions: [] } },
+            [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+              {
+                id: `patch-${index}`,
+                name: 'patchCardInstance',
+                arguments: JSON.stringify({
+                  description: 'Update the ticket',
+                  attributes: {
+                    cardId,
+                    patch: { attributes: { status: 'Open' } },
+                  },
+                }),
+              },
+            ],
+          },
+          unsigned: { age: 0, transaction_id: eventId },
+          status: EventStatus.SENT,
+        } as DiscreteMatrixEvent,
+        {
+          type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+          event_id: `patch-result-${index}`,
+          room_id: roomId,
+          sender: '@user:localhost',
+          origin_server_ts: ++ts,
+          content: {
+            msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+            commandRequestId: `patch-${index}`,
+            'm.relates_to': {
+              event_id: eventId,
+              key: 'applied',
+              rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+            },
+            data: { context: { tools: [], functions: [] } },
+          },
+          unsigned: { age: 0, transaction_id: `patch-result-${index}` },
+          status: EventStatus.SENT,
+        } as DiscreteMatrixEvent,
+      );
+      return eventId;
+    }
+
+    // records the check the ai-bot would publish for the patch, answered by
+    // a pass that still carries a warning
+    function addWarningCheck(
+      index: number,
+      patchEventId: string,
+      attempt: number,
+    ) {
+      let correctnessEventId = `correctness-${index}`;
+      events.push(
+        {
+          type: 'm.room.message',
+          event_id: correctnessEventId,
+          room_id: roomId,
+          sender: '@aibot:localhost',
+          origin_server_ts: ++ts,
+          content: {
+            msgtype: APP_BOXEL_CODE_PATCH_CORRECTNESS_MSGTYPE,
+            body: '',
+            format: 'org.matrix.custom.html',
+            isStreamingFinished: true,
+            'm.relates_to': {
+              rel_type: APP_BOXEL_CODE_PATCH_CORRECTNESS_REL_TYPE,
+              event_id: patchEventId,
+            },
+            [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+              {
+                id: `check-${index}`,
+                name: 'checkCorrectness',
+                arguments: JSON.stringify({
+                  description: `Check correctness of ${cardId}`,
+                  attributes: {
+                    targetType: 'card',
+                    targetRef: cardId,
+                    roomId,
+                    targetEventId: patchEventId,
+                    correctnessCheckAttempt: attempt,
+                  },
+                }),
+              },
+            ],
+          },
+          unsigned: { age: 0, transaction_id: correctnessEventId },
+          status: EventStatus.SENT,
+        } as DiscreteMatrixEvent,
+        {
+          type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+          event_id: `check-result-${index}`,
+          room_id: roomId,
+          sender: '@user:localhost',
+          origin_server_ts: ++ts,
+          content: {
+            msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+            commandRequestId: `check-${index}`,
+            'm.relates_to': {
+              event_id: correctnessEventId,
+              key: 'applied',
+              rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+            },
+            data: {
+              card: {
+                sourceUrl: `${cardId}-check-${index}.json`,
+                url: `${cardId}-check-${index}.json`,
+                name: `correctness-${index}.json`,
+                contentType: 'application/json',
+                content: JSON.stringify({
+                  data: {
+                    attributes: {
+                      correct: true,
+                      errors: [],
+                      warnings: [
+                        `${cardId}: "requester" is not a field of Ticket`,
+                      ],
+                    },
+                  },
+                }),
+              },
+            },
+          },
+          unsigned: { age: 0, transaction_id: `check-result-${index}` },
+          status: EventStatus.SENT,
+        } as DiscreteMatrixEvent,
+      );
+    }
+
+    async function nextAttempt(patchEventId: string) {
+      let { pendingCodePatchCorrectnessChecks } = await getPromptParts(
+        events,
+        '@aibot:localhost',
+        fakeMatrixClient,
+      );
+      return pendingCodePatchCorrectnessChecks?.attemptsByTargetKey?.[
+        `card:${cardId}|event:${patchEventId}`
+      ];
+    }
+
+    let attempts: (number | undefined)[] = [];
+    for (let index = 1; index <= 4; index++) {
+      let patchEventId = addPatch(index);
+      let attempt = await nextAttempt(patchEventId);
+      attempts.push(attempt);
+      addWarningCheck(index, patchEventId, attempt ?? 1);
+    }
+    assert.deepEqual(
+      attempts,
+      [1, 2, 3, 4],
+      'each fix message continues the count, so the fourth round is past the cap',
+    );
+
+    events.push({
+      type: 'm.room.message',
+      event_id: 'user-message',
+      room_id: roomId,
+      sender: '@user:localhost',
+      origin_server_ts: ++ts,
+      content: {
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        body: 'Try a different approach',
+        format: 'org.matrix.custom.html',
+        data: { context: { tools: [], functions: [] } },
+      },
+      unsigned: { age: 0, transaction_id: 'user-message' },
+      status: EventStatus.SENT,
+    } as DiscreteMatrixEvent);
+    let afterUser = addPatch(5);
+    assert.strictEqual(
+      await nextAttempt(afterUser),
+      1,
+      'a user message starts a fresh run of attempts',
+    );
+  });
+
   test('correctness attempts reset when a new patch event starts for the same target', async function () {
     const roomId = '!room:localhost';
     const targetRef = 'http://localhost/files/example.gts';
@@ -4994,7 +5459,7 @@ ${patchedFileSource}
     );
   });
 
-  test('getPromptParts includes the correctness summary in the trailing message', async function () {
+  test('getPromptParts includes the correctness summary in the trailing message after a failed check', async function () {
     const roomId = '!room:localhost';
     const aiMessageId = '$ai-msg';
     const eventList: DiscreteMatrixEvent[] = [
@@ -5067,7 +5532,7 @@ ${patchedFileSource}
         sender: '@command:localhost',
         origin_server_ts: 4,
         content: {
-          msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
           commandRequestId: 'check-1',
           'm.relates_to': {
             event_id: aiMessageId,
@@ -5075,6 +5540,21 @@ ${patchedFileSource}
             rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
           },
           data: {
+            card: {
+              sourceUrl: 'http://localhost/correctness/1.json',
+              url: 'http://localhost/correctness/1.json',
+              name: 'correctness-1.json',
+              contentType: 'application/json',
+              content: JSON.stringify({
+                data: {
+                  attributes: {
+                    correct: false,
+                    errors: ['example.gts: unknown field type'],
+                    warnings: [],
+                  },
+                },
+              }),
+            },
             context: {
               tools: [],
               functions: [],
@@ -5112,6 +5592,377 @@ ${patchedFileSource}
         ?.slice(0, -1)
         .some((message) => messageText(message).includes(summaryMessage)),
       'Summary must not be a history entry — it vanishes on the next request',
+    );
+    assert.true(
+      promptParts.messages?.some(
+        (message) =>
+          message.role === 'user' &&
+          messageText(message).includes('Fix the errors above'),
+      ),
+      'A failed check still asks for a fix',
+    );
+  });
+
+  test('a passing correctness batch asks the model, once, to finish its answer', async function () {
+    const roomId = '!room:localhost';
+    const aiMessageId = 'ai-message-1';
+    const targets = ['timetable.gts', 'Timetable/main.json'];
+
+    function checkResult(
+      index: number,
+      warnings: string[],
+    ): DiscreteMatrixEvent {
+      return {
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+        event_id: `command-result-${index}`,
+        room_id: roomId,
+        sender: '@user:localhost',
+        origin_server_ts: 3 + index,
+        content: {
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+          commandRequestId: `check-${index}`,
+          'm.relates_to': {
+            event_id: aiMessageId,
+            key: 'applied',
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+          },
+          data: {
+            card: {
+              sourceUrl: `http://localhost/correctness/${index}.json`,
+              url: `http://localhost/correctness/${index}.json`,
+              name: `correctness-${index}.json`,
+              contentType: 'application/json',
+              content: JSON.stringify({
+                data: {
+                  attributes: { correct: true, errors: [], warnings },
+                },
+              }),
+            },
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: `command-result-${index}`,
+        },
+        status: EventStatus.SENT,
+      };
+    }
+
+    const eventList: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: 'user-message',
+        room_id: roomId,
+        sender: '@user:localhost',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Save the timetable, then tell me which lessons are still unplaced and why.',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: 'user-message',
+        },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: aiMessageId,
+        room_id: roomId,
+        sender: '@aibot:localhost',
+        origin_server_ts: 2,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Saving the timetable.',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              tools: [],
+              functions: [],
+            },
+          },
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: targets.map((target, index) => ({
+            id: `check-${index}`,
+            name: 'checkCorrectness',
+            arguments: JSON.stringify({
+              description: `Check ${target}`,
+              attributes: {
+                targetType: 'file',
+                targetRef: `http://localhost/${target}`,
+                roomId,
+                correctnessCheckAttempt: 1,
+              },
+            }),
+          })),
+        },
+        unsigned: {
+          age: 0,
+          transaction_id: aiMessageId,
+        },
+        status: EventStatus.SENT,
+      },
+      checkResult(0, ['22 lessons are still unplaced']),
+      checkResult(1, []),
+    ];
+
+    const successNote =
+      'The write above passed its checks. Note that in at most one line of your reply, including any warnings listed above. Then finish your answer to the user: cover everything their last message asked for that you have not yet answered, any closing line your skills require, and any change you made that they did not ask for. If work you already described remains unfinished, carry straight on with it in the same reply. This is a note on what just landed, not a request to stop. Do not mention correctness, automated checks or tool calls.';
+
+    const { messages } = await getPromptParts(
+      eventList,
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.ok(messages, 'Expected prompt messages to be constructed');
+
+    let lastToolIndex = messages!.findLastIndex(
+      (message) => message.role === 'tool',
+    );
+    assert.deepEqual(
+      messages!
+        .filter((message) => message.role === 'tool')
+        .map((message) => (message as any).tool_call_id),
+      ['check-0', 'check-1'],
+      'Each check result is a tool message',
+    );
+    assert.true(
+      messageText(messages![lastToolIndex - 1]).includes(
+        'Warnings:\n- 22 lessons are still unplaced',
+      ),
+      'The tool message carries the warning',
+    );
+
+    // One note for the batch, right after the results. It sends the model
+    // back to the user's own message rather than asking for a summary.
+    let userMessagesAfterResults = messages!
+      .slice(lastToolIndex + 1)
+      .filter((message) => message.role === 'user');
+    assert.strictEqual(
+      messageText(userMessagesAfterResults[0]),
+      successNote,
+      'The success note follows the results',
+    );
+    assert.strictEqual(
+      messages!.filter((message) => messageText(message) === successNote)
+        .length,
+      1,
+      'The batch gets the success note once, not once per check',
+    );
+
+    // Nothing after a clean batch sizes the reply at one sentence, so the
+    // success note is the last instruction the model reads.
+    for (let message of messages!.filter((m) => m.role === 'user')) {
+      assert.false(
+        messageText(message).includes('one short sentence'),
+        'A clean batch never asks for a one-sentence reply',
+      );
+      assert.false(
+        messageText(message).includes('Fix the errors above'),
+        'A clean batch never asks for fixes',
+      );
+    }
+  });
+
+  // A user message, a bot message asking for one check per result, and the
+  // results in order. Each result is a card's attributes, `'no-output'` for a
+  // result with no card, or `'unreadable'` for a card whose download failed.
+  function correctnessBatchHistory(
+    results: (
+      | 'no-output'
+      | 'unreadable'
+      | { correct: boolean; errors: string[] }
+    )[],
+  ): DiscreteMatrixEvent[] {
+    const roomId = '!room:localhost';
+    const aiMessageId = 'ai-message-1';
+    return [
+      {
+        type: 'm.room.message',
+        event_id: 'user-message',
+        room_id: roomId,
+        sender: '@user:localhost',
+        origin_server_ts: 1,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Build the card, then tell me how to use it.',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: { context: { tools: [], functions: [] } },
+        },
+        unsigned: { age: 0, transaction_id: 'user-message' },
+        status: EventStatus.SENT,
+      },
+      {
+        type: 'm.room.message',
+        event_id: aiMessageId,
+        room_id: roomId,
+        sender: '@aibot:localhost',
+        origin_server_ts: 2,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          body: 'Saving the card.',
+          format: 'org.matrix.custom.html',
+          isStreamingFinished: true,
+          data: { context: { tools: [], functions: [] } },
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: results.map((_result, index) => ({
+            id: `check-${index}`,
+            name: 'checkCorrectness',
+            arguments: JSON.stringify({
+              description: `Check file ${index}`,
+              attributes: {
+                targetType: 'file',
+                targetRef: `http://localhost/file-${index}.gts`,
+                roomId,
+                correctnessCheckAttempt: 1,
+              },
+            }),
+          })),
+        },
+        unsigned: { age: 0, transaction_id: aiMessageId },
+        status: EventStatus.SENT,
+      },
+      ...results.map(
+        (result, index) =>
+          ({
+            type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+            event_id: `command-result-${index}`,
+            room_id: roomId,
+            sender: '@user:localhost',
+            origin_server_ts: 3 + index,
+            content: {
+              msgtype:
+                result === 'no-output'
+                  ? APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE
+                  : APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+              commandRequestId: `check-${index}`,
+              'm.relates_to': {
+                event_id: aiMessageId,
+                key: 'applied',
+                rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+              },
+              data: {
+                ...(result === 'no-output'
+                  ? {}
+                  : {
+                      card: {
+                        sourceUrl: `http://localhost/correctness/${index}.json`,
+                        url: `http://localhost/correctness/${index}.json`,
+                        name: `correctness-${index}.json`,
+                        contentType: 'application/json',
+                        ...(result === 'unreadable'
+                          ? { error: 'Error loading attached card: 404' }
+                          : {
+                              content: JSON.stringify({
+                                data: {
+                                  attributes: { ...result, warnings: [] },
+                                },
+                              }),
+                            }),
+                      },
+                    }),
+                context: { tools: [], functions: [] },
+                attachedFiles: [],
+              },
+            },
+            unsigned: { age: 0, transaction_id: `command-result-${index}` },
+            status: EventStatus.SENT,
+          }) as DiscreteMatrixEvent,
+      ),
+    ];
+  }
+
+  const SUCCESS_NOTE_START = 'The write above passed its checks.';
+  const TRAILING_SUMMARY_START =
+    'The automated correctness checks have finished.';
+
+  function userMessagesWith(
+    messages: Parameters<typeof messageText>[0][] | undefined,
+    text: string,
+  ) {
+    return (messages ?? []).filter(
+      (message) =>
+        (message as { role?: string } | undefined)?.role === 'user' &&
+        messageText(message).includes(text),
+    );
+  }
+
+  test('a passing batch with no result cards still gets the success note, and no trailing summary', async function () {
+    const { messages } = await getPromptParts(
+      correctnessBatchHistory(['no-output', 'no-output']),
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, SUCCESS_NOTE_START).length,
+      1,
+      'An applied check with no result card passed, so the batch gets the note once',
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, TRAILING_SUMMARY_START).length,
+      0,
+      'The trailing one-sentence summary is left out',
+    );
+  });
+
+  test('a batch with a failed check gets only the fix instruction and the trailing summary', async function () {
+    const { messages } = await getPromptParts(
+      correctnessBatchHistory([
+        { correct: true, errors: [] },
+        { correct: false, errors: ['file-1.gts: unknown field type'] },
+      ]),
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, SUCCESS_NOTE_START).length,
+      0,
+      'The success note would claim the write passed, so it is left out',
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, 'Fix the errors above').length,
+      1,
+      'The failing check asks for a fix',
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, TRAILING_SUMMARY_START).length,
+      1,
+      'The trailing summary fires as it does for any failed batch',
+    );
+  });
+
+  test('a check whose result card could not be read is not reported as passed', async function () {
+    const { messages } = await getPromptParts(
+      correctnessBatchHistory(['unreadable']),
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    let toolMessage = messages?.find((message) => message.role === 'tool');
+    assert.true(
+      messageText(toolMessage).includes('could not be read'),
+      'The tool message says the result could not be read',
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, SUCCESS_NOTE_START).length,
+      0,
+      'Nobody knows whether the write passed, so there is no success note',
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, TRAILING_SUMMARY_START).length,
+      1,
+      'The trailing summary fires',
     );
   });
 
