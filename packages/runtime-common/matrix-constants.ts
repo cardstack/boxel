@@ -203,6 +203,7 @@ export const APP_BOXEL_ORIGINATING_DEVICE_ID_KEY =
 export const APP_BOXEL_LLM_MODE = 'app.boxel.llm-mode';
 export const APP_BOXEL_RELOAD_BILLING_DATA_KEY = 'app.boxel.reloadBillingData';
 export type LLMMode = 'ask' | 'act';
+export const DEFAULT_CODING_LLM = 'anthropic/claude-sonnet-4.6';
 export const DEFAULT_REMIX_LLM = 'openai/gpt-5-nano';
 export const DEFAULT_IMAGE_GENERATION_LLM = 'google/gemini-2.5-flash-image';
 
