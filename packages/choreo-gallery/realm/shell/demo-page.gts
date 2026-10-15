@@ -510,12 +510,8 @@ export class DemoPage extends Component<Signature> {
         --mark-tail: rgba(255, 59, 31, 0.35);
         --mark-orbit: rgba(139, 150, 156, 0.75);
         /* and its button's ring is light, the one color that clears 3:1 on
-           the pill over any frame from black to white. The host's two
-           button rules read --boxel-outline and --ring, which the root
-           resolves for itself, so the pill restates them. */
+           the pill over any frame from black to white */
         --focus-ring: #fffaf2;
-        --boxel-outline: 2px solid var(--focus-ring);
-        --ring: var(--focus-ring);
         backdrop-filter: blur(10px);
         -webkit-backdrop-filter: blur(10px);
         opacity: 0.9;
