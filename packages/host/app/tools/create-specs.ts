@@ -11,6 +11,7 @@ import {
   isSpecCard,
   type Query,
   type Loader,
+  type VirtualNetwork,
   getAncestor,
 } from '@cardstack/runtime-common';
 
@@ -24,6 +25,7 @@ import {
   type CardOrFieldDeclaration,
   type ModuleDeclaration,
   isCardOrFieldDeclaration,
+  isComponentDeclaration,
   isReexportCardOrField,
 } from '../services/module-contents-service';
 
@@ -40,7 +42,10 @@ import type { SpecType } from '@cardstack/base/spec';
 import type { Spec } from '@cardstack/base/spec';
 
 class SpecTypeGuesser {
-  constructor(private declaration: ModuleDeclaration) {}
+  constructor(
+    private declaration: ModuleDeclaration,
+    private virtualNetwork: VirtualNetwork,
+  ) {}
 
   get type(): SpecType | undefined {
     return this.guess(this.declaration);
@@ -103,11 +108,8 @@ class SpecTypeGuesser {
       return false;
     }
     const superName = declaration.super.name;
-    const superModule = declaration.super.module;
     return (
-      superModule === '@glimmer/component' ||
-      (superName === 'Component' &&
-        superModule === 'https://cardstack.com/base/card-api') ||
+      isComponentDeclaration(declaration, this.virtualNetwork) ||
       superName === 'GlimmerComponent' ||
       superName?.includes('Component')
     );
@@ -168,7 +170,10 @@ export default class CreateSpecTool extends HostBaseTool<
       throw new Error('Cannot create a spec from another spec');
     }
     const cardTitle = this.getSpecTitle(declaration, codeRef.name);
-    const specType = new SpecTypeGuesser(declaration).type;
+    const specType = new SpecTypeGuesser(
+      declaration,
+      this.network.virtualNetwork,
+    ).type;
 
     const ResolvedSpecClass = await getSpecClassFromDeclaration(
       codeRef,
