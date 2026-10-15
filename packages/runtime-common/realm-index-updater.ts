@@ -105,6 +105,13 @@ export interface IncrementalIndexOptions {
   // file watcher announcing a change somebody else made, a reindex answering
   // 204 — are the ones the in-flight join exists to serve.
   readsOwnWrite?: boolean;
+  // The modules in this change set whose write left their schema as it was,
+  // by the writer's reading of the source before and after (see
+  // `moduleSchemaChanged`). Such a module does not put the pass in the
+  // write-path gate, since the type a staging write resolves from it is the
+  // one it already had. A module the writer did not read — a removal, a
+  // change the file watcher picked up — is not listed, and holds the gate.
+  modulesWithoutSchemaChange?: string[];
 }
 
 // What names a pass this process is waiting on in a diagnostic: its job type,
@@ -176,8 +183,8 @@ export class RealmIndexUpdater {
   // System-originated jobs (the file watcher) carry no tag.
   //
   // `affectsStaging` is whether the pass touched one of the two things a
-  // staging write resolves out of shared state: an executable module, or the
-  // realm's own config document. The write path uses it
+  // staging write resolves out of shared state: the schema of an executable
+  // module, or the realm's own config document. The write path uses it
   // (`incrementalIndexingAffectingStaging`) to wait for those passes alone —
   // an instance-only fan-out, however wide, moves neither and so gates no
   // writer.
@@ -394,7 +401,12 @@ export class RealmIndexUpdater {
   // Two kinds of change qualify, because a staging write resolves two things
   // out of shared state rather than one:
   //
-  //   - an executable module, which is what a card's type is built from;
+  //   - an executable module, which is what a card's type is built from,
+  //     unless its writer read that the write left the module's schema as it
+  //     was (`IncrementalIndexOptions.modulesWithoutSchemaChange`). That pass
+  //     still re-indexes every dependent, but the type a staging write
+  //     resolves is the same before and after it, so another writer has
+  //     nothing to wait for;
   //   - the realm's config document, whose indexed row overlays — and wins
   //     over — the settings read off disk, so a program reading a setting
   //     would otherwise see one the realm has already replaced.
@@ -578,8 +590,13 @@ export class RealmIndexUpdater {
       // A removal counts the same as a write: a module that is gone changes
       // what resolves just as surely as one whose bytes moved.
       affectsStaging: changes.some(
-        ({ url }) =>
-          hasExecutableExtension(url.href) || this.#isRealmConfigDocument(url),
+        ({ url, operation }) =>
+          (hasExecutableExtension(url.href) &&
+            !(
+              operation === 'update' &&
+              opts?.modulesWithoutSchemaChange?.includes(url.href)
+            )) ||
+          this.#isRealmConfigDocument(url),
       ),
     };
     this.#incrementalIndexingDeferreds.set(indexingDeferred, pendingPass);
@@ -729,6 +746,7 @@ export class RealmIndexUpdater {
       | 'carriedPrerenderHtmlChanges'
       | 'onDeferredPrerenderHtml'
       | 'readsOwnWrite'
+      | 'modulesWithoutSchemaChange'
     >,
   ): Promise<void> {
     let { settled } = await this.enqueueChanges(changes, opts);

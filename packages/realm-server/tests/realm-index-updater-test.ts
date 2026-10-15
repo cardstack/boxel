@@ -325,6 +325,83 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('a module write that left its schema as it was is outside the write-path gate', async function (assert) {
+    let { queue, waiters } = makeStubQueue();
+    let updater = new RealmIndexUpdater({
+      realm: makeStubRealm(),
+      dbAdapter: {} as DBAdapter,
+      queue,
+    });
+
+    let { settled } = await updater.enqueueUpdate(
+      [new URL(`${realmURL}person.gts`)],
+      { modulesWithoutSchemaChange: [`${realmURL}person.gts`] },
+    );
+    settled.catch(() => {});
+
+    assert.notStrictEqual(
+      updater.incrementalIndexing(),
+      undefined,
+      'the pass really is in flight',
+    );
+    assert.strictEqual(
+      updater.incrementalIndexingAffectingStaging(),
+      undefined,
+      'its dependents are re-indexed against the type a staging write already resolves',
+    );
+
+    waiters[0].rejectFromResult(serializedWorkerError);
+    await updater.incrementalIndexing();
+  });
+
+  test('a module the writer did not vouch for holds the gate beside one it did', async function (assert) {
+    let { queue, waiters } = makeStubQueue();
+    let updater = new RealmIndexUpdater({
+      realm: makeStubRealm(),
+      dbAdapter: {} as DBAdapter,
+      queue,
+    });
+
+    let { settled } = await updater.enqueueUpdate(
+      [new URL(`${realmURL}person.gts`), new URL(`${realmURL}pet.gts`)],
+      { modulesWithoutSchemaChange: [`${realmURL}person.gts`] },
+    );
+    settled.catch(() => {});
+
+    assert.notStrictEqual(
+      updater.incrementalIndexingAffectingStaging(),
+      undefined,
+      'one module whose schema may have moved is enough',
+    );
+
+    waiters[0].rejectFromResult(serializedWorkerError);
+    await updater.incrementalIndexing();
+  });
+
+  test('a module removal holds the gate even when listed as leaving its schema', async function (assert) {
+    let { queue, waiters } = makeStubQueue();
+    let updater = new RealmIndexUpdater({
+      realm: makeStubRealm(),
+      dbAdapter: {} as DBAdapter,
+      queue,
+    });
+
+    let { settled } = await updater.enqueueChanges(
+      [{ url: new URL(`${realmURL}person.gts`), operation: 'delete' }],
+      { modulesWithoutSchemaChange: [`${realmURL}person.gts`] },
+    );
+    settled.catch(() => {});
+
+    assert.notStrictEqual(
+      updater.incrementalIndexingAffectingStaging(),
+      undefined,
+      'a module that is gone takes its schema with it',
+    );
+
+    waiters[0].rejectFromResult(serializedWorkerError);
+    await updater.incrementalIndexing();
+  });
+
   test('a module removal holds the write-path gate as a module write does', async function (assert) {
     let { queue, waiters } = makeStubQueue();
     let updater = new RealmIndexUpdater({

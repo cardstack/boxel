@@ -427,6 +427,7 @@ import {
   type TextFileRef,
 } from './stream.ts';
 import { transpileJS } from './transpile.ts';
+import { moduleSchemaChanged } from './module-schema-change.ts';
 import { recordModuleCompile } from './module-compile-stats.ts';
 import type {
   CoarseRefusal,
@@ -3761,6 +3762,8 @@ export class Realm {
       // unless the pass is only a step toward a later one the same write
       // runs; see `CoalescedCaller.announcesPass`.
       announcesPass?: boolean;
+      // See `IncrementalIndexOptions.modulesWithoutSchemaChange`.
+      modulesWithoutSchemaChange?: string[];
     },
   ): Promise<
     IndexPassResult & { deferredPrerenderHtml?: DeferredPrerenderHtml }
@@ -3787,6 +3790,9 @@ export class Realm {
         ? { carriedPrerenderHtmlChanges: opts.carriedPrerenderHtmlChanges }
         : {}),
       ...(opts?.readsOwnWrite ? { readsOwnWrite: true } : {}),
+      ...(opts?.modulesWithoutSchemaChange?.length
+        ? { modulesWithoutSchemaChange: opts.modulesWithoutSchemaChange }
+        : {}),
       onEnqueued: () => stageCursor?.mark('enqueue'),
       onDeferredPrerenderHtml: (deferred) => {
         deferredPrerenderHtml = deferred;
@@ -3850,6 +3856,8 @@ export class Realm {
       // Invalidation sets earlier passes of this same write deferred, folded
       // into the prerender_html job this pass spawns.
       carriedPrerenderHtmlChanges?: IncrementalChange[];
+      // See `IncrementalIndexOptions.modulesWithoutSchemaChange`.
+      modulesWithoutSchemaChange?: string[];
       onSettled?: (
         invalidations: string[],
         meta: IncrementalIndexMeta,
@@ -3874,6 +3882,9 @@ export class Realm {
       initiatedBy: opts?.initiatedBy ?? null,
       ...(opts?.carriedPrerenderHtmlChanges?.length
         ? { carriedPrerenderHtmlChanges: opts.carriedPrerenderHtmlChanges }
+        : {}),
+      ...(opts?.modulesWithoutSchemaChange?.length
+        ? { modulesWithoutSchemaChange: opts.modulesWithoutSchemaChange }
         : {}),
       onInvalidation: async (invalidatedURLs: URL[], meta) => {
         await this.clearRealmIndexCachesAndBroadcast();
@@ -4780,6 +4791,35 @@ export class Realm {
     return result;
   }
 
+  // Whether writing `content` over the module at `path` leaves the module's
+  // schema as it was, read off the stored source before the write replaces it
+  // (see `moduleSchemaChanged`). False when the stored source cannot be read,
+  // which leaves the module's pass in the write-path gate, as for a module
+  // whose source nobody read.
+  async #writeLeavesModuleSchema(
+    url: URL,
+    path: LocalPath,
+    exists: boolean,
+    content: string | Uint8Array,
+  ): Promise<boolean> {
+    try {
+      let before = exists
+        ? (await readFileAsText(path, (p) => this.#adapter.openFile(p)))
+            ?.content
+        : undefined;
+      let after =
+        typeof content === 'string'
+          ? content
+          : new TextDecoder().decode(content);
+      return !(await moduleSchemaChanged({ url: url.href, before, after }));
+    } catch (err: unknown) {
+      this.#log.warn(
+        `could not compare the schema of ${url.href} before and after its write, so its index pass holds other writers: ${stringifyErrorForLog(err)}`,
+      );
+      return false;
+    }
+  }
+
   async #commitBatchUnlockedInner(
     batch: CommitBatch,
     options?: WriteOptions,
@@ -4859,6 +4899,10 @@ export class Realm {
     // the broadcast can tell whether any of them is left for this write to
     // announce.
     let passes: (SharedIndexPass | undefined)[] = [];
+    // The modules this batch rewrote without changing their schema, which
+    // every pass it runs hands to the index updater so those modules do not
+    // hold other writers at the write-path gate.
+    let modulesWithoutSchemaChange = new Set<string>();
     let performIndex = async (
       changes: IndexChange[],
       opts?: { deferPrerenderHtml?: boolean },
@@ -4884,6 +4928,7 @@ export class Realm {
         // Handed over either way: a pass that renders folds this into the job
         // it spawns, and a pass that defers folds it into the set it returns.
         carriedPrerenderHtmlChanges: carriedPrerenderHtmlChanges(),
+        modulesWithoutSchemaChange: [...modulesWithoutSchemaChange],
       });
       // A deferring pass returns the set it declined to render, already
       // unioned with whatever it was handed. A non-deferring pass normally
@@ -5066,6 +5111,13 @@ export class Realm {
       let isNewFile = stored === undefined;
       let contentHash = computeContentHash(content);
       let contentSize = computeContentSize(content);
+      // Read before the write replaces the bytes it compares against.
+      if (
+        currentWriteType === 'module' &&
+        (await this.#writeLeavesModuleSchema(url, path, !isNewFile, content))
+      ) {
+        modulesWithoutSchemaChange.add(url.href);
+      }
       this.sendIndexInitiationEvent(url.href);
       await this.trackOwnWrite(path);
       let { lastModified } = await this.#adapter.write(path, content);
@@ -5375,6 +5427,7 @@ export class Realm {
             ...(clientAuthored ? { clientAuthored } : {}),
             initiatedBy: initiatingUser,
             ...(carried.length ? { carriedPrerenderHtmlChanges: carried } : {}),
+            modulesWithoutSchemaChange: [...modulesWithoutSchemaChange],
             // Route the post-worker broadcast through onSettled so it runs
             // INSIDE the indexing deferred lifecycle. Without this, the
             // broadcast would fire from an outer .then() after the deferred
