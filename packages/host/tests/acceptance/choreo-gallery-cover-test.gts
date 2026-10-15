@@ -38,9 +38,11 @@ import { setupApplicationTest } from '../helpers/setup';
  * Crossing first, so its tile is in view: its tape scrolls itself in a frame
  * loop for as long as the stage is on. Circle loop's score and Keyframes'
  * morph repeat forever, one as Web Animations a Choreo pass starts by script,
- * the other written by Motion frame by frame.
+ * the other written by Motion frame by frame. Wires' tethers stand for as long
+ * as its board does, so its run ticks and its rest wires are redrawn every
+ * frame until resting pauses both.
  */
-const DEMOS = ['crossing', 'circle-loop', 'keyframes', 'enter'];
+const DEMOS = ['crossing', 'circle-loop', 'keyframes', 'wires', 'enter'];
 
 /** the module that runs the tape's loop */
 const TAPE = '/lib/xstress-live';
