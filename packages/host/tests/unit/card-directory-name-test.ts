@@ -3,22 +3,15 @@ import { module, test } from 'qunit';
 import { rri } from '@cardstack/runtime-common';
 import type { CodeRef } from '@cardstack/runtime-common';
 import { getCardDirectoryName } from '@cardstack/runtime-common/helpers/card-directory-name';
-import { RealmPaths } from '@cardstack/runtime-common/paths';
 
 module('Unit | runtime-common | card directory names', function () {
-  let paths: RealmPaths;
-
-  module('getCardDirectoryName', function (hooks) {
-    hooks.beforeEach(function () {
-      paths = new RealmPaths(new URL('http://example.com/test/'));
-    });
-
+  module('getCardDirectoryName', function () {
     test('returns explicit export names when provided', function (assert) {
       let ref: CodeRef = {
         module: rri('../pet'),
         name: 'PetCard',
       };
-      assert.strictEqual(getCardDirectoryName(ref, paths), 'PetCard');
+      assert.strictEqual(getCardDirectoryName(ref), 'PetCard');
     });
 
     test('infers directory from module name for default exports', function (assert) {
@@ -26,7 +19,7 @@ module('Unit | runtime-common | card directory names', function () {
         module: rri('../pet'),
         name: 'default',
       };
-      assert.strictEqual(getCardDirectoryName(ref, paths), 'Pet');
+      assert.strictEqual(getCardDirectoryName(ref), 'Pet');
     });
 
     test('uses parent directory when module is an index file', function (assert) {
@@ -34,7 +27,7 @@ module('Unit | runtime-common | card directory names', function () {
         module: rri('../animals/index'),
         name: 'default',
       };
-      assert.strictEqual(getCardDirectoryName(ref, paths), 'Animals');
+      assert.strictEqual(getCardDirectoryName(ref), 'Animals');
     });
 
     test('strips executable extensions before inferring name', function (assert) {
@@ -42,7 +35,7 @@ module('Unit | runtime-common | card directory names', function () {
         module: rri('../cards/preview-card.gts'),
         name: 'default',
       };
-      assert.strictEqual(getCardDirectoryName(ref, paths), 'PreviewCard');
+      assert.strictEqual(getCardDirectoryName(ref), 'PreviewCard');
     });
 
     test('sanitizes names with dashes and encoded characters', function (assert) {
@@ -50,7 +43,7 @@ module('Unit | runtime-common | card directory names', function () {
         module: rri('../fancy/%E2%9C%A8-sparkle-card'),
         name: 'default',
       };
-      assert.strictEqual(getCardDirectoryName(ref, paths), 'SparkleCard');
+      assert.strictEqual(getCardDirectoryName(ref), 'SparkleCard');
     });
 
     test('prefixes directories that would start with invalid characters', function (assert) {
@@ -58,7 +51,7 @@ module('Unit | runtime-common | card directory names', function () {
         module: rri('../123'),
         name: 'default',
       };
-      assert.strictEqual(getCardDirectoryName(ref, paths), 'Card123');
+      assert.strictEqual(getCardDirectoryName(ref), 'Card123');
     });
 
     test('resolves nested code refs like fieldOf', function (assert) {
@@ -70,11 +63,27 @@ module('Unit | runtime-common | card directory names', function () {
           name: 'default',
         },
       };
-      assert.strictEqual(getCardDirectoryName(ref, paths), 'Person');
+      assert.strictEqual(getCardDirectoryName(ref), 'Person');
+    });
+
+    test('infers directory from a prefix-form module', function (assert) {
+      let ref: CodeRef = {
+        module: rri('@cardstack/catalog/pets/pet-card.gts'),
+        name: 'default',
+      };
+      assert.strictEqual(getCardDirectoryName(ref), 'PetCard');
+    });
+
+    test('infers directory from a URL-form module with a query', function (assert) {
+      let ref: CodeRef = {
+        module: rri('http://example.com/test/animals/index.gts?x=1#y'),
+        name: 'default',
+      };
+      assert.strictEqual(getCardDirectoryName(ref), 'Animals');
     });
 
     test('falls back to cards when adoptsFrom is missing', function (assert) {
-      assert.strictEqual(getCardDirectoryName(undefined, paths), 'cards');
+      assert.strictEqual(getCardDirectoryName(undefined), 'cards');
     });
   });
 });

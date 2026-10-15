@@ -2120,7 +2120,7 @@ export function stagedIdentity(
   assertPathSegment(id, `id "${id}"`);
   let intended = `${[
     ...directorySegments,
-    getCardDirectoryName(adoptsFrom, paths),
+    getCardDirectoryName(adoptsFrom),
     id,
   ].join('/')}.json` as LocalPath;
   let url = paths.fileURL(intended);

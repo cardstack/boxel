@@ -1457,7 +1457,7 @@ const NEW_POLICY_SAVE_WAIT_MS = 30_000;
 // it yet, so the pointer can name the card before it is there.
 function newCardIdOf(localId: string, ref: CodeRef, realm: URL): string {
   let paths = new RealmPaths(realm);
-  return `${paths.url}${getCardDirectoryName(ref, paths)}/${localId}`;
+  return `${paths.url}${getCardDirectoryName(ref)}/${localId}`;
 }
 
 interface PolicyPointerEditorSignature {

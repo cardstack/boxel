@@ -1,5 +1,6 @@
 import type { LocalPath, RealmPaths } from '../paths.ts';
 import { executableExtensions } from '../index.ts';
+import { isUrlLike, type VirtualNetwork } from '../virtual-network.ts';
 import { parse as babelParse } from '@babel/parser';
 import { getBabelOptions } from '../babel-options.ts';
 
@@ -60,18 +61,28 @@ export function collectDependentModuleCacheInvalidations(
 export function extractModuleDependencyKeys(
   source: string,
   canonicalPath: LocalPath,
-  realmURL: string,
   paths: RealmPaths,
+  virtualNetwork: VirtualNetwork,
 ): Set<string> {
   let dependencies = new Set<string>();
-  let moduleURL = paths.fileURL(canonicalPath).href;
-  for (let specifier of extractImportSpecifiers(source, moduleURL)) {
+  let moduleRRI = paths.fileRRI(canonicalPath);
+  for (let specifier of extractImportSpecifiers(source, moduleRRI)) {
+    // A bare specifier that is not a registered prefix (an npm package) names
+    // nothing in any realm.
+    if (
+      !isUrlLike(specifier) &&
+      !virtualNetwork.isRegisteredPrefix(specifier)
+    ) {
+      continue;
+    }
     try {
-      let resolvedURL = new URL(specifier, moduleURL);
-      if (!resolvedURL.href.startsWith(realmURL)) {
+      // Resolved to URL form so that an import of one of the realm's own
+      // modules by its prefix lands on the same key as a relative import.
+      let resolved = virtualNetwork.resolveURL(specifier, moduleRRI);
+      if (!paths.inRealm(resolved)) {
         continue;
       }
-      dependencies.add(moduleDependencyKey(paths.local(resolvedURL)));
+      dependencies.add(moduleDependencyKey(paths.local(resolved)));
     } catch (_err) {
       // ignore unresolvable import specifiers
     }

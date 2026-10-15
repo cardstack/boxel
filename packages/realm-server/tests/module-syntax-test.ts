@@ -1560,12 +1560,12 @@ module(basename(import.meta.filename), function () {
         await import(dynamicPath);
         import "https://example.com/not-in-realm";
       `;
-      let paths = new RealmPaths(new URL(testRealm));
+      let paths = new RealmPaths(new URL(testRealm), virtualNetwork);
       let deps = extractModuleDependencyKeys(
         source,
         'dir/main.gts',
-        testRealm,
         paths,
+        virtualNetwork,
       );
       assert.deepEqual(
         [...deps].sort(),
@@ -1574,6 +1574,35 @@ module(basename(import.meta.filename), function () {
           moduleDependencyKey('dir/beta.js'),
           moduleDependencyKey('dir/delta.ts'),
           moduleDependencyKey('dir/gamma.gjs'),
+        ].sort(),
+      );
+    });
+    test('keys prefix-form imports by the module they name, and only when it is in the realm', function (assert) {
+      let network = new VirtualNetwork();
+      network.addRealmMapping(
+        '@cardstack/base/',
+        'http://localhost:4201/base/',
+      );
+      network.addRealmMapping('@test/realm/', testRealm);
+      let source = `
+        import { CardDef } from '@cardstack/base/card-api';
+        import { Pet } from '@test/realm/pets/pet';
+        import Component from '@glimmer/component';
+        import { tracked } from 'tracked-built-ins';
+        import sibling from './sibling';
+      `;
+      let paths = new RealmPaths(new URL(testRealm), network);
+      let deps = extractModuleDependencyKeys(
+        source,
+        'dir/main.gts',
+        paths,
+        network,
+      );
+      assert.deepEqual(
+        [...deps].sort(),
+        [
+          moduleDependencyKey('dir/sibling'),
+          moduleDependencyKey('pets/pet'),
         ].sort(),
       );
     });
