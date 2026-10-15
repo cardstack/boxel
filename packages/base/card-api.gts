@@ -92,8 +92,10 @@ import {
   runtimeNonQueryDependencyContext,
   runtimeQueryDependencyContext,
   type RuntimeDependencyTrackingContext,
+  ri,
   rri,
   resolveRRIReference,
+  type RealmIdentifier,
   type RealmResourceIdentifier,
   type VirtualNetwork,
   isDirectIndexedFieldKey,
@@ -6262,6 +6264,26 @@ export function resolveInstanceURL(
     );
   } catch {
     return undefined;
+  }
+}
+
+// The instance's realm, in the same form as its id. A card id is canonical
+// RRI, so for a realm registered under a prefix it reads `@scope/name/...`
+// while the realm meta is the realm's URL. Folding the realm through the
+// instance's own store puts the two in one form, so card code can test
+// membership and in-realm paths with a same-form `RealmPaths` without holding
+// the realm mappings. An unmapped realm stays a URL, matching its URL ids.
+export function instanceRealmId(
+  instance: CardDef,
+): RealmIdentifier | undefined {
+  let realm = instance[realmURL];
+  if (!realm) {
+    return undefined;
+  }
+  try {
+    return ri(getStore(instance).canonicalizeId(realm.href));
+  } catch {
+    return ri(realm.href);
   }
 }
 

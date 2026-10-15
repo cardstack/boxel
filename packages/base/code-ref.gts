@@ -10,6 +10,8 @@ import {
   fieldSerializer,
   CodeRefSerializer,
   loaderForModule,
+  resolveRRIReference,
+  rri,
   type Loader,
 } from '@cardstack/runtime-common';
 import { not } from '@cardstack/boxel-ui/helpers';
@@ -73,8 +75,10 @@ class EditView extends Component<typeof CodeRefField> {
 
       let name = parts.pop()!;
       let module = parts.join('/');
+      // The card's id is canonical RRI (prefix form for a mapped realm), so a
+      // relative module resolves against it in RRI space and is stored that way.
       if (isUrlLike(module) && this.cardURL) {
-        module = new URL(module, new URL(this.cardURL)).href;
+        module = resolveRRIReference(module, rri(this.cardURL));
       }
       try {
         // Through the loader, not a bare `import()`: the specifier is a realm

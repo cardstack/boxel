@@ -1,4 +1,5 @@
 import type { BaseDef, CardCrudFunctions, CardDef } from './card-api';
+import { instanceRealmId } from './card-api';
 import {
   copyCardURLToClipboard,
   type MenuItemOptions,
@@ -19,9 +20,10 @@ import type {
 import {
   cardTypeIcon,
   identifyCard,
-  isRealmIndexCard,
+  isRealmIndexCardId,
   isResolvedCodeRef,
   realmURL,
+  rri,
 } from '@cardstack/runtime-common';
 import { resolveAdoptsFrom } from '@cardstack/runtime-common';
 
@@ -33,6 +35,12 @@ import Trash2Icon from '@cardstack/boxel-icons/trash-2';
 import Wand from '@cardstack/boxel-icons/wand';
 
 const GENERATED_EXAMPLE_COUNT = 3;
+
+// The card's id is canonical RRI, so its realm is taken in the same form.
+function isWorkspaceIndexCard(card: CardDef): boolean {
+  let cardId = typeof card.id === 'string' ? rri(card.id) : undefined;
+  return isRealmIndexCardId(cardId, instanceRealmId(card));
+}
 
 type MenuContext =
   | {
@@ -128,7 +136,7 @@ export function getDefaultCardMenuItems(
       );
     }
     if (
-      !isRealmIndexCard(card) && // workspace index card cannot be deleted
+      !isWorkspaceIndexCard(card) && // workspace index card cannot be deleted
       cardId &&
       params.canEdit
     ) {
@@ -201,7 +209,7 @@ export function getDefaultCardMenuItems(
     // No "Open in Code Mode" here: the playground panel already lives inside
     // code submode, so the entry would be a no-op switch to the mode we're in.
     menuItems = [...menuItems, ...getSampleDataMenuItems(card, params)];
-    if (cardId && !isRealmIndexCard(card)) {
+    if (cardId && !isWorkspaceIndexCard(card)) {
       menuItems.push({
         label: `Create Listing`,
         action: async () => {
