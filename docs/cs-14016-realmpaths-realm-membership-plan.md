@@ -23,7 +23,7 @@ Route each through `RealmPaths` or `resolveRRIReference`, comparing in one form.
 - `packages/base/realm-config.gts`: the policy-standing self-check is
   `RealmPaths(instanceRealmId(config)).local(id) === 'realm'`.
 - `packages/base/query-field-support.ts`: the fallback when the store can't
-  place a reference tests `inRealm` against the realm URL and its canonical form.
+  place a reference is `new RealmPaths(realmURL).inRealm(reference)`.
 - `packages/base/code-ref.gts`: a relative module resolves with
   `resolveRRIReference(module, rri(cardURL))`, so it is valid on a prefix-form
   card and is stored in RRI form.
