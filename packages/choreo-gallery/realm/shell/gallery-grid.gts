@@ -592,6 +592,8 @@ export class GalleryGrid extends Component<Signature> {
         height: 540px;
         border: 1px solid var(--line);
         border-radius: 18px;
+        /* the tile inside rounds its focus ring to this box's inner edge */
+        --tile-radius: 17px;
         overflow: hidden;
         background: var(--bg-elev);
         cursor: pointer;

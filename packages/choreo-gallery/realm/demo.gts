@@ -516,6 +516,8 @@ class Fitted extends Component<typeof GalleryDemo> {
       .tile:has(.tile-title:focus-visible) {
         outline: 2px solid var(--ring);
         outline-offset: -2px;
+        /* rounded as the box that clips it, so the ring's corners show */
+        border-radius: var(--tile-radius, 0);
       }
 
       .tile-lede {
