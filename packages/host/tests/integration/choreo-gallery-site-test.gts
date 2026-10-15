@@ -289,8 +289,9 @@ module('Integration | Choreo gallery | site', function (hooks) {
 
   test('a tile’s name too long for it ends in an ellipsis on a whole line, at every short size the host draws', async function (assert) {
     let [keyframes] = await gallery.demos(['keyframes']);
+    // long enough to run past two lines of the widest tile here in any face
     keyframes!.title =
-      'A demo with a name far too long for any tile the host draws';
+      'A demo with a name far too long for any tile the host draws, at any of its sizes, in whichever face the browser sets it';
     let { getComponent } = (await gallery.loader.import(
       '@cardstack/base/card-api',
     )) as typeof CardAPI;
