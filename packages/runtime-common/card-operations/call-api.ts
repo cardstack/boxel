@@ -452,8 +452,9 @@ function lowerUrlTemplate(
       `\`url\` carries a user name or password, which are recorded wherever the URL is — send a credential as a slot in a header instead`,
     );
   }
-  // The parser keeps `*` in a host name, and decodes `%2A` to it.
-  if (parsed.hostname.includes('*')) {
+  // A `*` survives in a host name: Node's parser keeps it (and decodes `%2A`
+  // to it), a browser's keeps it percent-encoded, so both spellings are read.
+  if (/\*|%2a/i.test(parsed.hostname)) {
     refuse(
       'invalid-request',
       `\`url\` names its host with a wildcard — a request goes to one host, written out in full`,
