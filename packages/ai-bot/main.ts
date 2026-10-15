@@ -63,6 +63,7 @@ import {
 import { isApprovalResult } from '@cardstack/runtime-common/ai';
 import type { Tool } from '@cardstack/base/matrix-event';
 import { Responder } from './lib/responder.ts';
+import { collectUsedToolCallIds, ToolCallIds } from './lib/tool-call-ids.ts';
 import { buildChatCompletionRequest } from './lib/chat-completion-request.ts';
 import {
   shouldSetRoomTitle,
@@ -666,6 +667,9 @@ Common issues are:
               // out.
               ...botTools.map((tool) => tool.name),
             ]);
+            responder.responseState.toolCallIds = new ToolCallIds(
+              collectUsedToolCallIds(eventList),
+            );
             // The user stopped the loop after this run read the room; that
             // stop is not in the history, so it holds the correctness check
             // as well as the generation here.
@@ -939,8 +943,16 @@ Common issues are:
               // fulfills its commands, we fulfill ours, and getShouldRespond
               // waits for all of them before generating again.
               let message = completion.choices?.[0]?.message;
+              // The bot-tool results must name the ids the answer was posted
+              // with, not the provider's. Ids are assigned by position, over
+              // the same gap-free list the responder streamed.
               let { botToolCalls } = message
-                ? classifyToolCalls(message)
+                ? classifyToolCalls({
+                    ...message,
+                    tool_calls: responder.responseState.toolCallIds.apply(
+                      (message.tool_calls ?? []).filter(Boolean),
+                    ),
+                  })
                 : { botToolCalls: [] };
               // Only the bot tools this room was offered are run, and a call
               // held for the user's approval waits for it.

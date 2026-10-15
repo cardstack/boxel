@@ -21,6 +21,7 @@ import type OpenAI from 'openai';
 import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 import { OpenAIError } from 'openai';
 import { errorReporter } from '../lib/sentry.ts';
+import { collectUsedToolCallIds, ToolCallIds } from '../lib/tool-call-ids.ts';
 
 function snapshotWithContent(content: string): ChatCompletionSnapshot {
   return {
@@ -127,6 +128,86 @@ module('Responding', (hooks) => {
     fakeMatrixClient.resetSentEvents();
     responder.matrixResponsePublisher.eventSizeMax = DEFAULT_EVENT_SIZE_MAX;
     delete process.env.AI_BOT_STREAMING_MODE;
+  });
+
+  test('a tool call whose provider id the room already used is posted with a unique id', async () => {
+    // A backend that numbers calls per reply sends the same id every turn.
+    responder.responseState.toolCallIds = new ToolCallIds(
+      collectUsedToolCallIds([
+        {
+          type: 'm.room.message',
+          content: {
+            [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+              { id: 'run-realm-code_6b92:0', name: 'run-realm-code' },
+            ],
+          },
+        },
+        {
+          type: 'app.boxel.toolResult',
+          content: { commandRequestId: 'run-realm-code_6b92:0' },
+        },
+      ] as any),
+    );
+
+    await responder.ensureThinkingMessageSent();
+    await responder.onChunk(
+      {} as any,
+      snapshotWithToolCall({
+        id: 'run-realm-code_6b92:0',
+        name: 'run-realm-code',
+        arguments: { code: 'one' },
+      }),
+    );
+    await responder.onChunk(
+      {} as any,
+      snapshotWithToolCall({
+        id: 'run-realm-code_6b92:0',
+        name: 'run-realm-code',
+        arguments: { code: 'one more' },
+      }),
+    );
+    await responder.finalize();
+
+    let ids = fakeMatrixClient
+      .getSentEvents()
+      .flatMap((e: any) => e.content[APP_BOXEL_TOOL_REQUESTS_KEY] ?? [])
+      .map((request: any) => request.id);
+    assert.ok(ids.length > 0, 'the tool call was posted');
+    assert.deepEqual(
+      [...new Set(ids)],
+      ['run-realm-code_6b92:0_1'],
+      'every edit carries the same id, and not the one the room already used',
+    );
+  });
+
+  test('a tool call whose provider id the room has not used keeps it', async () => {
+    responder.responseState.toolCallIds = new ToolCallIds(
+      collectUsedToolCallIds([
+        {
+          type: 'm.room.message',
+          content: {
+            [APP_BOXEL_TOOL_REQUESTS_KEY]: [{ id: 'call-1', name: 'x' }],
+          },
+        },
+      ] as any),
+    );
+
+    await responder.ensureThinkingMessageSent();
+    await responder.onChunk(
+      {} as any,
+      snapshotWithToolCall({
+        id: 'call-2',
+        name: 'run-realm-code',
+        arguments: { code: 'one' },
+      }),
+    );
+    await responder.finalize();
+
+    let ids = fakeMatrixClient
+      .getSentEvents()
+      .flatMap((e: any) => e.content[APP_BOXEL_TOOL_REQUESTS_KEY] ?? [])
+      .map((request: any) => request.id);
+    assert.deepEqual([...new Set(ids)], ['call-2']);
   });
 
   test('does not treat a reaction as a response trigger', (assert) => {

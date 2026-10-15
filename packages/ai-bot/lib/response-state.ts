@@ -1,6 +1,7 @@
 import { thinkingMessage } from '../constants.ts';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
 import { cleanContent } from '@cardstack/runtime-common/ai';
+import { ToolCallIds } from './tool-call-ids.ts';
 
 export default class ResponseState {
   latestReasoning: string = '';
@@ -8,6 +9,8 @@ export default class ResponseState {
   toolCalls: ChatCompletionSnapshot.Choice.Message.ToolCall[] = [];
   private toolCallsJson: string | undefined;
   private allowedToolNames: Set<string> | undefined;
+  // Makes each tool call's id unique in the room (see tool-call-ids.ts).
+  toolCallIds = new ToolCallIds();
   isStreamingFinished = false;
   isCanceled = false;
   // The provider's finish_reason for this turn. Only the chunk that ends the
@@ -61,6 +64,8 @@ export default class ResponseState {
       | undefined,
   ) {
     if (toolCallsSnapshot?.length) {
+      // Assigned by position in the reply, so before any call is filtered out.
+      toolCallsSnapshot = this.toolCallIds.apply(toolCallsSnapshot);
       // In lengthy conversations, the LLM will sometimes call checkCorrectness
       // tool on its own, even when we explicitly disallow this in our prompts,
       // often before its own edits have been applied. Ignore these tool calls.
