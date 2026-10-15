@@ -2959,7 +2959,24 @@ export class PagePool {
       // falls through to the busy-tab fallback below. That residual
       // deadlock requires either operator-side capacity tuning or the
       // high-priority tier escape hatch.
-      if (queue !== 'file' && !refillGaveUp) {
+      //
+      // Once the refill has failed, the sub-render takes an idle tab of
+      // another affinity if there is one and otherwise throws, as a file
+      // caller does. The busy-tab fallback below would queue it behind the
+      // render it is blocking until that render times out.
+      if (queue !== 'file' && refillGaveUp) {
+        let stolen = await this.#stealCrossAffinityTab(
+          affinityKey,
+          0,
+          signal,
+          priority,
+        );
+        if (stolen) {
+          return { ...stolen, tabStartupMs };
+        }
+        throw new Error('No standby page available for prerender');
+      }
+      if (queue !== 'file') {
         // With the budget spent and nothing being created, lift the global
         // cap so the refill has room to make this sub-render's tab. Gated
         // on `#standbyCanCome` so a caller that wakes before its standby

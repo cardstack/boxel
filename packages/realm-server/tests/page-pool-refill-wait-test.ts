@@ -26,7 +26,9 @@ import { PrerenderCancelledError } from '../prerender/prerender-cancel.ts';
 //      when the refill pass that made it settles, and a caller that misses
 //      one keeps waiting for the next rather than stealing.
 //   6. A refill that fails ends the wait, and the caller throws, even while
-//      other waiting callers keep the refill running.
+//      other waiting callers keep the refill running. A module sub-render
+//      first takes an idle tab of another affinity if there is one, and
+//      never queues on a busy tab.
 
 interface Gate {
   promise: Promise<void>;
@@ -373,6 +375,7 @@ module(basename(import.meta.filename), function (hooks) {
     // on the refill runs out.
     stub.hangNext();
     let c = await pool.getPage('C');
+    let pendingAt = Date.now();
     let pending = pool.getPage('D', 'module');
     await new Promise((resolve) => setTimeout(resolve, 1100));
 
@@ -387,6 +390,7 @@ module(basename(import.meta.filename), function (hooks) {
 
     let d = settled(await within(pending), "D's tab");
     let tookMs = Date.now() - releasedAt;
+    let waitedMs = Date.now() - pendingAt;
     d.release();
     let again = settled(await within(cAgain), "C's second tab");
     again.release();
@@ -395,6 +399,11 @@ module(basename(import.meta.filename), function (hooks) {
     assert.true(
       tookMs < 200,
       `D took it before C came back for it (${tookMs}ms after the release)`,
+    );
+    // D parked across several wakes; each park is counted once.
+    assert.true(
+      d.waits.tabStartupMs <= waitedMs,
+      `D's tab startup (${d.waits.tabStartupMs}ms) is within its wait (${waitedMs}ms)`,
     );
   });
 
@@ -566,5 +575,89 @@ module(basename(import.meta.filename), function (hooks) {
         `the caller threw (got ${message})`,
       );
     }
+  });
+
+  test('a module sub-render whose parent holds its only tab steals an idle tab once the refill fails', async function (assert) {
+    assert.timeout(15_000);
+    let failing = false;
+    let browserManager = makeBrowserManager(async () => {
+      if (failing) {
+        throw new Error('context creation failed');
+      }
+    });
+    let pool = makePool({
+      maxPages: 3,
+      browserManager,
+      gate: makeGate(),
+      // Long enough that only the failure ends the wait.
+      standbyRefillWaitMs: 60_000,
+    });
+
+    let a = await pool.getPage('A');
+    a.release();
+    let b = await pool.getPage('B');
+    b.release();
+    // C's parent render holds C's only tab for the rest of the test.
+    let c = await pool.getPage('C');
+    await pool.warmStandbys();
+
+    // D takes the warm standby, and every creation after it fails.
+    failing = true;
+    let d = await pool.getPage('D');
+    d.release();
+
+    let sub = settled(
+      await within(pool.getPage('C', 'module'), 8000),
+      "C's sub-render tab",
+    );
+    sub.release();
+    c.release();
+    assert.notStrictEqual(
+      sub.pageId,
+      c.pageId,
+      "the sub-render took an idle tab from another affinity, not its parent's",
+    );
+  });
+
+  test('a brand-new module sub-render throws once the refill fails and no tab is idle', async function (assert) {
+    assert.timeout(15_000);
+    let failing = false;
+    let browserManager = makeBrowserManager(async () => {
+      if (failing) {
+        throw new Error('context creation failed');
+      }
+    });
+    let pool = makePool({
+      maxPages: 2,
+      browserManager,
+      gate: makeGate(),
+      // Long enough that only the failure ends the wait.
+      standbyRefillWaitMs: 60_000,
+    });
+
+    let a = await pool.getPage('A');
+    let b = await pool.getPage('B');
+    b.release();
+    await pool.warmStandbys();
+
+    // C takes the warm standby, and every creation after it fails. B is the
+    // idle affinity the cap evicts, leaving A and C, both mid-render.
+    failing = true;
+    let c = await pool.getPage('C');
+
+    let outcome = await within(
+      pool.getPage('D', 'module').then(
+        () => 'resolved',
+        (error: Error) => error.message,
+      ),
+      8000,
+    );
+    a.release();
+    c.release();
+    let message = settled(outcome, 'the sub-render to give up');
+    assert.true(
+      /No standby page available/.test(message),
+      `the sub-render threw rather than queueing on a busy tab (got ${message})`,
+    );
   });
 });
