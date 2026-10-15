@@ -2,7 +2,7 @@
 
 Segmented time entry — the Calendar family's clock. Hours, minutes, optionally seconds, optionally an AM/PM segment, each stepped with the arrow keys.
 
-On a touch device (`pointer: coarse`) the segments give way to a native `<input type='time'>` over the same value, so a tap opens the platform's own time picker — the iOS wheel, Android's clock dial.
+On a device with a touch screen (`any-pointer: coarse`, which includes a touchscreen laptop) the segments give way to a native `<input type='time'>` over the same value, so a tap opens the platform's own time picker — the iOS wheel, Android's clock dial.
 
 ## The contract
 
@@ -38,7 +38,8 @@ Where it is thinner: no timezone handling of any kind — this is a wall-clock t
 - **Each segment is stepped by the arrow keys**, which is the platform behaviour a reader expects from a time field and the reason a segmented control beats a free-text one here.
 - **The AM/PM segment only exists in 12-hour mode**, so a 24-hour field has no dead segment to travel through.
 - **Seeding is deterministic without `@now`.** A screen-reader user pressing Up on an empty hour segment gets 00, every time, rather than whatever the clock happened to say.
-- **Touch gets a control it can operate.** The segments answer only the keyboard; on a coarse pointer the native time input takes their place, which VoiceOver and TalkBack already know how to drive. Only one of the two is ever displayed, so neither assistive tech nor the tab order meets the field twice.
+- **Touch gets a control it can operate.** The segments answer only the keyboard; on a coarse pointer the native time input takes their place, which VoiceOver and TalkBack already know how to drive. Only one of the two is ever displayed, so neither assistive tech nor the tab order meets the field twice. The native input takes the group's name, including an `aria-label` or `aria-labelledby` set on the field itself, so two fields labelled "Start" and "End" don't both announce as "Time". It reads those attributes when it renders, so change `@label` rather than the attribute if the name changes later. The input sits inside the named group, so a screen reader can hear that name twice: once for the group, once for the input.
+- **The touch control meets the 44px target floor** (2.75rem), and its type is at least 16px so iOS Safari doesn't zoom the page when it takes focus.
 - **Incomplete state is reported as empty rather than as a partial value**, which means a form's validation never sees a half-typed string it has to interpret.
 
 ## Theming

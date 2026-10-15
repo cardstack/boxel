@@ -20,7 +20,7 @@ function timeSegs(): HTMLElement[] {
 function timeText(): string {
   return timeSegs().map((s) => s.textContent?.trim()).join('|');
 }
-// rendered on every device; only the (pointer: coarse) CSS decides it shows
+// rendered on every device; only the (any-pointer: coarse) CSS decides it shows
 function nativeInput(): HTMLInputElement {
   return q('[data-test-pretui-time-native]') as HTMLInputElement;
 }
@@ -103,6 +103,9 @@ module('Pretui | components/time-input', function (hooks) {
     await triggerKeyEvent(timeSegs()[0] as HTMLElement, 'keydown', 'ArrowUp');
     assert.deepEqual(seen, ['00:59'], 'the owner is told what was asked for');
     assert.strictEqual(timeText(), '23|59', 'and the display stays on the value the owner still holds');
+
+    await triggerKeyEvent(timeSegs()[0] as HTMLElement, 'keydown', 'ArrowUp');
+    assert.deepEqual(seen, ['00:59', '00:59'], 'asking again for a value the owner turned down is reported again');
   });
 
   test('TimeInput reports the wire string once every segment is filled', async function (assert) {
@@ -187,5 +190,24 @@ module('Pretui | components/time-input', function (hooks) {
     await fillIn(nativeInput(), '07:00');
     assert.deepEqual(seen, ['07:00'], 'the owner is told what was picked');
     assert.strictEqual(nativeInput().value, '23:59', 'and the control shows the value the owner still holds');
+
+    await fillIn(nativeInput(), '07:00');
+    assert.deepEqual(seen, ['07:00', '07:00'], 'picking the turned-down value again is reported again');
+  });
+
+  test('TimeInput native control takes the name the caller gave the group', async function (assert) {
+    await render(
+      <template>
+        <span id='start-label'>Start</span>
+        <TimeInput aria-labelledby='start-label' />
+        <TimeInput @label='Finish' />
+        <TimeInput aria-label='End' />
+      </template>,
+    );
+    let [byRef, byArg, byAttr] = all('[data-test-pretui-time-native]');
+    assert.strictEqual(byRef?.getAttribute('aria-labelledby'), 'start-label', 'a caller aria-labelledby reaches it');
+    assert.strictEqual(byArg?.getAttribute('aria-label'), 'Finish');
+    assert.false(byArg?.hasAttribute('aria-labelledby'));
+    assert.strictEqual(byAttr?.getAttribute('aria-label'), 'End', 'a caller aria-label wins over the default');
   });
 });
