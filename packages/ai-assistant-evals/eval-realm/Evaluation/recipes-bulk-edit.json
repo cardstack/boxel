@@ -1,0 +1,179 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "My recipe workspace has 30 recipes. Every recipe that has no cuisine yet is Italian, so set its cuisine to \"Italian\". Also mark every recipe that takes more than 45 minutes as weekend only. Leave everything else as it is, and don't ask me anything first. When it is done, tell me how many recipes you changed.",
+      "followUpPrompts": [],
+      "successCriteria": "1. All 20 recipes that had an empty cuisine now have the cuisine \"Italian\", and the 10 recipes that already had a cuisine (Thai, Indian, Mexican, Japanese, French) keep it.\n2. `weekendOnly` is true on exactly the 17 recipes whose `minutes` is more than 45 (Polenta with Mushrooms at 46 included) and false on the other 13. No other field changed, the recipe definition is unchanged, and no recipe was added or deleted.\n3. The assistant made the whole change in one `run-realm-code` call that finds the recipes with `realm.cards.search` and changes them with `realm.cards.update`. A read-only `run-realm-code` call before it, to look at the recipes, is acceptable. It did not call `transform-cards`, did not write a command module, and did not edit the recipe `.json` files with `realm.fs.replace`.\n4. The final reply says how many recipes changed (25: every recipe with an empty cuisine or more than 45 minutes) and does not mention correctness checks or tool calls.\n5. The assistant did not ask a question or wait for confirmation before acting, and the whole flow took at most 4 turns.",
+      "cardInfo": {
+        "name": "Recipes: Bulk Edit in One Script",
+        "summary": "The workspace starts with a recipe definition and 30 recipe instances. The prompt asks for two changes across many of them: an empty cuisine becomes \"Italian\", and a recipe longer than 45 minutes becomes weekend only. This eval tests whether the assistant makes a bulk edit as one run-realm-code script that loops over realm.cards.search and calls realm.cards.update, instead of writing a command for transform-cards or editing each JSON file by hand across several calls.",
+        "notes": null,
+        "cardThumbnailURL": null
+      }
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      },
+      "initialCards.0": {
+        "links": {
+          "self": "../Recipe/arancini"
+        }
+      },
+      "initialCards.1": {
+        "links": {
+          "self": "../Recipe/beef-tacos"
+        }
+      },
+      "initialCards.2": {
+        "links": {
+          "self": "../Recipe/bruschetta"
+        }
+      },
+      "initialCards.3": {
+        "links": {
+          "self": "../Recipe/cacio-e-pepe"
+        }
+      },
+      "initialCards.4": {
+        "links": {
+          "self": "../Recipe/caprese-salad"
+        }
+      },
+      "initialCards.5": {
+        "links": {
+          "self": "../Recipe/chicken-enchiladas"
+        }
+      },
+      "initialCards.6": {
+        "links": {
+          "self": "../Recipe/chicken-tikka-masala"
+        }
+      },
+      "initialCards.7": {
+        "links": {
+          "self": "../Recipe/coq-au-vin"
+        }
+      },
+      "initialCards.8": {
+        "links": {
+          "self": "../Recipe/dal-tadka"
+        }
+      },
+      "initialCards.9": {
+        "links": {
+          "self": "../Recipe/focaccia"
+        }
+      },
+      "initialCards.10": {
+        "links": {
+          "self": "../Recipe/gnocchi-with-sage-butter"
+        }
+      },
+      "initialCards.11": {
+        "links": {
+          "self": "../Recipe/green-curry"
+        }
+      },
+      "initialCards.12": {
+        "links": {
+          "self": "../Recipe/lasagne-al-forno"
+        }
+      },
+      "initialCards.13": {
+        "links": {
+          "self": "../Recipe/margherita-pizza"
+        }
+      },
+      "initialCards.14": {
+        "links": {
+          "self": "../Recipe/minestrone"
+        }
+      },
+      "initialCards.15": {
+        "links": {
+          "self": "../Recipe/okonomiyaki"
+        }
+      },
+      "initialCards.16": {
+        "links": {
+          "self": "../Recipe/osso-buco"
+        }
+      },
+      "initialCards.17": {
+        "links": {
+          "self": "../Recipe/pad-thai"
+        }
+      },
+      "initialCards.18": {
+        "links": {
+          "self": "../Recipe/panna-cotta"
+        }
+      },
+      "initialCards.19": {
+        "links": {
+          "self": "../Recipe/penne-arrabbiata"
+        }
+      },
+      "initialCards.20": {
+        "links": {
+          "self": "../Recipe/polenta-with-mushrooms"
+        }
+      },
+      "initialCards.21": {
+        "links": {
+          "self": "../Recipe/porchetta"
+        }
+      },
+      "initialCards.22": {
+        "links": {
+          "self": "../Recipe/ramen"
+        }
+      },
+      "initialCards.23": {
+        "links": {
+          "self": "../Recipe/ratatouille"
+        }
+      },
+      "initialCards.24": {
+        "links": {
+          "self": "../Recipe/ribollita"
+        }
+      },
+      "initialCards.25": {
+        "links": {
+          "self": "../Recipe/risotto-alla-milanese"
+        }
+      },
+      "initialCards.26": {
+        "links": {
+          "self": "../Recipe/saltimbocca"
+        }
+      },
+      "initialCards.27": {
+        "links": {
+          "self": "../Recipe/spaghetti-carbonara"
+        }
+      },
+      "initialCards.28": {
+        "links": {
+          "self": "../Recipe/tiramisu"
+        }
+      },
+      "initialCards.29": {
+        "links": {
+          "self": "../Recipe/vitello-tonnato"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}

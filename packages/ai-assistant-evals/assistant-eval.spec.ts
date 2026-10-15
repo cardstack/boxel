@@ -316,7 +316,10 @@ async function ensureActMode(page: Page, requestedModel: string) {
 // is told "workspace chooser, no realm" picks any workspace from the list.
 // `openCards` are stacked on top of the index, so an evaluation's initial
 // cards are open cards in the message context, the way a person would have
-// the card they are talking about in front of them.
+// the card they are talking about in front of them. Only the first
+// `MAX_OPEN_INITIAL_CARDS` are opened: an evaluation that starts with many
+// cards, such as a bulk edit, has the rest only in the workspace.
+const MAX_OPEN_INITIAL_CARDS = 3;
 async function ensureInsideWorkspace(
   page: Page,
   realmUrl: string,
@@ -870,7 +873,11 @@ async function runModel(
     setStep('set act mode');
     await ensureActMode(page, requestedModel);
     setStep('confirm the tab is inside the new workspace');
-    await ensureInsideWorkspace(page, result.realmUrl, result.initialCards);
+    await ensureInsideWorkspace(
+      page,
+      result.realmUrl,
+      result.initialCards.slice(0, MAX_OPEN_INITIAL_CARDS),
+    );
     // One safety clock for the whole run, follow-ups included.
     let deadline = Date.now() + MAX_MINUTES * 60_000;
     let botMessagesBefore = 0;

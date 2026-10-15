@@ -30,8 +30,8 @@ endpoint is the URL.
   `followUpPrompts` sent one at a time once the bot is idle, `successCriteria`
   a judge scores against, `initialCards` and `initialFiles` copied into the
   test workspace before the prompt (same path relative to the realm root, so
-  relative `adoptsFrom` references keep working; the cards are opened in the
-  stack so they are in the message context), and a query-backed
+  relative `adoptsFrom` references keep working; the first three cards are
+  opened in the stack so they are in the message context), and a query-backed
   `sessionReports` list.
 - **EvaluationResult**: one per model per session. The runner fills the
   mechanical fields (verdict, turns, cost, caching rate, start and end, tool
@@ -43,7 +43,7 @@ endpoint is the URL.
 - **EvaluationReport**: one per session, with a query-backed `results` table
   and the total cost.
 
-Four evaluations ship. `hello-world` is the smallest build there is, one
+Five evaluations ship. `hello-world` is the smallest build there is, one
 definition and one instance shown on screen — the one to start from, and the
 one to reach for when checking that a change did not break the basics.
 `linkedin-profile-computed-edit-restyle` is the step up: one definition with a
@@ -57,6 +57,10 @@ the assistant edits its own work in place instead of writing it again.
 card with three instances, then a list and a closing line the user asks for once
 everything is saved. It catches a final reply that shrinks to a one-sentence
 acknowledgement after the write passes its correctness check.
+`recipes-bulk-edit` starts the workspace with a recipe definition and 30
+instances, and asks for a change to most of them. It grades whether the
+assistant does a bulk edit as one `run-realm-code` script that loops over
+`realm.cards.search` and calls `realm.cards.update`.
 
 Add one by adding a JSON file under `eval-realm/Evaluation/` and running setup
 again. An evaluation that wants a card or a file already in the test workspace
