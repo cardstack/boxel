@@ -75,12 +75,16 @@ export default class RealmDropdown extends Component<Signature> {
           ...attributes
         >
           {{#if this.selectedRealm}}
-            <RealmURLTooltip @realmURL={{this.selectedRealm.path}}>
+            <RealmURLTooltip
+              class='selected-realm'
+              @realmURL={{this.selectedRealm.path}}
+              @label={{this.selectedRealm.name}}
+            >
               <RealmIcon class='icon' @realmInfo={{this.selectedRealm}} />
+              <div class='selected-item' data-test-selected-realm>
+                {{this.selectedItemText}}
+              </div>
             </RealmURLTooltip>
-            <div class='selected-item' data-test-selected-realm>
-              {{this.selectedItemText}}
-            </div>
             {{#if (and @displayReadOnlyTag (not this.selectedRealm.canWrite))}}
               <span class='read-only-tag' data-test-realm-read-only>READ ONLY</span>
             {{/if}}
@@ -130,7 +134,7 @@ export default class RealmDropdown extends Component<Signature> {
         width: 100%;
         max-width: 100%;
         display: grid;
-        grid-template-columns: auto 1fr auto auto;
+        grid-template-columns: minmax(0, 1fr) auto auto;
         justify-items: flex-start;
         gap: var(--boxel-sp-xxs);
         padding: var(--boxel-sp-5xs) var(--boxel-sp-xxs);
@@ -144,6 +148,13 @@ export default class RealmDropdown extends Component<Signature> {
       }
       .realm-dropdown-trigger[aria-expanded='true'] .arrow-icon {
         transform: scaleY(-1);
+      }
+      .selected-realm {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-2xs);
+        min-width: 0;
+        max-width: 100%;
       }
       .selected-item {
         max-width: 100%;

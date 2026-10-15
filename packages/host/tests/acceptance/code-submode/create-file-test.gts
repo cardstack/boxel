@@ -566,7 +566,7 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         );
     });
 
-    test('the realm dropdown shows the selected realm URL in a tooltip', async function (assert) {
+    test('the realm dropdown shows the selected realm name and URL in a tooltip', async function (assert) {
       await visitOperatorMode();
       await openNewFileModal('Card Definition');
 
@@ -574,8 +574,44 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
         '[data-test-realm-dropdown-trigger] [data-test-realm-url-tooltip-trigger]',
         'mouseenter',
       );
-      assert.dom('[data-test-realm-url-tooltip-label]').doesNotExist();
+      assert
+        .dom('[data-test-realm-url-tooltip-label]')
+        .hasText('Test Workspace A');
       assert.dom('[data-test-realm-url-tooltip]').hasText('test-realm/test');
+    });
+
+    test('the realm dropdown shows a truncated realm name in full in its tooltip', async function (assert) {
+      await visitOperatorMode();
+      let realmService = getService('realm') as any;
+      let realmA = realmService.realms.get(testRealmURL);
+      let previousInfo = realmA.info;
+      let longName =
+        'A workspace with a name far too long to fit inside the realm dropdown';
+      realmA.info = new TrackedObject({ ...previousInfo, name: longName });
+      try {
+        await openNewFileModal('Card Definition', longName);
+
+        let name = document.querySelector(
+          '[data-test-realm-dropdown-trigger] [data-test-selected-realm]',
+        ) as HTMLElement;
+        assert.ok(
+          name.scrollWidth > name.clientWidth,
+          'the name is truncated in the trigger',
+        );
+        assert
+          .dom(
+            '[data-test-realm-dropdown-trigger] [data-test-realm-url-tooltip-trigger] [data-test-selected-realm]',
+          )
+          .exists('hovering the name opens the tooltip');
+
+        await triggerEvent(
+          '[data-test-realm-dropdown-trigger] [data-test-realm-url-tooltip-trigger]',
+          'mouseenter',
+        );
+        assert.dom('[data-test-realm-url-tooltip-label]').hasText(longName);
+      } finally {
+        realmA.info = previousInfo;
+      }
     });
 
     test('the realm dropdown checks only the selected realm when two realms share a name', async function (assert) {
