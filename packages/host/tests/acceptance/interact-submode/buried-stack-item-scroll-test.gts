@@ -240,6 +240,30 @@ module(
       );
     });
 
+    test("scrolling while the card is still being restored isn't undone", async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: SETTLING_ARTICLE, format: 'isolated' }]],
+      });
+      await waitFor(`${stackCard(0, 0)} [data-test-article-end]`);
+      await scrollCard(stackCard(0, 0), 1200);
+
+      await click(`${stackCard(0, 0)} [data-test-card="${NOTE}"]`);
+      await waitFor(`${stackCard(0, 1)}[data-test-stack-card="${NOTE}"]`);
+      await click(`${stackCard(0, 1)} [data-test-close-button]`);
+      await waitFor(stackCard(0, 1), { count: 0 });
+      let mine = await scrollCard(stackCard(0, 0), 900);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      assert
+        .dom(`${stackCard(0, 0)} .lead.tall`)
+        .exists('the article is still settling, so a restore would still run');
+      assert.strictEqual(
+        scrollerIn(stackCard(0, 0)).scrollTop,
+        mine,
+        'the article stays where the user scrolled it',
+      );
+    });
+
     test('a card buried in one of several stacks returns to where it was scrolled', async function (assert) {
       await visitOperatorMode({
         stacks: [
