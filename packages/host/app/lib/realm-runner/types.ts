@@ -15,6 +15,7 @@ export type RealmRunnerCallMethod =
   | 'cards.get'
   | 'entries.search'
   | 'fs.delete'
+  | 'fs.deleteExisting'
   | 'capture'
   | 'images.generate'
   | 'workspaces.create'
