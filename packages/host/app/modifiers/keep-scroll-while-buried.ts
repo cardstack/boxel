@@ -131,10 +131,11 @@ export default class KeepScrollWhileBuried extends Modifier<Signature> {
       return;
     }
 
+    // `instant`, so a card that styles its scroller `scroll-behavior: smooth`
+    // still gets its offset back in one step rather than as an animation.
     let apply = () => {
       for (let [scroller, { top, left }] of saved) {
-        scroller.scrollTop = top;
-        scroller.scrollLeft = left;
+        scroller.scrollTo({ top, left, behavior: 'instant' });
       }
     };
     let stuck = () =>
