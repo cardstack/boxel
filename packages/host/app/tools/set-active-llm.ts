@@ -34,6 +34,16 @@ export default class SetActiveLLMTool extends HostBaseTool<
         `mode must be "act" or "ask", got "${input.mode}". To open code mode, use switch-submode instead.`,
       );
     }
+    // Only the models the room's model picker offers, so no caller can put
+    // the room on a model the user could not pick by hand.
+    if (input.model) {
+      let known = this.matrixService.pickableModelIds(input.roomId);
+      if (!known.includes(input.model)) {
+        throw new Error(
+          `Unknown model: ${input.model}. Models this room can use: ${known.join(', ')}`,
+        );
+      }
+    }
     if (input.model) {
       await this.matrixService.sendActiveLLMEvent(input.roomId, input.model);
     }

@@ -10,6 +10,7 @@ import {
   APP_BOXEL_LLM_MODE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  DEFAULT_FALLBACK_MODELS,
 } from '@cardstack/runtime-common/matrix-constants';
 
 import RealmService from '@cardstack/host/services/realm';
@@ -317,12 +318,13 @@ module('Integration | tools | ai-assistant', function (hooks) {
       sender: '@testuser:localhost',
       name: 'room-with-llm-model',
     });
+    let model = DEFAULT_FALLBACK_MODELS[0].modelId;
 
     let aiAssistantCommand = new UseAiAssistantTool(toolService.toolContext);
     await aiAssistantCommand.execute({
       prompt: 'Hello with custom LLM!',
       roomId,
-      llmModel: 'gpt-4',
+      llmModel: model,
     });
 
     // Check that the LLM model was set in room state
@@ -330,8 +332,28 @@ module('Integration | tools | ai-assistant', function (hooks) {
     assert.ok(llmState, 'LLM state should be present in room');
     assert.strictEqual(
       llmState.model,
-      'gpt-4',
-      'LLM model should be set to gpt-4',
+      model,
+      'LLM model should be set to the requested model',
+    );
+  });
+
+  test('does not set a model the model picker does not offer', async function (assert) {
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-with-unknown-llm',
+    });
+    let command = new SetActiveLLMTool(toolService.toolContext);
+
+    await assert.rejects(
+      command.execute({ roomId, model: 'no-such/model', mode: 'act' }),
+      /Unknown model: no-such\/model\. Models this room can use: /,
+      'the unknown model is rejected',
+    );
+
+    assert.throws(
+      () => getRoomState(roomId, APP_BOXEL_ACTIVE_LLM, ''),
+      /M_NOT_FOUND/,
+      'no active LLM state is written for an unknown model',
     );
   });
 
@@ -343,7 +365,11 @@ module('Integration | tools | ai-assistant', function (hooks) {
     let command = new SetActiveLLMTool(toolService.toolContext);
 
     await assert.rejects(
-      command.execute({ roomId, model: 'gpt-4', mode: 'code' }),
+      command.execute({
+        roomId,
+        model: DEFAULT_FALLBACK_MODELS[0].modelId,
+        mode: 'code',
+      }),
       /mode must be "act" or "ask"/,
       'the invalid mode is rejected',
     );

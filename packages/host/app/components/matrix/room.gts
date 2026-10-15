@@ -58,16 +58,14 @@ import {
   SupportedMimeType,
 } from '@cardstack/runtime-common';
 import { AI_BOT_EXECUTOR } from '@cardstack/runtime-common/commands';
-import {
-  DEFAULT_FALLBACK_MODELS,
-  LOCAL_SOURCE_URL_PREFIX,
-} from '@cardstack/runtime-common/matrix-constants';
+import { LOCAL_SOURCE_URL_PREFIX } from '@cardstack/runtime-common/matrix-constants';
 import type { Query } from '@cardstack/runtime-common/query';
 
 import ENV from '@cardstack/host/config/environment';
 import type { FileUploadState } from '@cardstack/host/lib/file-upload-state';
 import { formatTokenUsage } from '@cardstack/host/lib/format-token-usage';
 import type { Message } from '@cardstack/host/lib/matrix-classes/message';
+import { pickableModels } from '@cardstack/host/lib/pickable-models';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { isAutoExecutableTool } from '@cardstack/host/lib/tool-auto-execute';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
@@ -1209,53 +1207,10 @@ export default class Room extends Component<Signature> {
   // set, so the two can't drift apart.
   @cached
   private get baseLlmOptions(): LLMOption[] {
-    // Read from the system card if available
-    let systemCard = this.matrixService.systemCard;
-    if (systemCard?.modelConfigurations) {
-      let options: LLMOption[] = [];
-      let configModelIds = new Set<string>();
-      for (let modelConfig of systemCard.modelConfigurations) {
-        if (modelConfig.modelId && modelConfig.id) {
-          options.push({
-            id: modelConfig.id,
-            modelId: modelConfig.modelId,
-            name: modelConfig.cardTitle || modelConfig.modelId,
-          });
-          configModelIds.add(modelConfig.modelId);
-        }
-      }
-      // Add any used LLMs that aren't already covered by a config
-      for (let usedLLM of this.args.roomResource.usedLLMs) {
-        if (usedLLM && !configModelIds.has(usedLLM)) {
-          options.push({
-            id: usedLLM,
-            modelId: usedLLM,
-            name: usedLLM,
-          });
-        }
-      }
-      return options;
-    }
-
-    // Fallback to the realm-independent curated list. Merge in any models the
-    // room has already used so prior chats stay selectable; their display name
-    // is the raw model id when not in the curated set.
-    let fallbackById = new Map(
-      DEFAULT_FALLBACK_MODELS.map((m) => [m.modelId, m]),
+    return pickableModels(
+      this.matrixService.systemCard,
+      this.args.roomResource.usedLLMs,
     );
-    let allIds = new Set<string>(fallbackById.keys());
-    for (let usedLLM of this.args.roomResource.usedLLMs) {
-      if (usedLLM) {
-        allIds.add(usedLLM);
-      }
-    }
-    let ids = [...allIds].sort();
-
-    return ids.map((id) => ({
-      id,
-      modelId: id,
-      name: fallbackById.get(id)?.displayName ?? id,
-    }));
   }
 
   // The distinct OpenRouter model ids that can appear in the picker.

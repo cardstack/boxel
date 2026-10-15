@@ -100,6 +100,7 @@ import {
 } from '@cardstack/host/utils/local-storage-keys';
 
 import { isSkillCard } from '../lib/file-def-manager';
+import { pickableModelIds, usedLLMsFromEvents } from '../lib/pickable-models';
 import { getSkillSourceTools, loadSkillSource } from '../lib/skill-tools';
 import { getUniqueValidToolDefinitions } from '../lib/tool-definitions';
 import { skillsIndexId } from '../lib/utils';
@@ -2446,6 +2447,16 @@ export default class MatrixService extends Service {
 
   getRoomData(roomId: string) {
     return this.roomDataMap.get(roomId);
+  }
+
+  // The model ids the room may switch to: the ones its model picker offers.
+  // Read from the room's events, which exist whether or not the room is
+  // rendered.
+  pickableModelIds(roomId: string): string[] {
+    return pickableModelIds(
+      this.systemCard,
+      usedLLMsFromEvents(this.getRoomData(roomId)?.events ?? []),
+    );
   }
 
   private setRoomData(roomId: string, roomData: Room) {
