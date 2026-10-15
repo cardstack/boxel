@@ -53,16 +53,37 @@ const STILL = { duration: 0 } as const;
  * nothing the stage's resting reaches can pause it. Off stage (scrolled away,
  * or under a demo page) it settles on its first keyframe, where every pass of
  * the loop begins, and the loop stops; it starts again from there when the
- * stage comes back.
+ * stage comes back. It mounts playing, as any `{{motion}}` loop does, and a
+ * stage that turns out to be off stage settles as soon as that is known.
+ *
+ * Off is believed only once it has held for two frames. The stage's first
+ * report comes before anything has been measured, and says off; the measured
+ * answer follows a frame later. Settling on that first word would stop the
+ * loop and start it again from its first frame on every mount.
  */
 export class Keyframes extends Component {
-  @tracked private onStage = false;
+  @tracked private onStage = true;
 
   watch = modifier((el: HTMLElement) => {
+    let pending = 0;
     const stage = observeStage(el, (visible) => {
-      this.onStage = visible;
+      cancelAnimationFrame(pending);
+      pending = 0;
+      if (visible) {
+        this.onStage = true;
+        return;
+      }
+      pending = requestAnimationFrame(() => {
+        pending = requestAnimationFrame(() => {
+          pending = 0;
+          this.onStage = false;
+        });
+      });
     });
-    return () => stage.disconnect();
+    return () => {
+      cancelAnimationFrame(pending);
+      stage.disconnect();
+    };
   });
 
   get morph() {
