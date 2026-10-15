@@ -45,6 +45,7 @@ import {
   coerceErrorMessage,
   isCardError,
   serializableError,
+  stringifyErrorForLog,
 } from './error.ts';
 import type { IndexingProgressEvent } from './worker.ts';
 import { progressLaneOf } from './jobs/queue-claim.ts';
@@ -101,6 +102,8 @@ export const IDLE_RENDER_TIMEOUT_ABORT_AFTER =
 const IDLE_SCRIPT_BUSY_MAX = 0.05;
 
 const RENDER_TIMEOUT_TITLE = 'Render timeout';
+// How many reads `#removalsBackOnDisk` keeps in flight against the realm.
+const REMOVAL_READ_CONCURRENCY = 8;
 
 // A module every realm depends on and none owns. When consecutive renders
 // have timed out idle, whether this renders decides between a stack that
@@ -612,16 +615,9 @@ export class IndexRunner {
     let removals = [...operations]
       .filter(([, operation]) => operation === 'delete')
       .map(([href]) => href);
-    let onDisk = await Promise.all(
-      removals.map(
-        async (href) => (await current.#reader.readFile(new URL(href))) != null,
-      ),
-    );
-    removals.forEach((href, index) => {
-      if (onDisk[index]) {
-        operations.set(href, 'update');
-      }
-    });
+    for (let href of await current.#removalsBackOnDisk(removals)) {
+      operations.set(href, 'update');
+    }
     let urls = [...operations.keys()].map((href) => new URL(href));
     current.#log.debug(
       `${jobIdentity(current.#jobInfo)} starting from incremental indexing for ${urls.map((u) => u.href).join()}`,
@@ -850,6 +846,38 @@ export class IndexRunner {
         ...(swapCommit ?? {}),
       },
     };
+  }
+
+  // Which of `removals` have a file on disk again, read through the realm a
+  // few at a time: a folder removal can carry thousands of urls, and a burst
+  // of reads that size against the realm is what makes a read stall. A read
+  // that fails leaves its url a removal, which is what the caller asked for;
+  // only a recreate that coincides with the failure goes unindexed, until
+  // the recreating writer's own pass or a later one visits the url.
+  async #removalsBackOnDisk(removals: string[]): Promise<string[]> {
+    let backOnDisk: string[] = [];
+    let next = 0;
+    let readNext = async () => {
+      while (next < removals.length) {
+        let href = removals[next++];
+        try {
+          if (await this.#reader.readFile(new URL(href))) {
+            backOnDisk.push(href);
+          }
+        } catch (err: unknown) {
+          this.#log.warn(
+            `${jobIdentity(this.#jobInfo)} could not read ${href} to tell whether it was written again after its removal; indexing it as removed: ${stringifyErrorForLog(err)}`,
+          );
+        }
+      }
+    };
+    await Promise.all(
+      Array.from(
+        { length: Math.min(REMOVAL_READ_CONCURRENCY, removals.length) },
+        readNext,
+      ),
+    );
+    return backOnDisk;
   }
 
   // Announce this pass's now-fixed invalidation set, tagged per URL:
