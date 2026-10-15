@@ -48,6 +48,7 @@ import {
 } from './prerender-constants.ts';
 import { randomUUID } from 'crypto';
 import { isMissingExportMessage } from '@cardstack/runtime-common/package-shim-handler';
+import { withCredentialHeadersMasked } from '../lib/request-telemetry.ts';
 
 type PrerenderServer = Server & {
   __stopPrerenderer?: () => Promise<void>;
@@ -1764,7 +1765,9 @@ export function buildPrerenderApp(options: {
         log.info(
           `--> ${ctxt.method} ${ctxt.req.headers.accept} ${fullRequestURL(ctxt).href}: ${ctxt.status}${jobTag}`,
         );
-        log.debug(JSON.stringify(ctxt.req.headers));
+        log.debug(
+          JSON.stringify(withCredentialHeadersMasked(ctxt.req.headers)),
+        );
       });
       return next();
     })

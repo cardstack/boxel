@@ -25,6 +25,10 @@ import {
 } from '../utils/operator-token.ts';
 import { knownRealmURL, type RealmRoutingDeps } from '../lib/realm-routing.ts';
 import {
+  withCredentialHeadersMasked,
+  keepsMethodAndPathOnly,
+} from '../lib/request-telemetry.ts';
+import {
   AuthenticationError,
   AuthenticationErrorMessages,
   SupportedMimeType,
@@ -210,6 +214,24 @@ function loggableRequestURL(ctxt: Koa.Context): string {
   return masked.href;
 }
 
+// The request's headers as the debug line prints them. The line goes to Loki,
+// and Sentry's console integration keeps it as a breadcrumb on any event raised
+// during the request, so it carries no more than that event may:
+// - On the secure origin and the proxy routes, where an event keeps only the
+//   method and path, the line lists the header names alone.
+// - Elsewhere, a credential header (the session token, cookies, a signature)
+//   keeps its name with its value masked, and every other header is printed as
+//   sent, so the line still shows what the caller sent for diagnosis.
+function loggableRequestHeaders(
+  ctxt: Koa.Context,
+): Record<string, string | string[] | undefined> | string[] {
+  let headers = ctxt.req.headers;
+  if (keepsMethodAndPathOnly({ url: fullRequestURL(ctxt).href, headers })) {
+    return Object.keys(headers);
+  }
+  return withCredentialHeadersMasked(headers);
+}
+
 export function httpLogging(ctxt: Koa.Context, next: Koa.Next) {
   let logger = getLogger('realm:requests');
   // Stamp `[job: J.R]` onto the request log lines when the upstream
@@ -244,7 +266,7 @@ export function httpLogging(ctxt: Koa.Context, next: Koa.Next) {
         ctxt,
       )}: ${ctxt.status}${jobTag}${corrTag} dur=${Date.now() - startedAt}ms`,
     );
-    logger.debug(JSON.stringify(ctxt.req.headers));
+    logger.debug(JSON.stringify(loggableRequestHeaders(ctxt)));
   });
   return next();
 }

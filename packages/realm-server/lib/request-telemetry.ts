@@ -11,12 +11,14 @@
 //   and its query string can carry a token. The same holds for the system-key
 //   routes, whose bodies carry a key's value.
 // - An event raised during any other request keeps its request context, minus
-//   the `Authorization` / `Proxy-Authorization` and `Cookie` headers and the
-//   parsed cookies, and with any `token` query parameter masked. The caller's
-//   session token is no help in triage and is a liability once stored.
+//   the credential headers (`Authorization`, `Proxy-Authorization`, `Cookie`,
+//   `Set-Cookie` and the request-signature headers) and the parsed cookies,
+//   and with any `token` query parameter masked. The caller's session token
+//   is no help in triage and is a liability once stored.
 // - On every event, a breadcrumb that names a proxy route's URL (the request
 //   log line, kept by Sentry's console integration) loses that URL's query
-//   string.
+//   string. Nothing here looks for header values in a breadcrumb: the request
+//   log's header line masks the credential headers before it is written.
 // - A transaction carries the incoming URL again in its spans' data: the
 //   server span's `http.url`, `http.target` and `http.query`, which the trace
 //   context holds as the transaction's own data, and the like on each child
@@ -44,11 +46,48 @@ const proxyRoutePaths = new Set([
 // The operator routes that store a system key, and everything beneath them.
 export const SYSTEM_KEYS_PATH = '/_system-keys';
 
+// The headers whose value is a credential: the caller's session token, its
+// cookies, the HMAC signatures that authenticate a worker request
+// (`WORKER_REQUEST_SIGNATURE_HEADER`) and a session delegation
+// (`DELEGATED_USER_REALM_SESSION_SIGNATURE_HEADER`), and any header whose name
+// marks it as a signature, token, secret or API key. That last rule covers the
+// webhook routes: `/_stripe-webhook` checks `Stripe-Signature`, and an
+// incoming webhook checks whichever header its configuration names (such as
+// `X-Hub-Signature-256`), which no fixed list can know. A signature is
+// replayable with its body, so it is treated like a token. The names are
+// spelled out here, not imported, to keep this module free of imports. The
+// request log's header line masks these, and an event's request context drops
+// them, and every server's debug header line masks them
+// (`withCredentialHeadersMasked`).
 const credentialHeaders = new Set([
   'authorization',
   'proxy-authorization',
   'cookie',
+  'set-cookie',
+  'x-boxel-worker-request-signature',
+  'x-boxel-delegation-signature',
 ]);
+
+const credentialHeaderName = /signature|token|secret|api-?key/i;
+
+export function isCredentialHeader(name: string): boolean {
+  return (
+    credentialHeaders.has(name.toLowerCase()) || credentialHeaderName.test(name)
+  );
+}
+
+// A request's headers with each credential header's value printed as
+// `REDACTED`, for a log line that dumps them. Every other header is kept as
+// sent, so the line still shows what the caller sent.
+export function withCredentialHeadersMasked<
+  V extends string | string[] | undefined,
+>(headers: Record<string, V>): Record<string, V | 'REDACTED'> {
+  let masked: Record<string, V | 'REDACTED'> = {};
+  for (let [name, value] of Object.entries(headers)) {
+    masked[name] = isCredentialHeader(name) ? 'REDACTED' : value;
+  }
+  return masked;
+}
 
 const secureOriginHosts = new Set<string>();
 
@@ -207,16 +246,17 @@ function withoutCredentials(request: SentryRequestData): SentryRequestData {
   }
   let keptHeaders: Record<string, string | string[] | undefined> = {};
   for (let [name, value] of Object.entries(headers)) {
-    if (!credentialHeaders.has(name.toLowerCase())) {
+    if (!isCredentialHeader(name)) {
       keptHeaders[name] = value;
     }
   }
   return { ...kept, headers: keptHeaders };
 }
 
-// Whether an event for this request keeps only its method and the origin and
-// path of its URLs: a request to the secure origin, to a proxy route, or to a
-// system-keys route (whose bodies carry a key value).
+// Whether telemetry about this request keeps only its method and the origin
+// and path of its URLs: a request to the secure origin, to a proxy route, or
+// to a system-keys route (whose bodies carry a key value). `url` is the full
+// request URL; `headers` supply the host when they carry one.
 export function keepsMethodAndPathOnly(request: {
   url?: string;
   headers?: Record<string, string | string[] | undefined>;

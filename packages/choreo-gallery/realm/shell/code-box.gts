@@ -40,7 +40,7 @@ export const CodeBox: TOC<Signature> = <template>
       font-size: 10px;
       letter-spacing: 0.14em;
       text-transform: uppercase;
-      color: var(--copper-ink);
+      color: var(--eyebrow);
     }
 
     pre {

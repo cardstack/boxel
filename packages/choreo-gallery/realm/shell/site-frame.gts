@@ -131,6 +131,15 @@ export class SiteFrame extends Component<Signature> {
         color: var(--ink-dim);
       }
 
+      /* a link at rest carries a hairline underline, so it reads as a link
+         before the pointer finds it */
+      .top-links a,
+      .footer a {
+        text-decoration: underline;
+        text-decoration-color: var(--line-strong);
+        text-underline-offset: 3px;
+      }
+
       @media (hover: hover) {
         .top-links a:hover {
           color: var(--ink);

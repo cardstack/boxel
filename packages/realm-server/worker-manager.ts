@@ -90,6 +90,7 @@ import {
   WORKER_REQUEST_IPC_PREFIX,
 } from './lib/worker-request-forwarder.ts';
 import { isDeployedServerURL } from './lib/outbound/client.ts';
+import { withCredentialHeadersMasked } from './lib/request-telemetry.ts';
 import {
   encodeSecretsKeyringIpc,
   SECRETS_KEYRING_REQUEST,
@@ -316,7 +317,9 @@ if (port != null) {
             fullRequestURL(ctxt).href
           }: ${ctxt.status}`,
         );
-        log.debug(JSON.stringify(ctxt.req.headers));
+        log.debug(
+          JSON.stringify(withCredentialHeadersMasked(ctxt.req.headers)),
+        );
       });
       return next();
     })
