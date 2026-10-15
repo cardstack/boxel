@@ -1,16 +1,15 @@
 ---
 name: choreo-create
-description: Recreate or combine the Choreo gallery's demos (packages/choreo-test-app, packages/choreo-gallery) into Glimmer interfaces, spatial scenes and films, or add live tuning and focused teaching examples.
+description: Recreate or combine the Choreo gallery's demos (packages/choreo-gallery) into Glimmer interfaces, spatial scenes and films, or add live tuning and focused teaching examples.
 ---
 
 # Build from real Choreo examples
 
 The gallery's catalog is `packages/choreo-gallery/realm/demos/<id>.json`, one
 `GalleryDemo` card per demo (title, group, API pills, usage sample, walkthrough,
-lesson). The demos' components are in `packages/choreo-test-app`:
-`packages/choreo-test-app/app/lib/catalog.ts` resolves demo IDs to components,
-source samples and notes. IDs are not always filenames: `far` is `far-match`,
-`pointer` is `follow-pointer`, and `presence` is `presence-modes`. Read the
+lesson). Each demo adopts from its stage,
+`packages/choreo-gallery/realm/stages/<id>.gts`, and a demo with a Deep Dive
+has its note in `packages/choreo-gallery/realm/notes/<id>.gts`. Read the
 selected example before adapting it. Imports use `glimmer-motion`,
 `@cardstack/choreo`, `@cardstack/choreo/film`, or the separate
 `@cardstack/choreo-player` package; verify unfamiliar APIs against exported
@@ -38,20 +37,20 @@ transitions independent. Preserve user input during interruptible movement.
 ## Teaching and tuning
 
 Every gallery demo carries a `lesson` (concept guide, why, experiment, pitfall,
-composition idea) in `packages/choreo-gallery/realm/demos/<id>.json`. The test
-app keeps a copy in `packages/choreo-test-app/app/content/demo-lessons.json` for
-its guide pages; change both, since the realm check fails when they differ. The
-concept guides are `packages/choreo-test-app/app/content/guides/*.md`.
-`packages/choreo-gallery/docs/api-inventory.json` maps public APIs to concept
+composition idea) in `packages/choreo-gallery/realm/demos/<id>.json`. The
+concept guides are `packages/choreo-gallery/realm/docs/guides/*.md`.
+`packages/choreo-gallery/tools/api-inventory.json` maps public APIs to concept
 guides; look up the relevant entries rather than loading it whole. For a
 tutorial, isolate one observable relationship and predict the result of a
 parameter change. The docs-only spatial/film studies in
-`packages/choreo-gallery/docs/docs-studies-plan.md` are planned, not shipped.
+`packages/choreo-gallery/realm/design/docs-studies-plan.md` are planned, not shipped.
 
 Every control must supply a named variable consumed by that example. Show units,
-use meaningful ranges, and retain source defaults. The test app's
-`/playground/:demo_id` route uses the shared workbench, including live edits and authored presets. A timing-only
-edit and a new target require different engine handling; use the existing adapter.
+use meaningful ranges, and retain source defaults. Each demo page's lab
+(`packages/choreo-gallery/realm/shell/lab-panel.gts`) puts those variables on a
+DialKit panel beside the demo's authored presets. An edit reaches the demo as it
+renders; motion already in flight keeps its timing until the demo moves again,
+so the lab's replay runs it from the start with the new values.
 
 Verify the relevant behaviour: first interaction, mid-flight change, reset and
 teardown; for captured output, compare the same time reached by different paths.

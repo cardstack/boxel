@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Choreo Widget Room",
+        "summary": "The gallery's demos, live on the walls of a 3D room, with a narrated tour."
+      }
+    },
+    "relationships": {
+      "gallery": {
+        "links": {
+          "self": "./index"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "./theme"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "./widget-room",
+        "name": "ChoreoWidgetRoom"
+      }
+    }
+  }
+}

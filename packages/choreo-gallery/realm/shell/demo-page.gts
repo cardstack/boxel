@@ -1,24 +1,27 @@
-import { concat, fn } from '@ember/helper';
+import { array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
-import { motion } from 'glimmer-motion';
 
-import type { GalleryDemo } from '../demo';
+import type { GalleryDemo, Near } from '../demo';
 import { FilmLink } from '../lib/film-link';
-import type { GalleryNavigation } from '../lib/navigation';
+import { labSlug, LabState } from '../lib/lab';
 import { type Theater, theaterView } from '../lib/theater';
 import { ChoreoMark } from './choreo-mark';
 import { CodeBox } from './code-box';
+import { DemoLink } from './demo-link';
 import { DemoStage } from './demo-stage';
-import { GalleryLink } from './gallery-link';
-import { SpeedPicker } from './speed-picker';
+import { GuideLink } from './guide-link';
+import { LabPanel } from './lab-panel';
+import { LabToggle } from './lab-toggle';
+import { SpeedPicker, startPage } from './speed-picker';
 
 interface Signature {
   Args: {
     demo: GalleryDemo;
-    /** set inside the gallery; a demo card opened on its own has neither */
-    nav?: GalleryNavigation;
-    near?: { next?: GalleryDemo; prev?: GalleryDemo };
+    /** the demos either side of this one in its gallery's order */
+    near?: Near;
+    /** opens a demo card through the host; without it there is no pager */
+    onOpen?: (demo: GalleryDemo) => void;
     theater: Theater;
   };
 }
@@ -30,6 +33,22 @@ interface Signature {
 export class DemoPage extends Component<Signature> {
   /** the stage's film, when it has one, for the notes' join triggers */
   readonly filmLink = new FilmLink();
+  readonly lab = new LabState();
+
+  constructor(owner: unknown, args: Signature['Args']) {
+    super(owner as never, args);
+    startPage();
+  }
+
+  get labSlug(): string | undefined {
+    return labSlug(this.args.demo);
+  }
+
+  get labOpen(): boolean {
+    return this.lab.isOpen(this.labSlug);
+  }
+
+  toggleLab = () => this.lab.toggle(this.labSlug);
 
   get Notes() {
     return (this.args.demo.constructor as typeof GalleryDemo).notes;
@@ -45,6 +64,11 @@ export class DemoPage extends Component<Signature> {
   }
 
   leaveTheater = () => this.args.theater.enter(false);
+
+  /** whether there is a neighbour for the pager to open */
+  get paged(): boolean {
+    return Boolean(this.args.near?.prev || this.args.near?.next);
+  }
 
   /**
    * the notes' join triggers, while the stage's film frame is attached; a
@@ -68,76 +92,69 @@ export class DemoPage extends Component<Signature> {
         data-test-theater={{this.inTheater}}
       >
         <article class='demo-head' data-demo={{slug}}>
-          {{#if @nav}}
-            {{! the pager is at the foot of the page, past the code — a long way
-            to scroll to say "next". The same link, where you are already
-            looking. }}
-            <div class='demo-nav' {{motion role='furniture'}}>
-              <GalleryLink
-                @href={{@nav.hrefFor null}}
-                @onFollow={{fn @nav.go null}}
-                class='back back-all'
-                data-gallery-home
-              >
-                <span class='back-arrow' aria-hidden='true'>←</span>
-                All examples
-              </GalleryLink>
-              {{#if @near.next}}
-                <GalleryLink
-                  @href={{@nav.hrefFor @near.next.slug}}
-                  @onFollow={{fn @nav.go @near.next.slug}}
+          {{#if @onOpen}}
+            {{#if @near.next}}
+              {{! the pager is at the foot of the page, past the code — a long
+                way to scroll to say "next". The same link, where you are
+                already looking. }}
+              <div class='demo-nav'>
+                <DemoLink
+                  @demo={{@near.next}}
+                  @onOpen={{@onOpen}}
                   class='back next-demo'
                 >
                   Next
                   <b>{{@near.next.title}}</b>
                   →
-                </GalleryLink>
-              {{/if}}
-            </div>
+                </DemoLink>
+              </div>
+            {{/if}}
           {{/if}}
-          {{! the same ids the gallery tile's pieces carry: the crossing pairs
-          them and each pair is one flight — the stage, and the same three
-          lines of type, set twice }}
           <div class='demo-meta'>
-            <p class='kicker' {{motion id=(concat 'group-' slug) role='type'}}>
+            <p class='kicker'>
               {{@demo.group}}
               {{#if this.Notes}}
                 <span class='kicker-badge'>Deep Dive</span>
               {{/if}}
             </p>
-            <h1 {{motion id=(concat 'title-' slug) role='type'}}>
-              {{@demo.title}}
-            </h1>
-            <p class='lede' {{motion id=(concat 'lede-' slug) role='type'}}>
-              {{@demo.lede}}
-            </p>
+            <h1>{{@demo.title}}</h1>
+            <p class='lede'>{{@demo.lede}}</p>
           </div>
-          {{! one id on every demo page: between two demos the pills pair and the
-          crossfade of identical content is invisible }}
-          <div class='apis' {{motion id='apis' role='chrome'}}>
+          <div class='apis'>
             {{#each @demo.apis as |api|}}
               <code class='api'>{{api}}</code>
             {{/each}}
           </div>
         </article>
         {{#if @demo.slowmo}}
-          <SpeedPicker @slug={{slug}} />
+          <SpeedPicker />
         {{/if}}
-        <div class='stage-row' data-test-stage-row {{theaterView}}>
+        <p class='demo-links'>
+          {{#if this.labSlug}}
+            <LabToggle @open={{this.labOpen}} @onToggle={{this.toggleLab}} />
+          {{/if}}
+          <GuideLink @demo={{@demo}} />
+        </p>
+        <div
+          class='stage-row {{if this.labOpen "with-lab"}}'
+          data-test-stage-row
+          {{theaterView}}
+        >
           <div
             class='stage-wrap'
             data-demo-stage
             data-test-stage
             data-well={{this.well}}
-            {{motion id=(concat 'stage-' slug) role='stage'}}
             {{@theater.stage}}
           >
-            <DemoStage
-              @demo={{@demo}}
-              @face='stage'
-              @filmLink={{this.filmLink}}
-              @theater={{@theater}}
-            />
+            {{#each (array this.lab.replays) key='@identity'}}
+              <DemoStage
+                @demo={{@demo}}
+                @face='stage'
+                @filmLink={{this.filmLink}}
+                @theater={{@theater}}
+              />
+            {{/each}}
             {{! THE MARK, in theater only, where the site's bar has stepped out.
             It is also the way out, because the thing a viewer wants after
             the film is how it was made. }}
@@ -153,13 +170,20 @@ export class DemoPage extends Component<Signature> {
               </div>
             {{/if}}
           </div>
+          {{#if this.labOpen}}
+            {{#if this.labSlug}}
+              <LabPanel
+                @slug={{this.labSlug}}
+                @title={{@demo.title}}
+                @onReplay={{this.lab.replay}}
+              />
+            {{/if}}
+          {{/if}}
         </div>
-        {{! role='late': the code can wait for the move to land — the crossing
-        fades it in after the flight, and only if a viewport can see it }}
-        <CodeBox @source={{@demo.sample}} {{motion role='late'}} />
+        <CodeBox @source={{@demo.sample}} />
         {{! ...and, for a demo whose subject is its DATA, the data }}
         {{#if @demo.walkthrough.length}}
-          <section class='walk' aria-label='Walkthrough' {{motion role='late'}}>
+          <section class='walk' aria-label='Walkthrough'>
             {{#each @demo.walkthrough as |step|}}
               <p class='walk-note'>{{step.note}}</p>
               <CodeBox @label={{step.label}} @source={{step.source}} />
@@ -171,29 +195,25 @@ export class DemoPage extends Component<Signature> {
         {{#if this.Notes}}
           <this.Notes @preview={{this.preview}} />
         {{/if}}
-        {{#if @nav}}
-          <nav class='pager' {{motion role='late'}}>
-            {{#if @near.prev}}
-              <GalleryLink
-                @href={{@nav.hrefFor @near.prev.slug}}
-                @onFollow={{fn @nav.go @near.prev.slug}}
-              >
-                ←
-                {{@near.prev.title}}
-              </GalleryLink>
-            {{else}}
-              <span></span>
-            {{/if}}
-            {{#if @near.next}}
-              <GalleryLink
-                @href={{@nav.hrefFor @near.next.slug}}
-                @onFollow={{fn @nav.go @near.next.slug}}
-              >
-                {{@near.next.title}}
-                →
-              </GalleryLink>
-            {{/if}}
-          </nav>
+        {{#if @onOpen}}
+          {{#if this.paged}}
+            <nav class='pager' aria-label='More demos'>
+              {{#if @near.prev}}
+                <DemoLink @demo={{@near.prev}} @onOpen={{@onOpen}}>
+                  ←
+                  {{@near.prev.title}}
+                </DemoLink>
+              {{else}}
+                <span></span>
+              {{/if}}
+              {{#if @near.next}}
+                <DemoLink @demo={{@near.next}} @onOpen={{@onOpen}}>
+                  {{@near.next.title}}
+                  →
+                </DemoLink>
+              {{/if}}
+            </nav>
+          {{/if}}
         {{/if}}
       </div>
     {{/let}}
@@ -205,20 +225,17 @@ export class DemoPage extends Component<Signature> {
         margin-bottom: 28px;
       }
 
-      /* the transparent counterpart to the tile's metadata chin: the return
-         trip has a second box to tween into, the same shape the gallery
-         already has */
       .demo-meta {
         display: flex;
         flex-direction: column;
         gap: 18px;
       }
 
-      /* "all examples" and "next" on one line above the title */
+      /* "next" on a line of its own above the title */
       .demo-nav {
         display: flex;
         align-items: baseline;
-        justify-content: space-between;
+        justify-content: flex-end;
         gap: 16px;
         padding-top: 10px;
       }
@@ -236,30 +253,6 @@ export class DemoPage extends Component<Signature> {
         .back:hover {
           color: var(--ink);
         }
-      }
-
-      /* the canonical way back — brighter than a plain nav label, and the
-         arrow nudges further left on hover */
-      .back-all {
-        display: inline-flex;
-        align-items: center;
-        gap: 7px;
-        color: var(--ink);
-      }
-
-      @media (hover: hover) {
-        .back-all:hover {
-          color: var(--copper-ink);
-        }
-
-        .back-all:hover .back-arrow {
-          transform: translateX(-3px);
-        }
-      }
-
-      .back-arrow {
-        display: inline-block;
-        transition: transform 0.18s var(--ease);
       }
 
       .next-demo {
@@ -293,14 +286,10 @@ export class DemoPage extends Component<Signature> {
         font-size: 11px;
         letter-spacing: 0.18em;
         text-transform: uppercase;
-        /* ember-hot: it is a paired subject of the crossing, and lands on
-           the tile's group line, which is ember-hot too */
+        /* ember-hot, as the tile's group line is */
         color: var(--ember-hot);
       }
 
-      /* no draw-in here: this kicker already crossfades over from the tile
-         on the timeline's clock, and a second animation would read as
-         arriving twice */
       .kicker::before {
         content: '';
         width: 18px;
@@ -356,8 +345,31 @@ export class DemoPage extends Component<Signature> {
         padding: 3px 7px;
       }
 
+      .demo-links {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 12px 24px;
+        margin: 0 0 16px;
+      }
+
       .stage-row {
         position: relative;
+      }
+
+      /* the lab sits beside the stage, and under it where the page is too
+         narrow for both */
+      .stage-row.with-lab {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: start;
+        gap: 16px;
+      }
+
+      @media (max-width: 760px) {
+        .stage-row.with-lab {
+          grid-template-columns: minmax(0, 1fr);
+        }
       }
 
       .stage-wrap {
@@ -401,6 +413,33 @@ export class DemoPage extends Component<Signature> {
         aspect-ratio: 16 / 10.5;
         min-height: 0;
         max-height: min(92vh, 1180px);
+      }
+
+      /* A LAPTOP IS A WIDE, SHORT SUBJECT ON A TALL PLATTER. A machine seen
+         from a low three-quarter angle wants headroom above the lid and floor
+         under the base — without it the framing solver keeps pulling the
+         camera back to fit the height, and the drawing on the screen goes too
+         small to read. */
+      .stage-wrap[data-well='laptop'] {
+        min-height: min(84vh, 860px);
+      }
+
+      /* ...and on a narrow screen a device's well takes the shape of the
+         device. The flat laptop is 1178x838 scaled to fit, so on a phone it
+         is width-bound, and a tall well then holds a very small machine with
+         a band of empty air above and below it. The phone is the opposite
+         shape: a landscape well holds a very small phone with air either
+         side, and a tall one lets the device fill the frame. */
+      @media (max-width: 760px) {
+        .stage-wrap[data-well='laptop'] {
+          min-height: 0;
+          aspect-ratio: 1178 / 838;
+        }
+
+        .stage-wrap[data-well='phone'] {
+          min-height: 0;
+          aspect-ratio: 5 / 7;
+        }
       }
 
       /* ── Theater ────────────────────────────────────────────────────

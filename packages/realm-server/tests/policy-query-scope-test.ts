@@ -661,5 +661,56 @@ module(basename(import.meta.filename), function () {
       await nonGrantableInChain(core, CHAIN(), 'listOpen');
       assert.strictEqual(lookups.length, read * 2);
     });
+
+    // How many definitions one reading of a chain asks for, from a lookup no
+    // other ask has touched.
+    async function oneReading(chain: string[]) {
+      let lookups: string[] = [];
+      let core = stubCore([], { lookups, generation: () => 1 });
+      await nonGrantableInChain(core, chain, 'listOpen');
+      return lookups.length;
+    }
+
+    test('asks made together read the chain once between them', async function (assert) {
+      let read = await oneReading(CHAIN());
+      let lookups: string[] = [];
+      let core = stubCore([], { lookups, generation: () => 1 });
+      let answers = await Promise.all([
+        nonGrantableInChain(core, CHAIN(), 'listOpen'),
+        nonGrantableInChain(core, CHAIN(), 'listOpen'),
+      ]);
+      assert.deepEqual(answers, [false, false], 'both are answered');
+      assert.strictEqual(lookups.length, read, 'from one reading');
+    });
+
+    test('an ask under a moved generation does not wait on a reading begun before the move', async function (assert) {
+      let read = await oneReading(CHAIN());
+      let lookups: string[] = [];
+      let generation = 1;
+      let core = stubCore([], { lookups, generation: () => generation });
+      let first = nonGrantableInChain(core, CHAIN(), 'listOpen');
+      generation++;
+      let second = nonGrantableInChain(core, CHAIN(), 'listOpen');
+      await Promise.all([first, second]);
+      assert.strictEqual(lookups.length, read * 2, 'each reads the chain');
+    });
+
+    test('asks made together about a chain with a type it cannot read both refuse, and the next reads afresh', async function (assert) {
+      let chain = [LOCAL_ANCESTOR_KEY, key(BASE_SCHEDULE)];
+      let read = await oneReading(chain);
+      let lookups: string[] = [];
+      let core = stubCore([], { lookups, generation: () => 1 });
+      let answers = await Promise.all([
+        nonGrantableInChain(core, chain, 'listOpen'),
+        nonGrantableInChain(core, chain, 'listOpen'),
+      ]);
+      assert.deepEqual(answers, [true, true], 'both refuse');
+      assert.strictEqual(lookups.length, read, 'from one reading');
+      assert.true(
+        await nonGrantableInChain(core, chain, 'listOpen'),
+        'a later ask refuses too',
+      );
+      assert.strictEqual(lookups.length, read * 2, 'from a reading of its own');
+    });
   });
 });

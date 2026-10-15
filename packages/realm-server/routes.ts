@@ -16,7 +16,12 @@ import handleCreateRealmRequest, {
   type CreateRealmDeps,
 } from './handlers/create-realm.ts';
 import handleDeleteRealm from './handlers/handle-delete-realm.ts';
+import {
+  handleDataKeyReseal,
+  handleDataKeyStatus,
+} from './handlers/handle-data-keys.ts';
 import handleFetchCatalogRealmsRequest from './handlers/handle-fetch-catalog-realms.ts';
+import handleFetchPublicRealmsRequest from './handlers/handle-fetch-public-realms.ts';
 import handleFetchUserRequest from './handlers/handle-fetch-user.ts';
 import handleStripeWebhookRequest from './handlers/handle-stripe-webhook.ts';
 import handlePublishRealm from './handlers/handle-publish-realm.ts';
@@ -29,6 +34,7 @@ import {
   healthCheck,
   jwtMiddleware,
   grafanaAuthorization,
+  operatorAuthorization,
 } from './middleware/index.ts';
 import type Koa from 'koa';
 import handleCreateUserRequest from './handlers/handle-create-user.ts';
@@ -47,6 +53,7 @@ import handleOpenRouterPassthrough from './handlers/handle-openrouter-passthroug
 import handlePostDeployment from './handlers/handle-post-deployment.ts';
 import { handleCheckBoxelDomainAvailabilityRequest } from './handlers/handle-check-boxel-domain-availability.ts';
 import handleRealmAuth from './handlers/handle-realm-auth.ts';
+import handleSetRealmCatalog from './handlers/handle-set-realm-catalog.ts';
 import handleDelegateSession from './handlers/handle-delegate-session.ts';
 import handleWorkerRequest from './handlers/handle-worker-request.ts';
 import handleGetBoxelClaimedDomainRequest from './handlers/handle-get-boxel-claimed-domain.ts';
@@ -87,6 +94,10 @@ import handleRunCommand from './handlers/handle-run-command.ts';
 import handleCapture from './handlers/handle-capture.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
+import {
+  OPENROUTER_PASSTHROUGH_PATH,
+  REQUEST_FORWARD_PATH,
+} from './lib/request-telemetry.ts';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -190,6 +201,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleDeleteRealm(args),
   );
   router.get('/_catalog-realms', handleFetchCatalogRealmsRequest(args));
+  router.get(
+    '/_public-realms',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleFetchPublicRealmsRequest(args),
+  );
   router.get('/_queue-status', handleQueueStatusRequest(args));
   // Monitoring endpoint validating that every skill's command codeRefs
   // resolve in the deployed host. Self-authenticated with the monitoring
@@ -222,7 +238,7 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleCreateUserRequest(args),
   );
   router.post(
-    '/_request-forward',
+    REQUEST_FORWARD_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleRequestForward({
       dbAdapter: args.dbAdapter,
@@ -238,7 +254,7 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleClientTelemetry(),
   );
   router.post(
-    '/_openrouter/chat/completions',
+    OPENROUTER_PASSTHROUGH_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleOpenRouterPassthrough({
       dbAdapter: args.dbAdapter,
@@ -357,6 +373,19 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleArchivedRealms(args),
   );
 
+  // Rotating the data key that seals stored secrets. Only an operator token
+  // signed with the realm secret seed reaches these.
+  router.get(
+    '/_data-keys',
+    operatorAuthorization(args.realmSecretSeed, 'data-keys'),
+    handleDataKeyStatus(args),
+  );
+  router.post(
+    '/_data-keys/reseal',
+    operatorAuthorization(args.realmSecretSeed, 'data-keys'),
+    handleDataKeyReseal(args),
+  );
+
   // Grafana operator-action endpoints. All POST-only with
   // `Authorization: Bearer <token>` against the shared `grafanaSecret`.
   // Handlers read params from `ctxt.URL.searchParams` (Grafana button
@@ -375,6 +404,10 @@ export function createRoutes(args: CreateRoutesArgs) {
   registerGrafanaEndpoint(
     '/_grafana-revoke-user-sessions',
     handleRevokeUserSessions(args),
+  );
+  registerGrafanaEndpoint(
+    '/_grafana-set-realm-catalog',
+    handleSetRealmCatalog(args),
   );
   router.post('/_post-deployment', handlePostDeployment(args));
   router.post(

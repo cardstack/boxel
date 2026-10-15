@@ -125,6 +125,14 @@ export default class AiAssistantChatInput extends Component<Signature> {
         grid-area: 1 / 1 / 2 / 2;
       }
 
+      /* iOS zooms into inputs under 16px on focus */
+      @media (pointer: coarse) {
+        .chat-input,
+        .clone {
+          font-size: var(--boxel-font-size);
+        }
+      }
+
       .chat-input {
         background: transparent;
         border: 0;

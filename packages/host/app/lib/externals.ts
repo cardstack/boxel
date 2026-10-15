@@ -335,6 +335,23 @@ export function shimExternals(virtualNetwork: VirtualNetwork) {
     id: '@cardstack/choreo-player',
     resolve: () => import('@cardstack/choreo-player'),
   });
+  // DialKit, the tuning panel a card mounts over its own motion values
+  // (`dialkit/store` holds the values, `dialkit/vanilla` renders the
+  // controls), and pretext, which measures a run of text without laying it
+  // out in the DOM. Both are card-facing only, so they load with the first
+  // card that imports them.
+  virtualNetwork.shimAsyncModule({
+    id: 'dialkit/store',
+    resolve: () => import('dialkit/store'),
+  });
+  virtualNetwork.shimAsyncModule({
+    id: 'dialkit/vanilla',
+    resolve: () => import('dialkit/vanilla'),
+  });
+  virtualNetwork.shimAsyncModule({
+    id: '@chenglou/pretext',
+    resolve: () => import('@chenglou/pretext'),
+  });
   virtualNetwork.shimAsyncModule({
     id: 'ethers',
     resolve: () => import('ethers'),

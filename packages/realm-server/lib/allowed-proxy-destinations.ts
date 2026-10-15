@@ -1,6 +1,11 @@
 import type { CreditStrategy } from './credit-strategies.ts';
 import { CreditStrategyFactory } from './credit-strategies.ts';
 import { type DBAdapter, logger } from '@cardstack/runtime-common';
+import {
+  PROXY_ENDPOINT_KEY_COLUMNS,
+  readProxyEndpointKey,
+  type ProxyEndpointKeyRow,
+} from './proxy-endpoint-keys.ts';
 
 const log = logger('allowed-proxy-destinations');
 
@@ -39,6 +44,12 @@ function matchesDestination(requestUrl: URL, destinationUrl: string): boolean {
   return requestPath.startsWith(`${destinationPath}/`);
 }
 
+// A system key is named by its endpoint's configured URL, which is what logs
+// and errors record in place of the value.
+export function systemKeyName(endpointUrl: string): string {
+  return `system:${endpointUrl}`;
+}
+
 export interface AllowedProxyDestination {
   url: string;
   apiKey: string;
@@ -48,16 +59,11 @@ export interface AllowedProxyDestination {
   authParameterName?: string; // For URL parameter auth, e.g., 'key' for Google, 'api_key' for others
 }
 
-interface ProxyEndpointRow {
-  id: string;
-  url: string;
-  api_key: string;
+interface ProxyEndpointRow extends ProxyEndpointKeyRow {
   credit_strategy: string;
   supports_streaming: boolean;
   auth_method?: string;
   auth_parameter_name?: string;
-  created_at: string;
-  updated_at: string;
 }
 
 export class AllowedProxyDestinations {
@@ -74,7 +80,9 @@ export class AllowedProxyDestinations {
   private async loadFromDatabase() {
     try {
       const result = await this.dbAdapter.execute(
-        'SELECT * FROM proxy_endpoints',
+        `SELECT id, url, credit_strategy, supports_streaming, auth_method,
+           auth_parameter_name, ${PROXY_ENDPOINT_KEY_COLUMNS}
+         FROM proxy_endpoints`,
       );
 
       if (result.length === 0) {
@@ -96,12 +104,15 @@ export class AllowedProxyDestinations {
   private initializeFromEndpoints(endpoints: ProxyEndpointRow[]) {
     this.destinations = {};
     for (const endpoint of endpoints) {
+      // A row with no key passes its null through, as the column allows.
+      const apiKey = readProxyEndpointKey(endpoint) as string;
       this.destinations[endpoint.url] = {
         url: endpoint.url,
-        apiKey: endpoint.api_key,
+        apiKey,
         creditStrategy: CreditStrategyFactory.create(
           endpoint.credit_strategy as 'openrouter' | 'no-credit',
-          endpoint.api_key,
+          apiKey,
+          systemKeyName(endpoint.url),
         ),
         supportsStreaming: endpoint.supports_streaming,
         authMethod: (endpoint.auth_method || 'header') as AuthMethod, // Default to header for backward compatibility

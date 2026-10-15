@@ -353,6 +353,7 @@ import {
   realmInfoExtraKeys,
   withoutRealmInfoExtras,
 } from '@cardstack/runtime-common/helpers/const';
+import { callApiSender } from '../../lib/outbound/call-api-sender.ts';
 export { realmInfoExtraKeys, withoutRealmInfoExtras };
 
 // Asserts the realm-lifecycle timestamps `/_federated-info` adds on top of the
@@ -568,6 +569,7 @@ export function makeTestReconciler(
         matrixClient: dynamicMountDeps.matrixClient,
         realmServerURL: dynamicMountDeps.serverURL.href,
         definitionLookup: dynamicMountDeps.definitionLookup,
+        callApi: callApiSender,
       });
       realms.push(reconciledRealm);
       dynamicMountDeps.virtualNetwork.mount(reconciledRealm.handle);
@@ -641,11 +643,26 @@ async function dropDatabase(databaseName: string): Promise<void> {
        WHERE datname = $1 AND pid <> pg_backend_pid()`,
       [databaseName],
     );
+    // FORCE terminates any connection that opens after the terminate above,
+    // such as a pool reconnecting, which would otherwise fail the drop.
     await client.query(
-      `DROP DATABASE IF EXISTS ${quotePgIdentifier(databaseName)}`,
+      `DROP DATABASE IF EXISTS ${quotePgIdentifier(databaseName)} WITH (FORCE)`,
     );
   } finally {
     await client.end();
+  }
+}
+
+// A test database is a full copy of its template, often an indexed realm.
+// Dropping it when its test ends keeps a shard's disk use at one test
+// database plus its templates, instead of one database per test it has run.
+// The drop is best-effort, but a failure is reported: a drop that keeps
+// failing brings that growth back.
+async function dropTestDatabase(databaseName: string): Promise<void> {
+  try {
+    await dropDatabase(databaseName);
+  } catch (e) {
+    console.warn(`could not drop test database ${databaseName}: ${String(e)}`);
   }
 }
 
@@ -723,6 +740,9 @@ export async function cloneTestDBFromMigratedTemplate(): Promise<void> {
   await cloneTestDBFromTemplate(migratedTestDatabaseTemplate);
 }
 
+// The database each adapter from createTestPgAdapter was given.
+const testDatabaseNames = new WeakMap<PgAdapter, string>();
+
 export async function createTestPgAdapter(options?: {
   templateDatabase?: string;
   databaseName?: string;
@@ -737,7 +757,25 @@ export async function createTestPgAdapter(options?: {
     options?.templateDatabase ?? migratedTestDatabaseTemplate,
     databaseName,
   );
-  return await withPgDatabaseEnv(databaseName, async () => new PgAdapter());
+  let adapter = await withPgDatabaseEnv(
+    databaseName,
+    async () => new PgAdapter(),
+  );
+  testDatabaseNames.set(adapter, databaseName);
+  return adapter;
+}
+
+// Closes an adapter from createTestPgAdapter and drops the database it was
+// given (see dropTestDatabase). Any other adapter opened on that database is
+// disconnected, so close those first.
+export async function closeTestPgAdapter(adapter: PgAdapter): Promise<void> {
+  if (!adapter.isClosed) {
+    await adapter.close();
+  }
+  let databaseName = testDatabaseNames.get(adapter);
+  if (databaseName) {
+    await dropTestDatabase(databaseName);
+  }
 }
 
 // Wait for a freshly bound listener and surface a bind failure (EADDRINUSE
@@ -1231,9 +1269,11 @@ export function setupDB(
   let dbAdapter: PgAdapter | undefined;
   let publisher: QueuePublisher | undefined;
   let runner: QueueRunner | undefined;
+  let databaseName: string | undefined;
 
   const runBeforeHook = async () => {
     prepareTestDB();
+    databaseName = process.env.PGDATABASE;
     let templateDatabase =
       typeof args.templateDatabase === 'function'
         ? args.templateDatabase()
@@ -1258,9 +1298,11 @@ export function setupDB(
     let p = publisher;
     let r = runner;
     let a = dbAdapter;
+    let d = databaseName;
     publisher = undefined;
     runner = undefined;
     dbAdapter = undefined;
+    databaseName = undefined;
 
     // Each resource's cleanup is independent — a failure in one must
     // not skip the others. Matches the best-effort pattern used by
@@ -1290,6 +1332,9 @@ export function setupDB(
           // best-effort cleanup
         }
       }
+    }
+    if (d) {
+      await dropTestDatabase(d);
     }
   };
 
@@ -1514,6 +1559,7 @@ export async function createRealm({
       mediaCacheAdapter,
       cardDocumentCache,
       ...(realmFor ? { realmFor } : {}),
+      callApi: callApiSender,
     },
     {
       ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
@@ -1575,6 +1621,7 @@ export async function runTestRealmServer({
   mediaCacheAdapter,
   readIndexDrainBudgetMs,
   linkShapePolicy,
+  secureOriginURL,
   cardDocumentCache,
   published,
 }: {
@@ -1605,6 +1652,8 @@ export async function runTestRealmServer({
   // read path reads it off the realm, and the search fan-out reads it off the
   // server, so a test that sets it gets the setting on both legs.
   linkShapePolicy?: LinkShapePolicy;
+  // Gives the server a secure origin (see `lib/secure-origin.ts`).
+  secureOriginURL?: URL;
   // Inject a cache configured for the test; omit for the production default.
   cardDocumentCache?: CardDocumentCache;
   // Builds the realm as a published one (see `createRealm`).
@@ -1695,6 +1744,7 @@ export async function runTestRealmServer({
     definitionLookup,
     prerenderer,
     ...(linkShapePolicy ? { linkShapePolicy } : {}),
+    ...(secureOriginURL ? { secureOriginURL } : {}),
   });
   let testRealmHttpServer = await awaitListening(
     testRealmServer.listen(parseInt(realmURL.port)),
@@ -2351,6 +2401,7 @@ type InternalPermissionedRealmSetupOptions = {
   mediaCacheAdapter?: MediaCacheAdapter;
   readIndexDrainBudgetMs?: number;
   linkShapePolicy?: LinkShapePolicy;
+  secureOriginURL?: URL;
   cardDocumentCache?: CardDocumentCache;
 };
 
@@ -2373,6 +2424,7 @@ async function startPermissionedRealmFixture(
     mediaCacheAdapter,
     readIndexDrainBudgetMs,
     linkShapePolicy,
+    secureOriginURL,
     cardDocumentCache,
   }: InternalPermissionedRealmSetupOptions,
 ): Promise<{
@@ -2446,6 +2498,7 @@ async function startPermissionedRealmFixture(
     mediaCacheAdapter,
     readIndexDrainBudgetMs,
     linkShapePolicy,
+    secureOriginURL,
     cardDocumentCache,
     ...(published ? { published: true as const } : {}),
   });
@@ -2519,6 +2572,7 @@ export function setupPermissionedRealm(
     mediaCacheAdapter,
     readIndexDrainBudgetMs,
     linkShapePolicy,
+    secureOriginURL,
     cardDocumentCache,
   }: {
     permissions: RealmPermissions;
@@ -2553,6 +2607,8 @@ export function setupPermissionedRealm(
     // Makes the realm and server this setup builds answer a live card read or
     // search with each card's relationships resolved and nothing side-loaded.
     linkShapePolicy?: LinkShapePolicy;
+    // Gives the server a secure origin (see `lib/secure-origin.ts`).
+    secureOriginURL?: URL;
     // Inject a cache configured for the test (e.g. one that holds its
     // computation open, so a second request is guaranteed to join rather than
     // race). Omit for the production default.
@@ -2589,6 +2645,7 @@ export function setupPermissionedRealm(
         mediaCacheAdapter,
         readIndexDrainBudgetMs,
         linkShapePolicy,
+        secureOriginURL,
         cardDocumentCache,
       });
       testRealmServer = server;
@@ -2644,10 +2701,10 @@ function permissionedRealmTemplateCacheKey(
     fileSizeLimitBytes: options.fileSizeLimitBytes ?? null,
     audioSizeLimitBytes: options.audioSizeLimitBytes ?? null,
     videoSizeLimitBytes: options.videoSizeLimitBytes ?? null,
-    // `readIndexDrainBudgetMs` and `linkShapePolicy` are
-    // deliberately absent: both tune request-time behavior on the live realm
-    // and leave no trace in the template database, so keying on either would
-    // only fragment the template cache.
+    // `readIndexDrainBudgetMs`, `linkShapePolicy` and `secureOriginURL` are
+    // deliberately absent: each tunes request-time behavior on the live realm
+    // or server and leaves no trace in the template database, so keying on
+    // any of them would only fragment the template cache.
     prerenderer: prerendererCacheKeyPart(options.prerenderer),
   });
 }

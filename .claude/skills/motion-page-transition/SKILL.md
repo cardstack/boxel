@@ -4,7 +4,7 @@ description: >-
   Page and route transitions with the View Transitions API via animateView /
   viewTransition — snapshot morphs between screens, scoped or document-wide.
   Use for route changes in glimmer-motion / Choreo code in this repo
-  (packages/glimmer-motion, packages/choreo, the Choreo gallery and test app,
+  (packages/glimmer-motion, packages/choreo, the Choreo gallery,
   host UI that animates with them); also covers when a view transition is the
   WRONG tool (live/animated content, where a <Choreo @route> crossing keeps
   the real DOM).

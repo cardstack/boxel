@@ -254,6 +254,13 @@ export const anchorTo = modifier(
   },
 );
 
+// Provided by a surface whose rules a wormholed popup would break: a modal
+// <dialog> makes everything outside it inert, and an editor that commits on
+// blur reads focus moving into the wormhole as leaving. Select renders its
+// list in place under it. Consumed at creation, which is the only time
+// ember-basic-dropdown reads @renderInPlace.
+export const POPUPS_IN_PLACE = 'pretui-popups-in-place';
+
 // Keeps the native <dialog>'s modal state in sync with the controlled @open
 // arg, and owns its 'cancel' (Escape) and 'click' (backdrop) listeners —
 // attached here rather than with {{on}} because the lint rule

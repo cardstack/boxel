@@ -1,7 +1,8 @@
 // Pretui — Drawer: a slide-over panel on the native <dialog> top layer.
 import Component from '@glimmer/component';
 import { emit } from '../pretui-primitives';
-import { resolveDrawerPlacement, resolveOpen, modalBehavior } from '../internal/overlay';
+import { provide } from 'ember-provide-consume-context';
+import { POPUPS_IN_PLACE, resolveDrawerPlacement, resolveOpen, modalBehavior } from '../internal/overlay';
 import type { PlacementArgs, DrawerPlacement, OpenArgs } from '../internal/overlay';
 
 // An agent asking for a "Sheet" means THIS component (shadcn's Sheet is a
@@ -24,6 +25,10 @@ export interface DrawerSignature {
 }
 
 export class Drawer extends Component<DrawerSignature> {
+  @provide(POPUPS_IN_PLACE)
+  get popupsInPlace() {
+    return true;
+  }
   get dismissible() {
     return this.args.dismissible ?? true;
   }

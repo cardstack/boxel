@@ -1,61 +1,31 @@
-import { Choreo, type ChoreoContext } from '@cardstack/choreo';
-import { array } from '@ember/helper';
 import Component from '@glimmer/component';
-import { modifier } from 'ember-modifier';
 
-import type { Crossing } from '../lib/crossing';
-import { factor } from '../lib/tempo';
+import { realmFile } from '../lib/realm-url';
 import type { Theater } from '../lib/theater';
 import { ChoreoMark } from './choreo-mark';
 import { ChoreoRoot } from './choreo-root';
-import { GalleryLink } from './gallery-link';
-import { HowPanel } from './how-panel';
-import { TempoPicker, ThemePicker } from './pickers';
-
-/**
- * The page is a <Choreo @route> region: a page swap inside it is one render
- * pass, and the timeline below is the whole gallery ⇄ demo crossing —
- * Keynote's slide grammar, spoken directly. The top bar and footer sit
- * OUTSIDE the region: chrome that never re-renders is steady by construction.
- *
- * The timeline renders only while a crossing is in flight, so a gallery
- * filter pass compiles nothing and <Presence> keeps owning the filter
- * animation.
- */
-const BASE = 0.9;
-/* Emphasised, not snappy: a Magic Move wants to gather itself, travel, and
-   arrive, not jump and settle. */
-const EASE = [0.2, 0, 0, 1] as const;
-
-/** every time in the crossing derives from one morph, so tempo retimes it whole */
-function t() {
-  const m = BASE * factor();
-  return {
-    arrive: 0.55 * m,
-    late: 0.4 * m,
-    lateDelay: 0.66 * m,
-    leave: 0.42 * m,
-    move: m,
-  };
-}
+import { ThemePicker } from './pickers';
 
 interface Signature {
   Args: {
-    crossing: Crossing;
-    /** the brand mark, clicked: back to the gallery, or its top */
-    goHome: () => void;
-    /** where the brand mark points: the gallery card's own URL */
-    homeHref: string;
-    /** in theater the bar steps out and the film's page opens on the picture */
-    theater: Theater;
+    /** a film's page in theater: the bar steps out and the page opens on the picture */
+    theater?: Theater;
   };
   Blocks: { default: [] };
 }
 
+/**
+ * The site around a page of the gallery: the brand, the theme picker and the
+ * site's links above it, the licence below. The gallery and each demo's page
+ * wear the same frame, so a demo opened on its own is still the site.
+ *
+ * Moving between pages belongs to the host, which opens each demo card in
+ * its stack, so the frame has no navigation of its own: the brand is the
+ * site's name, and the way back to the gallery is the host's.
+ */
 export class SiteFrame extends Component<Signature> {
-  wire = modifier((element: Element, [c]: [ChoreoContext]) => {
-    this.args.crossing.wire(c, element);
-  });
+  /** the gallery's demos, hung in a walkable 3D room */
+  roomHref = realmFile('widget-room');
 
   <template>
     <ChoreoRoot
@@ -63,21 +33,16 @@ export class SiteFrame extends Component<Signature> {
       data-test-theater={{@theater.on}}
     >
       <header class='topbar'>
-        <GalleryLink
-          @href={{@homeHref}}
-          @onFollow={{@goHome}}
-          class='brand'
-          data-gallery-brand
-        >
+        <span class='brand'>
           <ChoreoMark />
           <span class='brand-copy'>
             <span class='brand-name'>Choreo</span>
             <span class='brand-sub'>by Cardstack</span>
           </span>
-        </GalleryLink>
+        </span>
         <nav class='top-links' aria-label='Gallery'>
-          <TempoPicker />
           <ThemePicker />
+          <a href={{this.roomHref}} data-gallery-room>3D Gallery</a>
           <a
             href='https://github.com/cardstack/boxel/tree/main/packages/choreo'
             target='_blank'
@@ -85,73 +50,10 @@ export class SiteFrame extends Component<Signature> {
           >GitHub</a>
         </nav>
       </header>
-      {{! it flies out of the picker above and back into it, so it belongs
-        next to the picker rather than inside whatever page is showing }}
-      <HowPanel />
       <main class='page-shell'>
-        {{! @quiet: dozens of live demos compositing under a Magic Move is not
-          dropped frames, it is erratic pacing — the crossing pauses what is
-          running when it lifts off and hands it back on landing }}
-        <Choreo
-          @route={{true}}
-          @quiet={{true}}
-          @scroll={{@crossing.scrollIntent}}
-          class='page'
-          as |c|
-        >
-          <span hidden {{this.wire c}}></span>
-          {{#if @crossing.active}}
-            {{#let (t) as |tt|}}
-              <c.Parallel>
-                {{! the canned crossing: leaves dissolve as the paired stage
-                  and type lift off, arrivals land near the settle — and the
-                  crossfade carries color, so the ground never leaks through
-                  the flying stage }}
-                <c.Crossing
-                  @duration={{tt.move}}
-                  @ease={{EASE}}
-                  @leave={{tt.leave}}
-                  @arrive={{tt.arrive}}
-                  @overlap={{0.18}}
-                />
-                {{! the hero's own exit — it RISES out rather than dissolving
-                  in place, and the generic leave yields it to this step }}
-                <c.Tween
-                  @of={{c.onstage (c.removed 'scene')}}
-                  @y={{array 0 -28}}
-                  @opacity={{array 1 0}}
-                  @duration={{tt.leave}}
-                  @ease={{EASE}}
-                />
-                {{! the code and the pager, which really can wait for the move
-                  to land }}
-                <c.Tween
-                  @of={{c.onstage (c.inserted 'late')}}
-                  @opacity={{array 0 1}}
-                  @delay={{tt.lateDelay}}
-                  @duration={{tt.late}}
-                  @ease={{EASE}}
-                />
-                {{#if @crossing.returningHome}}
-                  {{! The unmatched tiles are the grid's own to bring in AFTER
-                    the landing: this hold claims them, so the canned arrive
-                    leaves them alone and nothing competes with the move for
-                    frames. z-index at its resting value is a no-op worn only
-                    for the claim. }}
-                  <c.Hold
-                    @of={{array
-                      (c.onstage (c.inserted 'card'))
-                      (c.onstage (c.inserted 'stage'))
-                      (c.onstage (c.inserted 'type'))
-                    }}
-                    @zIndex={{0}}
-                  />
-                {{/if}}
-              </c.Parallel>
-            {{/let}}
-          {{/if}}
+        <div class='page'>
           {{yield}}
-        </Choreo>
+        </div>
       </main>
       <footer class='footer'>
         <span>© 2026 Cardstack Foundation</span>
@@ -235,8 +137,7 @@ export class SiteFrame extends Component<Signature> {
         }
       }
 
-      /* the main wraps the <Choreo> region that IS the page: the shell keeps
-         the footer at the foot, the region keeps the page's own measure */
+      /* the shell keeps the footer at the foot, the page keeps its measure */
       .page-shell {
         flex: 1;
         display: flex;

@@ -23,7 +23,12 @@ import type {
   Realm,
   RealmPermissions,
 } from '@cardstack/runtime-common';
-import { resolveNamedQuery } from '@cardstack/runtime-common/card-operations';
+import {
+  admitsNothing,
+  resolveNamedQuery,
+  type NamedQueryAdmittingNothing,
+  type ResolvedNamedQuery,
+} from '@cardstack/runtime-common/card-operations';
 import type { PgAdapter } from '@cardstack/postgres';
 import { resetCatalogRealms } from '../../handlers/handle-fetch-catalog-realms.ts';
 import { LIVE_SEARCH_CACHE_HEADER } from '../../handlers/handle-search.ts';
@@ -91,6 +96,8 @@ const WITHHELD = 'http://127.0.0.1:4444/withheld/';
 const BORROWED = 'http://127.0.0.1:4444/borrowed/';
 const SUBTYPES = 'http://127.0.0.1:4444/subtypes/';
 const ROSTERS = 'http://127.0.0.1:4444/rosters/';
+// Holds a type of its own, which only its policy reaches a caller.
+const SEALED = 'http://127.0.0.1:4444/sealed/';
 
 const OWNER = '@owner:localhost';
 const PROVIDER_A = '@provider-a:localhost';
@@ -107,6 +114,38 @@ const SCHEDULE = { module: `${LIB}schedule`, name: 'ServicePlanSchedule' };
 const NOTICE = { module: `${LIB}notice`, name: 'Notice' };
 const CLASSROOM = { module: `${LIB}classroom`, name: 'Classroom' };
 const ASSIGNED = { module: `${LIB}classroom`, name: 'AssignedClassroom' };
+const MEMO = { module: `${SEALED}memo`, name: 'Memo' };
+
+const MEMO_MODULE = `
+  import { contains, field, CardDef } from "@cardstack/base/card-api";
+  import StringField from "@cardstack/base/string";
+  import { operation } from "@cardstack/base/operations";
+
+  export class Memo extends CardDef {
+    @field providerId = contains(StringField);
+    @field status = contains(StringField);
+
+    @operation static listMemos = {
+      base: 'query',
+      query: { filter: { on: () => Memo, eq: { status: 'open' } } },
+    };
+
+    @operation static listClosedMemos = {
+      base: 'query',
+      query: { filter: { on: () => Memo, eq: { status: 'closed' } } },
+    };
+  }
+`;
+
+function memo(providerId: string) {
+  return JSON.stringify({
+    data: {
+      type: 'card',
+      attributes: { providerId, status: 'open' },
+      meta: { adoptsFrom: { module: rri(MEMO.module), name: MEMO.name } },
+    },
+  });
+}
 
 // `listOpen` does not compare against the caller, so two callers asking it
 // of the same realms send the same request: whatever tells their answers
@@ -452,6 +491,18 @@ function aOpen(title = 'A open') {
   };
 }
 
+// A resolution expected to name the query it runs, rather than to admit
+// nothing.
+async function resolves(
+  resolving: Promise<ResolvedNamedQuery | NamedQueryAdmittingNothing>,
+): Promise<ResolvedNamedQuery> {
+  let resolved = await resolving;
+  if (admitsNothing(resolved)) {
+    throw new Error('expected the named query to resolve to a query');
+  }
+  return resolved;
+}
+
 module(`server-endpoints/${basename(import.meta.filename)}`, function () {
   module('composing a policy into a filter', function () {
     const ON = { module: rri(SCHEDULE.module), name: SCHEDULE.name };
@@ -577,6 +628,25 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           {
             realmURL: new URL(PRIVATE),
             fileSystem: aOpen(),
+            permissions: { ...owner },
+          },
+          {
+            realmURL: new URL(SEALED),
+            fileSystem: {
+              'realm.json': withPolicy('Sealed', SEALED),
+              'policies/policy.json': policyRules([
+                {
+                  targetType: MEMO,
+                  grants: [
+                    { operation: 'listMemos', where: OWN },
+                    { operation: 'listClosedMemos', where: OWN },
+                  ],
+                },
+              ]),
+              'memo.gts': MEMO_MODULE,
+              'memos/a.json': memo(PROVIDER_A),
+              'memos/b.json': memo(PROVIDER_B),
+            },
             permissions: { ...owner },
           },
           {
@@ -786,6 +856,36 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           ids(response),
           A_OPEN_IN_GRANTS,
           "provider A's open schedules, in the declaration's order: not B's, and not A's closed one",
+        );
+      });
+
+      test('a named query on a type whose module the caller may not read is answered with the rows the grant admits', async function (assert) {
+        let response = await federatedSearch(
+          { operation: 'listMemos', on: MEMO, realms: [SEALED] },
+          PROVIDER_A,
+        );
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.deepEqual(ids(response), [`${SEALED}memos/a`]);
+      });
+
+      test('a refusal on a type whose module the caller may not read is answered as a declared query that admits nothing is', async function (assert) {
+        let nothing = await federatedSearch(
+          { operation: 'listClosedMemos', on: MEMO, realms: [SEALED] },
+          PROVIDER_A,
+        );
+        assert.strictEqual(nothing.status, 200, 'HTTP 200 status');
+        assert.deepEqual(ids(nothing), [], 'the declared query admits nothing');
+
+        let undeclared = await federatedSearch(
+          { operation: 'listEveryMemo', on: MEMO, realms: [SEALED] },
+          PROVIDER_A,
+        );
+        assert.strictEqual(undeclared.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          undeclared.text,
+          nothing.text,
+          'byte-identical to the declared query that admits nothing',
         );
       });
 
@@ -2020,10 +2120,11 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         // A page no other test asks for, so neither answer is an earlier
         // test's cache entry.
         let declared = { ...listOpen([COARSE]), page: { number: 0, size: 3 } };
-        let { query: resolved } = await resolveNamedQuery(
-          realms[COARSE].operationCore,
-          declared,
-          { principal: { kind: 'user', user: PROVIDER_A }, realms: [COARSE] },
+        let { query: resolved } = await resolves(
+          resolveNamedQuery(realms[COARSE].operationCore, declared, {
+            principal: { kind: 'user', user: PROVIDER_A },
+            realms: [COARSE],
+          }),
         );
         let adHoc = await federatedSearch(resolved, PROVIDER_A);
         let again = await federatedSearch(resolved, PROVIDER_A);
@@ -2170,10 +2271,11 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         // and nothing else. Resolving is inside the window, as it is inside the
         // federated request, so both traces carry its definition lookups.
         let direct = await indexQueriesDuring(async () => {
-          let { query: resolved } = await resolveNamedQuery(
-            realms[COARSE].operationCore,
-            body,
-            { principal: { kind: 'user', user: PROVIDER_A }, realms: [COARSE] },
+          let { query: resolved } = await resolves(
+            resolveNamedQuery(realms[COARSE].operationCore, body, {
+              principal: { kind: 'user', user: PROVIDER_A },
+              realms: [COARSE],
+            }),
           );
           let query = parseSearchEntryQueryFromPayload(resolved);
           query.itemQuery = applyServerSearchPageBound(query.itemQuery);

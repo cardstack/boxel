@@ -24,7 +24,7 @@
  * inbox — the trash lives in the chrome, the list lives in the outlet, and they
  * are different regions precisely so their changesets stay apart. A region-local
  * registry could not see across that boundary, which is the whole point.
- * docs/nested-choreo.md has the reasoning.
+ * packages/choreo-gallery/realm/docs/nested-choreo.md has the reasoning.
  */
 import { measureBounds } from './measure.ts';
 import type { Bounds } from './types.ts';

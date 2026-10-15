@@ -9,6 +9,7 @@ import type {
   PromptParts,
   TextContent,
 } from './types.ts';
+import { uniqBy } from 'lodash-es';
 import { constructHistory } from './history.ts';
 import {
   canonicalizeMatrixMediaKey,
@@ -76,6 +77,7 @@ import { isMarkdownFile } from '../paths.ts';
 import { SKILL_INSTRUCTIONS_MESSAGE, SYSTEM_MESSAGE } from './constants.ts';
 import { MAX_CORRECTNESS_FIX_ATTEMPTS } from './correctness-constants.ts';
 import { humanReadable } from '../code-ref.ts';
+import { readStopState } from './stop.ts';
 import {
   compactionSummaryMessage,
   getLatestCompaction,
@@ -238,9 +240,23 @@ export async function getPromptParts(
     eventList,
     client,
   );
-  let shouldRespond = getShouldRespond(history);
-  let pendingCodePatchCorrectnessChecks =
-    collectPendingCodePatchCorrectnessCheck(history, aiBotUserId);
+  // A stop holds the whole loop, including the correctness check a code
+  // patch would otherwise kick off; and the edits of a stopped answer are
+  // never checked, not even once the user writes again. constructHistory
+  // keeps only messages and tool results, so the stop is read from the raw
+  // event list.
+  let { inForce: stop, stoppedMessageIds } = readStopState(
+    eventList,
+    aiBotUserId,
+  );
+  let shouldRespond = !stop && getShouldRespond(history);
+  let pendingCodePatchCorrectnessChecks = stop
+    ? undefined
+    : collectPendingCodePatchCorrectnessCheck(
+        history,
+        aiBotUserId,
+        stoppedMessageIds,
+      );
   if (!shouldRespond) {
     return {
       shouldRespond: false,
@@ -375,7 +391,14 @@ function shouldPromptCheckCorrectnessSummary(
   if (!isToolResultEvent(lastEvent)) {
     return false;
   }
-  if (!isCheckCorrectnessToolResultEvent(lastEvent, history)) {
+  let batch = checkCorrectnessBatchFor(lastEvent, history);
+  if (!batch) {
+    return false;
+  }
+  // A batch that passed has its own note, sent after the tool results, and
+  // it is the only one the model should get: this summary sizes the reply
+  // at one sentence, which would cut short the answer that note asks for.
+  if (checkCorrectnessBatchPassed(batch, history)) {
     return false;
   }
   let lastNonResultIndex = findLastIndex(
@@ -387,6 +410,54 @@ function shouldPromptCheckCorrectnessSummary(
   }
   let lastNonResultEvent = history[lastNonResultIndex];
   return lastNonResultEvent.sender === aiBotUserId;
+}
+
+// The checks one message asked for: the message a check result answers, and
+// that message's checkCorrectness requests. Undefined when `toolResult` does
+// not answer a checkCorrectness request.
+interface CheckCorrectnessBatch {
+  sourceIndex: number;
+  requests: ToolRequest[];
+}
+
+function checkCorrectnessBatchFor(
+  toolResult: ToolResultEvent,
+  history: DiscreteMatrixEvent[],
+): CheckCorrectnessBatch | undefined {
+  let sourceEventId = toolResult.content['m.relates_to']?.event_id;
+  if (!sourceEventId) {
+    return undefined;
+  }
+  let sourceIndex = history.findIndex(
+    (event) => event.event_id === sourceEventId,
+  );
+  if (sourceIndex === -1) {
+    return undefined;
+  }
+  let requests = getCheckCorrectnessToolRequests(history[sourceIndex]);
+  if (
+    !requests.some(
+      (request) => request.id === toolResult.content.commandRequestId,
+    )
+  ) {
+    return undefined;
+  }
+  return { sourceIndex, requests };
+}
+
+// Whether every check in the batch passed. Results come after the message
+// that asked for them, so only those events are searched.
+function checkCorrectnessBatchPassed(
+  batch: CheckCorrectnessBatch,
+  history: DiscreteMatrixEvent[],
+): boolean {
+  let laterEvents = history.slice(batch.sourceIndex + 1);
+  return batch.requests.every((request) => {
+    let result = findLast(laterEvents, (event) =>
+      isTerminalToolResultEventFor(event, request.id!),
+    ) as ToolResultEvent | undefined;
+    return result !== undefined && correctnessCheckPassed(result);
+  });
 }
 
 function getCheckCorrectnessToolRequests(
@@ -439,7 +510,12 @@ function isTerminalToolResultEventFor(
     return false;
   }
   let status = event.content['m.relates_to']?.key;
-  return status === 'applied' || status === 'failed' || status === 'invalid';
+  return (
+    status === 'applied' ||
+    status === 'failed' ||
+    status === 'invalid' ||
+    status === 'canceled'
+  );
 }
 
 async function getEnabledSkills(
@@ -1071,26 +1147,99 @@ function isCheckCorrectnessToolResultEvent(
   toolResultEvent: ToolResultEvent,
   history: DiscreteMatrixEvent[],
 ) {
-  let sourceEventId = toolResultEvent.content['m.relates_to']?.event_id;
-  if (!sourceEventId) {
-    return false;
-  }
-  let sourceEvent = history.find((event) => event.event_id === sourceEventId);
-  if (!sourceEvent) {
-    return false;
-  }
-  let checkRequests = getCheckCorrectnessToolRequests(sourceEvent);
-  if (checkRequests.length === 0) {
-    return false;
-  }
-  return checkRequests.some(
-    (request) => request.id === toolResultEvent.content.commandRequestId,
+  return checkCorrectnessBatchFor(toolResultEvent, history) !== undefined;
+}
+
+// The latest result that is a call's outcome. A request can accumulate
+// several result events — a 'failed' from a first attempt and an 'applied'
+// from a later retry — and an approval is not an outcome at all.
+function findToolResultFor(
+  toolResults: ToolResultEvent[],
+  commandRequestId: string | undefined,
+): ToolResultEvent | undefined {
+  return findLast(
+    toolResults,
+    (toolResult) =>
+      (isToolResultWithOutputMsgtype(toolResult.content.msgtype) ||
+        isToolResultWithNoOutputMsgtype(toolResult.content.msgtype)) &&
+      !isApprovalResult(toolResult) &&
+      toolResult.content.commandRequestId === commandRequestId,
   );
 }
 
-function toToolCalls(event: CardMessageEvent): ChatCompletionMessageToolCall[] {
-  const content = event.content as CardMessageContent;
-  return (getToolRequests<Partial<EncodedToolRequest>>(content) ?? []).map(
+// Whether a call finished streaming: it has a name, and arguments that parse.
+function isCompleteToolRequest(request: Partial<EncodedToolRequest>): boolean {
+  if (!request.name) {
+    return false;
+  }
+  if (typeof request.arguments === 'object' && request.arguments !== null) {
+    // older format, already decoded
+    return true;
+  }
+  if (typeof request.arguments !== 'string') {
+    return false;
+  }
+  try {
+    JSON.parse(request.arguments);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function isCanceledAnswer(event: CardMessageEvent): boolean {
+  return Boolean(
+    (event.content as CardMessageContent).isCanceled ||
+    (event as { status?: string }).status === 'cancelled',
+  );
+}
+
+// The calls of a bot message that go into the prompt. The provider rejects a
+// prompt whose call has no tool message after it ("No tool output found for
+// function call"), so every call carried here gets one from
+// `toResultMessages`, even when nothing answered it in the room. A call cut
+// off mid-stream, because its answer was stopped or interrupted, is not a
+// request the model finished making: it is left out, with its canceled
+// result, so the prompt never carries arguments that do not parse.
+function promptToolRequests(
+  event: CardMessageEvent,
+  toolResults: ToolResultEvent[],
+): Partial<EncodedToolRequest>[] {
+  let canceled = isCanceledAnswer(event);
+  return (
+    getToolRequests<Partial<EncodedToolRequest>>(
+      event.content as CardMessageContent,
+    ) ?? []
+  ).filter(
+    (toolRequest) =>
+      toolRequest.id &&
+      (isCompleteToolRequest(toolRequest) ||
+        (!canceled && findToolResultFor(toolResults, toolRequest.id))),
+  );
+}
+
+// The tool message for a call nothing in the room answered: the answer that
+// made it was canceled before the call ran, or its result never arrived (for
+// example ai-bot restarted, or the user wrote again without running it).
+function unansweredToolMessage(
+  event: CardMessageEvent,
+  toolCallId: string,
+): OpenAIPromptMessage {
+  let canceled = isCanceledAnswer(event);
+  return {
+    role: 'tool',
+    tool_call_id: toolCallId,
+    content: canceled
+      ? 'Tool call canceled: the answer that made this call was stopped before the call ran.\n'
+      : 'Tool call not run: no result was recorded for this call.\n',
+  };
+}
+
+function toToolCalls(
+  event: CardMessageEvent,
+  toolResults: ToolResultEvent[] = [],
+): ChatCompletionMessageToolCall[] {
+  return promptToolRequests(event, toolResults).map(
     (toolRequest: Partial<EncodedToolRequest>) => {
       return {
         id: toolRequest.id!,
@@ -1110,27 +1259,20 @@ async function toResultMessages(
   client: MatrixClient,
   history: DiscreteMatrixEvent[],
 ): Promise<OpenAIPromptMessage[]> {
-  const messageContent = event.content as CardMessageContent;
   let toolResultEntries = await Promise.all(
-    (getToolRequests<Partial<EncodedToolRequest>>(messageContent) ?? []).map(
+    promptToolRequests(event, toolResults).map(
       async (toolRequest: Partial<EncodedToolRequest>) => {
         let decodedToolRequest = decodeToolRequestSafe(toolRequest);
-        // A request can accumulate several result events — a 'failed' from a
-        // first attempt and an 'applied' from a later retry — and the latest
-        // one is the call's actual outcome.
-        let toolResult = findLast(
-          toolResults,
-          (toolResult) =>
-            (isToolResultWithOutputMsgtype(toolResult.content.msgtype) ||
-              isToolResultWithNoOutputMsgtype(toolResult.content.msgtype)) &&
-            !isApprovalResult(toolResult) &&
-            toolResult.content.commandRequestId === toolRequest.id,
-        );
+        let toolResult = findToolResultFor(toolResults, toolRequest.id);
         if (!toolResult) {
-          return undefined;
+          return {
+            toolMessage: unansweredToolMessage(event, toolRequest.id!),
+            followUpMessage: undefined,
+          };
         }
         let content: string;
         let followUpUserMessage: string | undefined;
+        let checkPassed: boolean | undefined;
         let status = toolResult.content['m.relates_to']?.key;
         let isCheckCorrectnessRequest =
           decodedToolRequest?.name === CHECK_CORRECTNESS_TOOL_NAME;
@@ -1141,6 +1283,7 @@ async function toResultMessages(
           );
           content = checkCorrectnessContent.toolMessage;
           followUpUserMessage = checkCorrectnessContent.followUpUserMessage;
+          checkPassed = correctnessCheckPassed(toolResult);
         } else if (isReadFileCommand(decodedToolRequest)) {
           let fileUrl = getReadFileUrl(decodedToolRequest);
           if (fileUrl && !isFileAttachedInRoom(fileUrl, history)) {
@@ -1183,7 +1326,7 @@ async function toResultMessages(
               content: followUpUserMessage,
             } as OpenAIPromptMessage)
           : undefined;
-        return { toolMessage, followUpMessage };
+        return { toolMessage, followUpMessage, checkPassed };
       },
     ),
   );
@@ -1192,11 +1335,28 @@ async function toResultMessages(
       .map((entry) => entry?.toolMessage)
       .filter((message): message is OpenAIPromptMessage => Boolean(message)) ??
     [];
-  let followUpMessages =
+  // The checks one message asked for get one instruction for the batch. If
+  // any of them did not pass, the success note is left out: it would tell the
+  // model the write passed and to finish, next to the instruction to fix it.
+  // Checks that end the same way share one note, so the model reads the same
+  // instruction once, not once per file.
+  // A request to fix warnings displaces it the same way.
+  let anyCheckNotPassed = toolResultEntries.some(
+    (entry) =>
+      entry?.checkPassed === false ||
+      entry?.followUpMessage?.content === CORRECTNESS_WARNINGS_FIX_INSTRUCTION,
+  );
+  let followUpMessages = uniqBy(
     toolResultEntries
       .map((entry) => entry?.followUpMessage)
-      .filter((message): message is OpenAIPromptMessage => Boolean(message)) ??
-    [];
+      .filter((message): message is OpenAIPromptMessage => Boolean(message))
+      .filter(
+        (message) =>
+          !anyCheckNotPassed ||
+          message.content !== CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION,
+      ) ?? [],
+    (message) => message.content,
+  );
   return [...toolMessages, ...followUpMessages];
 }
 
@@ -1211,22 +1371,33 @@ function buildCheckCorrectnessResultContent(
     };
   }
   let status = toolResult.content['m.relates_to']?.key ?? 'unknown';
-  let resultCard = extractCorrectnessResultCard(toolResult);
-  if (resultCard) {
+  let read = readCorrectnessResult(toolResult);
+  if (read.kind === 'card') {
     let formattedSummary = formatCorrectnessResultSummary(
       targetDescription,
-      resultCard,
+      read.summary,
       status,
     );
     let attemptNumber = Math.max(
       1,
       getCorrectnessCheckAttemptFromRequest(request),
     );
-    return toCheckCorrectnessResultContent(formattedSummary, attemptNumber);
+    return toCheckCorrectnessResultContent(
+      formattedSummary,
+      correctnessCheckPassed(toolResult),
+      attemptNumber,
+      isCardCorrectnessTarget(request),
+    );
+  }
+  if (read.kind === 'unreadable' && status === 'applied') {
+    return {
+      toolMessage: `The correctness result for ${targetDescription} could not be read${read.reason ? `: ${read.reason}` : ''}.`,
+    };
   }
   if (status === 'applied') {
     return {
       toolMessage: `Check correctness passed for ${targetDescription}.`,
+      followUpUserMessage: CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION,
     };
   }
   let failureReason = toolResult.content.failureReason;
@@ -1238,6 +1409,17 @@ function buildCheckCorrectnessResultContent(
   return {
     toolMessage: `Check correctness was marked as ${status} for ${targetDescription}.`,
   };
+}
+
+// Card-instance checks report warnings about what was written (undeclared
+// fields, invalid options, dangling links), so only those ask for a fix.
+// A card can be written as its .json file, so that counts too.
+function isCardCorrectnessTarget(request?: ToolRequest): boolean {
+  let { targetType, targetRef } = extractCheckCorrectnessTargetParts(request);
+  return (
+    targetType === 'card' ||
+    (typeof targetRef === 'string' && targetRef.endsWith('.json'))
+  );
 }
 
 function describeCheckCorrectnessTarget(request?: ToolRequest) {
@@ -1279,42 +1461,58 @@ type FormattedCorrectnessSummary = {
 const CODE_FIX_INSTRUCTION = `1. Fix the errors above by re-reading the failing file(s), then use the run-realm-code tool. Make awaited realm.fs.replace calls with exact current text.
 2. Keep all fixes in one tool call or one reply, and do not repeat a failed match without re-reading the file.`;
 
+// Sent once, as a user-role message after the tool results, when every check
+// in a batch passed (see correctnessCheckPassed); the trailing summary below
+// is then left out, so this is the last instruction the model reads. A bare "summarize in one sentence"
+// in that place replaces the answer the user asked for before the write (the
+// question that came with the request, a skill's required closing line) with
+// the sentence. The note therefore sizes itself at one line and sends the
+// model back to the user's message to finish.
 const CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION =
-  'Summarize the results above in one short sentence confirming that the target is now auto-corrected. Do not mention correctness or automated checks or tool calls.';
+  'The write above passed its checks. Note that in at most one line of your reply, including any warnings listed above. Then finish your answer to the user: cover everything their last message asked for that you have not yet answered, any closing line your skills require, and any change you made that they did not ask for. If work you already described remains unfinished, carry straight on with it in the same reply. This is a note on what just landed, not a request to stop. Do not mention correctness, automated checks or tool calls.';
 
 // Warnings never fail the check, but they often name a mistake in what was
 // just written (a misnamed field, an invalid option, a dangling link) that
-// left the card silently incomplete. Ask for the fix, and let these rounds
-// count toward MAX_CORRECTNESS_FIX_ATTEMPTS so a warning that survives the
-// fix cannot re-ask on every write.
+// left the card silently incomplete. Sent in place of the success note while
+// attempts remain; these rounds count toward MAX_CORRECTNESS_FIX_ATTEMPTS, and
+// at the cap the success note (which already asks the model to mention the
+// warnings) takes over.
 const CORRECTNESS_WARNINGS_FIX_INSTRUCTION =
-  'The target passed, but the warnings above may point at mistakes in what you just wrote: a misnamed field, a value outside the allowed options, data written in the wrong place, or a link to a card that does not exist. Fix the ones that are mistakes now by re-reading the file and using the run-realm-code tool; if none are, say so in one short sentence. Do not mention correctness or automated checks or tool calls.';
-
-const CORRECTNESS_WARNINGS_LIMIT_INSTRUCTION =
-  'Summarize the results above in one short sentence, and mention the remaining warnings so the user can decide whether they matter. Do not attempt further automated fixes for them. Do not mention correctness or automated checks or tool calls.';
+  'The write above passed its checks, but the warnings above may point at mistakes in what you just wrote: a misnamed field, a value outside the allowed options, data written in the wrong place, or a link to a card that does not exist. Fix the ones that are mistakes now by re-reading the file and using the run-realm-code tool. If none are mistakes, note the warnings in at most one line and finish your answer to the user. Do not mention correctness, automated checks or tool calls.';
 
 const CORRECTNESS_FAILURE_LIMIT_INSTRUCTION = `Automated correctness fixes have already been attempted ${MAX_CORRECTNESS_FIX_ATTEMPTS} times and the target is still failing validation. Stop proposing further automated patches; instead, summarize the remaining errors and ask the user how they want to proceed. Do not mention correctness or automated checks or tool calls.`;
 
-// This lands mid-answer, right after a file is written, and it is the last
-// thing the model reads before replying — so an instruction that only asks
-// for a summary reads as the end of the work. It was: a build announced as
-// two cards delivered one, reported it was clean, and stopped, because
-// nothing resumes a plan across turns.
-
+// Rides the trailing context message after a batch with a check that did
+// not pass (a clean batch gets the success note above instead). This lands
+// mid-answer, right after a file is written, and it is the last thing the
+// model reads before replying — so an instruction that only asks for a
+// summary reads as the end of the work. It was: a build announced as two
+// cards delivered one, reported it was clean, and stopped, because nothing
+// resumes a plan across turns.
 const CHECK_CORRECTNESS_SUMMARY_INSTRUCTION =
   'The automated correctness checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention: correctness, automated correctness checks, tool calls. If work you already described remains unfinished, carry straight on with it in the same reply — this is a note on what just landed, not a request to stop.';
 
-function extractCorrectnessResultCard(
-  toolResult?: ToolResultEvent,
-): CorrectnessResultSummary | undefined {
-  if (!toolResult || !isToolResultWithOutputContent(toolResult.content)) {
-    return undefined;
+// What a check result carries: no result card at all (a result with no
+// output), a card whose content could not be read (its download failed, or
+// it is not a correctness card), or the card's verdict.
+type CorrectnessResultRead =
+  | { kind: 'no-card' }
+  | { kind: 'unreadable'; reason: string | undefined }
+  | { kind: 'card'; summary: CorrectnessResultSummary };
+
+function readCorrectnessResult(
+  toolResult: ToolResultEvent,
+): CorrectnessResultRead {
+  if (!isToolResultWithOutputContent(toolResult.content)) {
+    return { kind: 'no-card' };
   }
   let cardPayload = toolResult.content.data.card;
   if (!cardPayload) {
-    return undefined;
+    return { kind: 'no-card' };
   }
-  let cardContent = cardPayload.content ?? cardPayload;
+  if (typeof cardPayload.content !== 'string') {
+    return { kind: 'unreadable', reason: cardPayload.error };
+  }
   let parsed:
     | {
         data?: {
@@ -1327,18 +1525,58 @@ function extractCorrectnessResultCard(
       }
     | undefined;
   try {
-    parsed =
-      typeof cardContent === 'string' ? JSON.parse(cardContent) : cardContent;
+    parsed = JSON.parse(cardPayload.content);
   } catch (error) {
     getLog().error('Unable to parse correctness result card', error);
-    return undefined;
+    return { kind: 'unreadable', reason: 'its content is not JSON' };
   }
-  let attributes = parsed?.data?.attributes ?? {};
+  let attributes = parsed?.data?.attributes;
+  if (!attributes) {
+    return { kind: 'unreadable', reason: 'it is not a correctness result' };
+  }
   return {
-    correct: Boolean(attributes.correct),
-    errors: Array.isArray(attributes.errors) ? attributes.errors : [],
-    warnings: Array.isArray(attributes.warnings) ? attributes.warnings : [],
+    kind: 'card',
+    summary: {
+      correct: Boolean(attributes.correct),
+      errors: Array.isArray(attributes.errors) ? attributes.errors : [],
+      warnings: Array.isArray(attributes.warnings) ? attributes.warnings : [],
+    },
   };
+}
+
+function correctnessErrorLines(summary: CorrectnessResultSummary): string[] {
+  return summary.errors.filter(
+    (entry) => typeof entry === 'string' && entry.trim().length > 0,
+  );
+}
+
+// The one definition of a check that passed. It came back applied, and
+// either carries no result card or a card that says it is correct and lists
+// no errors. Everything else, including a card that could not be read, did
+// not pass: the model is never told a write passed when nobody knows.
+function correctnessCheckPassed(toolResult: ToolResultEvent): boolean {
+  if (toolResult.content['m.relates_to']?.key !== 'applied') {
+    return false;
+  }
+  let read = readCorrectnessResult(toolResult);
+  if (read.kind === 'no-card') {
+    return true;
+  }
+  return (
+    read.kind === 'card' &&
+    read.summary.correct &&
+    correctnessErrorLines(read.summary).length === 0
+  );
+}
+
+function correctnessCheckHasWarnings(toolResult: ToolResultEvent): boolean {
+  let read = readCorrectnessResult(toolResult);
+  return (
+    read.kind === 'card' &&
+    read.summary.warnings.some(
+      (entry) => typeof entry === 'string' && entry.trim().length > 0,
+    )
+  );
 }
 
 function formatCorrectnessResultSummary(
@@ -1352,9 +1590,7 @@ function formatCorrectnessResultSummary(
       ? `Check correctness passed for ${targetDescription}.`
       : `Check correctness was marked as ${status} for ${targetDescription}.`,
   );
-  let errorLines = result.errors.filter(
-    (entry) => typeof entry === 'string' && entry.trim().length,
-  );
+  let errorLines = correctnessErrorLines(result);
   if (errorLines.length) {
     sections.push(
       `Errors:\n${errorLines.map((line) => `- ${line}`).join('\n')}`,
@@ -1501,18 +1737,14 @@ function getLatestCorrectnessCheckAttemptInfo(
       1,
       getCorrectnessCheckAttemptFromRequest(sourceRequest),
     );
-    let resultCard = extractCorrectnessResultCard(toolResult);
-    let status = toolResult.content['m.relates_to']?.key;
     // A pass that still carries warnings asks for a fix, so it keeps the
     // attempt count running rather than resetting it.
-    let succeeded =
-      status === 'applied' &&
-      Boolean(resultCard) &&
-      resultCard!.correct === true &&
-      [...resultCard!.errors, ...resultCard!.warnings].filter(
-        (entry) => typeof entry === 'string' && entry.trim().length,
-      ).length === 0;
-    return { attempt, succeeded };
+    return {
+      attempt,
+      succeeded:
+        correctnessCheckPassed(toolResult) &&
+        !correctnessCheckHasWarnings(toolResult),
+    };
   }
   return undefined;
 }
@@ -1546,7 +1778,9 @@ function getNextCorrectnessCheckAttempt(
 
 function toCheckCorrectnessResultContent(
   formattedSummary: FormattedCorrectnessSummary,
+  passed: boolean,
   attemptNumber = 0,
+  isCardTarget = false,
 ): CheckCorrectnessResultContent {
   let attemptNote =
     formattedSummary.hasErrors && attemptNumber > 0
@@ -1556,20 +1790,26 @@ function toCheckCorrectnessResultContent(
     .filter(Boolean)
     .join('\n\n');
 
-  if (!formattedSummary.hasErrors) {
-    if (!formattedSummary.hasWarnings) {
+  if (passed) {
+    if (
+      isCardTarget &&
+      formattedSummary.hasWarnings &&
+      attemptNumber < MAX_CORRECTNESS_FIX_ATTEMPTS
+    ) {
       return {
         toolMessage,
-        followUpUserMessage: CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION,
+        followUpUserMessage: CORRECTNESS_WARNINGS_FIX_INSTRUCTION,
       };
     }
     return {
       toolMessage,
-      followUpUserMessage:
-        attemptNumber >= MAX_CORRECTNESS_FIX_ATTEMPTS
-          ? CORRECTNESS_WARNINGS_LIMIT_INSTRUCTION
-          : CORRECTNESS_WARNINGS_FIX_INSTRUCTION,
+      followUpUserMessage: CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION,
     };
+  }
+  // Not passed, but nothing listed to fix (the card says incorrect without
+  // naming an error): no note, and the trailing summary covers it.
+  if (!formattedSummary.hasErrors) {
+    return { toolMessage };
   }
 
   if (attemptNumber >= MAX_CORRECTNESS_FIX_ATTEMPTS) {
@@ -1625,7 +1865,8 @@ export async function buildPromptForModel(
       // prompt-cache prefix, and models imitate an elision placeholder in
       // place of real code.
       let content = body;
-      let toolCalls = toToolCalls(event as CardMessageEvent);
+      let toolResults = getToolResults(event as CardMessageEvent, history);
+      let toolCalls = toToolCalls(event as CardMessageEvent, toolResults);
       if (content || toolCalls.length) {
         let historicalMessage: OpenAIPromptMessage = {
           role: 'assistant',
@@ -1636,7 +1877,6 @@ export async function buildPromptForModel(
         }
         historicalMessages.push(historicalMessage);
       }
-      let toolResults = getToolResults(event as CardMessageEvent, history);
       (
         await toResultMessages(
           event as CardMessageEvent,
@@ -1797,13 +2037,19 @@ function addHistoryCacheBreakpoint(
 function collectPendingCodePatchCorrectnessCheck(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
+  // The answers the user stopped (see readStopState); their edits are never
+  // checked. Edits that landed before the stop are ones the user walked
+  // away from, and checking them later would only delay the answer to
+  // whatever they write next.
+  stoppedMessageIds: ReadonlySet<string> = new Set(),
 ): PendingCodePatchCorrectnessCheck | undefined {
   for (let index = history.length - 1; index >= 0; index--) {
     let event = history[index];
     if (
       event.type !== 'm.room.message' ||
       event.sender !== aiBotUserId ||
-      event.content.msgtype !== APP_BOXEL_MESSAGE_MSGTYPE
+      event.content.msgtype !== APP_BOXEL_MESSAGE_MSGTYPE ||
+      stoppedMessageIds.has(event.event_id)
     ) {
       continue;
     }

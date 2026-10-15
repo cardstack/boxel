@@ -33,6 +33,7 @@ export type { LoweringContext } from './lowering.ts';
 export {
   actingUserResolver,
   dischargePendingDecision,
+  nonGrantableAnswerSources,
   notPermitted,
   pendingWriteFor,
   pendingWriteHolds,
@@ -56,6 +57,7 @@ export type {
   GrantedDecision,
   LockedGrant,
   MatchedGrant,
+  NonGrantableAnswerSources,
   OperationPolicyAccess,
   PendingDecision,
   PendingWrite,
@@ -136,7 +138,10 @@ export type {
 } from './executors.ts';
 export {
   OPERATIONS_CHANNEL,
+  KEY_USE_CHANNEL,
   emitCapabilityCheck,
+  emitKeyUse,
+  emitNamedQueryRefusalHidden,
   emitOperationPerf,
   INTERNAL_ROUTE,
   emitPolicyCompile,
@@ -144,6 +149,8 @@ export {
   emitPolicySearchScope,
   emitPolicySnapshotRead,
   setCapabilityCheckSink,
+  setKeyUseSink,
+  setNamedQueryRefusalHiddenSink,
   setOperationPerfSink,
   setPolicyCompileSink,
   setPolicyDecisionSink,
@@ -152,6 +159,9 @@ export {
 } from './telemetry.ts';
 export type {
   CapabilityCheckEvent,
+  KeyUseEvent,
+  KeyUseOutcome,
+  NamedQueryRefusalHiddenEvent,
   OperationDiagnostics,
   OperationMissingRead,
   OperationMissingReason,
@@ -220,6 +230,7 @@ export type {
 } from './transforms.ts';
 export { lowerQueryOperation, lowerQueryTemplate } from './query.ts';
 export {
+  admitsNothing,
   isNamedQueryPayload,
   namedQueryInvocation,
   namedQueryRendering,
@@ -228,6 +239,7 @@ export {
   searchInvocation,
 } from './named-query.ts';
 export type {
+  NamedQueryAdmittingNothing,
   NamedQueryContext,
   NamedQueryStats,
   ResolvedNamedQuery,
@@ -256,6 +268,8 @@ export {
   isOperationFailure,
   isSourceResult,
   isWrite,
+  travelsAsWrite,
+  isCallApiResult,
   linkStrategyOf,
   readLinkStrategyOf,
   refusalForNonReader,
@@ -263,9 +277,22 @@ export {
   unshareableFormatsOf,
   AUTHENTICATION_REQUIRED,
 } from './types.ts';
+export {
+  buildCallApiRequest,
+  slotsIn,
+  type CallApiCredential,
+  type CallApiRequest,
+  type CallApiSender,
+} from './call-api.ts';
 export type {
   BaseOperation,
+  CallApiResponse,
+  CallApiSlot,
+  CallApiSlotKey,
+  CallApiSlotPlacement,
   EntryPosition,
+  OperationCallApi,
+  OperationCallApiResult,
   LowerOperationDeclarationsResult,
   OperationDefinition,
   ExplainedGrant,

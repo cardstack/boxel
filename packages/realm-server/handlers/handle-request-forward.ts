@@ -1,20 +1,32 @@
 import type Koa from 'koa';
 import type { DBAdapter } from '@cardstack/runtime-common';
-import { logger, SupportedMimeType } from '@cardstack/runtime-common';
+import { logger } from '@cardstack/runtime-common';
 import {
   sendResponseForBadRequest,
+  sendResponseForError,
   sendResponseForSystemError,
   sendResponseForForbiddenRequest,
-  setContextResponse,
   fetchRequestFromContext,
 } from '../middleware/index.ts';
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
 import {
   clientDisconnectSignal,
+  forwardJsonResponse,
   handleStreamingRequest,
   isClientDisconnectError,
+  outboundFailureResponse,
+  outboundLogContext,
+  systemKeyCredential,
   upstreamCallSignal,
 } from '../lib/proxy-forward.ts';
+import {
+  forbiddenOutboundHeaders,
+  outboundFetch,
+  sendContext,
+  type OutboundErrorContext,
+} from '../lib/outbound/client.ts';
+import { scrubError } from '../lib/outbound/scrub-error.ts';
+import { CredentialScrubber } from '../lib/outbound/scrubber.ts';
 import { withBillableCall } from '../lib/billable-call.ts';
 import * as Sentry from '@sentry/node';
 
@@ -132,6 +144,13 @@ export default function handleRequestForward({
     // ends, so an upstream request nobody is reading any more keeps that slot
     // for as long as it runs — on a slow model call, over a minute.
     let clientGone = clientDisconnectSignal(ctxt);
+    // Holds every form of the credential the outbound client attaches. No
+    // error from this call is logged, reported or answered with until it has
+    // been scrubbed with it.
+    let scrubber = new CredentialScrubber();
+    // The key and the recorded form of the caller's URL, once the call has a
+    // key.
+    let call: OutboundErrorContext | undefined;
 
     try {
       // 1. Validate JWT token and extract user
@@ -176,6 +195,18 @@ export default function handleRequestForward({
         return;
       }
 
+      // Outgoing headers are exactly the body's `headers` plus the
+      // credential; none of this request's own headers are forwarded. Boxel's
+      // internal headers may not be smuggled in through the body either.
+      let forbiddenHeaders = forbiddenOutboundHeaders(json.headers);
+      if (forbiddenHeaders.length > 0) {
+        await sendResponseForBadRequest(
+          ctxt,
+          `Header ${forbiddenHeaders.join(', ')} may not be forwarded`,
+        );
+        return;
+      }
+
       // 3. Validate proxy destination is allowed and get config
       const destinationsConfig =
         AllowedProxyDestinations.getInstance(dbAdapter);
@@ -205,28 +236,14 @@ export default function handleRequestForward({
         }
       }
 
-      // Build headers and URL based on authentication method
-      let finalUrl = json.url;
+      // The outbound client attaches the system key where the endpoint's
+      // configuration puts it. The URL and headers built here never carry it,
+      // so what is recorded about this call is the URL the caller sent.
       const headers: Record<string, string> = {
         ...(json.headers ?? {}),
       };
-
-      // Add authentication based on the configured method
-      if (destinationConfig.authMethod === 'url-parameter') {
-        const paramName = destinationConfig.authParameterName || 'key';
-        const url = new URL(json.url);
-        url.searchParams.set(paramName, destinationConfig.apiKey);
-        finalUrl = url.toString();
-      } else if (
-        destinationConfig.authMethod === 'header' &&
-        destinationConfig.authParameterName
-      ) {
-        headers[destinationConfig.authParameterName] =
-          `Bearer ${destinationConfig.apiKey}`;
-      } else {
-        // Default to header authentication
-        headers.Authorization = `Bearer ${destinationConfig.apiKey}`;
-      }
+      const credential = systemKeyCredential(destinationConfig);
+      call = sendContext(credential.name, json.url);
 
       let finalBody: BodyInit | undefined;
       if (json.multipart) {
@@ -300,60 +317,46 @@ export default function handleRequestForward({
           if (json.stream) {
             return await handleStreamingRequest(
               ctxt,
-              finalUrl,
+              json.url,
               json.method,
               headers,
               finalBody,
               matrixUserId,
               clientGone,
+              { credential, scrubber },
             );
           }
 
           // Cancelling the upstream call is what frees the user's in-flight
           // slot: without it the slot is held until a response the client
           // will never read finally arrives. The signal is released once that
-          // response exists, so reading it and recording its cost cannot be
-          // cancelled — by then the provider has already generated and billed
-          // for the tokens, and abandoning the read only loses the charge.
+          // response exists, so a client leaving does not stop the read of a
+          // charged response or the recording of its cost — by then the
+          // provider has already generated and billed for the tokens, and
+          // abandoning the read only loses the charge. forwardJsonResponse
+          // cancels the read only when nothing is charged.
           const upstreamCall = upstreamCallSignal(clientGone);
-          const fetchOptions: RequestInit = {
+          const externalResponse = await outboundFetch({
+            url: json.url,
             method: json.method,
             headers,
+            // Only non-GET requests carry a body
+            body: json.method !== 'GET' ? finalBody : undefined,
             signal: upstreamCall.signal,
-          };
-
-          // Only add body for non-GET requests or when requestBody is provided
-          if (json.method !== 'GET' && finalBody !== undefined) {
-            fetchOptions.body = finalBody;
-          }
-
-          // FIXME undici or something is swallowing the errors, making them useless:
-          /*
-            Error in request forward handler: TypeError: fetch failed
-              at node:internal/deps/undici/undici:13510:13
-              at processTicksAndRejections (node:internal/process/task_queues:105:5)
-          */
-          const externalResponse = await globalThis.fetch(
-            finalUrl,
-            fetchOptions,
-          );
+            sizePath: 'system-key',
+            credential,
+            scrubber,
+          });
           upstreamCall.release();
 
-          const responseData = await externalResponse.json();
-
-          const response = new Response(JSON.stringify(responseData), {
-            status: externalResponse.status,
-            statusText: externalResponse.statusText,
-            headers: {
-              'content-type': SupportedMimeType.JSON,
-            },
+          return await forwardJsonResponse(ctxt, externalResponse, {
+            chargesForUsage: destinationConfig.creditStrategy.chargesForUsage,
+            signal: clientGone,
           });
-
-          await setContextResponse(ctxt, response);
-          return responseData;
         },
       );
     } catch (error) {
+      scrubError(error, scrubber);
       if (isClientDisconnectError(error, clientGone)) {
         // Cancelling on purpose is not a fault: there is no one left to
         // answer and nothing an on-call engineer could act on, so this stays
@@ -363,7 +366,23 @@ export default function handleRequestForward({
         );
         return;
       }
-      log.error('Error in request forward handler:', error);
+      let failure = outboundFailureResponse(error);
+      if (failure) {
+        log.warn(
+          `Request forward stopped by the outbound guard: ${failure.message}${outboundLogContext(error, call)}`,
+        );
+        await sendResponseForError(
+          ctxt,
+          failure.status,
+          failure.statusText,
+          failure.message,
+        );
+        return;
+      }
+      log.error(
+        `Error in request forward handler${outboundLogContext(error, call)}:`,
+        error,
+      );
       Sentry.captureException(error);
       await sendResponseForSystemError(
         ctxt,

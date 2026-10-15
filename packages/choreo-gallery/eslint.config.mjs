@@ -8,10 +8,6 @@ import globals from 'globals';
 
 export default defineConfig([
   globalIgnores([
-    // the film-graph sketches are proposals written in a syntax that does
-    // not exist yet (f.Spine, f.Attach, f.picture.*): read them, don't lint them
-    'docs/film-graph/**/*.gts',
-    'docs/film-graph/**/*.mjs',
     'out/**',
     // the film app's build (choreo-film-app) and the films' vendored scripts
     'realm/film-app/**',
@@ -26,7 +22,7 @@ export default defineConfig([
   },
   {
     // Node browser checks contain functions evaluated in the page.
-    files: ['tools/*widget*.mjs', 'tools/sagrada-model-review.mjs'],
+    files: ['tools/sagrada-model-review.mjs'],
     languageOptions: { globals: { ...globals.browser } },
     settings: { node: { version: '>=22.16.0' } },
   },

@@ -6,7 +6,7 @@ description: >-
   indicator, thumbnail-to-lightbox), LayoutGroup for grids and filtered lists.
   Use when things move because the layout changed, in glimmer-motion / Choreo
   code in this repo (packages/glimmer-motion, packages/choreo, the Choreo
-  gallery and test app, host UI that animates with them).
+  gallery, host UI that animates with them).
 ---
 
 # Layout moved: `layout`, `layoutId`, `<LayoutGroup>`
@@ -60,6 +60,6 @@ while their content keeps running).
 - Whole-page navigation morph → `motion-page-transition` (but NOT if the
   content is live — layout animation keeps it running; snapshots freeze it).
 
-Canonical demos, in `packages/choreo-test-app/app/components/examples/`: `lightbox.gts`,
-`shared-tabs.gts`, `layout-toggle.gts` (Curves — radius/shadow correction);
+Canonical demos, in `packages/choreo-gallery/realm/stages/`: `lightbox.gts`,
+`tabs.gts`, `layout.gts` (Curves — radius/shadow correction);
 and `packages/choreo-gallery/realm/shell/gallery-grid.gts` (the filter grid).

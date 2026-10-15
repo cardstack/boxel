@@ -25,7 +25,7 @@ import {
 } from '@cardstack/runtime-common';
 import type { SerializedError } from '@cardstack/runtime-common/error';
 import type { ConsoleErrorEntry, PagePool } from './page-pool.ts';
-import { toAffinityKey } from './affinity.ts';
+import { renderSessionOf, toAffinityKey } from './affinity.ts';
 import { batchStaleAfterMs } from './prerender-constants.ts';
 import {
   abortable,
@@ -132,43 +132,10 @@ const HOST_CHUNK_IMPORT_FAILURE_RE =
 //
 // It is answered here and pinned on the tab, rather than read back in the tab
 // from the sessions it holds, because those sessions live in localStorage,
-// which every tab of one affinity shares: a sibling tab's capture can replace
-// them partway through a realm's own render, and that render's HTML is served
-// to every viewer.
+// which the tab shares with every other tab of its BrowserContext.
 export function renderActorFor(auth: string): string | null {
-  let tokens: Record<string, unknown>;
-  try {
-    tokens = JSON.parse(auth);
-  } catch (_e) {
-    return null;
-  }
-  if (!tokens || typeof tokens !== 'object') {
-    return null;
-  }
-  let users = new Set<string>();
-  for (let token of Object.values(tokens)) {
-    if (typeof token !== 'string') {
-      return null;
-    }
-    let claims: { user?: unknown; realmAuthority?: unknown } | null;
-    try {
-      claims = JSON.parse(
-        Buffer.from(token.split('.')[1] ?? '', 'base64url').toString('utf8'),
-      );
-    } catch (_e) {
-      return null;
-    }
-    if (
-      !claims ||
-      typeof claims !== 'object' ||
-      claims.realmAuthority ||
-      typeof claims.user !== 'string'
-    ) {
-      return null;
-    }
-    users.add(claims.user);
-  }
-  return users.size === 1 ? [...users][0] : null;
+  let session = renderSessionOf(auth);
+  return session.kind === 'user' ? session.user : null;
 }
 
 // Searches the error, and the errors nested in it, since the failed import is
@@ -297,6 +264,22 @@ export class RenderRunner {
 
   clearAuthCache(affinityKey: string) {
     this.#lastAuthByAffinity.delete(affinityKey);
+  }
+
+  // Drops the auth kept for every affinity not in `liveAffinityKeys`. A key
+  // can lose its last tab without being disposed (a steal moves it away), and
+  // its auth would otherwise stay for the life of the process.
+  pruneAuthCache(liveAffinityKeys: Set<string>) {
+    for (let affinityKey of [...this.#lastAuthByAffinity.keys()]) {
+      if (!liveAffinityKeys.has(affinityKey)) {
+        this.#lastAuthByAffinity.delete(affinityKey);
+      }
+    }
+  }
+
+  // The affinities that hold an icon memo for some job.
+  get iconMemoAffinityKeys(): string[] {
+    return [...this.#iconMemosByAffinity.keys()];
   }
 
   // Resolve the icon memo for a visit. Only indexing visits participate
@@ -467,7 +450,7 @@ export class RenderRunner {
     pool: PoolInfo;
   }> {
     this.#nonce++;
-    let affinityKey = toAffinityKey({ affinityType, affinityValue });
+    let affinityKey = toAffinityKey({ affinityType, affinityValue, auth });
     log.info(
       `running command ${command ?? '<unknown>'}, nonce=${this.#nonce} affinity=${affinityKey}`,
     );
@@ -707,7 +690,7 @@ export class RenderRunner {
     pool: PoolInfo;
   }> {
     this.#nonce++;
-    let affinityKey = toAffinityKey({ affinityType, affinityValue });
+    let affinityKey = toAffinityKey({ affinityType, affinityValue, auth });
     log.info(
       `capture prerendering url=${url} format=${format} nonce=${this.#nonce} affinity=${affinityKey} realm=${realm} priority=${priority ?? 0}`,
     );
@@ -1041,7 +1024,7 @@ export class RenderRunner {
     pool: PoolInfo;
   }> {
     this.#nonce++;
-    let affinityKey = toAffinityKey({ affinityType, affinityValue });
+    let affinityKey = toAffinityKey({ affinityType, affinityValue, auth });
     log.info(
       `module prerendering url ${url}, nonce=${this.#nonce} affinity=${affinityKey} realm=${realm}`,
     );
@@ -1261,7 +1244,7 @@ export class RenderRunner {
     timings: Timings;
     pool: PoolInfo;
   }> {
-    let affinityKey = toAffinityKey({ affinityType, affinityValue });
+    let affinityKey = toAffinityKey({ affinityType, affinityValue, auth });
     // Which halves of the bifurcated visit run. The fused visit (no
     // visitType) runs both.
     let runIndexSteps = visitType !== 'prerender-html';

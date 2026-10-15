@@ -1,7 +1,11 @@
 import QUnit from 'qunit';
 const { module, test, assert } = QUnit;
 
-import { fulfillReadRealmFileCalls } from '../lib/bot-tools/read-realm-file/fulfillment.ts';
+import {
+  fulfillReadRealmFileCall,
+  type ReadRealmFileFulfillmentDeps,
+  type ReadRealmFileFulfillmentOutcome,
+} from '../lib/bot-tools/read-realm-file/fulfillment.ts';
 import {
   READ_REALM_FILE_MAX_URLS,
   READ_REALM_FILE_TOOL_NAME,
@@ -71,6 +75,19 @@ function baseDeps(client: any, extra: object = {}) {
     delegatedUserRealmSessions: sessions(),
     ...extra,
   };
+}
+
+// The calls of one response, fulfilled one at a time as the bot's call loop
+// does.
+async function fulfillReadRealmFileCalls(
+  calls: any[],
+  deps: ReadRealmFileFulfillmentDeps,
+): Promise<ReadRealmFileFulfillmentOutcome[]> {
+  let outcomes: ReadRealmFileFulfillmentOutcome[] = [];
+  for (let call of calls) {
+    outcomes.push(await fulfillReadRealmFileCall(call, deps));
+  }
+  return outcomes;
 }
 
 // Reads the (stringified) data payload back off a recorded event.

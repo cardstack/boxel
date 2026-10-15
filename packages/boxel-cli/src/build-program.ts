@@ -6,6 +6,7 @@ import { registerLintCommand } from './commands/lint.ts';
 import { registerParseCommand } from './commands/parse.ts';
 import { registerReadTranspiledCommand } from './commands/read-transpiled.ts';
 import { registerRealmCommand } from './commands/realm/index.ts';
+import { registerRealmServerCommand } from './commands/realm-server/index.ts';
 import { registerFileCommand } from './commands/file/index.ts';
 import { registerRunCommand } from './commands/run-command.ts';
 import { registerCaptureCommand } from './commands/capture.ts';
@@ -139,6 +140,7 @@ Environment variables (for 'add'):
   registerLintCommand(program);
   registerParseCommand(program);
   registerRealmCommand(program);
+  registerRealmServerCommand(program);
   registerRunCommand(program);
   registerCaptureCommand(program);
   registerSearchCommand(program);

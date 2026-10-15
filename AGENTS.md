@@ -35,6 +35,8 @@
 
 ## Testing instructions by package
 
+- For how tests select elements, see [Test selectors](#test-selectors).
+
 ### packages/ai-bot
 
 - `pnpm test`
@@ -217,8 +219,18 @@ A bumpable prefix is necessary but not sufficient: each flow also asks whether t
 
 ## Production-safe selectors
 
-- `data-test-*` attributes are stripped from production builds. Never use them for runtime behavior or styling in app code.
-- For production hooks, use classes or non-test `data-*` attributes (for example `data-path`, `data-kind`) and keep `data-test-*` only for tests.
+- `data-test-*` attributes are only for tests, and the host app's production build strips them: never use them for runtime behavior or styling in app or card code.
+- Runtime code that needs to find an element selects it by a non-test `data-*` attribute (for example `data-kanban-column`, `data-stack-card`), never by class: classes are only for styling. Markup a third-party library renders is found by its own attributes, ARIA roles or API, and by a class only when it offers none. Existing runtime code that queries by class is not precedent.
+
+## Test selectors
+
+- Tests select elements by `data-test-*` attributes, never by class: classes belong to styling and get renamed in CSS refactors that change no behavior. When an element has no hook, add one. Markup a third-party library renders is selected by its own attributes or ARIA roles (scoped inside a `data-test-*` hook when it renders inside one), and by a class only when it offers none.
+- Existing tests that select by class are not precedent.
+
+## UI changes
+
+- A change to a card or field template, a component defined in a realm, or their scoped styles is checked against the UI review procedure of the `boxel-ui-guidelines` skill (`references/ui-review-procedure.md`, with `references/checklist.md` and `references/theme-token-contract.md`), when writing the change and when reviewing it. The procedure runs whole, starting with its step-0 grep over each touched file. Every hit is either fixed or listed, with the reason it was left, in the report the procedure ends with.
+- The skill comes from the `boxel-skills` plugin. Without it, run `pnpm --filter @cardstack/boxel-cli fetch:skills` and read `skills/boxel-ui-guidelines/` in `packages/boxel-cli/.boxel-skills-cache/<tag>/`, where `<tag>` is the pinned `ref`.
 
 ## `.gts` file gotcha: regex literals can break content-tag
 

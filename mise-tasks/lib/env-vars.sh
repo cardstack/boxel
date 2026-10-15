@@ -130,6 +130,10 @@ if [ -n "${BOXEL_ENVIRONMENT:-}" ]; then
   export PRERENDER_MGR_URL="https://prerender-mgr.${ENV_SLUG}.localhost"
   export ICONS_URL="https://icons.${ENV_SLUG}.localhost"
   export HOST_URL="https://host.${ENV_SLUG}.localhost"
+  # The secure origin: a listener of the dev realm-server's own that serves
+  # only the secure page shell (packages/realm-server/lib/secure-origin.ts),
+  # registered with Traefik as `realm-server-secure`.
+  export SECURE_ORIGIN_URL="https://realm-server-secure.${ENV_SLUG}.localhost/secure"
 
   # Database. Hyphens in slugs (e.g. `cs-12345-foo`) aren't valid in
   # unquoted Postgres identifiers, so use the underscored variant for
@@ -145,6 +149,7 @@ if [ -n "${BOXEL_ENVIRONMENT:-}" ]; then
   export PRERENDER_PORT=0
   export PRERENDER_MGR_PORT=0
   export ICONS_PORT=0
+  export SECURE_PORT=0
 
   # Paths
   export REALMS_ROOT="./realms/${ENV_SLUG}"
@@ -171,6 +176,7 @@ else
     export PRERENDER_MGR_URL="http://localhost:4222"
     export ICONS_URL="http://localhost:4206"
     export HOST_URL="https://localhost:4200"
+    export SECURE_ORIGIN_URL="https://localhost:4208/secure"
 
     # Database
     export PGDATABASE="boxel"
@@ -184,6 +190,7 @@ else
     export PRERENDER_PORT=4221
     export PRERENDER_MGR_PORT=4222
     export ICONS_PORT=4206
+    export SECURE_PORT=4208
 
     # Paths
     export REALMS_ROOT="./realms/localhost_4201"
@@ -204,6 +211,7 @@ else
     export PRERENDER_MGR_URL="${PRERENDER_MGR_URL:-http://localhost:4222}"
     export ICONS_URL="${ICONS_URL:-http://localhost:4206}"
     export HOST_URL="${HOST_URL:-https://localhost:4200}"
+    export SECURE_ORIGIN_URL="${SECURE_ORIGIN_URL:-https://localhost:4208/secure}"
 
     # Database
     export PGDATABASE="${PGDATABASE:-boxel}"
@@ -217,6 +225,7 @@ else
     export PRERENDER_PORT="${PRERENDER_PORT:-4221}"
     export PRERENDER_MGR_PORT="${PRERENDER_MGR_PORT:-4222}"
     export ICONS_PORT="${ICONS_PORT:-4206}"
+    export SECURE_PORT="${SECURE_PORT:-4208}"
 
     # Paths
     export REALMS_ROOT="${REALMS_ROOT:-./realms/localhost_4201}"
@@ -268,6 +277,11 @@ else
   unset _BOXEL_DEV_CERT_DIR _BOXEL_DEV_CERT_FILE _BOXEL_DEV_KEY_FILE
 
 fi
+
+# Where the host test runner (testem) serves the test page. Host tests render
+# the secure origin's credential fields, so the dev realm-server lets this
+# origin frame them, alongside HOST_URL.
+export HOST_TEST_RUNNER_URL="${HOST_TEST_RUNNER_URL:-http://localhost:7357}"
 
 # Media cache (declared captures: poster/thumb/rendition).
 # Without a store the capture pipeline is disabled and every

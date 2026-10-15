@@ -17,6 +17,7 @@ import {
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
   DEFAULT_VIDEO_SIZE_LIMIT_BYTES,
   parseRateLimitSpec,
+  markRealmPublishable,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm.ts';
 import yargs from 'yargs';
@@ -51,6 +52,18 @@ import { ModuleCacheCoordinator } from './lib/module-cache-coordination.ts';
 import { JobsFinishedListener } from './lib/jobs-finished-listener.ts';
 import { JobScopedSearchCache } from './job-scoped-search-cache.ts';
 import { startHealthSampler } from './health-sampler.ts';
+import {
+  isDeployedServerURL,
+  startOutboundGuard,
+} from './lib/outbound/client.ts';
+import { callApiSender } from './lib/outbound/call-api-sender.ts';
+import {
+  reportPlaintextCensus,
+  reportSealedCensus,
+  secretsKeyring,
+  startSecretsAtRest,
+} from './lib/secrets-at-rest/index.ts';
+import { sealProxyEndpointKeys } from './lib/proxy-endpoint-keys.ts';
 import { buildLinkShapePolicy } from './search-inflight.ts';
 import { startEventLoopHeartbeat } from './liveness/event-loop-heartbeat.ts';
 import { startLivenessResponder } from './liveness/index.ts';
@@ -222,12 +235,16 @@ let {
   fromUrl: fromUrls,
   toUrl: toUrls,
   username: usernames,
+  publishable: publishableRealmURLs = [],
   useRegistrationSecretFunction,
   migrateDB,
   workerManagerPort,
   workerManagerUrl,
   livenessPort,
   prerendererUrl,
+  secureOriginURL: secureOriginURLArg,
+  securePort,
+  secureOriginAppOrigin,
 } = yargs(process.argv.slice(2))
   .usage('Start realm server')
   .options({
@@ -275,6 +292,11 @@ let {
       demandOption: true,
       type: 'array',
     },
+    publishable: {
+      description:
+        'The URL of a mounted realm to mark publishable at startup, matching one of the --fromUrl values. Repeat for each realm.',
+      type: 'array',
+    },
     migrateDB: {
       description:
         'When this flag is set the database will automatically migrate when server is started',
@@ -309,6 +331,22 @@ let {
       description:
         'Traefik service name for registration in branch mode (default: realm-server)',
       type: 'string',
+    },
+    secureOriginURL: {
+      description:
+        'Where the secure origin serves its page shell. Requests to its host are answered by the secure origin alone. Defaults, when --securePort is given, to https://localhost:<securePort>/secure (its Traefik hostname in branch mode).',
+      type: 'string',
+    },
+    securePort: {
+      description:
+        'Port for a listener that serves the secure origin and nothing else, for local development. Omit where the secure origin is a hostname routed to --port.',
+      type: 'number',
+    },
+    secureOriginAppOrigin: {
+      description:
+        "An origin, besides --serverURL's, whose app pages may frame the secure origin's credential fields. Repeatable. A host starting with `*.` stands for every subdomain of the rest. For the host's dev server and test runner in development, and the host PR previews on staging.",
+      type: 'array',
+      string: true,
     },
   })
   .parseSync();
@@ -365,16 +403,52 @@ for (let i = 0; i < fromUrls.length; i++) {
     urlMappings.push([to, to]); // use toUrl for both in hrefs
   }
 }
+// The secure origin (see lib/secure-origin.ts). Guarded on a real port for the
+// same reason as `livenessPort` below; 0 is allowed in branch mode, where
+// Traefik finds the listener by the port it is given.
+const secureServiceName = `${serviceName}-secure`;
+const secureListenerPort =
+  typeof securePort === 'number' &&
+  Number.isInteger(securePort) &&
+  (securePort > 0 || (securePort === 0 && isEnvironmentMode()))
+    ? securePort
+    : undefined;
+const secureOriginURL =
+  secureOriginURLArg ??
+  (secureListenerPort === undefined
+    ? undefined
+    : isEnvironmentMode()
+      ? `${serviceURL(secureServiceName)}/secure`
+      : `https://localhost:${secureListenerPort}/secure`);
+
 let hrefs = urlMappings.map(([from, to]) => [from.href, to.href]);
+let publishableRealms = publishableRealmURLs.map((url) => new URL(String(url)));
+for (let realmURL of publishableRealms) {
+  if (!hrefs.some(([from]) => from === realmURL.href)) {
+    console.error(
+      `--publishable=${realmURL.href} doesn't match the --fromUrl of any mounted realm`,
+    );
+    process.exit(-1);
+  }
+}
 let dist: URL = new URL(distURL);
 let autoMigrate = migrateDB || undefined;
 
 log.info(
   `Realm server boot config: port=${port} serverURL=${serverURL} distURL=${distURL} matrixURL=${matrixURL} realmsRootPath=${realmsRootPath} migrateDB=${Boolean(
     migrateDB,
-  )} workerManagerPort=${workerManagerPort ?? 'none'} livenessPort=${livenessPort ?? 'none'} prerendererUrl=${prerendererUrl} enableFileWatcher=${ENABLE_FILE_WATCHER} fullIndexOnStartupOverride=${FULL_INDEX_ON_STARTUP_OVERRIDE ?? 'unset (bootstrap-only)'}`,
+  )} secureOriginURL=${secureOriginURL ?? 'none'} securePort=${secureListenerPort ?? 'none'} workerManagerPort=${workerManagerPort ?? 'none'} livenessPort=${livenessPort ?? 'none'} prerendererUrl=${prerendererUrl} enableFileWatcher=${ENABLE_FILE_WATCHER} fullIndexOnStartupOverride=${FULL_INDEX_ON_STARTUP_OVERRIDE ?? 'unset (bootstrap-only)'}`,
 );
 log.info(`Realm paths: ${paths.map(String).join(', ')}`);
+
+// Refuse to boot with an outbound guard a deployed server must not run with,
+// and report the guard's effective settings.
+try {
+  startOutboundGuard({ serverURL: String(serverURL) });
+} catch (e: any) {
+  console.error(`Outbound guard self-check failed: ${e.message}`);
+  process.exit(-1);
+}
 
 // Start beating before anything else, so the shared buffer reflects a turning
 // event loop for the whole of boot rather than only from the point the server is
@@ -505,6 +579,16 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
 };
 
 (async () => {
+  // Refuse to boot a deployed server without its KMS-wrapped data key, and
+  // report which provider and data keys are in effect.
+  try {
+    await startSecretsAtRest({
+      deployed: isDeployedServerURL(String(serverURL)),
+    });
+  } catch (e: any) {
+    console.error(`Secrets-at-rest self-check failed: ${e.message}`);
+    process.exit(-1);
+  }
   try {
     await smokeTestHostApp();
   } catch (e: any) {
@@ -519,6 +603,18 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   let realms: Realm[] = [];
   let dbAdapter = new PgAdapter({ autoMigrate });
   let queue = new PgQueuePublisher(dbAdapter);
+  // Seals any proxy endpoint key still held only in plain text, so every
+  // deploy converges with no operator step. The pass is idempotent and safe
+  // for replicas to run at once; if it fails, the proxy keeps serving those
+  // keys from the plain-text column.
+  try {
+    await sealProxyEndpointKeys(dbAdapter);
+  } catch (e: any) {
+    Sentry.captureException(e);
+    console.error(`Sealing proxy endpoint keys failed: ${e?.message ?? e}`);
+  }
+  await reportPlaintextCensus(dbAdapter);
+  await reportSealedCensus(dbAdapter, secretsKeyring());
   // DB-backed job-scoped search cache, shared across replicas via Postgres.
   // One instance per process, shared between the request handlers (via
   // RealmServer → createRoutes) and the JobsFinishedListener so a
@@ -610,6 +706,19 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
       url: hrefs[i][0],
     })),
   });
+
+  // A realm the server mounts never goes through create-realm, which is what
+  // seeds realm_metadata.publishable for a realm made in the app. Without the
+  // flag the host doesn't offer the Host submode and _publish-realm refuses
+  // the realm, so set it for each mount the start script names.
+  for (let realmURL of publishableRealms) {
+    await markRealmPublishable(dbAdapter, realmURL);
+  }
+  if (publishableRealms.length > 0) {
+    log.info(
+      `Marked publishable: ${publishableRealms.map((url) => url.href).join(', ')}`,
+    );
+  }
 
   // Validate per-CLI-path username invariant. Phase 3 no longer constructs
   // realms here — the reconciler does it via mountFromRow once registry
@@ -707,6 +816,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
             reconciler
               ? findRealm(url, { realms, reconciler, dbAdapter })
               : Promise.resolve(undefined),
+          callApi: callApiSender,
         },
         {
           ...(fullIndexOnStartup ? { fullIndexOnStartup: true as const } : {}),
@@ -777,6 +887,18 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     prerenderer,
     reportHostShell: () => reportHostShellToManager(dbAdapter),
     linkShapePolicy,
+    ...(secureOriginURL ? { secureOriginURL: new URL(secureOriginURL) } : {}),
+    secureOriginAppOrigins: (secureOriginAppOrigin ?? []).map(String),
+  });
+
+  const secureHttpServer =
+    secureListenerPort === undefined
+      ? undefined
+      : server.listenSecureOrigin(secureListenerPort);
+  secureHttpServer?.on('listening', () => {
+    if (isEnvironmentMode()) {
+      registerService(secureHttpServer, secureServiceName, { http2: true });
+    }
   });
 
   let httpServer = server.listen(port);
@@ -824,9 +946,12 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     // keep-alive sessions instead of waiting for peers to release them —
     // without it `close()` can hang for a tab-keep-alive (or Traefik
     // backend session) lifetime.
-    if (typeof (httpServer as any).closeAllConnections === 'function') {
-      (httpServer as any).closeAllConnections();
+    for (let listener of [httpServer, secureHttpServer]) {
+      if (typeof (listener as any)?.closeAllConnections === 'function') {
+        (listener as any).closeAllConnections();
+      }
     }
+    secureHttpServer?.close();
     searchCache.stopJanitor();
     stopHealthSampler();
     httpServer.close(() => {

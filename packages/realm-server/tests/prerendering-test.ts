@@ -897,8 +897,8 @@ module(basename(import.meta.filename), function () {
       // (the source URL), `flaky-target` (extensionless — what the card's
       // adoptsFrom.module resolves to via rri), or the canonicalized form
       // surfaced through X-Boxel-Canonical-Path. Without this, the matcher
-      // would miss the actual fetch and the test would silently pass
-      // without exercising the retry path.
+      // would miss the actual fetch, and the test would fail on its
+      // injected-failure count without ever exercising the retry path.
       let stripExecExt = (u: string) => {
         for (let ext of executableExtensions) {
           if (u.endsWith(ext)) {
@@ -909,6 +909,8 @@ module(basename(import.meta.filename), function () {
       };
       let targetTrimmed = stripExecExt(moduleURL);
       let flakyPatch = installFlakyDepFetchPatch({
+        // Pause only the module's own fetches, in any of the shapes above.
+        urlPattern: `${targetTrimmed}*`,
         matcher: (url) => stripExecExt(url) === targetTrimmed,
         failuresBeforeSuccess: 1,
       });
@@ -927,17 +929,18 @@ module(basename(import.meta.filename), function () {
           renderOptions: { clearCache: true },
         });
         let elapsedMs = Date.now() - started;
+        let trace = `requests the patch saw:\n${flakyPatch.trace()}`;
 
         assert.strictEqual(
           flakyPatch.failuresInjected(),
           1,
-          'patch injected exactly one transient 502 for the dep fetch',
+          `patch injected exactly one transient 502 for the dep fetch\n${trace}`,
         );
         assert.notOk(
           result.response.error,
           `render recovered from transient 502 (error: ${JSON.stringify(
             result.response.error?.error ?? null,
-          )})`,
+          )})\n${trace}`,
         );
         assert.false(
           result.pool.timedOut,
@@ -8385,7 +8388,13 @@ module(basename(import.meta.filename), function () {
       assert.true(result.pool.evicted, 'the attempt reports the tab evicted');
       assert.deepEqual(
         disposed,
-        [toAffinityKey({ affinityType: 'realm', affinityValue: realm })],
+        [
+          toAffinityKey({
+            affinityType: 'realm',
+            affinityValue: realm,
+            auth: 'test-auth',
+          }),
+        ],
         'the tab is disposed so the next attempt gets a fresh one',
       );
     });
@@ -8661,6 +8670,7 @@ module(basename(import.meta.filename), function () {
                   nonce: `nonce-${attemptCount}`,
                   status: 'ready',
                   searchDoc: { name: 'notes.txt' },
+                  types: [],
                   deps: [],
                 };
 
@@ -10203,9 +10213,23 @@ module(basename(import.meta.filename), function () {
     // memo is scoped to the visit's jobId; visits without one (on-demand
     // renders) always render the icon and never touch the memo.
     module('index-visit icon memo', function () {
+      // Indexing renders a realm's cards under realm authority.
+      let indexAuth = () => {
+        let sessions = JSON.parse(
+          testCreatePrerenderAuth(testUserId, permissions, {
+            realmAuthority: true,
+          }),
+        ) as Record<string, string>;
+        let token = sessions[realmURL];
+        if (token) {
+          sessions[new URL(realmURL).origin + '/'] = token;
+        }
+        return JSON.stringify(sessions);
+      };
       let affinityKey = toAffinityKey({
         affinityType: 'realm',
         affinityValue: realmURL,
+        auth: indexAuth(),
       });
       let indexVisit = (fileName: string, extra?: Record<string, unknown>) =>
         prerenderer.prerenderVisit({
@@ -10213,7 +10237,7 @@ module(basename(import.meta.filename), function () {
           affinityValue: realmURL,
           realm: realmURL,
           url: `${realmURL}${fileName}`,
-          auth: auth(),
+          auth: indexAuth(),
           visitType: 'index',
           renderOptions: {
             cardRender: true,

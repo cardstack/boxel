@@ -74,7 +74,7 @@ export interface BatchClearCacheDecision<
 export function computeBatchClearCacheGate<
   T extends Pick<
     PrerenderVisitArgs,
-    'affinityType' | 'affinityValue' | 'renderOptions' | 'batchId'
+    'affinityType' | 'affinityValue' | 'auth' | 'renderOptions' | 'batchId'
   >,
 >(
   args: T,
@@ -92,6 +92,7 @@ export function computeBatchClearCacheGate<
   let affinityKey = toAffinityKey({
     affinityType: args.affinityType,
     affinityValue: args.affinityValue,
+    auth: args.auth,
   });
   let live: string[] = [];
   let finished: { batchId: string; idleMs: number }[] = [];

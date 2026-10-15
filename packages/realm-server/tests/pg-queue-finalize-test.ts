@@ -12,7 +12,11 @@ import {
   type PgAdapter,
 } from '@cardstack/postgres';
 import type { Expression, PgPrimitive } from '@cardstack/runtime-common';
-import { createTestPgAdapter, prepareTestDB } from './helpers/index.ts';
+import {
+  closeTestPgAdapter,
+  createTestPgAdapter,
+  prepareTestDB,
+} from './helpers/index.ts';
 
 const WORKER_ID = 'finalize-test-worker';
 
@@ -85,7 +89,7 @@ module(basename(import.meta.filename), function () {
     });
 
     hooks.afterEach(async function () {
-      await adapter.close();
+      await closeTestPgAdapter(adapter);
     });
 
     test('a serialization failure is reported as a retryable conflict, not a verdict', async function (assert) {

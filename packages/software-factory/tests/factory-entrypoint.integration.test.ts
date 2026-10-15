@@ -200,7 +200,11 @@ module('factory-entrypoint integration', function () {
       ) {
         response.writeHead(200, { 'content-type': SupportedMimeType.JSON });
         response.end('{}');
-      } else if (request.url === '/_realm-auth' && request.method === 'POST') {
+      } else if (
+        new URL(request.url ?? '', 'http://localhost').pathname ===
+          '/_realm-auth' &&
+        request.method === 'POST'
+      ) {
         response.writeHead(200, { 'content-type': SupportedMimeType.JSON });
         response.end(
           JSON.stringify({

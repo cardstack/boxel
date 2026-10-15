@@ -5,7 +5,7 @@ description: >-
   transitions, keyframes, variants, stagger, hover/tap/focus gestures, motion
   values, SVG. Use when one element animates on its own in glimmer-motion /
   Choreo code in this repo (packages/glimmer-motion, packages/choreo, the
-  Choreo gallery and test app, host UI that animates with them) — including
+  Choreo gallery, host UI that animates with them) — including
   the three Glimmer-specific rules that silently break motion when violated.
 ---
 
@@ -50,26 +50,20 @@ import { motion, to, spring } from 'glimmer-motion';
 
 Anything updating at pointer/frame rate (a follower, a scrub readout, a
 progress fill) must NOT go through tracked state — that is a render per
-frame. Make a `motionValue`, bind it once through an object passed to
-`style=`, and drive it: `.set(v)` writes a value, `animate(this.x, v, transition)` animates
+frame. Make a `motionValue`, bind it once with `style=(styles …)`, and
+drive it: `.set(v)` writes a value, `animate(this.x, v, transition)` animates
 to one (a spring chasing the pointer), `.jump(v)` teleports and stops what
 was driving it (the scrub case):
 
 ```gts
-import { animate, motionValue, spring } from 'glimmer-motion';
+import { animate, motionValue, spring, styles } from 'glimmer-motion';
 
 const tight = spring({ visualDuration: 0.2, bounce: 0 });
 
 x = motionValue(0);
-dot = { x: this.x };
 follow = (to: number) => void animate(this.x, to, tight);
-// template: {{motion style=this.dot}}
+// template: {{motion style=(styles x=this.x)}}
 ```
-
-Bind motion values through a plain object field, as the demos do. The
-`styles` helper's value type is `MotionValue<never>`, which a
-`MotionValue<number>` doesn't satisfy, so `(styles x=this.x)` fails Glint
-even though it runs.
 
 glimmer-motion re-exports motion-dom's imperative surface (`motionValue`,
 `MotionValue`, `animate`, `transformValue`, `styleEffect`, `frame`); import
@@ -105,9 +99,9 @@ must respect `motionSpeed()` — use `scaleTransition`/`onMotionSpeed` from
 
 ## Canonical demos
 
-`packages/choreo-test-app/app/components/examples/`: `stagger.gts`, `trail.gts`,
-`keyframes.gts`, `gestures.gts`, `enter.gts`, `path-draw.gts` (SVG
-`pathLength`), `follow-pointer.gts` (motion values + springs).
+`packages/choreo-gallery/realm/stages/`: `stagger.gts`, `trail.gts`,
+`keyframes.gts`, `gestures.gts`, `enter.gts`, `path.gts` (SVG
+`pathLength`), `pointer.gts` (motion values + springs).
 
 Escalate: element leaves the DOM → `motion-presence`; position/size change
 caused by layout → `motion-layout`; multi-element ordering → `choreo-scene`.

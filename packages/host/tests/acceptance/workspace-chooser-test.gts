@@ -14,16 +14,21 @@ import { module, test } from 'qunit';
 
 import { TrackedObject } from 'tracked-built-ins';
 
-import { testRealmInfo } from '@cardstack/runtime-common';
+import { ri, testRealmInfo } from '@cardstack/runtime-common';
 import type { Realm } from '@cardstack/runtime-common';
-import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
+import {
+  APP_BOXEL_CATALOG_REALMS_EVENT_TYPE,
+  APP_BOXEL_REALM_EVENT_TYPE,
+} from '@cardstack/runtime-common/matrix-constants';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import {
   setupAcceptanceTestRealm,
   setupAuthEndpoints,
   setupLocalIndexing,
+  setupPublicReadableRealms,
   setupRealmCacheTeardown,
   setupUserSubscription,
   visitOperatorMode,
@@ -588,6 +593,209 @@ module('Acceptance | workspace-chooser', function (hooks) {
 
       restoreTwo();
       restoreOne();
+    });
+  });
+
+  module('choosing catalogs', function (hooks) {
+    const publicGalleryURL = 'http://test-realm/someone-else/public-gallery/';
+
+    hooks.beforeEach(async function () {
+      await setupAcceptanceTestRealm({
+        realmURL: publicGalleryURL,
+        mockMatrixUtils,
+        permissions: { '*': ['read'] },
+        contents: {
+          'realm.json': realmConfigCardJSON({ name: 'Public Gallery' }),
+          'index.json': {
+            data: {
+              type: 'card',
+              meta: {
+                adoptsFrom: {
+                  module: '@cardstack/base/cards-grid',
+                  name: 'CardsGrid',
+                },
+              },
+            },
+          },
+        },
+      });
+      // Workspace A is public too, but it's one of the user's own realms, so
+      // the picker must not offer it.
+      setupPublicReadableRealms([
+        { url: publicGalleryURL, name: 'Public Gallery' },
+        { url: realmAURL, name: 'Workspace A' },
+      ]);
+    });
+
+    // The picker's own checkbox for a realm's row.
+    function realmCheckbox(url: string) {
+      return `[data-test-pretui-list-row]:has([data-test-public-realm="${url}"]) [data-test-pretui-list-select]`;
+    }
+
+    async function storedCatalogRealms() {
+      let matrixService = getService('matrix-service') as MatrixService;
+      let content = (await (
+        matrixService as any
+      ).client.getAccountDataFromServer(
+        APP_BOXEL_CATALOG_REALMS_EVENT_TYPE,
+      )) as { realms: string[] } | null;
+      return content?.realms ?? [];
+    }
+
+    test('a public realm can be added to the Catalogs section', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      assert
+        .dom('[data-test-catalog-list] [data-test-workspace="Public Gallery"]')
+        .doesNotExist('the public realm is not a catalog to begin with');
+
+      await click('[data-test-manage-catalogs]');
+      await waitFor(`[data-test-public-realm="${publicGalleryURL}"]`);
+      assert
+        .dom(`[data-test-public-realm="${realmAURL}"]`)
+        .doesNotExist("a realm of the user's own is not offered");
+      assert.dom(realmCheckbox(publicGalleryURL)).isNotChecked();
+
+      await click(realmCheckbox(publicGalleryURL));
+      assert.dom(realmCheckbox(publicGalleryURL)).isChecked();
+      await click('[data-test-save-manage-catalogs]');
+
+      assert.dom('[data-test-manage-catalogs-error]').doesNotExist();
+      assert.dom('[data-test-manage-catalogs-modal]').doesNotExist();
+      await waitFor(
+        '[data-test-catalog-list] [data-test-workspace="Public Gallery"]',
+      );
+      assert
+        .dom('[data-test-catalog-list] [data-test-workspace="Public Gallery"]')
+        .exists('the chosen realm shows in the Catalogs section');
+      assert.deepEqual(
+        await storedCatalogRealms(),
+        [publicGalleryURL],
+        'the choice is saved to the account data',
+      );
+    });
+
+    test('a public realm the user added can be taken out of the Catalogs section', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      let matrixService = getService('matrix-service') as MatrixService;
+      await matrixService.setUserCatalogRealms([publicGalleryURL]);
+      await waitFor(
+        '[data-test-catalog-list] [data-test-workspace="Public Gallery"]',
+      );
+
+      await click('[data-test-manage-catalogs]');
+      await waitFor(`[data-test-public-realm="${publicGalleryURL}"]`);
+      assert
+        .dom(realmCheckbox(publicGalleryURL))
+        .isChecked('the realm the user added is checked');
+
+      // A click anywhere on the row toggles it, like its checkbox.
+      await click(`[data-test-public-realm="${publicGalleryURL}"]`);
+      assert.dom(realmCheckbox(publicGalleryURL)).isNotChecked();
+      await click('[data-test-save-manage-catalogs]');
+
+      assert
+        .dom('[data-test-catalog-list] [data-test-workspace="Public Gallery"]')
+        .doesNotExist('the realm is gone from the Catalogs section');
+      assert.deepEqual(await storedCatalogRealms(), []);
+      let realmServer = getService('realm-server') as RealmServerService;
+      assert.deepEqual(realmServer.userCatalogRealmIdentifiers, []);
+    });
+
+    test('cancelling the picker changes nothing', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      await click('[data-test-manage-catalogs]');
+      await waitFor(`[data-test-public-realm="${publicGalleryURL}"]`);
+      await click(realmCheckbox(publicGalleryURL));
+      await click('[data-test-cancel-manage-catalogs]');
+
+      assert.dom('[data-test-manage-catalogs-modal]').doesNotExist();
+      assert
+        .dom('[data-test-catalog-list] [data-test-workspace="Public Gallery"]')
+        .doesNotExist();
+      assert.deepEqual(await storedCatalogRealms(), []);
+    });
+
+    test('a pick another list shows survives a save and comes back when that list stops showing it', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      let matrixService = getService('matrix-service') as MatrixService;
+      let realmServer = getService('realm-server') as RealmServerService;
+      await matrixService.setUserCatalogRealms([publicGalleryURL]);
+      let ownRealms = realmServer.userRealmIdentifiers;
+
+      // The realm is shared with the user, so Your Workspaces shows it.
+      await realmServer.setAvailableRealmIdentifiers([
+        ...ownRealms,
+        ri(publicGalleryURL),
+      ]);
+      await settled();
+      assert
+        .dom('[data-test-catalog-list] [data-test-workspace="Public Gallery"]')
+        .doesNotExist('the realm is listed with the user’s own realms');
+
+      await click('[data-test-manage-catalogs]');
+      await waitFor(
+        '[data-test-public-realm-list], [data-test-public-realms-empty]',
+      );
+      assert
+        .dom(`[data-test-public-realm="${publicGalleryURL}"]`)
+        .doesNotExist('the picker does not offer it');
+      await click('[data-test-save-manage-catalogs]');
+      assert.deepEqual(
+        await storedCatalogRealms(),
+        [publicGalleryURL],
+        'saving keeps the pick',
+      );
+
+      // The share is revoked.
+      await realmServer.setAvailableRealmIdentifiers(ownRealms);
+      await waitFor(
+        '[data-test-catalog-list] [data-test-workspace="Public Gallery"]',
+      );
+      assert
+        .dom('[data-test-catalog-list] [data-test-workspace="Public Gallery"]')
+        .exists('the pick is back in the Catalogs section');
+    });
+
+    test('a favorited public realm that no list shows becomes a catalog pick', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      let matrixService = getService('matrix-service') as MatrixService;
+      let unreachableURL = 'http://test-realm/someone-else/private/';
+      matrixService.workspaceFavorites = [publicGalleryURL, unreachableURL];
+
+      await matrixService.adoptUnlistedFavoritesAsCatalogs();
+
+      assert.deepEqual(
+        await storedCatalogRealms(),
+        [publicGalleryURL],
+        'only the public realm is added to the picks',
+      );
+      await waitFor(
+        '[data-test-favorites-list] [data-test-workspace="Public Gallery"]',
+      );
+      assert
+        .dom('[data-test-catalog-list] [data-test-workspace="Public Gallery"]')
+        .exists('the realm shows in the Catalogs section');
+      assert
+        .dom(
+          '[data-test-favorites-list] [data-test-workspace="Public Gallery"]',
+        )
+        .exists('and stays among the favorites');
+    });
+
+    test('an empty Catalogs section points at the gear', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      let realmServer = getService('realm-server') as any;
+      for (let i = realmServer.availableRealms.length - 1; i >= 0; i--) {
+        if (realmServer.availableRealms[i].type === 'catalog') {
+          realmServer.availableRealms.splice(i, 1);
+        }
+      }
+      await settled();
+
+      assert
+        .dom('[data-test-catalog-empty]')
+        .hasText('No catalogs yet. Add public realms with the gear.');
+      assert.dom('[data-test-manage-catalogs]').exists();
     });
   });
 

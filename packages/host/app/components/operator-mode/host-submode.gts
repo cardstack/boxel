@@ -203,7 +203,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
               data-test-publish-realm-button
             >
               <Refresh width='22' height='22' class='publish-icon' />
-              Publishing…
+              <span class='top-bar-button-label'>Publishing…</span>
             </BoxelButton>
           {{else}}
             <BoxelButton
@@ -214,7 +214,9 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
               data-test-publish-realm-button
             >
               <PublishSiteIcon width='22' height='22' class='publish-icon' />
-              {{this.publishButtonLabel}}
+              <span
+                class='top-bar-button-label'
+              >{{this.publishButtonLabel}}</span>
             </BoxelButton>
           {{/if}}
           <PublishingRealmPopover
@@ -244,7 +246,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
                   data-test-open-site-button
                 >
                   <Globe width='22' height='22' class='globe-icon' />
-                  Open Site
+                  <span class='top-bar-button-label'>Open Site</span>
                 </BoxelButton>
               </:trigger>
               <:content>
@@ -322,7 +324,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
       }
 
       .publish-realm-button {
-        padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
+        --boxel-button-padding: var(--boxel-sp-2xs) var(--boxel-sp-xs);
         border: none;
         border-radius: var(--submode-bar-item-border-radius);
         box-shadow: var(--submode-bar-item-box-shadow);
@@ -345,7 +347,7 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
       }
 
       .open-site-button {
-        padding: var(--boxel-sp-xxs) var(--boxel-sp-xs);
+        --boxel-button-padding: var(--boxel-sp-2xs) var(--boxel-sp-xs);
         --boxel-button-color: transparent;
         --boxel-button-border: 1px solid var(--boxel-700);
         --boxel-button-text-color: var(--boxel-light);
@@ -362,6 +364,28 @@ export default class HostSubmode extends Component<HostSubmodeSignature> {
       .globe-icon {
         flex-shrink: 0;
         color: var(--boxel-teal);
+      }
+
+      .top-bar-button-label {
+        white-space: nowrap;
+      }
+
+      /* Too narrow for labeled buttons: show icons only, keeping the label
+         as the accessible name. */
+      @container (width < 40rem) {
+        .publish-realm-button,
+        .open-site-button {
+          --boxel-button-padding: 0;
+          --boxel-button-min-width: var(--container-button-size);
+          justify-content: center;
+        }
+        .top-bar-button-label {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+        }
       }
 
       .publish-realm-button.publishing {

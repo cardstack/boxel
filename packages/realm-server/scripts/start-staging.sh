@@ -47,6 +47,8 @@ NODE_NO_WARNINGS=1 \
   --realmsRootPath='/persistent/realms' \
   --serverURL='https://realms-staging.stack.cards' \
   --prerendererUrl='http://boxel-prerender-manager.boxel-staging-internal:4222' \
+  --secureOriginURL='https://secure.stack.cards/' \
+  --secureOriginAppOrigin='https://*.boxel-host-preview.stack.cards' \
   \
   --path='/persistent/base' \
   --username='base_realm' \
@@ -93,6 +95,7 @@ NODE_NO_WARNINGS=1 \
   --username='choreo_gallery_realm' \
   --fromUrl='https://realms-staging.stack.cards/choreo-gallery/' \
   --toUrl='https://realms-staging.stack.cards/choreo-gallery/' \
+  --publishable='https://realms-staging.stack.cards/choreo-gallery/' \
   \
   --path='/persistent/software-factory' \
   --username='software_factory_realm' \

@@ -1,5 +1,5 @@
 /**
- * Gates and the run handle (docs/choreo-constructs.md §4.1, §4.6).
+ * Gates and the run handle (packages/choreo-gallery/realm/docs/choreo-constructs.md §4.1, §4.6).
  * A gate parks the run; advance() opens it; mid-segment advance is
  * Keynote's click-through — every property lands on its segment-end
  * value. A parked run is a still, and settled.

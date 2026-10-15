@@ -62,6 +62,7 @@ import {
   APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
   REALMS_LIST_UPDATED_EVENT_TYPE,
   APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
+  APP_BOXEL_CATALOG_REALMS_EVENT_TYPE,
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_LLM_MODE,
   DEFAULT_FALLBACK_MODELS,
@@ -529,6 +530,13 @@ export default class MatrixService extends Service {
             case APP_BOXEL_SYSTEM_CARD_EVENT_TYPE:
               await this.setSystemCard(e.event.content.id);
               break;
+            // Keeps the Catalogs section in step when another tab or device
+            // changes which public realms the user added to it.
+            case APP_BOXEL_CATALOG_REALMS_EVENT_TYPE:
+              this.realmServer.setUserCatalogRealmIdentifiers(
+                (e.event.content.realms as string[] | undefined) ?? [],
+              );
+              break;
           }
         },
       ],
@@ -635,6 +643,12 @@ export default class MatrixService extends Service {
 
   get userId() {
     return this.client.getUserId();
+  }
+
+  // Handed to the frame on the secure origin that changes this account's
+  // password or email, which makes those requests itself.
+  get accessToken(): string | undefined {
+    return this.client.getAccessToken() ?? undefined;
   }
 
   get aiBotUserId() {
@@ -1162,6 +1176,37 @@ export default class MatrixService extends Service {
     this.workspaceFavorites = newFavorites;
   }
 
+  // Replaces the public realms the user added to the Catalogs section of their
+  // dashboard.
+  public async setUserCatalogRealms(realmURLs: string[]): Promise<void> {
+    await this.client.setAccountData(APP_BOXEL_CATALOG_REALMS_EVENT_TYPE, {
+      realms: realmURLs,
+    });
+    this.realmServer.setUserCatalogRealmIdentifiers(realmURLs);
+  }
+
+  // A favorite that no list on the dashboard shows, but that is a public realm,
+  // becomes one of the user's catalog picks, so the favorite stays visible.
+  // Costs a request only when such a favorite exists.
+  public async adoptUnlistedFavoritesAsCatalogs(): Promise<void> {
+    let listed = new Set<string>(this.realmServer.availableRealmIdentifiers);
+    let unlisted = this.workspaceFavorites.filter((url) => !listed.has(url));
+    if (unlisted.length === 0) {
+      return;
+    }
+    let publicRealms = new Set(
+      (await this.realmServer.fetchPublicRealms()).map(({ url }) => url),
+    );
+    let adopted = unlisted.filter((url) => publicRealms.has(url));
+    if (adopted.length === 0) {
+      return;
+    }
+    await this.setUserCatalogRealms([
+      ...this.realmServer.userCatalogPicks,
+      ...adopted,
+    ]);
+  }
+
   async setDisplayName(displayName: string) {
     await this.client.setDisplayName(displayName);
   }
@@ -1237,14 +1282,18 @@ export default class MatrixService extends Service {
         }
         if (isTesting())
           console.warn('[start-phase] getAccountData(realm-servers,favorites)');
-        let [realmServersData, favoritesData] = await Promise.all([
-          this.client.getAccountDataFromServer(
-            APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
-          ) as Promise<{ realmServers: string[] } | null>,
-          this.client.getAccountDataFromServer(
-            APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
-          ) as Promise<{ favorites: string[] } | null>,
-        ]);
+        let [realmServersData, favoritesData, catalogRealmsData] =
+          await Promise.all([
+            this.client.getAccountDataFromServer(
+              APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
+            ) as Promise<{ realmServers: string[] } | null>,
+            this.client.getAccountDataFromServer(
+              APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
+            ) as Promise<{ favorites: string[] } | null>,
+            this.client.getAccountDataFromServer(
+              APP_BOXEL_CATALOG_REALMS_EVENT_TYPE,
+            ) as Promise<{ realms: string[] } | null>,
+          ]);
         this.workspaceFavorites = favoritesData?.favorites ?? [];
 
         // Boot assembles the realm list from trusted servers via
@@ -1363,14 +1412,25 @@ export default class MatrixService extends Service {
           this.realmServer.fetchCatalogRealms(),
           this.realmServer.setAvailableRealmIdentifiers(userRealmURLs.map(ri)),
         ]);
+        // After both lists above, so a realm the user added as a catalog that
+        // is also a server catalog or one of their own realms is listed once.
+        this.realmServer.setUserCatalogRealmIdentifiers(
+          catalogRealmsData?.realms ?? [],
+        );
+        this.adoptUnlistedFavoritesAsCatalogs().catch((err) =>
+          console.error(
+            'Failed to add favorited public realms to Catalogs',
+            err,
+          ),
+        );
 
         // Commit or undo the keyless-account seed now that the list is
-        // assembled. `_realm-auth` returns the public base/catalog realms for
-        // every authenticated user, so a non-empty trusted result does NOT mean
-        // the account has a workspace of its own — those realms dedup into the
-        // base/catalog entries and leave `userRealmIdentifiers` empty. Only keep
-        // the account on the authoritative trusted path (and persist the seed)
-        // when it actually has a user realm; otherwise leave it on the legacy
+        // assembled. A non-empty trusted result does NOT by itself mean the
+        // account has a workspace of its own: a permission row on the base or a
+        // catalog realm dedups into those entries and leaves
+        // `userRealmIdentifiers` empty. Only keep the account on the
+        // authoritative trusted path (and persist the seed) when it actually
+        // has a user realm; otherwise leave it on the legacy
         // `app.boxel.realms` path so account-data updates (including foreign
         // realm URLs the trusted path can't serve) keep driving its list.
         if (seededOwnRealmServer) {
@@ -1992,6 +2052,9 @@ export default class MatrixService extends Service {
     attachedCards?: CardDef[];
     attachedFiles?: FileDef[];
     context?: BoxelContext;
+    // The result answers a call the user asked to go ahead, which lifts a
+    // stop they pressed (see runtime-common/ai/stop.ts).
+    resumesAssistant?: boolean;
   }) {
     let resultCardFileDef: FileDef | undefined;
     if (params.resultCard) {
@@ -2021,11 +2084,15 @@ export default class MatrixService extends Service {
       resultCardFileDef = undefined; // don't send the card as a result if the card is attached
     }
     let content: ToolResultWithNoOutputContent | ToolResultWithOutputContent;
+    let resumesAssistant = params.resumesAssistant
+      ? { resumesAssistant: true as const }
+      : {};
     if (resultCardFileDef === undefined) {
       content = {
         msgtype: APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
         commandRequestId: params.toolCallId,
         failureReason: params.failureReason,
+        ...resumesAssistant,
         'm.relates_to': {
           event_id: params.invokedToolFromEventId,
           key: params.status,
@@ -2043,6 +2110,7 @@ export default class MatrixService extends Service {
         },
         commandRequestId: params.toolCallId,
         failureReason: params.failureReason,
+        ...resumesAssistant,
         data: {
           ...contentData,
           card: resultCardFileDef.serialize(),
@@ -2356,29 +2424,6 @@ export default class MatrixService extends Service {
     );
   }
 
-  async login(usernameOrEmail: string, password: string) {
-    let waiterToken = signInWaiter.beginAsync();
-    try {
-      const cred = await this.client.loginWithPassword(
-        usernameOrEmail,
-        password,
-      );
-      return cred;
-    } catch (error) {
-      try {
-        const cred = await this.client.loginWithEmail(
-          usernameOrEmail,
-          password,
-        );
-        return cred;
-      } catch (error2) {
-        throw error;
-      }
-    } finally {
-      signInWaiter.endAsync(waiterToken);
-    }
-  }
-
   async loginFlows() {
     await this.ready;
     return this.client.loginFlows();
@@ -2602,10 +2647,6 @@ export default class MatrixService extends Service {
     return await this.client.getThreePids();
   }
 
-  async addThreePidOnly(data: MatrixSDK.IAddThreePidOnlyBody) {
-    return await this.client.addThreePidOnly(data);
-  }
-
   async deleteThreePid(medium: string, address: string) {
     return await this.client.deleteThreePid(medium, address);
   }
@@ -2730,21 +2771,6 @@ export default class MatrixService extends Service {
     );
   }
 
-  async setPassword(
-    authDict: MatrixSDK.AuthDict,
-    newPassword: string,
-    logoutDevices?: boolean,
-  ) {
-    return await this.client.setPassword(authDict, newPassword, logoutDevices);
-  }
-
-  async registerRequest(data: MatrixSDK.RegisterRequest, kind?: string) {
-    // See requestRegisterEmailToken: registration can run before the SDK has
-    // loaded on the standalone /cli-auth route.
-    await this.ready;
-    return await this.client.registerRequest(data, kind);
-  }
-
   // Type of matrixEvent is a partial MatrixEvent because a couple of places
   // where this method is called don't have the full MatrixEvent type available
   async sendReadReceipt(
@@ -2781,7 +2807,6 @@ export default class MatrixService extends Service {
         room: {
           timeline: {
             limit: 100,
-            not_types: [APP_BOXEL_STOP_GENERATING_EVENT_TYPE],
             'org.matrix.msc3874.not_rel_types': ['m.replace'],
           },
         },
@@ -3243,7 +3268,7 @@ export default class MatrixService extends Service {
     // optimistic event with event_id `local-${cgi}`, hand that id to addEvent
     // as oldEventId so Room.addEvent replaces the synthetic in-place. Without
     // this bridge the synthetic and the real echo would both live in
-    // roomData.events and every consumer iterating `this.events` (sortedEvents,
+    // roomData.events and every consumer iterating `roomResource.events` (the stop rule,
     // usedLLMs, llmModeEvents, command/code-patch result lookups, MessageBuilder's
     // `events` argument) would double-count.
     let cgi = event.content?.clientGeneratedId as string | undefined;

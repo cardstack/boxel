@@ -20,6 +20,7 @@ import {
   frame,
   type FrameData,
   generateLinearEasing,
+  mix,
   spring as springGenerator,
 } from 'motion-dom';
 import { easingDefinitionToFunction } from 'motion-utils';
@@ -58,6 +59,18 @@ const MIDFLIGHT_KEYS = [
 /** how fast each value was moving, in units per second, keyed by element then property */
 export type Velocities = Map<HTMLElement, Map<string, number>>;
 
+/**
+ * Where each ambient loop stood in its cycle, from 0 to 1, keyed by sprite
+ * then by the loop's properties (see loopKey).
+ */
+export type LoopPhases = Map<ChoreoNode, Map<string, number>>;
+
+/** a loop's properties, which tell it apart from another loop on its sprite */
+const loopKey = (cue: Cue) =>
+  Object.keys(cue.target ?? {})
+    .sort()
+    .join(',');
+
 export interface Run {
   /** open the gate the run is parked at; mid-segment, complete the segment and park (§4.1) */
   advance(): void;
@@ -69,6 +82,12 @@ export interface Run {
   finished: Promise<void>;
   /** nothing left to play: the run completed or was cancelled */
   isDone(): boolean;
+  /**
+   * Where each of this run's ambient loops is in its cycle. A replacement
+   * run starts the same loop on the same sprite from there, so an edited
+   * timeline retimes a loop rather than sending it back to the top.
+   */
+  loopPhases(): LoopPhases;
   /**
    * The sprites this run is DRIVING through space right now — an
    * unfinished move/spring/tween writing geometry — with each cue's
@@ -137,6 +156,8 @@ interface RunOptions {
    */
   doomed?: boolean;
   inherit?: Velocities;
+  /** where the prior run's ambient loops stood, to carry them on from */
+  loops?: LoopPhases;
   /** a camera step landed or the run ended: the frame's new resting state */
   onCamera?(state: CameraState): void;
   /**
@@ -309,6 +330,8 @@ interface Track {
   from3d?: Camera3DState;
   held?: HeldValue[];
   loopAnimation?: Animation;
+  /** how far into its cycle a loop began, in scaled ms: carried from the prior run's loop */
+  loopOffset?: number;
   /** where each value stood when this track first started — the scrub-back frame */
   origin?: Record<string, PropValue>;
   /** completed while playing (finals landed / hold released) */
@@ -625,6 +648,30 @@ export class ChoreoRun implements Run {
   }
   isDone(): boolean {
     return this.ended || this.cancelled;
+  }
+
+  loopPhases(): LoopPhases {
+    const out: LoopPhases = new Map();
+    for (const t of this.tracks) {
+      const animation = t.loopAnimation;
+      if (!animation || animation.playState === 'idle') {
+        continue;
+      }
+      const cycle = Number(animation.effect?.getComputedTiming().duration);
+      if (!(cycle > 0)) {
+        continue;
+      }
+      const node = t.cue.sprite.node;
+      let phases = out.get(node);
+      if (!phases) {
+        out.set(node, (phases = new Map()));
+      }
+      phases.set(
+        loopKey(t.cue),
+        (Number(animation.currentTime ?? 0) % cycle) / cycle,
+      );
+    }
+    return out;
   }
 
   midflight(): Map<ChoreoNode, Record<string, unknown> | undefined> {
@@ -1361,7 +1408,9 @@ export class ChoreoRun implements Run {
         } else if (t.loopAnimation) {
           t.loopAnimation.pause();
           const cycle = t.end - t.start;
-          t.loopAnimation.currentTime = cycle ? (now - t.start) % cycle : 0;
+          t.loopAnimation.currentTime = cycle
+            ? (now - t.start + (t.loopOffset ?? 0)) % cycle
+            : 0;
         } else if (cue.target || cue.flight) {
           // a still frame is COMPUTED, not driven: the live animation (if
           // any) is retired and every value jumped to its sampled position —
@@ -1586,7 +1635,7 @@ export class ChoreoRun implements Run {
 
   /**
    * Rebuild the camera fold from the score prefix before a seek's still
-   * (notes/external-clock-camera-seek-handoff.md). Forward playback folds
+   * (packages/choreo-gallery/realm/design/external-clock-camera-seek-handoff.md). Forward playback folds
    * each camera cue's landing into the run's cumulative camera as the
    * clock crosses it — but a random-access seek can jump clean over a
    * window, and a cue that never starts never folds: the clock reads `t`
@@ -1809,7 +1858,7 @@ export class ChoreoRun implements Run {
    * comes back.
    *
    * Nothing here touches the DOM — that is the design, not an
-   * optimisation (docs/postmortem-follow.md). The resting boxes were
+   * optimisation (packages/choreo-gallery/realm/docs/postmortem-follow.md). The resting boxes were
    * measured by the pass with every moved value released, and a source's
    * `now` is its resting box composed with the motion values driving it
    * this frame: JS-side numbers, not a measurement. So a follower is pure
@@ -2168,9 +2217,12 @@ export class ChoreoRun implements Run {
     }
     if (cue.loop) {
       // an ambient loop rides the platform: the engine's probes stay quiet,
-      // and its phase is the run clock's remainder (§4.5)
+      // and its phase is the run clock's remainder (§4.5), carried on from
+      // where the prior run's same loop stood
       const el = cue.sprite.element;
       const cycle = t.end - t.start;
+      const phase = this.options.loops?.get(cue.sprite.node)?.get(loopKey(cue));
+      t.loopOffset = phase === undefined ? undefined : phase * cycle;
       const times = cue.transition?.times as number[] | undefined;
       const segmentEase = cssEasing(
         cue.transition?.ease as Easing | undefined,
@@ -2184,6 +2236,11 @@ export class ChoreoRun implements Run {
           iterations: Infinity,
         },
       );
+      // where the run clock says the loop is, as a still seeks it: a loop
+      // that starts a tick after its cue is already that far round
+      t.loopAnimation.currentTime =
+        (Math.max(0, this.master - t.start) + (t.loopOffset ?? 0)) %
+        Math.max(1, cycle);
       t.loopAnimation.playbackRate = this.rate;
       if (!this.playing) {
         t.loopAnimation.pause();
@@ -2379,12 +2436,31 @@ export class ChoreoRun implements Run {
         : [t.origin?.[key] ?? 0, raw as PropValue];
       const numeric = frames.map((f) => parseFloat(String(f)));
       if (numeric.some((n) => Number.isNaN(n))) {
-        // non-numeric values snap to the nearest keyframe
-        const index = Math.min(
-          frames.length - 1,
-          Math.floor(p * frames.length),
-        );
-        ve.getValue(key, frames[index]!)!.jump(frames[index]!);
+        // colors and complex strings mix as playback mixes them (motion's
+        // own mixer), so a still matches the frame a live run would draw;
+        // values with no common shape fall back to the mixer's snap
+        const segments = frames.length - 1;
+        if (segments < 1) {
+          ve.getValue(key, frames[0]!)!.jump(frames[0]!);
+          continue;
+        }
+        let at: number;
+        if (sprung) {
+          const generator = springGenerator({
+            keyframes: [0, segments],
+            ...(transition ?? {}),
+          } as never);
+          at = generator.next(now - t.start).value;
+        } else {
+          at = (ease ? ease(p) : p) * segments;
+        }
+        at = Math.min(segments - 1e-9, Math.max(0, at));
+        const index = Math.floor(at);
+        const value = mix(
+          frames[index]! as never,
+          frames[index + 1]! as never,
+        )(at - index) as PropValue;
+        ve.getValue(key, value)!.jump(value);
         continue;
       }
       let value: number;

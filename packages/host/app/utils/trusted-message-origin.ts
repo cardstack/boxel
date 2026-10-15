@@ -1,6 +1,7 @@
-// A message is trusted only when its origin is exactly the realm server's
-// origin. A prefix comparison would let look-alike origins through (for
-// example `https://realms.cardstack.co` against `https://realms.cardstack.com/`).
+// A message is trusted only when its origin is exactly the origin of
+// `trustedURL` (the realm server's, or the secure origin's). A prefix
+// comparison would let look-alike origins through (for example
+// `https://realms.cardstack.co` against `https://realms.cardstack.com/`).
 export function isTrustedMessageOrigin(
   origin: string,
   trustedURL: string,

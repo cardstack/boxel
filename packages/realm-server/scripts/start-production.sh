@@ -47,6 +47,7 @@ NODE_NO_WARNINGS=1 \
   --realmsRootPath='/persistent/realms' \
   --serverURL='https://app.boxel.ai' \
   --prerendererUrl='http://boxel-prerender-manager.boxel-production-internal:4222' \
+  --secureOriginURL='https://secure.boxel.ai/' \
   \
   --path='/persistent/base' \
   --username='base_realm' \
@@ -93,6 +94,7 @@ NODE_NO_WARNINGS=1 \
   --username='choreo_gallery_realm' \
   --fromUrl='https://app.boxel.ai/choreo-gallery/' \
   --toUrl='https://app.boxel.ai/choreo-gallery/' \
+  --publishable='https://app.boxel.ai/choreo-gallery/' \
   \
   --path='/persistent/software-factory' \
   --username='software_factory_realm' \

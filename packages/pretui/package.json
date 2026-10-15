@@ -26,6 +26,7 @@
     "@glint/template": "catalog:",
     "@types/qunit": "catalog:",
     "concurrently": "catalog:",
+    "ember-provide-consume-context": "catalog:",
     "ember-source": "catalog:",
     "ember-template-lint": "catalog:",
     "qunit": "catalog:",

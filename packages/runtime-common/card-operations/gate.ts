@@ -51,6 +51,7 @@ import {
   OperationFailure,
   isDefinitionFreeBaseOperation,
   isWrite,
+  travelsAsWrite,
   type BaseOperation,
   type OperationDefinition,
   type OperationTarget,
@@ -1734,6 +1735,11 @@ export async function authorizationCardIds(
 // what keeps a lost notice from leaving a flag unread indefinitely. An answer
 // that rests on a type it could not read is never remembered: it refuses
 // now, and the next invocation reads again.
+//
+// An invocation that asks while another is still reading the same chain under
+// the same generation waits for that reading rather than starting its own,
+// so invocations decided side by side, as a batch's or a capability check's
+// pairs are, read each definition once between them.
 export async function nonGrantableInChain(
   core: OperationCore,
   types: string[],
@@ -1747,13 +1753,62 @@ export async function nonGrantableInChain(
     generation === undefined
       ? undefined
       : nonGrantableAnswers.get(lookup)?.get(key);
+  let answerSources = nonGrantableAnswerSources(core);
   if (
     remembered &&
     remembered.generation === generation &&
     Date.now() - remembered.at < MAX_REMEMBERED_MS
   ) {
+    answerSources.remembered++;
     return remembered.nonGrantable;
   }
+  let inFlight =
+    generation === undefined
+      ? undefined
+      : nonGrantableReadings.get(lookup)?.get(key);
+  if (inFlight && inFlight.generation === generation) {
+    answerSources.joined++;
+    return await inFlight.nonGrantable;
+  }
+  answerSources.read++;
+  let nonGrantable = readNonGrantableInChain(
+    core,
+    types,
+    name,
+    from,
+    key,
+    generation,
+  );
+  if (generation === undefined) {
+    return await nonGrantable;
+  }
+  let readings = nonGrantableReadings.get(lookup);
+  if (!readings) {
+    readings = new Map();
+    nonGrantableReadings.set(lookup, readings);
+  }
+  let reading = { generation, nonGrantable };
+  readings.set(key, reading);
+  try {
+    return await nonGrantable;
+  } finally {
+    if (readings.get(key) === reading) {
+      readings.delete(key);
+    }
+  }
+}
+
+// Reads the definitions `nonGrantableInChain` answers from, and remembers the
+// answer under `key` where the generation it read under allows it.
+async function readNonGrantableInChain(
+  core: OperationCore,
+  types: string[],
+  name: string,
+  from: number,
+  key: string,
+  generation: number | undefined,
+): Promise<boolean> {
+  let lookup = core.definitionLookup;
   let at = Date.now();
   let relativeTo = new URL(core.realmURL);
   let read = async (codeRef: ResolvedCodeRef) => {
@@ -1809,6 +1864,41 @@ const nonGrantableAnswers = new WeakMap<
   Map<string, { generation: number; at: number; nonGrantable: boolean }>
 >();
 const MAX_REMEMBERED_ANSWERS = 10_000;
+
+// The chains `nonGrantableInChain` is reading right now, per definition lookup,
+// with the generation each reading began under. An entry lasts only as long
+// as its reading, so the map holds no more than the reads in flight.
+const nonGrantableReadings = new WeakMap<
+  OperationCore['definitionLookup'],
+  Map<string, { generation: number; nonGrantable: Promise<boolean> }>
+>();
+
+// Where `nonGrantableInChain`'s answers came from, per core: read from the
+// definitions, served from a remembered answer, or taken from a reading
+// another invocation had in flight. `ancestorDefinitionReads` says how many
+// definitions were read; this says which invocations read them, so a count
+// that differs from what was expected names the interleaving behind it.
+export interface NonGrantableAnswerSources {
+  read: number;
+  remembered: number;
+  joined: number;
+}
+
+const answerSourcesByCore = new WeakMap<
+  OperationCore,
+  NonGrantableAnswerSources
+>();
+
+export function nonGrantableAnswerSources(
+  core: OperationCore,
+): NonGrantableAnswerSources {
+  let sources = answerSourcesByCore.get(core);
+  if (!sources) {
+    sources = { read: 0, remembered: 0, joined: 0 };
+    answerSourcesByCore.set(core, sources);
+  }
+  return sources;
+}
 
 // How long a remembered answer holds whatever the generation says. It is the
 // five seconds the compiled-policy cache allows an entry between
@@ -1878,7 +1968,7 @@ async function recordedChain(
 function declines(scope: GateScope, base: BaseOperation): boolean {
   return (
     scope.coarseDeclined === 'all' ||
-    (scope.coarseDeclined === 'writes' && isWrite(base))
+    (scope.coarseDeclined === 'writes' && travelsAsWrite(base))
   );
 }
 

@@ -16,6 +16,7 @@ import {
   type ReadUrlRequestInit,
 } from '../lib/bot-tools/read-url/read.ts';
 import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
+import { addressPolicyCases } from '@cardstack/runtime-common/address-policy-cases';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
@@ -54,40 +55,26 @@ const BOXEL_HOST_SHELL = `<!DOCTYPE html><html><head><title>Boxel</title>
   </head><body><script src="/assets/app.js"></script></body></html>`;
 
 module('readUrl address policy', () => {
-  test('isPublicAddress refuses private, loopback, link-local and reserved addresses', () => {
-    for (let address of [
-      '127.0.0.1',
-      '10.1.2.3',
-      '172.16.0.1',
-      '192.168.1.1',
-      '169.254.169.254',
-      '100.64.0.1',
-      '0.0.0.0',
-      '224.0.0.1',
-      '::1',
-      '::',
-      'fd00::1',
-      'fe80::1',
-      '::ffff:127.0.0.1',
-      '::ffff:169.254.169.254',
-      '::ffff:7f00:1',
-      '::127.0.0.1',
-      '::7f00:1',
-      '::ffff:0:7f00:1',
-      '64:ff9b::7f00:1',
-      '64:ff9b:1::a00:1',
-      '2002:7f00:1::1',
-      '2001:0:4136:e378:8000:63bf:3fff:fdd2',
-      'not-an-address',
-    ]) {
-      assert.false(isPublicAddress(address), `${address} is not public`);
+  test('isPublicAddress agrees with every shared address-policy case', () => {
+    for (let { address, public: isPublic, label } of addressPolicyCases) {
+      assert.strictEqual(
+        isPublicAddress(address),
+        isPublic,
+        `${label} (${address}) is ${isPublic ? '' : 'not '}public`,
+      );
     }
   });
 
-  test('isPublicAddress accepts public addresses', () => {
-    for (let address of ['93.184.215.14', '8.8.8.8', '2606:4700::1111']) {
-      assert.true(isPublicAddress(address), `${address} is public`);
-    }
+  test('guardedLookup refuses a hostname with an IPv6 address outside global unicast', async () => {
+    let lookup = guardedLookup(async () => ['2606:4700::1111', '5f00::1']);
+    let error = await new Promise<Error | null>((resolve) =>
+      lookup('example.com', { all: true }, (err) => resolve(err)),
+    );
+    assert.ok(error, 'the lookup fails');
+    assert.ok(
+      /private or reserved address/.test(String(error?.message)),
+      error?.message,
+    );
   });
 
   test('guardedLookup refuses a hostname with any private address', async () => {

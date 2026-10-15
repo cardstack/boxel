@@ -28,6 +28,7 @@ import {
   settlePrerenderHtmlJobs,
 } from './helpers/indexing.ts';
 import { PagePool } from '../prerender/page-pool.ts';
+import { renderActorFor } from '../prerender/render-runner.ts';
 import { installRealmServerAssertOwnRealmServerBypassPatch } from './helpers/prerender-page-patches.ts';
 import { FakeMediaCacheAdapter } from './helpers/fake-media-cache-adapter.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
@@ -182,6 +183,56 @@ function overwriteTabSessionsWith(sessionAuth: string): () => void {
           (auth: string) => localStorage.setItem('boxel-session', auth),
           sessionAuth,
         );
+        return result;
+      };
+    }
+    return pageInfo;
+  } as PagePool['getPage'];
+  return () => {
+    for (let [page, evaluate] of wrapped) {
+      page.evaluate = evaluate;
+    }
+    PagePool.prototype.getPage = originalGetPage;
+  };
+}
+
+// A tab's localStorage belongs to its BrowserContext, so the sessions one
+// render writes there are in the storage of every tab of that context, and
+// stay there for every later render in it. This patch has a context that
+// has carried `user`'s sessions hold them through every call the render
+// server makes into any of its tabs, which is as late as another render's
+// write could land. Answers how to stop.
+function keepSessionsOfInTheirContexts(user: string): () => void {
+  let originalGetPage = PagePool.prototype.getPage;
+  let wrapped = new Map<any, (...args: any[]) => Promise<any>>();
+  let carried = new Map<unknown, string>();
+  PagePool.prototype.getPage = async function (
+    this: PagePool,
+    ...args: Parameters<PagePool['getPage']>
+  ) {
+    let pageInfo = await originalGetPage.apply(this, args);
+    let page = pageInfo.page as any;
+    if (page?.evaluate && !wrapped.has(page)) {
+      let originalEvaluate = page.evaluate.bind(page);
+      wrapped.set(page, page.evaluate);
+      page.evaluate = async (fn: unknown, ...evaluateArgs: any[]) => {
+        let result = await originalEvaluate(fn, ...evaluateArgs);
+        let context = page.browserContext();
+        let [sessionAuth] = evaluateArgs;
+        if (
+          String(fn).includes('boxel-session') &&
+          typeof sessionAuth === 'string' &&
+          renderActorFor(sessionAuth) === user
+        ) {
+          carried.set(context, sessionAuth);
+        }
+        let sessions = carried.get(context);
+        if (sessions) {
+          await originalEvaluate(
+            (auth: string) => localStorage.setItem('boxel-session', auth),
+            sessions,
+          );
+        }
         return result;
       };
     }
@@ -414,5 +465,47 @@ module(basename(import.meta.filename), function (hooks) {
       html.includes('board-row'),
       `the realm's render drew no schedule, not even the requester's whose sessions it ended up holding: ${html}`,
     );
+  });
+  test("another reader's capture leaves a reader's capture and the realm's own render on their own sessions", async function (assert) {
+    let stopKeeping = keepSessionsOfInTheirContexts(OTHER_READER);
+    try {
+      let response = await postCapture(OTHER_READER);
+      assert.strictEqual(
+        response.body.data?.attributes?.captures?.[0]?.height,
+        OTHER_ROW_HEIGHT,
+        `the other reader's capture drew their own schedule: ${JSON.stringify(response.body)}`,
+      );
+
+      response = await postCapture(REQUESTER);
+      assert.strictEqual(
+        response.body.data?.attributes?.captures?.[0]?.height,
+        REQUESTER_ROW_HEIGHT,
+        `the requester's capture drew their own schedule and not the other reader's: ${JSON.stringify(response.body)}`,
+      );
+
+      let before = await prerenderedHtmlRowFor(db, `${BOARD_CARD}.json`);
+      let baseline = await maxPrerenderHtmlJobId(db, REALM);
+      await realm!.write('boards/board.json', board(2));
+      await settlePrerenderHtmlJobs(db, REALM, {
+        afterJobId: baseline,
+        timeout: 120_000,
+      });
+      let row = await prerenderedHtmlRowFor(db, `${BOARD_CARD}.json`);
+      assert.true(
+        (row?.generation ?? -1) > (before?.generation ?? -1),
+        `the HTML is the render just made (generation ${row?.generation}, before ${before?.generation})`,
+      );
+      let html = row?.isolated_html ?? '';
+      assert.true(
+        html.includes('board-search'),
+        `the render drew the board: ${html}`,
+      );
+      assert.notOk(
+        html.includes('board-row'),
+        `the realm's render drew no schedule, not even the other reader's: ${html}`,
+      );
+    } finally {
+      stopKeeping();
+    }
   });
 });

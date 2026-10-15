@@ -1,10 +1,10 @@
 /**
- * @route and c.Crossing (docs/choreo-constructs.md §4.7): a subtree swap as
+ * @route and c.Crossing (packages/choreo-gallery/realm/docs/choreo-constructs.md §4.7): a subtree swap as
  * one pass — leaves fade first, the paired flight carries, arrivals land
  * near the settle, and live content never freezes, because nothing is
  * snapshotted.
  */
-import { Choreo } from '@cardstack/choreo';
+import { Choreo, type ChoreoContext } from '@cardstack/choreo';
 import { setupChoreo } from '@cardstack/choreo/test-support';
 import { array } from '@ember/helper';
 import { find, render, settled, waitUntil } from '@ember/test-helpers';
@@ -71,6 +71,7 @@ class ColorPages extends Component {
       style='position:relative;width:300px;height:220px;background:rgb(16,32,48)'
       as |c|
     >
+      {{grabColors c}}
       {{#if (eq this.page 'grid')}}
         <div
           id='tileC'
@@ -97,6 +98,11 @@ class ColorPages extends Component {
   </template>
 }
 let colors: ColorPages;
+let colorsCtx: ChoreoContext;
+const grabColors = (c: ChoreoContext) => {
+  colorsCtx = c;
+  return '';
+};
 
 class SubstancePages extends Component {
   @tracked page: 'detail' | 'grid' = 'grid';
@@ -493,19 +499,21 @@ module('Integration | choreo | crossing', function (hooks) {
     await animationsSettled();
     colors.page = 'detail';
     await settled();
-    // mid-flight is a STATE, not a frame count: wait for the skin to have
-    // actually left its seat (left:10) — three frames buy no progress at
-    // all if the first one arrives late, and the crossfade then reads at
-    // exactly opacity 1
     await waitUntil(
-      () => {
-        const s = document.querySelector(
-          '[data-choreo-orphans] #tileC',
-        ) as HTMLElement | null;
-        return s !== null && bounds(s).left > 20;
-      },
+      () =>
+        colorsCtx.run !== null &&
+        document.querySelector('[data-choreo-orphans] #tileC') !== null,
       { timeout: 2000 },
     );
+    // Read the crossfade as a still at the run's midpoint. Played live, the
+    // skin's move and its fade ride different drivers (the transform on the
+    // JS frame loop, the opacity accelerated onto WAAPI), so a wall-clock
+    // sample can find the skin moved while its fade has not started.
+    const run = colorsCtx.run!;
+    run.pause();
+    run.time = run.duration / 2;
+    await nextFrame();
+    const at = `at ${run.time.toFixed(3)}s of ${run.duration.toFixed(3)}s`;
 
     const hero = find('#heroC') as HTMLElement;
     const mid = channels(getComputedStyle(hero).backgroundColor);
@@ -521,9 +529,11 @@ module('Integration | choreo | crossing', function (hooks) {
       1,
       'the flying box is never transparent: the ground cannot leak through',
     );
+    // at the midpoint the solid stands clear of both skins, so a carry that
+    // jumped to either endpoint fails
     assert.true(
-      mid!.r > 27 && mid!.r < 109 && mid!.b < 105 && mid!.b > 43,
-      `the solid tweens between the two effective colors (r ${mid!.r}, b ${mid!.b})`,
+      mid!.r > 38 && mid!.r < 98 && mid!.b < 94 && mid!.b > 54,
+      `the solid tweens between the two effective colors (r ${mid!.r}, b ${mid!.b} ${at})`,
     );
     assert.strictEqual(
       getComputedStyle(hero).opacity,
@@ -534,11 +544,13 @@ module('Integration | choreo | crossing', function (hooks) {
       '[data-choreo-orphans] #tileC',
     ) as HTMLElement;
     assert.ok(skin, 'the old skin rides the flight');
+    const skinOpacity = parseFloat(getComputedStyle(skin).opacity);
     assert.true(
-      parseFloat(getComputedStyle(skin).opacity) < 1,
-      'the old skin is the fading half',
+      skinOpacity > 0 && skinOpacity < 1,
+      `the old skin is the fading half (opacity ${skinOpacity} ${at}, ${skin.getAnimations().length} platform animations on the skin)`,
     );
 
+    run.play();
     await animationsSettled();
     // beat five: landed, the solid is handed back to the stylesheet's own
     // alpha — computed style, not the attribute
