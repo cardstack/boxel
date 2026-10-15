@@ -660,6 +660,7 @@ export default class CodeSubmode extends Component<Signature> {
         ? rri(cardId)
         : rri(cardId.endsWith('.json') ? cardId : `${cardId}.json`);
     await this.operatorModeStateService.updateCodePath(codePath);
+    this.operatorModeStateService.closeWorkspaceChooser();
   }
 
   get cardPreviewFormat() {

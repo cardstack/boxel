@@ -1875,6 +1875,29 @@ module('Acceptance | code submode tests', function (_hooks) {
       });
     });
 
+    test('Clicking a search result while the workspace chooser is open closes the chooser and shows the file', async function (assert) {
+      await visitOperatorMode({
+        submode: 'code',
+        codePath: `${testRealmURL}employee.gts`,
+        workspaceChooserOpened: true,
+      });
+
+      assert.dom('[data-test-workspace-chooser]').exists();
+
+      await click('[data-test-open-search-field]');
+      await fillIn('[data-test-search-field]', 'Mango');
+      await waitFor(`[data-test-search-result="${testRealmURL}Pet/mango"]`, {
+        timeout: 2000,
+      });
+      await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
+
+      assert.dom('[data-test-workspace-chooser]').doesNotExist();
+      await waitFor('[data-test-card-url-bar-input]');
+      assert
+        .dom('[data-test-card-url-bar-input]')
+        .hasValue(`${testRealmURL}Pet/mango.json`);
+    });
+
     test('Clicking a file in search panel opens the file itself (no .json appended)', async function (assert) {
       await visitOperatorMode({
         submode: 'code',
