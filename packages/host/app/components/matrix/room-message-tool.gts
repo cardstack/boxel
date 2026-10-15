@@ -355,10 +355,16 @@ export default class RoomMessageTool extends Component<Signature> {
   }
 
   // The calls that hold this call for the user's click, shown above the
-  // code while it waits, so the user knows what the click allows.
+  // code while a click can still run it (Run, Retry or Try Anyway), so the
+  // user knows what the click allows.
   private get clickReasons() {
     let { status } = this.args.messageTool;
-    if (status !== 'ready' && status !== undefined) {
+    if (
+      status !== undefined &&
+      status !== 'ready' &&
+      status !== 'invalid' &&
+      status !== 'failed'
+    ) {
       return [];
     }
     return this.args.messageTool.clickReasons;
@@ -433,7 +439,7 @@ export default class RoomMessageTool extends Component<Signature> {
         {{#if this.clickReasons.length}}
           <div class='click-reasons' data-test-tool-call-click-reasons>
             <p class='click-reasons-intro'>This waits for your click because the
-              script calls:</p>
+              script contains:</p>
             <ul class='click-reasons-list'>
               {{#each this.clickReasons as |clickReason|}}
                 <li data-test-tool-call-click-reason={{clickReason.call}}>
@@ -549,7 +555,8 @@ export default class RoomMessageTool extends Component<Signature> {
       }
       .click-reasons {
         padding: 0 var(--boxel-sp-xxs);
-        font: var(--boxel-font-xs);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
         color: var(--boxel-light);
       }
       .click-reasons-intro {
