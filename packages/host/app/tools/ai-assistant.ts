@@ -55,14 +55,12 @@ export default class UseAiAssistantTool extends HostBaseTool<
     let attachedCardsPromise = this.ensureAttachedCardsLoaded(input);
     let openCardsPromise = this.maybeGetOpenCards(input);
     let setActiveLLMPromise = this.maybeSetActiveLLM(input, roomId);
-    let setLLMModePromise = this.maybeSetLLMMode(input, roomId);
     await Promise.all([
       openRoomPromise,
       loadSkillsPromise,
       attachedCardsPromise,
       openCardsPromise,
       setActiveLLMPromise,
-      setLLMModePromise,
     ]);
 
     // Only send message if prompt is provided
@@ -197,25 +195,18 @@ export default class UseAiAssistantTool extends HostBaseTool<
     return attachedCards;
   }
 
+  // The model and the mode go in one call, so that a refused model does not
+  // leave the mode changed.
   async maybeSetActiveLLM(
     input: BaseToolModule.UseAiAssistantInput,
     roomId: string,
   ): Promise<void> {
-    if (input.llmModel) {
-      let setActiveLLMCommand = new SetActiveLLMTool(this.toolContext);
-      await setActiveLLMCommand.execute({
+    if (input.llmModel || input.llmMode) {
+      await new SetActiveLLMTool(this.toolContext).execute({
         roomId,
         model: input.llmModel,
+        mode: input.llmMode,
       });
-    }
-  }
-
-  async maybeSetLLMMode(
-    input: BaseToolModule.UseAiAssistantInput,
-    roomId: string,
-  ): Promise<void> {
-    if (input.llmMode) {
-      await this.matrixService.sendLLMModeEvent(roomId, input.llmMode as any);
     }
   }
 }

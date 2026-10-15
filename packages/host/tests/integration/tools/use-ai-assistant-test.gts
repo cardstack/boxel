@@ -337,6 +337,31 @@ module('Integration | tools | ai-assistant', function (hooks) {
     );
   });
 
+  test('does not change the mode when the requested model is unknown', async function (assert) {
+    let roomId = createAndJoinRoom({
+      sender: '@testuser:localhost',
+      name: 'room-with-unknown-llm-and-mode',
+    });
+
+    let aiAssistantCommand = new UseAiAssistantTool(toolService.toolContext);
+    await assert.rejects(
+      aiAssistantCommand.execute({
+        prompt: 'Hello with an unknown LLM!',
+        roomId,
+        llmModel: 'no-such/model',
+        llmMode: 'act',
+      }),
+      /Unknown model: no-such\/model/,
+      'the unknown model is rejected',
+    );
+
+    assert.throws(
+      () => getRoomState(roomId, APP_BOXEL_LLM_MODE, ''),
+      /M_NOT_FOUND/,
+      'no LLM mode state is written when the model is rejected',
+    );
+  });
+
   test('does not set a model the model picker does not offer', async function (assert) {
     let roomId = createAndJoinRoom({
       sender: '@testuser:localhost',
