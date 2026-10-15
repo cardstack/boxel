@@ -19,6 +19,8 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
 
+import type { ClickReason } from '../host-base-tool';
+
 import type { Message } from './message';
 import type { CardDef } from '@cardstack/base/card-api';
 import type { SerializedFile } from '@cardstack/base/file-api';
@@ -27,6 +29,11 @@ import type { SerializedFile } from '@cardstack/base/file-api';
 export type NeverAutoExecutesFor = (
   attributes: Record<string, unknown> | undefined,
 ) => boolean;
+
+// Why a call waits for the user's click (HostBaseTool.clickReasonsFor).
+export type ClickReasonsFor = (
+  attributes: Record<string, unknown> | undefined,
+) => ClickReason[];
 
 // 'approved' is the user's approval of a call ai-bot holds for approval; the
 // call is then running (see `status`) until ai-bot's result lands.
@@ -70,6 +77,7 @@ export interface ToolResolution {
   actionVerb: string;
   neverAutoExecutes: boolean;
   neverAutoExecutesFor?: NeverAutoExecutesFor;
+  clickReasonsFor?: ClickReasonsFor;
 }
 
 export type ToolResolver = (
@@ -104,6 +112,8 @@ export default class MessageTool {
     // Resolves the tool from its name. Without one, the values above are the
     // tool's fixed resolution (a call ai-bot runs has nothing to resolve).
     resolver?: ToolResolver,
+    // Why this call waits for the click (see HostBaseTool.clickReasonsFor).
+    clickReasonsFor?: ClickReasonsFor,
   ) {
     setOwner(this, owner);
 
@@ -116,6 +126,7 @@ export default class MessageTool {
       actionVerb,
       neverAutoExecutes,
       neverAutoExecutesFor,
+      clickReasonsFor,
     };
     this.#resolver = resolver;
     if (resolver) {
@@ -250,6 +261,19 @@ export default class MessageTool {
           ? (attributes as Record<string, unknown>)
           : undefined,
       ) === true
+    );
+  }
+
+  // Why this call waits for the user's click, read from the current
+  // arguments like `neverAutoExecutes`. Empty for a call that needs no click.
+  get clickReasons(): ClickReason[] {
+    let attributes = this.arguments?.attributes;
+    return (
+      this.resolution?.clickReasonsFor?.(
+        attributes && typeof attributes === 'object'
+          ? (attributes as Record<string, unknown>)
+          : undefined,
+      ) ?? []
     );
   }
 
