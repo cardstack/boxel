@@ -449,7 +449,7 @@ export class GalleryGrid extends Component<Signature> {
         background: var(--bg-spot);
         box-shadow: inset 0 0 0 1px rgba(255, 59, 31, 0.35);
         /* full ink: the raised ground and the ember ring say selected, and
-           no accent ink holds 4.5:1 on --bg-spot in the dark palette */
+           --ember-ink falls under 4.5:1 on --bg-spot in the dark palette */
         color: var(--ink);
       }
 
