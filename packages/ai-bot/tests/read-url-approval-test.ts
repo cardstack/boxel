@@ -71,6 +71,42 @@ function botMessage(
   } as unknown as DiscreteMatrixEvent;
 }
 
+// A streamed bot message as room history holds it: /messages leaves edits
+// out, so the event keeps its placeholder content and the final content,
+// tool requests included, rides the aggregated edit under `unsigned`.
+function streamedBotMessage(
+  requests: Record<string, unknown>[],
+  id = '$bot',
+  body = '',
+): DiscreteMatrixEvent {
+  return {
+    type: 'm.room.message',
+    event_id: id,
+    sender: BOT,
+    content: { body: '', isStreamingFinished: false },
+    unsigned: {
+      'm.relations': {
+        'm.replace': {
+          type: 'm.room.message',
+          event_id: `${id}-edit`,
+          sender: BOT,
+          content: {
+            body,
+            isStreamingFinished: true,
+            [APP_BOXEL_TOOL_REQUESTS_KEY]: requests,
+            'm.new_content': {
+              body,
+              isStreamingFinished: true,
+              [APP_BOXEL_TOOL_REQUESTS_KEY]: requests,
+            },
+            'm.relates_to': { rel_type: 'm.replace', event_id: id },
+          },
+        },
+      },
+    },
+  } as unknown as DiscreteMatrixEvent;
+}
+
 function result(
   commandRequestId: string,
   key: string,
@@ -238,6 +274,44 @@ module('readUrl approval', () => {
       name: READ_URL_TOOL_NAME,
       arguments: JSON.stringify({ url: 'https://a.example/' }),
     });
+  });
+
+  test('an approved call is released when its request is on the streamed message edit', () => {
+    let history = [
+      humanMessage('Find their docs'),
+      streamedBotMessage([
+        readUrlRequest('held-a', 'https://a.example/', true),
+        readUrlRequest('held-b', 'https://b.example/', true),
+      ]),
+      result('held-a', 'approved', USER),
+      result('held-b', 'approved', USER),
+      result('held-b', 'applied', BOT),
+    ];
+    assert.deepEqual(
+      readUrlCallsReleasedByApprovals(history, BOT).map((entry) => [
+        entry.call.id,
+        entry.requestEventId,
+      ]),
+      [['held-a', '$bot']],
+      'the unsettled call is released against the message it belongs to',
+    );
+  });
+
+  test('a page read for a streamed request approves the URLs on it', async () => {
+    let history = [
+      streamedBotMessage([
+        readUrlRequest('read-1', 'https://docs.example.com/guide'),
+      ]),
+      result('read-1', 'applied', BOT, [
+        { url: 'mxc-download/read-1', contentType: 'text/plain' },
+      ]),
+    ];
+    let approved = await collectPreapprovedUrls(
+      history,
+      BOT,
+      async () => '<a href="https://docs.example.com/next">Next</a>',
+    );
+    assert.true(approved.has('https://docs.example.com/next'));
   });
 
   test('nothing is released unless a human approved a held, unsettled readUrl', () => {

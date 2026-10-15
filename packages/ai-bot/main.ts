@@ -602,6 +602,18 @@ Common issues are:
           // An approval is not a turn of its own (getShouldRespond ignores
           // it), so its handler stops here.
           if (isApprovalResult({ content: event.getContent() })) {
+            let approvedId = (event.getContent() as any)?.commandRequestId;
+            if (
+              !pendingReleasedCalls.some(
+                (entry) => entry.call.id === approvedId,
+              )
+            ) {
+              // Expected when an earlier handler already took the call on;
+              // otherwise the approved call is missing from the history.
+              log.info(
+                `[${eventId}] approval of ${approvedId} released no call to run in ${room.roomId}`,
+              );
+            }
             return;
           }
           // Route to-device streaming previews (see AI_BOT_STREAMING_MODE

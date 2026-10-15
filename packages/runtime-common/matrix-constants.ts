@@ -97,6 +97,19 @@ export function getToolRequests<T = unknown>(
   );
 }
 
+// An event's latest content. Room history fetched without edits keeps a
+// streamed bot message's placeholder content; the server carries the latest
+// edit, whose content holds the final body and tool requests, under
+// `unsigned['m.relations']['m.replace']`.
+export function latestEventContent(event: {
+  content?: Record<string, any>;
+  unsigned?: Record<string, any>;
+}): Record<string, any> | undefined {
+  return (
+    event.unsigned?.['m.relations']?.['m.replace']?.content ?? event.content
+  );
+}
+
 // Reads the room-skills state event's tool definitions under either key.
 // Pre-rename rooms carry `commandDefinitions` until the host next rewrites the
 // state event (which emits only `toolDefinitions`).

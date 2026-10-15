@@ -2,6 +2,7 @@ import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-
 import {
   getToolRequests,
   isToolResultEventType,
+  latestEventContent,
 } from '@cardstack/runtime-common/matrix-constants';
 
 // The approval flow every bot tool shares. A tool's turn may mark a call
@@ -82,7 +83,7 @@ export function releasedToolCalls(
       name?: string;
       arguments?: unknown;
       approvalRequired?: boolean;
-    }>(event.content as Record<string, any>) ?? []) {
+    }>(latestEventContent(event)) ?? []) {
       if (
         !request?.id ||
         !request.name ||
