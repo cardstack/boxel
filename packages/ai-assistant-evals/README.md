@@ -43,7 +43,7 @@ endpoint is the URL.
 - **EvaluationReport**: one per session, with a query-backed `results` table
   and the total cost.
 
-Three evaluations ship. `hello-world` is the smallest build there is, one
+Four evaluations ship. `hello-world` is the smallest build there is, one
 definition and one instance shown on screen — the one to start from, and the
 one to reach for when checking that a change did not break the basics.
 `linkedin-profile-computed-edit-restyle` is the step up: one definition with a
@@ -53,6 +53,10 @@ definition and both instances in place, and restyles the card.
 `linksToMany`, a computed field on each, three instances, and then a follow-up
 prompt in the same room that changes only the look, so it also grades whether
 the assistant edits its own work in place instead of writing it again.
+`reading-list-save-then-answer` grades the reply rather than the build: a small
+card with three instances, then a list and a closing line the user asks for once
+everything is saved. It catches a final reply that shrinks to a one-sentence
+acknowledgement after the write passes its correctness check.
 
 Add one by adding a JSON file under `eval-realm/Evaluation/` and running setup
 again. An evaluation that wants a card or a file already in the test workspace
