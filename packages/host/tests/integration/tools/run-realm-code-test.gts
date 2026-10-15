@@ -1337,7 +1337,7 @@ return errors;`,
       );
     });
 
-    test('a download the script did not await is not fetched after the run ends', async function (assert) {
+    test('a download the script did not await fails the run and is not fetched', async function (assert) {
       // Holds the destination lookup until the run has ended.
       getService('network').virtualNetwork.mount(
         async (req: Request) => {
@@ -1352,12 +1352,18 @@ return errors;`,
         getService('tool-service').toolContext,
       );
 
-      await command.execute({
-        realm: testRealmURL,
-        roomId: '!room:example.com',
-        code: `realm.fs.download('${sourceURL}', 'late.png');
+      // The download is still waiting on its lookup when the script
+      // returns, so the run fails, as for any realm call not awaited. The
+      // failure is reported only once that lookup has answered.
+      await assert.rejects(
+        command.execute({
+          realm: testRealmURL,
+          roomId: '!room:example.com',
+          code: `realm.fs.download('${sourceURL}', 'late.png');
 return 'done';`,
-      });
+        }),
+        /await every realm call/,
+      );
 
       assert.deepEqual(sourceRequests, [], 'nothing is fetched');
       let response = await getService('network').authedFetch(
