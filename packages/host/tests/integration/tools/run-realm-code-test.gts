@@ -2417,6 +2417,154 @@ throw new Error('stop here');`,
     assert.strictEqual(operatorModeStateService.state.submode, submodeBefore);
   });
 
+  module('realm.cards.update', function () {
+    const recipeRef = `{ module: ${JSON.stringify(`${testRealmURL}recipe`)}, name: 'Recipe' }`;
+
+    async function run(code: string) {
+      let toolService = getService('tool-service');
+      let command = new RunRealmCodeTool(toolService.toolContext);
+      return await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code,
+      });
+    }
+
+    async function cardJSON(path: string) {
+      let source = await getService('card-service').getSource(
+        new URL(`${testRealmURL}${path}`),
+      );
+      return JSON.parse(source.content);
+    }
+
+    test('changes the fields it is given and keeps the others', async function (assert) {
+      let result = await run(`
+const updated = await realm.cards.update('Recipe/pancakes', { cuisine: 'French' });
+return updated;`);
+
+      assert.deepEqual(JSON.parse(result.scriptResult!), {
+        path: 'Recipe/pancakes.json',
+        fields: ['cuisine'],
+        saves: 'after the script finishes',
+      });
+      assert.deepEqual(
+        result.files.map((file) => [file.fileUrl, file.status]),
+        [[`${testRealmURL}Recipe/pancakes.json`, 'saved']],
+      );
+      let { data } = await cardJSON('Recipe/pancakes.json');
+      assert.strictEqual(data.attributes.cuisine, 'French');
+      assert.strictEqual(data.attributes.name, 'Pancakes');
+      assert.strictEqual(
+        data.relationships.chef.links.self,
+        '../Chef/ana',
+        'links are kept',
+      );
+    });
+
+    test('edits a long text field in the script without cutting it', async function (assert) {
+      let long = Array.from(
+        { length: 40 },
+        (_, n) => `Line ${n}: a \`code\` span, a \${placeholder} and "quotes".`,
+      ).join('\n');
+      assert.true(long.length > 500);
+      await run(
+        `await realm.cards.update('Pet/mango', { name: ${JSON.stringify(long)} });`,
+      );
+
+      let result = await run(`
+const card = await realm.cards.get('Pet/mango');
+const name = card.attributes.name.replace('Line 0:', 'First line:');
+await realm.cards.update('Pet/mango', { name });
+return name.length;`);
+
+      let expected = long.replace('Line 0:', 'First line:');
+      assert.strictEqual(JSON.parse(result.scriptResult!), expected.length);
+      let { data } = await cardJSON('Pet/mango.json');
+      assert.strictEqual(data.attributes.name, expected);
+    });
+
+    test('a search-then-update loop saves every card, past the file limit, in one batch', async function (assert) {
+      let cardService = getService('card-service');
+      for (let n = 0; n < 25; n++) {
+        await cardService.saveSource(
+          new URL(`${testRealmURL}Recipe/batch/r${n}.json`),
+          recipeJSON(
+            'Recipe',
+            { name: `R${n}`, cuisine: 'batch' },
+            undefined,
+            '../../recipe',
+          ),
+          'editor',
+        );
+      }
+
+      let result = await run(`
+const { cards } = await realm.cards.search({ filter: { eq: { cuisine: 'batch' }, on: ${recipeRef} } });
+for (const card of cards) {
+  await realm.cards.update(card.path, { cuisine: 'done' });
+}
+return cards.length;`);
+
+      assert.strictEqual(JSON.parse(result.scriptResult!), 25);
+      assert.strictEqual(result.files.length, 25, 'the result names each card');
+      let { data } = await cardJSON('Recipe/batch/r24.json');
+      assert.strictEqual(data.attributes.cuisine, 'done');
+    });
+
+    test('two updates to the same card in one run both apply', async function (assert) {
+      let result = await run(`
+await realm.cards.update('Recipe/ramen', { cuisine: 'Japanese street food' });
+await realm.cards.update('Recipe/ramen.json', { name: 'Shoyu ramen' });`);
+
+      assert.strictEqual(result.files.length, 1);
+      let { data } = await cardJSON('Recipe/ramen.json');
+      assert.strictEqual(data.attributes.cuisine, 'Japanese street food');
+      assert.strictEqual(data.attributes.name, 'Shoyu ramen');
+    });
+
+    test('a run that fails saves no card update, and says so', async function (assert) {
+      await assert.rejects(
+        run(`
+await realm.cards.update('Recipe/pancakes', { cuisine: 'French' });
+throw new Error('stop');`),
+        /stop.*The card updates it asked for were not saved/,
+      );
+      let { data } = await cardJSON('Recipe/pancakes.json');
+      assert.strictEqual(data.attributes.cuisine, 'unknown');
+    });
+
+    test('refuses a file that is not a card, attributes that are not an object, and realm.fs on an updated card', async function (assert) {
+      let result = await run(`
+const errors = [];
+for (const call of [
+  () => realm.cards.update('task.json', { title: 'x' }),
+  () => realm.cards.update('Recipe/missing', { name: 'x' }),
+  () => realm.cards.update('Recipe/pancakes', ['x']),
+  () => realm.cards.update('Recipe/pancakes', 'x'),
+]) {
+  try { await call(); } catch (error) { errors.push(error.message); }
+}
+await realm.cards.update('Recipe/ramen', { cuisine: 'Ramen-ya' });
+try { await realm.fs.readText('Recipe/ramen.json'); } catch (error) { errors.push(error.message); }
+return errors;`);
+
+      let errors = JSON.parse(result.scriptResult!) as string[];
+      assert.true(
+        /Not a card instance: .*task\.json/.test(errors[0]!),
+        errors[0],
+      );
+      assert.true(/Card not found/.test(errors[1]!), errors[1]);
+      assert.true(/attributes object/.test(errors[2]!), errors[2]);
+      assert.true(/attributes object/.test(errors[3]!), errors[3]);
+      assert.true(
+        /realm\.fs cannot read or change it in the same run/.test(errors[4]!),
+        errors[4],
+      );
+      let { data } = await cardJSON('Recipe/ramen.json');
+      assert.strictEqual(data.attributes.cuisine, 'Ramen-ya');
+    });
+  });
+
   module('realm.cards.search', function () {
     const recipeRef = `{ module: ${JSON.stringify(`${testRealmURL}recipe`)}, name: 'Recipe' }`;
 
