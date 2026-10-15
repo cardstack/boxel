@@ -2,7 +2,11 @@ import { service } from '@ember/service';
 
 import { v4 as uuidv4 } from 'uuid';
 
-import { rri } from '@cardstack/runtime-common';
+import {
+  RealmPaths,
+  rri,
+  type RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 
 import HostBaseTool from '../lib/host-base-tool';
 import { findNonConflictingFilename } from '../utils/file-name';
@@ -68,23 +72,30 @@ export default class WriteBinaryFileTool extends HostBaseTool<
       path = path.slice(1);
     }
 
-    // `realm` comes from `realmOf`, which answers with a realm identifier.
-    // No form guard, and reachability by a prefix form is unverified.
-    // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
-    let url = new URL(path, realm);
-    let finalUrl = url;
+    // `realm` is in whichever form the realm was registered under, so the
+    // target stays an identifier until the upload resolves it to a URL.
+    let fileId: RealmResourceIdentifier;
+    if (realm) {
+      fileId = new RealmPaths(realm).fileRRI(path);
+    } else {
+      // Without a realm the path must be a complete identifier; `toURL`
+      // throws for one that resolves nowhere.
+      this.network.virtualNetwork.toURL(path);
+      fileId = rri(path);
+    }
+    let finalFileId = fileId;
 
     if (input.useNonConflictingFilename) {
-      let existing = await this.cardService.getSource(url);
+      let existing = await this.cardService.getSource(fileId);
       if (existing.status === 200 || existing.status === 406) {
-        let nonConflictingUrl = await findNonConflictingFilename(
-          url.href,
-          (candidateUrl) => this.fileExists(candidateUrl),
+        finalFileId = rri(
+          await findNonConflictingFilename(fileId, (candidate) =>
+            this.fileExists(candidate),
+          ),
         );
-        finalUrl = new URL(nonConflictingUrl);
       } else if (existing.status !== 404) {
         throw new Error(
-          `Error checking if file exists at ${url}: ${existing.status}`,
+          `Error checking if file exists at ${fileId}: ${existing.status}`,
         );
       }
     }
@@ -95,6 +106,7 @@ export default class WriteBinaryFileTool extends HostBaseTool<
     let clientRequestId = `binary:${uuidv4()}`;
     this.cardService.clientRequestIds.add(clientRequestId);
 
+    let finalUrl = this.network.virtualNetwork.toURL(finalFileId);
     let response = await this.network.authedFetch(finalUrl, {
       method: 'POST',
       headers: {
@@ -134,7 +146,7 @@ export default class WriteBinaryFileTool extends HostBaseTool<
 
     let commandModule = await this.loadToolModule();
     const { WriteBinaryFileResult } = commandModule;
-    return new WriteBinaryFileResult({ fileIdentifier: finalUrl.href });
+    return new WriteBinaryFileResult({ fileIdentifier: finalFileId });
   }
 
   private async fileExists(fileUrl: string): Promise<boolean> {
