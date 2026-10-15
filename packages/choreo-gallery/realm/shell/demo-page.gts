@@ -805,8 +805,9 @@ export class DemoPage extends Component<Signature> {
         fill: var(--ink);
       }
 
+      /* a hot label most often sits in a .dg-hot box */
       .demo-body :deep(.dg-t.is-hot) {
-        fill: var(--ember-ink);
+        fill: var(--hot-ink);
       }
 
       .demo-body :deep(.dg-t.is-dim) {
@@ -836,7 +837,7 @@ export class DemoPage extends Component<Signature> {
       }
 
       .demo-body :deep(.dg-h.is-hot) {
-        fill: var(--ember-ink);
+        fill: var(--hot-ink);
       }
 
       .walk {

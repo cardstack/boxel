@@ -90,6 +90,8 @@ export const ChoreoRoot: TOC<Signature> = <template>
       --steel-ink: #96a0a5;
       /* the small uppercase label over a section, a tile or a code sample */
       --eyebrow: var(--ember-ink);
+      /* ember text on an ember-tinted fill, such as a diagram's hot box */
+      --hot-ink: #ff9370;
       /* a focus indicator needs 3:1 against whatever it is drawn over */
       --focus-ring: var(--ember-hot);
       --glow: rgba(255, 59, 31, 0.38);
@@ -167,6 +169,7 @@ export const ChoreoRoot: TOC<Signature> = <template>
       --copper-ink: #905824;
       --iris-ink: #7334f5;
       --steel-ink: #5e686e;
+      --hot-ink: #a02600;
       --focus-ring: var(--ember-ink);
       --mark-tail: rgba(255, 59, 31, 0.5);
       --mark-orbit: rgba(94, 104, 110, 0.85);
