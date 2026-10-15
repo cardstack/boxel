@@ -324,6 +324,8 @@ export function handleDeleteIncomingWebhookRequest({
       await query(dbAdapter, [
         `DELETE FROM incoming_webhooks WHERE id = `,
         param(checked.incomingWebhookId),
+        ` AND username = `,
+        param(checked.requestingUserId),
       ]);
     } catch (error) {
       await sendResponseForSystemError(
