@@ -16,6 +16,8 @@ import runRealmCode from '@cardstack/host/lib/realm-runner/runner';
 import RunRealmCodeTool from '@cardstack/host/tools/run-realm-code';
 
 import {
+  createJWT,
+  testRealmSecretSeed,
   testRealmURL,
   setupIntegrationTestRealm,
   setupLocalIndexing,
@@ -29,6 +31,27 @@ import { setupRenderingTest } from '../../helpers/setup';
 import type { CardDef } from '@cardstack/base/card-api';
 
 const otherRealmURL = 'http://test-realm/test2/';
+
+// Makes the realm service know a workspace the user can read under
+// `identifier`, without a realm behind it: the capture endpoint is stubbed,
+// so only the realm service's view of the workspace matters.
+function knowReadableWorkspace(identifier: string) {
+  getService('realm').getOrCreateRealmResource(
+    identifier,
+    createJWT(
+      {
+        user: '@testuser:localhost',
+        realm: identifier,
+        sessionRoom: 'boxel-session-room-id',
+        permissions: ['read'],
+        realmServerURL: 'http://test-realm/',
+      },
+      '1d',
+      testRealmSecretSeed,
+    ),
+    { exact: true },
+  );
+}
 
 // A card instance written out by hand, so a test can match its exact text.
 function recipeJSON(
@@ -499,6 +522,66 @@ return { show: 'Pet/missing' };`,
       /not in a workspace the user can read/,
     );
     assert.strictEqual(captureRequests.length, 0, 'no capture is attempted');
+  });
+
+  test('realm.capture finds the workspace of a prefixed id, whatever form the workspace is known by', async function (assert) {
+    let { virtualNetwork } = getService('network');
+    virtualNetwork.addRealmMapping(
+      '@test/mapped/',
+      'http://test-realm/mapped/',
+    );
+    try {
+      knowReadableWorkspace('@test/mapped/');
+      let toolService = getService('tool-service');
+      let command = new RunRealmCodeTool(toolService.toolContext);
+
+      let result = await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `return await realm.capture('@test/mapped/Pet/mango');`,
+      });
+
+      assert.strictEqual(captureRequests.length, 1, 'one capture request');
+      let { realmURL, cardId } = captureRequests[0].data.attributes;
+      assert.strictEqual(realmURL, 'http://test-realm/mapped/');
+      assert.strictEqual(cardId, 'http://test-realm/mapped/Pet/mango');
+      assert.strictEqual(
+        JSON.parse(result.scriptResult!).path,
+        '@test/mapped/Pet/mango',
+        'the capture is named by the id the script gave',
+      );
+    } finally {
+      virtualNetwork.removeRealmMapping('@test/mapped/');
+    }
+  });
+
+  test('realm.capture asks a workspace nested under the run realm for its own card, and names it by its URL', async function (assert) {
+    let nestedRealmURL = `${testRealmURL}nested/`;
+    knowReadableWorkspace(nestedRealmURL);
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `return [
+  await realm.capture('${nestedRealmURL}Pet/mango'),
+  await realm.capture('${testRealmURL}Pet/mango'),
+];`,
+    });
+
+    assert.deepEqual(
+      captureRequests.map((r) => r.data.attributes.realmURL),
+      [nestedRealmURL, testRealmURL],
+      'each capture is asked of the deepest workspace that holds it',
+    );
+    let [nested, own] = JSON.parse(result.scriptResult!);
+    assert.strictEqual(
+      nested.path,
+      `${nestedRealmURL}Pet/mango`,
+      'a card in the nested workspace keeps its URL',
+    );
+    assert.strictEqual(own.path, 'Pet/mango');
   });
 
   test('realm.cards.get returns a card as data, with computed fields and absolute URLs', async function (assert) {

@@ -46,6 +46,7 @@ import {
   captureDeadline,
   captureForAgent,
   resolveViewTarget,
+  workspaceOf,
   uploadedImages,
   type ViewedImage,
   type ViewOptions,
@@ -406,6 +407,9 @@ class RealmFsSession {
     private readCard: ReadCard,
     private searchEntries: SearchEntriesFn,
     captureURL: CaptureURL,
+    // Whether a URL or card id is held by this realm itself rather than by
+    // another workspace, including one nested under this realm's URL.
+    private heldByThisRealm: (reference: string) => boolean,
     private createWorkspace: CreateWorkspace,
     private deleteWorkspace: DeleteWorkspace,
     private generateImage: GenerateImage,
@@ -1181,8 +1185,9 @@ class RealmFsSession {
   // What `realm.capture` captures. A relative path resolves inside this realm,
   // as for every other call. A full URL or a prefixed card id (`@scope/...`)
   // may name a card or file in any workspace: the capture itself refuses one
-  // the user cannot read. The result names a target in this realm by its
-  // path, and any other by what the script gave.
+  // the user cannot read. The result names a target this realm holds by its
+  // path, and any other — one in a workspace nested under this realm's URL
+  // too — by what the script gave.
   private captureTarget(path: unknown): { url: string; path: string } {
     if (
       typeof path === 'string' &&
@@ -1192,7 +1197,9 @@ class RealmFsSession {
       return {
         url: reference,
         path:
-          reference.startsWith(this.realmURL) && reference !== this.realmURL
+          reference.startsWith(this.realmURL) &&
+          reference !== this.realmURL &&
+          this.heldByThisRealm(reference)
             ? this.relative(reference)
             : reference,
       };
@@ -1604,6 +1611,9 @@ export default class RunRealmCodeTool extends HostBaseTool<
       (query, realms) => this.store.searchEntries(query, realms),
       (url, options, doneBy, signal) =>
         this.captureURL(url, options, doneBy, signal),
+      (reference) =>
+        workspaceOf(reference, { network: this.network, realm: this.realm })
+          ?.realmURL === this.realmRootURL(realmURL),
       (workspaceInput) =>
         createWorkspace(
           { matrixService: this.matrixService, realm: this.realm },
