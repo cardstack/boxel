@@ -60,6 +60,10 @@ had. Follow ADR 001 §1.7:
 - Cite each reason in Sources. Put a reason you inferred, but that no source
   states, under Open questions. Name the authors of the key commits as the
   people to ask.
+- When someone answers an open question, put the answer where it belongs
+  (Rationale or Considered options), cite it in Sources as
+  "<name>, <date>", and delete the question. Use their words; don't embellish
+  the reason.
 - Write the Decision from the code as it stands today, verified by reading it.
   If the code has drifted from the original decision, say so. The drift may
   need a superseding ADR.

@@ -106,8 +106,10 @@ A retroactive ADR records a decision made before it was written down. Its
 ADR was written.
 
 Each claim about why the decision was made MUST cite a source in Sources: a
-commit, a PR in this repository, or a file. A reason that no source states
-MUST go under Open questions, with the people to ask. Considered options MUST
+commit, a PR in this repository, a file, or an answer from a named person with
+its date. A reason that no source states MUST go under Open questions, with the
+people to ask. When a person answers an open question, the answer MUST move
+into the ADR and be cited in Sources. Considered options MUST
 list only alternatives that a source shows were considered.
 
 ### 1.8. Public repository
