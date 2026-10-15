@@ -323,7 +323,7 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a process sealing with another data key seals again a secret sealed under the public local development key', async function (assert) {
+    test('a process sealing with another data key reports a secret sealed under the public local development key and leaves it for an operator', async function (assert) {
       await insertPlainTextRow(FIRST_ID, FIRST_SECRET);
       await sealIncomingWebhookSecrets(dbAdapter);
       assert.strictEqual(
@@ -334,14 +334,72 @@ module(basename(import.meta.filename), function () {
         [{ keyId: 'kms-deployed', key: Buffer.alloc(32, 9) }],
         'kms-deployed',
       );
+      let before = await secretRow(FIRST_ID);
 
-      let result = await sealIncomingWebhookSecrets(dbAdapter, deployed);
+      let result: Awaited<ReturnType<typeof sealIncomingWebhookSecrets>>;
+      let lines = await logLinesDuring(
+        ['incoming-webhook-secrets'],
+        async () => {
+          result = await sealIncomingWebhookSecrets(dbAdapter, deployed);
+        },
+      );
 
+      assert.strictEqual(result!.tampered, 1);
+      assert.strictEqual(result!.sealed, 0);
+      assert.deepEqual(await secretRow(FIRST_ID), before);
+      let errors = lines.filter(({ level }) => level === 'error');
+      assert.strictEqual(errors.length, 1, 'the backfill reports the row');
+      assert.true(errors[0].message.includes(FIRST_ID));
+      assert.false(errors[0].message.includes(FIRST_SECRET));
+
+      result = await sealIncomingWebhookSecrets(dbAdapter, deployed, {
+        resealTampered: true,
+      });
       assert.strictEqual(result.sealed, 1);
-      assert.strictEqual(result.unloadedKey, 0);
       let row = await secretRow(FIRST_ID);
       assert.strictEqual(row.signing_secret_key_id, 'kms-deployed');
       assert.strictEqual(openedFrom(row, deployed), FIRST_SECRET);
+    });
+
+    test('an owner edited alongside a local development key seal is reported, not sealed to the new owner', async function (assert) {
+      let deployed = new SecretsKeyring(
+        [{ keyId: 'kms-deployed', key: Buffer.alloc(32, 9) }],
+        'kms-deployed',
+      );
+      let newOwner = '@new-owner:localhost';
+      await insertPlainTextRow(FIRST_ID, FIRST_SECRET);
+      await sealIncomingWebhookSecrets(dbAdapter, deployed);
+      // The second row's owner is edited and its secret sealed to the new
+      // owner with the public local key, which anyone can do.
+      await insertPlainTextRow(SECOND_ID, SECOND_SECRET);
+      await sealIncomingWebhookSecrets(dbAdapter, keyring);
+      await dbAdapter.execute(
+        `UPDATE incoming_webhooks SET username = $1 WHERE id = $2`,
+        { bind: [newOwner, SECOND_ID] },
+      );
+      await sealIncomingWebhookSecrets(dbAdapter, keyring, {
+        resealTampered: true,
+      });
+      // The first row, sealed under the deployed key, has its owner edited and
+      // its key id pointed at the public local key.
+      await dbAdapter.execute(
+        `UPDATE incoming_webhooks SET username = $1,
+           signing_secret_key_id = 'local-development'
+         WHERE id = $2`,
+        { bind: [newOwner, FIRST_ID] },
+      );
+      let second = await secretRow(SECOND_ID);
+      assert.strictEqual(second.username, newOwner);
+      assert.strictEqual(second.signing_secret_key_id, 'local-development');
+      assert.strictEqual(openedFrom(second), SECOND_SECRET);
+      let first = await secretRow(FIRST_ID);
+
+      let result = await sealIncomingWebhookSecrets(dbAdapter, deployed);
+
+      assert.strictEqual(result.tampered, 2);
+      assert.strictEqual(result.sealed, 0);
+      assert.deepEqual(await secretRow(FIRST_ID), first);
+      assert.deepEqual(await secretRow(SECOND_ID), second);
     });
 
     test('the backfill leaves a row whose secret was rotated after it was read', async function (assert) {

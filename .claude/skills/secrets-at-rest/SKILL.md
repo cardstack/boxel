@@ -240,10 +240,13 @@ two disagree. Backfills go through `backfillDecision`, which decides
 seal / unchanged / unloadedKey / tampered the same way for every table.
 
 A sealed value that fails to open under a data key the process has loaded,
-or opens to a value other than the plain text, is **tampered**. Every
-application write keeps the binding's columns, the plain text and the sealed
-value in step, so only an edit outside the application produces either
-state. The binding's `owner` and `id` are what stop a sealed secret being
+opens to a value other than the plain text, or is sealed under the public
+`local-development` key when the process seals with another key, is
+**tampered**. Every application write keeps the binding's columns, the plain
+text and the sealed value in step, and a deployed process never seals with the
+local key, so only an edit outside the application produces any of these
+states. A local-key row is not opened to check it: anyone can seal with that
+key, so opening it proves nothing about its binding. The binding's `owner` and `id` are what stop a sealed secret being
 moved to another user or row, so the backfill never re-seals a tampered row
 on its own: that would make the edit permanent and leave it looking like an
 application write. It logs an error naming the row (never the secret),
@@ -301,10 +304,9 @@ proxy endpoint keys: sealed=0 cleared=0 unchanged=3 unloadedKey=0 tampered=0 ski
 ```
 
 - `sealed`: rows sealed from `api_key` because their sealed key was
-  missing. This count also includes rows that a process sealing with KMS
-  found sealed under the public `local-development` key: it seals them
-  again, and logs a warning for each. With `--reseal-tampered` it also
-  includes tampered rows.
+  missing. With `--reseal-tampered` it also includes tampered rows, rows
+  under the public `local-development` key among them, each logged as a
+  warning.
 - `cleared`: rows with no `api_key` whose sealed columns were emptied.
 - `unchanged`: rows that were already correct. A second run reports every
   row here.
@@ -315,9 +317,10 @@ proxy endpoint keys: sealed=0 cleared=0 unchanged=3 unloadedKey=0 tampered=0 ski
   everywhere before any process seals with it, so a nonzero count means a
   rotation step was skipped or a data key was retired too early.
 - `tampered`: rows whose sealed key fails to open under a loaded data key,
-  or opens to a value other than `api_key` (for example, a `url` or key
-  edited by hand). Each is logged as an error naming its url, reported to
-  Sentry, and left as it is.
+  opens to a value other than `api_key` (for example, a `url` or key edited
+  by hand), or is sealed under the public `local-development` key in a
+  process sealing with KMS. Each is logged as an error naming its url,
+  reported to Sentry, and left as it is.
 - `skipped`: rows that changed between the read and the update. Those rows
   are left to whatever changed them.
 
@@ -336,8 +339,9 @@ private address can be another machine, and a tunnel to a deployed database
 also answers on `localhost`. Against a deployed database it needs
 `SECRETS_KMS_KEY_ARN` and `SECRETS_WRAPPED_DATA_KEY`, and a role that can
 decrypt with that key, which in practice means running it inside a
-realm-server task. If rows do end up sealed under the local key, the next
-realm-server start seals them again under KMS. The command logs the
+realm-server task. A row sealed under the local key in a deployed database
+counts as `tampered` at the next realm-server start, and is sealed again under
+KMS only by this command with `--reseal-tampered`. The command logs the
 backfill line, then the census. With `--reseal-tampered`
 (`pnpm seal-proxy-endpoint-keys --reseal-tampered`) it also seals tampered
 rows again from their plain-text key; run it only after inspecting the rows

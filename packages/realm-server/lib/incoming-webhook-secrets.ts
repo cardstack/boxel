@@ -197,16 +197,18 @@ export async function rotateIncomingWebhookSecret(
 }
 
 export interface IncomingWebhookSecretSealing {
-  // Rows whose secret was sealed, including rows sealed under the public
-  // local development key by a process that seals with another key.
+  // Rows whose secret was sealed: rows with no sealed secret and, with
+  // `resealTampered`, tampered rows.
   sealed: number;
   // Rows whose sealed secret already matched their plain-text secret.
   unchanged: number;
   // Rows sealed under a data key this process hasn't loaded, left as they
   // are.
   unloadedKey: number;
-  // Rows whose sealed value fails to open under a loaded key or opens to a
-  // value other than the plain text, reported and left as they are.
+  // Rows whose sealed value fails to open under a loaded key, opens to a
+  // value other than the plain text, or is sealed under the public local
+  // development key in a process sealing with another key, reported and left
+  // as they are.
   tampered: number;
   // Rows that changed between the read and the update, left to whoever
   // changed them.

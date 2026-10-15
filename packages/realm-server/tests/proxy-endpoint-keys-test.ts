@@ -311,7 +311,7 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a process sealing with another data key seals again a key sealed under the public local development key', async function (assert) {
+    test('a process sealing with another data key reports a key sealed under the public local development key and leaves it for an operator', async function (assert) {
       await insertPlainTextRow(OPENROUTER_URL, OPENROUTER_KEY);
       await sealProxyEndpointKeys(dbAdapter);
       assert.strictEqual(
@@ -322,9 +322,17 @@ module(basename(import.meta.filename), function () {
         [{ keyId: 'kms-deployed', key: Buffer.alloc(32, 9) }],
         'kms-deployed',
       );
+      let before = await keyRow(OPENROUTER_URL);
 
       let result = await sealProxyEndpointKeys(dbAdapter, deployed);
 
+      assert.strictEqual(result.tampered, 1);
+      assert.strictEqual(result.sealed, 0);
+      assert.deepEqual(await keyRow(OPENROUTER_URL), before);
+
+      result = await sealProxyEndpointKeys(dbAdapter, deployed, {
+        resealTampered: true,
+      });
       assert.strictEqual(result.sealed, 1);
       assert.strictEqual(result.unloadedKey, 0);
       let row = await keyRow(OPENROUTER_URL);

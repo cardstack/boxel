@@ -121,19 +121,21 @@ export type BackfillDecision =
 //
 // A row sealed under a data key this process hasn't loaded is left alone:
 // re-sealing it under this process's current key would move it back onto an
-// older data key than the one a rotation put it under. The one exception is
-// the public local development key: a process sealing with any other key seals
-// such a row again, since anyone can open it.
+// older data key than the one a rotation put it under.
 //
-// A sealed value that fails to open under a loaded key, or opens to a value
-// other than the plain text, is tampered: every application write keeps the
-// binding's columns, the plain text and the sealed value in step, so only an
-// edit outside the application produces either state. The binding's owner and
-// id are what stop a sealed secret being moved to another row or user, so
-// re-sealing such a row from what it says would make the edit permanent and
-// indistinguishable from an application write. The row is left as it is and
-// reported through `reportTampered`, unless `resealTampered` is set, which an
-// operator does once they have looked at the row.
+// A row is tampered when its sealed value fails to open under a loaded key,
+// opens to a value other than the plain text, or, in a process sealing with
+// any other key, is sealed under the public local development key. Every
+// application write keeps the binding's columns, the plain text and the sealed
+// value in step, and a deployed process never seals with the local key, so only
+// an edit outside the application produces any of these states. A local-key
+// row proves nothing about its binding, since anyone can seal with that key,
+// so it is not opened to check. The binding's owner and id are what stop a
+// sealed secret being moved to another row or user, so re-sealing such a row
+// from what it says would make the edit permanent and indistinguishable from an
+// application write. The row is left as it is and reported through
+// `reportTampered`, unless `resealTampered` is set, which an operator does once
+// they have looked at the row.
 //
 // `subject` names the secret in the reports, as in "the signing secret of
 // webhook <id>"; it never carries the secret.
@@ -163,10 +165,16 @@ export function backfillDecision({
     sealed.keyId === LOCAL_DATA_KEY_ID &&
     keyring.currentKeyId !== LOCAL_DATA_KEY_ID
   ) {
-    warn(
-      `${subject} is sealed under the public local development key, so it is sealed again under data key ${keyring.currentKeyId}`,
+    if (resealTampered) {
+      warn(
+        `${subject} is sealed under the public local development key, so it is sealed again under data key ${keyring.currentKeyId}`,
+      );
+      return 'seal';
+    }
+    reportTampered(
+      `${subject} is sealed under the public local development key, which a process sealing with data key ${keyring.currentKeyId} never writes, so it is left as it is for an operator to inspect`,
     );
-    return 'seal';
+    return 'tampered';
   }
   if (!keyring.keyIds.includes(sealed.keyId)) {
     warn(
