@@ -297,6 +297,8 @@ export default class MatrixService extends Service {
   private roomsWaitingForSync: Map<string, Deferred<void>> = new Map();
   @tracked private _systemCard: SystemCard | undefined;
   @tracked private _systemCardLoadFailed = false;
+  // The latest system card load, for checks that must wait for it.
+  #systemCardLoading: Promise<void> | undefined;
   private _userChoiceId: string | undefined;
   private _systemCardInvalidationUnsub: (() => void) | undefined;
   // Sticky "the active SystemCard was deleted in-session" signal. Bridges the
@@ -2450,13 +2452,14 @@ export default class MatrixService extends Service {
   }
 
   // The model ids the room may switch to: the ones its model picker offers.
-  // Read from the room's events, which exist whether or not the room is
-  // rendered.
-  pickableModelIds(roomId: string): string[] {
-    return pickableModelIds(
-      this.systemCard,
-      usedLLMsFromEvents(this.getRoomData(roomId)?.events ?? []),
-    );
+  // `roomId` is undefined for a room that does not exist yet. Waits for a
+  // system card that is still loading, so that its models are not refused in
+  // the meantime. The used models come from the room's events, which exist
+  // whether or not the room is rendered.
+  async pickableModelIds(roomId: string | undefined): Promise<string[]> {
+    await this.#systemCardLoading?.catch(() => undefined);
+    let events = roomId ? (this.getRoomData(roomId)?.events ?? []) : [];
+    return pickableModelIds(this.systemCard, usedLLMsFromEvents(events));
   }
 
   private setRoomData(roomId: string, roomData: Room) {
@@ -3457,6 +3460,12 @@ export default class MatrixService extends Service {
   }
 
   private async setSystemCard(userChoiceId: string | undefined) {
+    let loading = this.loadSystemCard(userChoiceId);
+    this.#systemCardLoading = loading;
+    await loading;
+  }
+
+  private async loadSystemCard(userChoiceId: string | undefined) {
     this._userChoiceId = userChoiceId;
     let envDefaultId = ENV.defaultSystemCardId;
 

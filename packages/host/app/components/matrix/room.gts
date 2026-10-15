@@ -65,7 +65,10 @@ import ENV from '@cardstack/host/config/environment';
 import type { FileUploadState } from '@cardstack/host/lib/file-upload-state';
 import { formatTokenUsage } from '@cardstack/host/lib/format-token-usage';
 import type { Message } from '@cardstack/host/lib/matrix-classes/message';
-import { pickableModels } from '@cardstack/host/lib/pickable-models';
+import {
+  modelIdsOf,
+  pickableModels,
+} from '@cardstack/host/lib/pickable-models';
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import { isAutoExecutableTool } from '@cardstack/host/lib/tool-auto-execute';
 import { getAutoAttachment } from '@cardstack/host/resources/auto-attached-card';
@@ -1216,7 +1219,7 @@ export default class Room extends Component<Signature> {
   // The distinct OpenRouter model ids that can appear in the picker.
   @cached
   private get pickerModelIds(): string[] {
-    return [...new Set(this.baseLlmOptions.map((option) => option.modelId))];
+    return modelIdsOf(this.baseLlmOptions);
   }
 
   // Cost tier ($…$$$$ / Free) per model id, populated by `loadModelCostTiers`.

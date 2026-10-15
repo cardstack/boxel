@@ -24,34 +24,50 @@ export default class SetActiveLLMTool extends HostBaseTool<
   protected async run(
     input: BaseToolModule.SetActiveLLMInput,
   ): Promise<undefined> {
-    // The room reads any value other than 'act' as Ask. A model that mixes
-    // this up with the submode (GPT-5.4 Mini sent 'code') would switch the
-    // room out of Act mode and then wait on its own patches for approval.
-    // Validate before either event is sent so a rejected call cannot partially
-    // change the active model.
-    if (input.mode && input.mode !== 'act' && input.mode !== 'ask') {
-      throw new Error(
-        `mode must be "act" or "ask", got "${input.mode}". To open code mode, use switch-submode instead.`,
-      );
+    let { model, mode } = await checkActiveLLMInput(
+      this.matrixService,
+      input.roomId,
+      input,
+    );
+    if (model) {
+      await this.matrixService.sendActiveLLMEvent(input.roomId, model);
     }
-    // Only the models the room's model picker offers, so no caller can put
-    // the room on a model the user could not pick by hand.
-    if (input.model) {
-      let known = this.matrixService.pickableModelIds(input.roomId);
-      if (!known.includes(input.model)) {
-        throw new Error(
-          `Unknown model: ${input.model}. Models this room can use: ${known.join(', ')}`,
-        );
-      }
-    }
-    if (input.model) {
-      await this.matrixService.sendActiveLLMEvent(input.roomId, input.model);
-    }
-    if (input.mode === 'act' || input.mode === 'ask') {
-      await this.matrixService.sendLLMModeEvent(input.roomId, input.mode);
+    if (mode) {
+      await this.matrixService.sendLLMModeEvent(input.roomId, mode);
     }
     return undefined;
   }
+}
+
+// Checks a model and a mode before any of them is sent, so that a refused
+// call changes nothing. `roomId` is undefined for a room that does not exist
+// yet. Returns the model trimmed.
+export async function checkActiveLLMInput(
+  matrixService: MatrixService,
+  roomId: string | undefined,
+  input: { model?: string; mode?: string },
+): Promise<{ model?: string; mode?: 'act' | 'ask' }> {
+  // The room reads any value other than 'act' as Ask. A model that mixes
+  // this up with the submode (GPT-5.4 Mini sent 'code') would switch the
+  // room out of Act mode and then wait on its own patches for approval.
+  let mode = input.mode || undefined;
+  if (mode !== undefined && mode !== 'act' && mode !== 'ask') {
+    throw new Error(
+      `mode must be "act" or "ask", got "${mode}". To open code mode, use switch-submode instead.`,
+    );
+  }
+  // Only the models the room's model picker offers, so no caller can put the
+  // room on a model the user could not pick by hand.
+  let model = input.model?.trim() || undefined;
+  if (model) {
+    let known = await matrixService.pickableModelIds(roomId);
+    if (!known.includes(model)) {
+      throw new Error(
+        `Unknown model: ${model}. Models this room can use: ${known.join(', ')}`,
+      );
+    }
+  }
+  return { model, mode };
 }
 
 // Pre-rename spellings: realm content references these classes by named

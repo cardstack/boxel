@@ -69,11 +69,13 @@ export function usedLLMsFromEvents(
   return [...usedLLMs];
 }
 
+export function modelIdsOf(options: LLMOption[]): string[] {
+  return [...new Set(options.map((option) => option.modelId))];
+}
+
 export function pickableModelIds(
   systemCard: SystemCard | undefined,
   usedLLMs: string[],
 ): string[] {
-  return [
-    ...new Set(pickableModels(systemCard, usedLLMs).map((o) => o.modelId)),
-  ];
+  return modelIdsOf(pickableModels(systemCard, usedLLMs));
 }

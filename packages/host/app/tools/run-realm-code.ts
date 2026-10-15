@@ -800,7 +800,7 @@ class RealmFsSession {
       case 'room.disableSkills':
         return this.room.disableSkills(args[0]);
       case 'room.setModel':
-        return this.room.setModel(args[0]);
+        return await this.room.setModel(args[0]);
       case 'ui.switchSubmode': {
         let submode = args[0];
         if (submode !== 'interact' && submode !== 'code') {

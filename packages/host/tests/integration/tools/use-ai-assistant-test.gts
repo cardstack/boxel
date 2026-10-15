@@ -362,6 +362,24 @@ module('Integration | tools | ai-assistant', function (hooks) {
     );
   });
 
+  test('does not create a room when the requested model is unknown', async function (assert) {
+    let initialRoomIds = [...getRoomIds()];
+
+    let aiAssistantCommand = new UseAiAssistantTool(toolService.toolContext);
+    await assert.rejects(
+      aiAssistantCommand.execute({
+        prompt: 'Hello with an unknown LLM!',
+        roomId: 'new',
+        openRoom: true,
+        llmModel: 'no-such/model',
+      }),
+      /Unknown model: no-such\/model/,
+      'the unknown model is rejected',
+    );
+
+    assert.deepEqual(getRoomIds(), initialRoomIds, 'no room is created');
+  });
+
   test('does not set a model the model picker does not offer', async function (assert) {
     let roomId = createAndJoinRoom({
       sender: '@testuser:localhost',
