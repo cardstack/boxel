@@ -1677,6 +1677,11 @@ await workspaces['del' + 'ete']('${oldWorkspace}');`;
       one: { invalidated: ['task.json'] },
       reindex: { reindex: 'started' },
     });
+    assert.deepEqual(result.indexActions, [
+      'invalidate Pet/mango.json, pet.gts',
+      'invalidate task.json',
+      'reindex',
+    ]);
   });
 
   test('realm.index.invalidate refuses a path outside the realm and an empty list', async function (assert) {
@@ -1729,6 +1734,30 @@ return refused;`,
       cancel: { cancelled: true },
       full: { fullReindex: 'started' },
     });
+  });
+
+  test('a failed run names the index actions it already started', async function (assert) {
+    let calls = stubIndexing();
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.index.invalidate('task.json');
+await realm.index.fullReindex();
+throw new Error('boom');`,
+      }),
+      /boom\. No file was saved\. Index actions already started by this run: invalidate task\.json; fullReindex/,
+    );
+    assert.deepEqual(calls, [
+      {
+        action: 'invalidate',
+        realm: testRealmURL,
+        urls: [`${testRealmURL}task.json`],
+      },
+      { action: 'fullReindex', realm: testRealmURL },
+    ]);
   });
 
   test('a script that reaches realm.index.fullReindex another way is refused', async function (assert) {

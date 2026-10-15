@@ -338,6 +338,9 @@ class RealmFsSession {
   // Workspaces this run deleted that do not exist again: a later create at
   // the same URL takes the URL out.
   readonly goneWorkspaces = new Set<string>();
+  // `realm.index` calls this run made, in order. The realm server has started
+  // each one, so a retry must not start it again.
+  readonly indexActions: string[] = [];
   // Binary files this run knows exist: found by a lookup or saved by
   // realm.fs.writeBytes. They are not in `known`, since their content is not
   // text, but they count toward MAX_FILES.
@@ -794,22 +797,27 @@ class RealmFsSession {
         }
         let urls = paths.map((path) => this.resolve(method, path));
         await this.index.invalidate(urls);
-        return { invalidated: urls.map((url) => this.relative(url)) };
+        let invalidated = urls.map((url) => this.relative(url));
+        this.indexActions.push(`invalidate ${invalidated.join(', ')}`);
+        return { invalidated };
       }
       case 'index.reindex':
         await this.index.reindex();
+        this.indexActions.push('reindex');
         return { reindex: 'started' };
       case 'index.fullReindex':
         if (!this.namedCalls.has('realm.index.fullReindex')) {
           throw notNamedError('realm.index.fullReindex');
         }
         await this.index.fullReindex();
+        this.indexActions.push('fullReindex');
         return { fullReindex: 'started' };
       case 'index.cancelJob':
         if (!this.namedCalls.has('realm.index.cancelJob')) {
           throw notNamedError('realm.index.cancelJob');
         }
         await this.index.cancelJob();
+        this.indexActions.push('cancelJob');
         return { cancelled: true };
       default:
         throw new Error(`Unknown realm call: ${String(method)}`);
@@ -1510,6 +1518,11 @@ export default class RunRealmCodeTool extends HostBaseTool<
       if (session.deletedWorkspaces.length > 0) {
         report += ` Workspaces already deleted by this run: ${session.deletedWorkspaces.join(', ')}`;
       }
+      // Index actions start on the realm server when the call returns, so
+      // name them, so a retry does not start a full reindex again.
+      if (session.indexActions.length > 0) {
+        report += ` Index actions already started by this run: ${session.indexActions.join('; ')}`;
+      }
       // Room changes are made only after a run that finished, so a failed
       // run made none.
       if (session.room.requested) {
@@ -1581,6 +1594,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
       ),
       createdWorkspaces: [...session.createdWorkspaces],
       deletedWorkspaces: [...session.deletedWorkspaces],
+      indexActions: [...session.indexActions],
       roomChanges,
     });
   }
