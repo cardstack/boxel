@@ -585,11 +585,23 @@ module(basename(import.meta.filename), function () {
         );
       }
 
+      // The roles this module sets up. The table's owner also shows up once
+      // the table has explicit grants, and the migration never touches it.
+      const rolesUnderTest = [
+        'readonly_role',
+        DIRECT_MEMBER,
+        INHERITING_MEMBER,
+        OUTSIDER,
+      ];
+
       function selectGranteesIn(
         grants: { grantee: string; privilege_type: string }[],
       ) {
         return grants
-          .filter(({ privilege_type }) => privilege_type === 'SELECT')
+          .filter(
+            ({ grantee, privilege_type }) =>
+              privilege_type === 'SELECT' && rolesUnderTest.includes(grantee),
+          )
           .map(({ grantee }) => grantee);
       }
 
