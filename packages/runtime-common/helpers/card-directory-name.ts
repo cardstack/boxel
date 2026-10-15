@@ -49,7 +49,16 @@ function directoryNameFromModule(
 
 function lastMeaningfulSegment(pathname: string): string | undefined {
   let normalized = pathname.replace(/\\/g, '/').replace(/\/+$/, '');
-  let segments = normalized.split('/').filter(Boolean);
+  // A relative module's `.` and `..` name no directory of their own: `..`
+  // removes the segment before it.
+  let segments: string[] = [];
+  for (let segment of normalized.split('/')) {
+    if (segment === '..') {
+      segments.pop();
+    } else if (segment && segment !== '.') {
+      segments.push(segment);
+    }
+  }
   if (!segments.length) {
     return undefined;
   }

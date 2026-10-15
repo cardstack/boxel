@@ -30,6 +30,14 @@ module('Unit | runtime-common | card directory names', function () {
       assert.strictEqual(getCardDirectoryName(ref), 'Animals');
     });
 
+    test('ignores dot segments in a relative index module', function (assert) {
+      let ref: CodeRef = {
+        module: rri('./animals/../index'),
+        name: 'default',
+      };
+      assert.strictEqual(getCardDirectoryName(ref), 'Index');
+    });
+
     test('strips executable extensions before inferring name', function (assert) {
       let ref: CodeRef = {
         module: rri('../cards/preview-card.gts'),
