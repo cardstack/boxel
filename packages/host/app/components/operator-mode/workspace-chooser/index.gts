@@ -791,6 +791,15 @@ export default class WorkspaceChooser extends Component<Signature> {
         height: 100%;
         width: 100%;
         z-index: var(--host-workspace-chooser-z-index);
+        --workspace-chooser-gutter: 5rem;
+        --workspace-chooser-card-width: fit-content;
+        --workspace-chooser-tile-width: var(--boxel-xxs-container);
+        /* Favorites until the grid is measured; capped so the tile never
+           outgrows a content area narrower than 1.5 tiles. */
+        --workspace-chooser-enlarged-tile-width: min(
+          var(--boxel-xxs-container) * 1.5,
+          100vw - 2 * var(--workspace-chooser-gutter)
+        );
       }
       .sort-controls {
         display: flex;
@@ -828,7 +837,17 @@ export default class WorkspaceChooser extends Component<Signature> {
         align-items: center;
         gap: var(--boxel-sp-lg);
         height: 100%;
-        padding: calc(5rem + 3.75rem) 5rem 5rem;
+        /* The bottom always clears the floating AI assistant button, which
+           sits over the chooser's bottom-right corner. */
+        padding: calc(var(--workspace-chooser-gutter) + 3.75rem)
+          var(--workspace-chooser-gutter)
+          max(
+            var(--workspace-chooser-gutter),
+            calc(
+              var(--container-button-size) + var(--operator-mode-spacing) +
+                var(--boxel-sp)
+            )
+          );
         overflow: auto;
         /* Fade in only the contents; the dark chooser background above
            paints immediately so the grey operator-mode canvas never flashes
@@ -866,6 +885,7 @@ export default class WorkspaceChooser extends Component<Signature> {
       }
       .section-disclosure-icon {
         --icon-color: var(--boxel-light);
+        --icon-fill: var(--boxel-light);
         color: var(--boxel-light);
         flex-shrink: 0;
         transition: transform 0.15s ease;
@@ -910,6 +930,19 @@ export default class WorkspaceChooser extends Component<Signature> {
       }
       .unreachable-notice-spinner {
         flex-shrink: 0;
+      }
+      /* One tile per row, filling the chooser's own width, which is less
+         than the viewport's when the AI assistant panel is open. */
+      @media (max-width: 30rem) {
+        .workspace-chooser {
+          --workspace-chooser-gutter: var(--boxel-sp);
+          --workspace-chooser-card-width: 100%;
+          --workspace-chooser-tile-width: 100%;
+          --workspace-chooser-enlarged-tile-width: 100%;
+        }
+        .sections-wrapper {
+          width: 100%;
+        }
       }
     </style>
   </template>

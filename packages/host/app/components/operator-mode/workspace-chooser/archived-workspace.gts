@@ -121,12 +121,12 @@ export default class ArchivedWorkspace extends Component<Signature> {
       .archived-card {
         display: flex;
         flex-direction: column;
-        width: fit-content;
+        width: var(--workspace-chooser-card-width);
         position: relative;
       }
       .tile {
-        min-width: var(--boxel-xxs-container);
-        width: var(--boxel-xxs-container);
+        min-width: var(--workspace-chooser-tile-width);
+        width: var(--workspace-chooser-tile-width);
         height: 10.375rem;
         border-radius: var(--boxel-border-radius-xl);
         background-color: var(--boxel-500);
@@ -247,7 +247,7 @@ export default class ArchivedWorkspace extends Component<Signature> {
         align-items: center;
         padding-top: var(--boxel-sp-xs);
         gap: var(--boxel-sp-5xs);
-        max-width: var(--boxel-xxs-container);
+        max-width: var(--workspace-chooser-tile-width);
       }
       .info > span {
         text-overflow: ellipsis;

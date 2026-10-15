@@ -583,7 +583,7 @@ export default class Workspace extends Component<Signature> {
       .workspace-card {
         display: flex;
         flex-direction: column;
-        width: fit-content;
+        width: var(--workspace-chooser-card-width);
         position: relative;
         cursor: pointer;
         --item-container-border-color: transparent;
@@ -594,7 +594,7 @@ export default class Workspace extends Component<Signature> {
         position: absolute;
         top: 0;
         left: 0;
-        width: var(--boxel-xxs-container);
+        width: var(--workspace-chooser-tile-width);
         height: 10.375rem;
         box-sizing: border-box;
         border-radius: var(--boxel-border-radius-xl);
@@ -605,17 +605,17 @@ export default class Workspace extends Component<Signature> {
       .workspace-card.is-enlarged :deep(.workspace) {
         width: var(
           --favorite-tile-width,
-          calc(var(--boxel-xxs-container) * 1.5)
+          var(--workspace-chooser-enlarged-tile-width)
         );
         min-width: var(
           --favorite-tile-width,
-          calc(var(--boxel-xxs-container) * 1.5)
+          var(--workspace-chooser-enlarged-tile-width)
         );
       }
       .workspace-card.is-enlarged::after {
         width: var(
           --favorite-tile-width,
-          calc(var(--boxel-xxs-container) * 1.5)
+          var(--workspace-chooser-enlarged-tile-width)
         );
       }
       .workspace-card:hover::after {
@@ -841,13 +841,13 @@ export default class Workspace extends Component<Signature> {
         align-items: center;
         padding-top: var(--boxel-sp-xs);
         gap: var(--boxel-sp-5xs);
-        max-width: var(--boxel-xxs-container);
+        max-width: var(--workspace-chooser-tile-width);
       }
       .reindex-error {
         position: absolute;
         top: 0;
         left: 0;
-        width: var(--boxel-xxs-container);
+        width: var(--workspace-chooser-tile-width);
         box-sizing: border-box;
         z-index: 21;
         display: flex;
@@ -977,19 +977,24 @@ export default class Workspace extends Component<Signature> {
         overflow: hidden;
         overflow-wrap: anywhere;
       }
-      /* Height is reserved rather than derived from content: the counts are
+      /* Height is fixed rather than derived from content: the counts are
          fetched after the tile renders (favorites only), so a row that grew
          when they landed would shift the tile's centered name. 1lh at the
-         stats' own font-size matches a populated row exactly. */
+         stats' own font-size matches a populated row exactly. On a tile too
+         narrow for every stat, the ones that don't fit wrap onto a second
+         line that's clipped, so a stat is dropped whole, never cut off. */
       .tile-metadata-row {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
-        gap: var(--boxel-sp-sm);
-        min-height: 1lh;
+        column-gap: var(--boxel-sp-sm);
+        height: 1lh;
+        overflow: hidden;
         font-size: 0.75rem;
       }
       .tile-stat {
         display: flex;
+        white-space: nowrap;
         align-items: baseline;
         gap: 0.25rem;
         font-size: 0.75rem;
@@ -1018,7 +1023,7 @@ export default class Workspace extends Component<Signature> {
         position: absolute;
         top: calc(10.375rem - 2.25rem);
         left: 0;
-        width: var(--boxel-xxs-container);
+        width: var(--workspace-chooser-tile-width);
         height: 2.25rem;
         background: var(--boxel-dark-40);
         backdrop-filter: blur(6px);
@@ -1043,7 +1048,7 @@ export default class Workspace extends Component<Signature> {
       .workspace-card.is-enlarged .host-trigger {
         width: var(
           --favorite-tile-width,
-          calc(var(--boxel-xxs-container) * 1.5)
+          var(--workspace-chooser-enlarged-tile-width)
         );
       }
       .trigger-house {
