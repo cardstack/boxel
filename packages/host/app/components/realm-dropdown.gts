@@ -23,6 +23,8 @@ import { RealmPaths, ri } from '@cardstack/runtime-common';
 
 import type { EnhancedRealmInfo } from '@cardstack/host/services/realm';
 
+import RealmURLTooltip from './realm-url-tooltip';
+
 import type RealmService from '../services/realm';
 
 export interface RealmDropdownItem extends EnhancedRealmInfo {
@@ -70,11 +72,12 @@ export default class RealmDropdown extends Component<Signature> {
           data-realm-dropdown-trigger
           data-test-realm-dropdown-trigger
           data-test-realm-name={{this.selectedRealm.name}}
-          title={{this.selectedItemText}}
           ...attributes
         >
           {{#if this.selectedRealm}}
-            <RealmIcon class='icon' @realmInfo={{this.selectedRealm}} />
+            <RealmURLTooltip @realmURL={{this.selectedRealm.path}}>
+              <RealmIcon class='icon' @realmInfo={{this.selectedRealm}} />
+            </RealmURLTooltip>
             <div class='selected-item' data-test-selected-realm>
               {{this.selectedItemText}}
             </div>
@@ -283,7 +286,7 @@ export default class RealmDropdown extends Component<Signature> {
         new MenuItem({
           label: realm.name,
           action: () => this.args.onSelect(realm),
-          checked: realm.name === this.selectedRealm?.name,
+          checked: realm.path === this.selectedRealm?.path,
           iconURL: realm.iconURL ?? undefined,
           subtext: !realm.canWrite ? 'READ ONLY' : undefined,
         }),

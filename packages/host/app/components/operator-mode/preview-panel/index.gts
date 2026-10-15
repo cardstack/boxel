@@ -151,6 +151,10 @@ export default class PreviewPanel extends Component<Signature> {
     return this.realm.info(this.cardId);
   }
 
+  private get realmURLText() {
+    return this.cardId ? this.realm.realmURLTextOf(this.cardId) : undefined;
+  }
+
   private get contextMenuItems() {
     if (!this.args.card || !(getMenuItems in this.args.card)) {
       return [];
@@ -300,6 +304,7 @@ export default class PreviewPanel extends Component<Signature> {
             @cardTypeIcon={{cardTypeIcon @card}}
             @cardTitle={{this.cardTitle}}
             @realmInfo={{this.realmInfo}}
+            @realmURLText={{this.realmURLText}}
             {{! Form is edit-with-base-template — visually the same as
                 edit for the header's green bar. Hide the pencil while
                 in either mode and let the X (finish editing) take you

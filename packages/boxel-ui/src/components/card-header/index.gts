@@ -44,6 +44,9 @@ interface Signature {
     onExpand?: () => void;
     onFinishEditing?: () => void;
     realmInfo?: RealmDisplayInfo;
+    // Display text for the realm's URL, shown under its name in the realm
+    // icon's tooltip.
+    realmURLText?: string;
     utilityMenu?: CardHeaderUtilityMenu;
   };
   Element: HTMLElement;
@@ -94,8 +97,19 @@ export default class CardHeader extends Component<Signature> {
                   />
                 </:trigger>
                 <:content>
-                  In
-                  {{@realmInfo.name}}
+                  {{#if @realmURLText}}
+                    <span class='realm-tooltip'>
+                      In
+                      {{@realmInfo.name}}
+                      <span
+                        class='realm-tooltip-url'
+                        data-test-card-header-realm-url
+                      >{{@realmURLText}}</span>
+                    </span>
+                  {{else}}
+                    In
+                    {{@realmInfo.name}}
+                  {{/if}}
                 </:content>
               </Tooltip>
             {{/if}}
@@ -249,6 +263,13 @@ export default class CardHeader extends Component<Signature> {
     {{/let}}
     <style scoped>
       @layer boxelComponentL4 {
+        .realm-tooltip {
+          display: block;
+          text-align: start;
+        }
+        .realm-tooltip-url {
+          display: block;
+        }
         header {
           container-type: inline-size;
           container-name: card-header;

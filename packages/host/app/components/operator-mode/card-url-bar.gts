@@ -8,6 +8,7 @@ import { and, bool, not } from '@cardstack/boxel-ui/helpers';
 
 import { IconGlobe, Warning as IconWarning } from '@cardstack/boxel-ui/icons';
 
+import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
 import type URLBarResource from '@cardstack/host/resources/url-bar';
 import { urlBarResource } from '@cardstack/host/resources/url-bar';
 
@@ -40,11 +41,13 @@ export default class CardURLBar extends Component<Signature> {
     >
       <div class='realm-info' data-test-card-url-bar-realm-info>
         {{#let (this.realm.info @realmURL) as |realmInfo|}}
-          <RealmIcon
-            class='url-realm-icon'
-            @realmInfo={{realmInfo}}
-            @canAnimate={{true}}
-          />
+          <RealmURLTooltip @realmURL={{@realmURL}}>
+            <RealmIcon
+              class='url-realm-icon'
+              @realmInfo={{realmInfo}}
+              @canAnimate={{true}}
+            />
+          </RealmURLTooltip>
           <span>in {{realmInfo.name}}</span>
         {{/let}}
       </div>

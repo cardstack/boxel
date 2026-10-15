@@ -1075,6 +1075,73 @@ module('Acceptance | workspace-chooser', function (hooks) {
     });
   });
 
+  module('realms with the same name', function () {
+    async function hoverForRealmURL(section: string, realmURL: string) {
+      await triggerEvent(
+        `${section} [data-test-realm-url-tooltip-trigger="${realmURL}"]`,
+        'mouseenter',
+      );
+      let text = document
+        .querySelector('[data-test-realm-url-tooltip]')
+        ?.textContent?.trim();
+      await triggerEvent(
+        `${section} [data-test-realm-url-tooltip-trigger="${realmURL}"]`,
+        'mouseleave',
+      );
+      return text;
+    }
+
+    test('hovering a tile icon shows its realm URL, so same-named workspaces can be told apart', async function (assert) {
+      let restoreB = withUpdatedRealmInfo(realmBURL, { name: 'Workspace A' });
+      try {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+
+        assert
+          .dom('[data-test-workspace-list] [data-test-workspace="Workspace A"]')
+          .exists({ count: 2 });
+        assert.strictEqual(
+          await hoverForRealmURL('[data-test-workspace-list]', realmAURL),
+          'test-realm/testuser/workspace-a',
+        );
+        assert.strictEqual(
+          await hoverForRealmURL('[data-test-workspace-list]', realmBURL),
+          'test-realm/testuser/workspace-b',
+        );
+
+        let matrixService = getService('matrix-service') as MatrixService;
+        matrixService.workspaceFavorites = [realmAURL, realmBURL];
+        await settled();
+        await waitFor('[data-test-favorites-list] [data-test-workspace]');
+
+        assert.strictEqual(
+          await hoverForRealmURL('[data-test-favorites-list]', realmBURL),
+          'test-realm/testuser/workspace-b',
+        );
+      } finally {
+        restoreB();
+      }
+    });
+
+    test('the delete and archive modals show the realm URL', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      await click(`[data-test-workspace-menu-trigger="${realmBURL}"]`);
+      await click('[data-test-boxel-menu-item-text="Delete Workspace"]');
+      await waitFor(`[data-test-delete-modal="${realmBURL}"]`);
+      assert
+        .dom('[data-test-delete-modal-workspace-url]')
+        .hasText('test-realm/testuser/workspace-b');
+      await click('[data-test-cancel-delete-button]');
+
+      await click(`[data-test-workspace-menu-trigger="${realmBURL}"]`);
+      await click('[data-test-boxel-menu-item-text="Archive Workspace"]');
+      await waitFor('[data-test-archive-modal-workspace-url]');
+      assert
+        .dom('[data-test-archive-modal-workspace-url]')
+        .hasText('test-realm/testuser/workspace-b');
+    });
+  });
+
   module('long realm names', function () {
     test('workspace card stays constrained to icon-tile width when the name is long', async function (assert) {
       let longName =
