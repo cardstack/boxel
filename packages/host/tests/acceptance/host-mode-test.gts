@@ -996,6 +996,30 @@ module('Acceptance | host mode tests', function (hooks) {
     assert.dom(openerSelector).isFocused('focus is back on the opener');
   });
 
+  test('closing a card opened from a stacked card returns focus inside that card', async function (assert) {
+    let firstStackSelector = `[data-test-host-mode-stack-item="${testHostModeRealmURL}ViewCardDemo/secondary"]`;
+    let secondStackSelector = `[data-test-host-mode-stack-item="${testHostModeRealmURL}ViewCardDemo/tertiary"]`;
+    let innerOpener = `${firstStackSelector} [data-test-view-card-demo-button]`;
+
+    await visit('/test/ViewCardDemo/index.json');
+    await waitFor('[data-test-view-card-demo-button]');
+    await click('[data-test-view-card-demo-button]');
+    await waitFor(innerOpener);
+    await click(innerOpener);
+    await waitFor(secondStackSelector);
+
+    assert.dom(secondStackSelector).isFocused('the card on top has focus');
+
+    await click(
+      `${secondStackSelector} [data-test-host-stack-item-close-button]`,
+    );
+    await waitUntil(() => !document.querySelector(secondStackSelector));
+
+    assert
+      .dom(innerOpener)
+      .isFocused('focus is back on the control that opened it');
+  });
+
   test('Escape closes the top card of the trail', async function (assert) {
     let firstStackCardId = `${testHostModeRealmURL}ViewCardDemo/secondary`;
     let secondStackCardId = `${testHostModeRealmURL}ViewCardDemo/tertiary`;
