@@ -385,6 +385,13 @@ export class FilmStage extends Component<Signature> {
         cursor: pointer;
       }
 
+      /* the frame behind the button can be any color, so the ring is drawn
+         inside the button, on its own dark ground, in its own light ink */
+      .film-theater-btn:focus-visible {
+        outline: 2px solid var(--film-btn-ink, #f2e9d2);
+        outline-offset: -4px;
+      }
+
       .film-theater-btn:hover {
         background: var(--film-btn-hover, rgba(74, 52, 20, 0.85));
       }
