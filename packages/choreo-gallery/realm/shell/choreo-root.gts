@@ -80,10 +80,11 @@ export const ChoreoRoot: TOC<Signature> = <template>
       --azure: #6ea8f0;
       /* An accent as TEXT. The accents above are tuned as fills and rules;
          small type in them needs 4.5:1 on --bg, --bg-page, --bg-elev and the
-         code box, so each one an element sets text in has an -ink twin, lifted
-         here and darkened in light mode. Text reads the -ink token; fills,
+         faint tints laid over them (a code box, a tile's meta, an API pill), so
+         each one an element sets text in has an -ink twin, lifted here and
+         darkened in light mode. Text reads the -ink token; fills,
          rules and glows keep the accent. */
-      --ember-ink: #ff7649;
+      --ember-ink: #ff7a4e;
       --copper-ink: var(--copper);
       --iris-ink: #af8bf9;
       --steel-ink: #96a0a5;
@@ -164,7 +165,7 @@ export const ChoreoRoot: TOC<Signature> = <template>
       --surface-tint-rgb: 33, 29, 24;
       --ember-ink: #bf2e00;
       --copper-ink: #905824;
-      --iris-ink: #7639f5;
+      --iris-ink: #7334f5;
       --steel-ink: #5e686e;
       --focus-ring: var(--ember-ink);
       --mark-tail: rgba(255, 59, 31, 0.5);
