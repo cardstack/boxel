@@ -94,6 +94,9 @@ const BOOTSTRAP = `
         fullReindex: () => call('index.fullReindex', []),
         cancelJob: () => call('index.cancelJob', []),
       }),
+      commands: Object.freeze({
+        run: (codeRef, input) => call('commands.run', [codeRef, input ?? {}]),
+      }),
     });
     globalThis.room = Object.freeze({
       enableSkills: (ids) => call('room.enableSkills', [ids]),
@@ -181,6 +184,7 @@ const METHODS = new Set<RealmRunnerCallMethod>([
   'index.reindex',
   'index.fullReindex',
   'index.cancelJob',
+  'commands.run',
 ]);
 
 // A worker runs one script. These hold that run's open host calls so a

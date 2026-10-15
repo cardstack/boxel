@@ -147,7 +147,7 @@ async function withExtendableTimeout<T>(
 }
 
 // Every tool module the host provides is registered under this specifier.
-const HOST_TOOL_MODULE_PREFIX = '@cardstack/boxel-host/';
+export const HOST_TOOL_MODULE_PREFIX = '@cardstack/boxel-host/';
 
 type GenericCommand = Command<
   typeof CardDef | undefined,
@@ -1359,7 +1359,7 @@ export default class ToolService extends Service {
 
   // Construct a new instance of the input type with the
   // The input is undefined if the command has no input type
-  private async instantiateToolInput(
+  async instantiateToolInput(
     command: GenericCommand,
     attributes: Record<string, any> | undefined,
     relationships: Record<string, any> | undefined,

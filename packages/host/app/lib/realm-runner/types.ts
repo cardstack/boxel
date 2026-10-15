@@ -29,7 +29,8 @@ export type RealmRunnerCallMethod =
   | 'index.invalidate'
   | 'index.reindex'
   | 'index.fullReindex'
-  | 'index.cancelJob';
+  | 'index.cancelJob'
+  | 'commands.run';
 
 export type RealmRunnerCallHandler = (
   method: RealmRunnerCallMethod,

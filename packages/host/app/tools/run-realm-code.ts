@@ -3,6 +3,7 @@ import { service } from '@ember/service';
 import {
   assertQuery,
   coerceErrorMessage,
+  getClass,
   isBinaryContentType,
   isCardInstance,
   isRelativePath,
@@ -18,9 +19,11 @@ import {
   type LooseSingleCardDocument,
   type Query,
   type Relationship,
+  type ResolvedCodeRef,
   type Saved,
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
+import type { Command, ToolContext } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_ACTIVE_LLM,
   DEFAULT_FALLBACK_MODELS,
@@ -41,7 +44,7 @@ import {
   type RequestedRoomChanges,
 } from '../lib/realm-runner/room-actions';
 import runRealmCode from '../lib/realm-runner/runner';
-import { loadSkillSource } from '../lib/skill-tools';
+import { getSkillSourceTools, loadSkillSource } from '../lib/skill-tools';
 import {
   captureDeadline,
   captureForAgent,
@@ -52,6 +55,7 @@ import {
   type ViewOptions,
 } from '../lib/visual-capture';
 import { createWorkspace, deleteWorkspace } from '../lib/workspaces';
+import { HOST_TOOL_MODULE_PREFIX } from '../services/tool-service';
 import { pruneEmptyQueryParts } from '../utils/search/prune-empty-query';
 
 import LintAndFixTool from './lint-and-fix';
@@ -81,6 +85,7 @@ import type RecentFilesService from '../services/recent-files-service';
 import type StoreService from '../services/store';
 import type ToolService from '../services/tool-service';
 import type Base64ImageFieldType from '@cardstack/base/base64-image';
+import type { CardDef } from '@cardstack/base/card-api';
 import type * as BaseToolModule from '@cardstack/base/command';
 
 const log = logger('tools:run-realm-code');
@@ -238,6 +243,14 @@ type CreateWorkspace = (input: {
 // Deletes a workspace the current user owns and returns its URL.
 type DeleteWorkspace = (realmIdentifier: string) => Promise<{ url: string }>;
 
+// Runs one command that a skill enabled in the run's room declares, with the
+// input given in the shape of a tool call's payload, and answers with the
+// command's result as plain data.
+type RunCommand = (
+  codeRef: { module: string; name: string },
+  input: { attributes?: Record<string, unknown>; relationships?: unknown },
+) => Promise<unknown>;
+
 // The index of the run's realm. Every call acts on the whole realm or on
 // paths already resolved inside it.
 interface IndexActions {
@@ -311,6 +324,9 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   'index.reindex': true,
   'index.fullReindex': true,
   'index.cancelJob': true,
+  // A command keeps its own checks, as it does when the model calls it as a
+  // tool: it can act on a realm other than the run's.
+  'commands.run': false,
 };
 
 // Runs one search in the run's realm and answers with the entry document.
@@ -365,6 +381,8 @@ class RealmFsSession {
   // `realm.index` calls this run made, in order. The realm server has started
   // each one, so a retry must not start it again.
   readonly indexActions: string[] = [];
+  // Commands this run ran, in order, each named by its module and export.
+  readonly commandsRun: string[] = [];
   // Binary files this run knows exist: found by a lookup or saved by
   // realm.fs.writeBytes. They are not in `known`, since their content is not
   // text, but they count toward MAX_FILES.
@@ -413,6 +431,7 @@ class RealmFsSession {
     private createWorkspace: CreateWorkspace,
     private deleteWorkspace: DeleteWorkspace,
     private generateImage: GenerateImage,
+    private runCommand: RunCommand,
     private namedCalls: Set<ClickRequiredCall>,
     private index: IndexActions,
     private mayWrite: boolean,
@@ -903,6 +922,39 @@ class RealmFsSession {
         await this.index.cancelJob();
         this.indexActions.push('cancelJob');
         return { cancelled: true };
+      case 'commands.run': {
+        let [codeRef, input] = args;
+        if (
+          !codeRef ||
+          typeof codeRef !== 'object' ||
+          typeof (codeRef as { module?: unknown }).module !== 'string' ||
+          !['string', 'undefined'].includes(
+            typeof (codeRef as { name?: unknown }).name,
+          )
+        ) {
+          throw new TypeError(
+            'realm.commands.run expects a code ref: { module, name }',
+          );
+        }
+        if (!input || typeof input !== 'object' || Array.isArray(input)) {
+          throw new TypeError(
+            'realm.commands.run expects the input as { attributes, relationships }',
+          );
+        }
+        let { module, name = 'default' } = codeRef as {
+          module: string;
+          name?: string;
+        };
+        let result = await this.runCommand(
+          { module, name },
+          input as Record<string, unknown>,
+        );
+        this.commandsRun.push(`${module}#${name}`);
+        // The command can write to this realm, so what this run read before
+        // may be out of date: read each file again on its next use.
+        this.known.clear();
+        return result ?? null;
+      }
       default:
         throw new Error(`Unknown realm call: ${String(method)}`);
     }
@@ -1519,7 +1571,9 @@ export default class RunRealmCodeTool extends HostBaseTool<
     'the user can read), can generate images into the realm with ' +
     'realm.images.generate, can save a file from a URL with ' +
     'realm.fs.download, can create workspaces with realm.workspaces.create, ' +
-    'can change the skills and model of this room with room.*, and can ' +
+    'can change the skills and model of this room with room.*, can run a ' +
+    'command that a skill enabled in the room declares with ' +
+    'realm.commands.run(codeRef, { attributes, relationships }), and can ' +
     'refresh the index of the workspace with realm.index.*. In a workspace ' +
     'the user can only read, reads work and each write is refused. Return ' +
     '{ show: "<card path>" } to open a card in the realm when the run ends.';
@@ -1631,6 +1685,8 @@ export default class RunRealmCodeTool extends HostBaseTool<
           realmIdentifier,
         ),
       (imageInput) => this.generateImage(imageInput),
+      (codeRef, commandInput) =>
+        this.runSkillCommand(roomId, codeRef, commandInput),
       namedCalls,
       {
         invalidate: (urls) => this.realm.invalidateUrls(realmURL, urls),
@@ -1706,6 +1762,10 @@ export default class RunRealmCodeTool extends HostBaseTool<
       // name them, so a retry does not start a full reindex again.
       if (session.indexActions.length > 0) {
         report += ` Index actions already started by this run: ${session.indexActions.join('; ')}`;
+      }
+      // A command's changes stay made, so a retry must not run it again.
+      if (session.commandsRun.length > 0) {
+        report += ` Commands already run by this run: ${session.commandsRun.join(', ')}`;
       }
       // Room changes are made only after a run that finished, so a failed
       // run made none.
@@ -1824,6 +1884,116 @@ export default class RunRealmCodeTool extends HostBaseTool<
       }
     }
     return changes;
+  }
+
+  // Runs a command from a script. Only a command that a skill enabled in the
+  // room declares can run, so the room's skills are the list of commands a
+  // script may run. A command whose declaration needs approval is refused: a
+  // script cannot show the user what it would approve. Host tools are refused
+  // too, since `realm.*` and `room.*` already do their work with the run's
+  // limits.
+  private async runSkillCommand(
+    roomId: string,
+    codeRef: { module: string; name: string },
+    { attributes, relationships }: Parameters<RunCommand>[1],
+  ): Promise<unknown> {
+    let label = `${codeRef.module}#${codeRef.name}`;
+    if (codeRef.module.startsWith(HOST_TOOL_MODULE_PREFIX)) {
+      throw new Error(
+        `realm.commands.run cannot run the host tool ${label}; use the realm.* or room.* call that does its work, or call the tool directly`,
+      );
+    }
+    let declared = await this.declaredCommand(roomId, codeRef);
+    if (!declared) {
+      throw new Error(
+        `realm.commands.run can only run a command that a skill enabled in this room declares, and none declares ${label}`,
+      );
+    }
+    if (declared.requiresApproval !== false) {
+      throw new Error(
+        `${label} needs the user's approval, so a script cannot run it; call it as a tool instead`,
+      );
+    }
+    if (
+      (attributes !== undefined &&
+        (typeof attributes !== 'object' ||
+          attributes === null ||
+          Array.isArray(attributes))) ||
+      (relationships !== undefined &&
+        (typeof relationships !== 'object' ||
+          relationships === null ||
+          Array.isArray(relationships)))
+    ) {
+      throw new TypeError(
+        'realm.commands.run expects attributes and relationships to be objects',
+      );
+    }
+    let CommandClass = (await getClass(
+      declared.codeRef,
+      this.loaderService.loader,
+    )) as (new (context: ToolContext) => Command<any, any>) | undefined;
+    if (typeof CommandClass !== 'function') {
+      throw new Error(`${label} is not a command`);
+    }
+    let command = new CommandClass(this.toolService.toolContext);
+    let commandInput = await this.toolService.instantiateToolInput(
+      command,
+      attributes as Record<string, unknown> | undefined,
+      relationships as Record<string, unknown> | undefined,
+    );
+    let result = (await command.execute(commandInput as any)) as
+      | CardDef
+      | undefined;
+    if (!result || !isCardInstance(result)) {
+      return null;
+    }
+    let { data } = await this.cardService.serializeCard(result);
+    return {
+      attributes: data.attributes ?? {},
+      relationships: data.relationships ?? {},
+    };
+  }
+
+  // The declaration of a command in the skills enabled in the room, matched
+  // by its module and export. A module may be written as a URL or in prefix
+  // form, so both sides are compared as URLs.
+  private async declaredCommand(
+    roomId: string,
+    codeRef: { module: string; name: string },
+  ): Promise<
+    { codeRef: ResolvedCodeRef; requiresApproval?: boolean } | undefined
+  > {
+    let module = this.moduleURL(codeRef.module);
+    let skillIds = (
+      this.matrixService.getRoomData(roomId)?.skillsConfig.enabledSkillCards ??
+      []
+    ).map((skill) => skill.sourceUrl);
+    for (let skillId of skillIds) {
+      let source;
+      try {
+        source = await loadSkillSource(this.store, skillId);
+      } catch (error) {
+        log.warn(
+          `could not load skill ${skillId}: ${coerceErrorMessage(error, 'unknown error')}`,
+        );
+        continue;
+      }
+      for (let tool of getSkillSourceTools(source)) {
+        let toolCodeRef = tool.codeRef;
+        if (
+          toolCodeRef &&
+          isResolvedCodeRef(toolCodeRef) &&
+          toolCodeRef.name === codeRef.name &&
+          this.moduleURL(toolCodeRef.module) === module
+        ) {
+          return {
+            codeRef: toolCodeRef,
+            requiresApproval: tool.requiresApproval,
+          };
+        }
+      }
+    }
+    return undefined;
   }
 
   private async checkSkill(id: string): Promise<void> {

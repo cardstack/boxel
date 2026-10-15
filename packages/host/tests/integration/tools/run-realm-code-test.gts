@@ -1,4 +1,4 @@
-import { settled } from '@ember/test-helpers';
+import { settled, waitUntil } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 
@@ -89,6 +89,7 @@ module('Integration | tools | run-realm-code', function (hooks) {
   setupRenderingTest(hooks);
   setupLocalIndexing(hooks);
   let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
     activeRealms: [testRealmURL, otherRealmURL],
     autostart: true,
   });
@@ -161,6 +162,59 @@ boxel:
   kind: skill
 ---
 # Test Skill
+`,
+          'commands/greet.gts': `
+            import { Command } from '@cardstack/runtime-common';
+            import { CardDef, field, contains, linksTo, getStore } from '@cardstack/base/card-api';
+            import StringField from '@cardstack/base/string';
+            import { Pet } from '../pet';
+
+            export class GreetInput extends CardDef {
+              @field greeting = contains(StringField);
+              @field pet = linksTo(Pet);
+            }
+
+            export class GreetResult extends CardDef {
+              @field message = contains(StringField);
+            }
+
+            export default class GreetCommand extends Command<typeof GreetInput, typeof GreetResult> {
+              async getInputType() {
+                return GreetInput;
+              }
+              async run(input) {
+                // A link loads on first read, as in the catalog's commands.
+                void input.pet;
+                await getStore(input).loaded();
+                return new GreetResult({
+                  message: input.greeting + ', ' + input.pet.name,
+                });
+              }
+            }
+
+            export class GuardedCommand extends GreetCommand {}
+            export class UndeclaredCommand extends GreetCommand {}
+          `,
+          'skills/command-skill/SKILL.md': `---
+name: Command Skill
+description: A skill that declares commands a script runs
+boxel:
+  kind: skill
+  tools:
+    - codeRef:
+        module: '${testRealmURL}commands/greet'
+        name: default
+      requiresApproval: false
+    - codeRef:
+        module: '${testRealmURL}commands/greet'
+        name: GuardedCommand
+      requiresApproval: true
+    - codeRef:
+        module: '@cardstack/boxel-host/tools/preview-format'
+        name: default
+      requiresApproval: false
+---
+# Command Skill
 `,
           'pet.gts': `
             import { CardDef, field, contains } from '@cardstack/base/card-api';
@@ -2256,6 +2310,116 @@ throw new Error('stop');`,
     });
   });
 
+  module('realm.commands.run', function (hooks) {
+    let roomId: string;
+    let skillId = `${testRealmURL}skills/command-skill/SKILL.md`;
+    let command: RunRealmCodeTool;
+
+    hooks.beforeEach(async function () {
+      await getService('matrix-service').ready;
+      roomId = mockMatrixUtils.createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'commands',
+      });
+      command = new RunRealmCodeTool(getService('tool-service').toolContext);
+      // Room changes are made after the run, so the next run sees the skill.
+      await command.execute({
+        realm: testRealmURL,
+        roomId,
+        code: `await room.enableSkills([${JSON.stringify(skillId)}]);`,
+      });
+      await waitUntil(() =>
+        getService('matrix-service')
+          .getRoomData(roomId)
+          ?.skillsConfig.enabledSkillCards.some(
+            (file) => file.sourceUrl === skillId,
+          ),
+      );
+    });
+
+    test('runs a command that a skill enabled in the room declares and returns its result as data', async function (assert) {
+      let result = await command.execute({
+        realm: testRealmURL,
+        roomId,
+        code: `return await realm.commands.run(
+  { module: ${JSON.stringify(`${testRealmURL}commands/greet`)}, name: 'default' },
+  {
+    attributes: { greeting: 'Hello' },
+    relationships: { pet: { links: { self: ${JSON.stringify(`${testRealmURL}Pet/mango`)} } } },
+  },
+);`,
+      });
+
+      let returned = JSON.parse(result.scriptResult!);
+      assert.strictEqual(returned.attributes.message, 'Hello, Mango');
+    });
+
+    test('refuses a command no enabled skill declares, one that needs approval, and a host tool', async function (assert) {
+      let run = (module: string, name: string) =>
+        command.execute({
+          realm: testRealmURL,
+          roomId,
+          code: `await realm.commands.run(
+  { module: ${JSON.stringify(module)}, name: ${JSON.stringify(name)} },
+  { attributes: { greeting: 'Hello' } },
+);`,
+        });
+      let greet = `${testRealmURL}commands/greet`;
+
+      await assert.rejects(
+        run(greet, 'UndeclaredCommand'),
+        /can only run a command that a skill enabled in this room declares/,
+      );
+      await assert.rejects(
+        run(greet, 'GuardedCommand'),
+        /needs the user's approval, so a script cannot run it/,
+      );
+      await assert.rejects(
+        run('@cardstack/boxel-host/tools/preview-format', 'default'),
+        /cannot run the host tool/,
+      );
+    });
+
+    test('refuses a command whose skill is not enabled in the room', async function (assert) {
+      let otherRoomId = mockMatrixUtils.createAndJoinRoom({
+        sender: '@testuser:localhost',
+        name: 'no-skills',
+      });
+
+      await assert.rejects(
+        command.execute({
+          realm: testRealmURL,
+          roomId: otherRoomId,
+          code: `await realm.commands.run(
+  { module: ${JSON.stringify(`${testRealmURL}commands/greet`)} },
+  { attributes: { greeting: 'Hello' } },
+);`,
+        }),
+        /can only run a command that a skill enabled in this room declares/,
+      );
+    });
+
+    test('a failed run names the commands it already ran', async function (assert) {
+      await assert.rejects(
+        command.execute({
+          realm: testRealmURL,
+          roomId,
+          code: `await realm.commands.run(
+  { module: ${JSON.stringify(`${testRealmURL}commands/greet`)} },
+  {
+    attributes: { greeting: 'Hello' },
+    relationships: { pet: { links: { self: ${JSON.stringify(`${testRealmURL}Pet/mango`)} } } },
+  },
+);
+throw new Error('stop');`,
+        }),
+        new RegExp(
+          `Commands already run by this run: ${testRealmURL}commands/greet#default`,
+        ),
+      );
+    });
+  });
+
   test('realm.ui actions run in order after the script finishes', async function (assert) {
     let toolService = getService('tool-service');
     let operatorModeStateService = getService('operator-mode-state-service');
@@ -2328,16 +2492,16 @@ return queued;`,
       code: `await realm.ui.previewFormat('Plain/base-typed', 'isolated');`,
     });
 
-    // The test user cannot read the base realm, so code mode refuses to open
-    // it. What matters is which module the action asked for: the base module,
-    // not a path inside the workspace.
-    let detail = result.uiActions[0]?.detail ?? '';
-    assert.true(
-      detail.includes(baseModule),
-      `asks for ${baseModule}: ${detail}`,
+    // What matters is which module the action opened: the base module, not
+    // a path inside the workspace.
+    assert.strictEqual(
+      result.uiActions[0]?.status,
+      'done',
+      result.uiActions[0]?.detail,
     );
-    assert.false(
-      detail.includes(`${testRealmURL}Plain/`),
+    assert.strictEqual(
+      getService('operator-mode-state-service').state.codePath?.href,
+      baseModule,
       'does not join the module to the instance path',
     );
   });
