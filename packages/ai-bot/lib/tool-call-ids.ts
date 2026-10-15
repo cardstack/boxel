@@ -1,4 +1,4 @@
-import type { MatrixEvent as DiscreteMatrixEvent } from 'matrix-js-sdk';
+import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
 import { getToolRequests } from '@cardstack/runtime-common/matrix-constants';
 
 // The host, ai-bot and prompt building all identify a tool call by its id
@@ -9,8 +9,9 @@ import { getToolRequests } from '@cardstack/runtime-common/matrix-constants';
 // keeps the provider's id unless the room has used it already, in which case
 // it gets a suffix that makes it unique.
 
-// Every tool-call id the room has used, on bot messages (their edits
-// included) and on results.
+// Every tool-call id the room has used, on bot messages and on results. A
+// streamed bot message carries its requests only on its latest edit, which the
+// server aggregates under `unsigned['m.relations']['m.replace']`.
 export function collectUsedToolCallIds(
   eventList: DiscreteMatrixEvent[],
 ): Set<string> {
@@ -34,10 +35,7 @@ export function collectUsedToolCallIds(
   for (let event of eventList) {
     let raw = event as any;
     addFrom(raw.content);
-    addFrom(raw.content?.['m.new_content']);
-    let replacement = raw.unsigned?.['m.relations']?.['m.replace'];
-    addFrom(replacement?.content);
-    addFrom(replacement?.content?.['m.new_content']);
+    addFrom(raw.unsigned?.['m.relations']?.['m.replace']?.content);
   }
   return used;
 }

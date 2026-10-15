@@ -7,7 +7,7 @@ import {
 import { collectUsedToolCallIds, ToolCallIds } from '../lib/tool-call-ids.ts';
 
 module('tool-call ids', () => {
-  test('collects ids from requests, edits, aggregated replacements and results', (assert) => {
+  test('collects ids from requests, aggregated replacements and results', (assert) => {
     let used = collectUsedToolCallIds([
       {
         type: 'm.room.message',
@@ -15,22 +15,20 @@ module('tool-call ids', () => {
       },
       {
         type: 'm.room.message',
-        content: {
-          'm.new_content': {
-            [LEGACY_APP_BOXEL_COMMAND_REQUESTS_KEY]: [{ id: 'b' }],
-          },
-        },
+        content: { [LEGACY_APP_BOXEL_COMMAND_REQUESTS_KEY]: [{ id: 'b' }] },
       },
       {
+        // A streamed answer: the placeholder carries no requests, its latest
+        // edit (aggregated by the server) does.
         type: 'm.room.message',
         content: { body: '' },
         unsigned: {
           'm.relations': {
             'm.replace': {
               content: {
-                'm.new_content': {
-                  [APP_BOXEL_TOOL_REQUESTS_KEY]: [{ id: 'c' }],
-                },
+                body: '',
+                [APP_BOXEL_TOOL_REQUESTS_KEY]: [{ id: 'c' }],
+                'm.relates_to': { rel_type: 'm.replace', event_id: '$1' },
               },
             },
           },

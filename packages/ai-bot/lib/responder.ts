@@ -72,12 +72,16 @@ export class Responder {
   private completionTokens: number | undefined;
   private telemetryLogged = false;
 
+  // usedToolCallIds: every tool-call id the room has used, so this turn's calls
+  // are posted with ids unique in the room (see tool-call-ids.ts).
   constructor(
     client: MatrixClient,
     roomId: string,
     agentId: string,
+    usedToolCallIds: Iterable<string>,
     streamPreviewTarget?: { userId: string; deviceId: string },
   ) {
+    this.responseState = new ResponseState(usedToolCallIds);
     this.client = client;
     this.streamPreviewTarget = streamPreviewTarget;
     this.matrixResponsePublisher = new MatrixResponsePublisher(
@@ -92,7 +96,7 @@ export class Responder {
     ISendEventResponse | void | { errorMessage: string }
   >[] = [];
 
-  responseState = new ResponseState();
+  responseState: ResponseState;
 
   // This turn's state for each offered bot tool, used to label calls and
   // hold those that wait for the user's approval.

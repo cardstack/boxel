@@ -10,7 +10,22 @@ export default class ResponseState {
   private toolCallsJson: string | undefined;
   private allowedToolNames: Set<string> | undefined;
   // Makes each tool call's id unique in the room (see tool-call-ids.ts).
-  toolCallIds = new ToolCallIds();
+  private toolCallIds: ToolCallIds;
+
+  constructor(usedToolCallIds: Iterable<string>) {
+    this.toolCallIds = new ToolCallIds(usedToolCallIds);
+  }
+
+  // A reply's tool calls with the ids they are posted with. Ids are assigned
+  // by position, so the streamed snapshot and the finished completion must
+  // both come through here to get the same ids.
+  withPostedIds<T extends { id?: string }>(
+    toolCalls: (T | null | undefined)[] | undefined,
+  ): T[] {
+    return this.toolCallIds.apply(
+      (toolCalls ?? []).filter((call): call is T => Boolean(call)),
+    );
+  }
   isStreamingFinished = false;
   isCanceled = false;
   // The provider's finish_reason for this turn. Only the chunk that ends the
@@ -65,7 +80,7 @@ export default class ResponseState {
   ) {
     if (toolCallsSnapshot?.length) {
       // Assigned by position in the reply, so before any call is filtered out.
-      toolCallsSnapshot = this.toolCallIds.apply(toolCallsSnapshot);
+      toolCallsSnapshot = this.withPostedIds(toolCallsSnapshot);
       // In lengthy conversations, the LLM will sometimes call checkCorrectness
       // tool on its own, even when we explicitly disallow this in our prompts,
       // often before its own edits have been applied. Ignore these tool calls.

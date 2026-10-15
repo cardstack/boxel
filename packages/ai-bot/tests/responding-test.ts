@@ -21,7 +21,9 @@ import type OpenAI from 'openai';
 import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 import { OpenAIError } from 'openai';
 import { errorReporter } from '../lib/sentry.ts';
-import { collectUsedToolCallIds, ToolCallIds } from '../lib/tool-call-ids.ts';
+import { collectUsedToolCallIds } from '../lib/tool-call-ids.ts';
+import { classifyToolCalls } from '../lib/bot-tools/index.ts';
+import { READ_URL_TOOL_NAME } from '../lib/bot-tools/read-url/read.ts';
 
 function snapshotWithContent(content: string): ChatCompletionSnapshot {
   return {
@@ -113,7 +115,7 @@ module('Responding', (hooks) => {
   hooks.beforeEach(() => {
     clock = FakeTimers.install();
     fakeMatrixClient = new FakeMatrixClient();
-    responder = new Responder(fakeMatrixClient, 'room-id', 'abc123agentId');
+    responder = new Responder(fakeMatrixClient, 'room-id', 'abc123agentId', []);
     // Most tests here exercise room-edit streaming mechanics (thinking-message
     // replacement, throttled edits, event splitting). Since the default mode is
     // now to-device, pin room-edits as the module baseline; tests that target a
@@ -130,18 +132,48 @@ module('Responding', (hooks) => {
     delete process.env.AI_BOT_STREAMING_MODE;
   });
 
-  test('a tool call whose provider id the room already used is posted with a unique id', async () => {
-    // A backend that numbers calls per reply sends the same id every turn.
-    responder.responseState.toolCallIds = new ToolCallIds(
-      collectUsedToolCallIds([
-        {
-          type: 'm.room.message',
-          content: {
-            [APP_BOXEL_TOOL_REQUESTS_KEY]: [
-              { id: 'run-realm-code_6b92:0', name: 'run-realm-code' },
-            ],
+  // A streamed bot answer as the room history holds it: the placeholder
+  // carries no requests, the server-aggregated latest edit does.
+  function streamedAnswerWithToolCalls(ids: string[]) {
+    return {
+      type: 'm.room.message',
+      content: { body: '' },
+      unsigned: {
+        'm.relations': {
+          'm.replace': {
+            content: {
+              body: '',
+              [APP_BOXEL_TOOL_REQUESTS_KEY]: ids.map((id) => ({
+                id,
+                name: 'run-realm-code',
+              })),
+              'm.relates_to': { rel_type: 'm.replace', event_id: '$answer' },
+            },
           },
         },
+      },
+    };
+  }
+
+  function postedToolCallIds(): string[] {
+    return [
+      ...new Set(
+        fakeMatrixClient
+          .getSentEvents()
+          .flatMap((e: any) => e.content[APP_BOXEL_TOOL_REQUESTS_KEY] ?? [])
+          .map((request: any) => request.id as string),
+      ),
+    ];
+  }
+
+  test('a tool call whose provider id the room already used is posted with a unique id', async () => {
+    // A backend that numbers calls per reply sends the same id every turn.
+    responder = new Responder(
+      fakeMatrixClient,
+      'room-id',
+      'abc123agentId',
+      collectUsedToolCallIds([
+        streamedAnswerWithToolCalls(['run-realm-code_6b92:0']),
         {
           type: 'app.boxel.toolResult',
           content: { commandRequestId: 'run-realm-code_6b92:0' },
@@ -168,28 +200,19 @@ module('Responding', (hooks) => {
     );
     await responder.finalize();
 
-    let ids = fakeMatrixClient
-      .getSentEvents()
-      .flatMap((e: any) => e.content[APP_BOXEL_TOOL_REQUESTS_KEY] ?? [])
-      .map((request: any) => request.id);
-    assert.ok(ids.length > 0, 'the tool call was posted');
     assert.deepEqual(
-      [...new Set(ids)],
+      postedToolCallIds(),
       ['run-realm-code_6b92:0_1'],
       'every edit carries the same id, and not the one the room already used',
     );
   });
 
   test('a tool call whose provider id the room has not used keeps it', async () => {
-    responder.responseState.toolCallIds = new ToolCallIds(
-      collectUsedToolCallIds([
-        {
-          type: 'm.room.message',
-          content: {
-            [APP_BOXEL_TOOL_REQUESTS_KEY]: [{ id: 'call-1', name: 'x' }],
-          },
-        },
-      ] as any),
+    responder = new Responder(
+      fakeMatrixClient,
+      'room-id',
+      'abc123agentId',
+      collectUsedToolCallIds([streamedAnswerWithToolCalls(['call-1'])] as any),
     );
 
     await responder.ensureThinkingMessageSent();
@@ -203,11 +226,44 @@ module('Responding', (hooks) => {
     );
     await responder.finalize();
 
-    let ids = fakeMatrixClient
-      .getSentEvents()
-      .flatMap((e: any) => e.content[APP_BOXEL_TOOL_REQUESTS_KEY] ?? [])
-      .map((request: any) => request.id);
-    assert.deepEqual([...new Set(ids)], ['call-2']);
+    assert.deepEqual(postedToolCallIds(), ['call-2']);
+  });
+
+  test('a bot-tool call from the finished completion gets the id it was posted with', async () => {
+    responder = new Responder(
+      fakeMatrixClient,
+      'room-id',
+      'abc123agentId',
+      collectUsedToolCallIds([
+        streamedAnswerWithToolCalls(['readUrl:0']),
+      ] as any),
+    );
+    let readUrlCall = {
+      id: 'readUrl:0',
+      name: READ_URL_TOOL_NAME,
+      arguments: { url: 'https://example.com/' },
+    };
+
+    await responder.ensureThinkingMessageSent();
+    await responder.onChunk({} as any, snapshotWithToolCall(readUrlCall));
+    await responder.finalize();
+
+    // What runner.finalChatCompletion() hands back: the provider's ids.
+    let completionMessage = snapshotWithToolCall(readUrlCall).choices[0]
+      .message as any;
+    let { botToolCalls } = classifyToolCalls({
+      ...completionMessage,
+      tool_calls: responder.responseState.withPostedIds(
+        completionMessage.tool_calls,
+      ),
+    });
+
+    assert.deepEqual(postedToolCallIds(), ['readUrl:0_1']);
+    assert.deepEqual(
+      botToolCalls.map((call) => call.id),
+      ['readUrl:0_1'],
+      'the bot-tool result will name the posted id',
+    );
   });
 
   test('does not treat a reaction as a response trigger', (assert) => {
@@ -380,10 +436,16 @@ module('Responding', (hooks) => {
   test('`to-device` streaming mode: streams previews to the target device and lands one final consolidated room event', async () => {
     process.env.AI_BOT_STREAMING_MODE = 'to-device';
     try {
-      responder = new Responder(fakeMatrixClient, 'room-id', 'abc123agentId', {
-        userId: '@alice:example.com',
-        deviceId: 'DEVICEALICE',
-      });
+      responder = new Responder(
+        fakeMatrixClient,
+        'room-id',
+        'abc123agentId',
+        [],
+        {
+          userId: '@alice:example.com',
+          deviceId: 'DEVICEALICE',
+        },
+      );
 
       await responder.ensureThinkingMessageSent();
 
@@ -467,10 +529,16 @@ module('Responding', (hooks) => {
   test('per-turn telemetry records mode, event counts, and token usage', async () => {
     process.env.AI_BOT_STREAMING_MODE = 'to-device';
     try {
-      responder = new Responder(fakeMatrixClient, 'room-id', 'abc123agentId', {
-        userId: '@alice:example.com',
-        deviceId: 'DEVICEALICE',
-      });
+      responder = new Responder(
+        fakeMatrixClient,
+        'room-id',
+        'abc123agentId',
+        [],
+        {
+          userId: '@alice:example.com',
+          deviceId: 'DEVICEALICE',
+        },
+      );
 
       await responder.ensureThinkingMessageSent();
 
@@ -524,7 +592,7 @@ module('Responding', (hooks) => {
   test('a trailing usage-only chunk cannot flip a finished stream back to streaming, and its counts land on the final room event', async () => {
     process.env.AI_BOT_STREAMING_MODE = 'to-device';
     try {
-      responder = new Responder(fakeMatrixClient, 'room-id', 'agent-id', {
+      responder = new Responder(fakeMatrixClient, 'room-id', 'agent-id', [], {
         userId: '@alice:example.com',
         deviceId: 'DEVICEALICE',
       });
@@ -645,7 +713,7 @@ module('Responding', (hooks) => {
     // flip it back off.
     process.env.AI_BOT_STREAMING_MODE = 'to-device';
     try {
-      responder = new Responder(fakeMatrixClient, 'room-id', 'agent-id', {
+      responder = new Responder(fakeMatrixClient, 'room-id', 'agent-id', [], {
         userId: '@alice:example.com',
         deviceId: 'DEVICEALICE',
       });
@@ -961,7 +1029,12 @@ module('Responding', (hooks) => {
     try {
       // No streamPreviewTarget passed (simulates a prompt from an older client
       // that didn't stamp the originating device id).
-      responder = new Responder(fakeMatrixClient, 'room-id', 'abc123agentId');
+      responder = new Responder(
+        fakeMatrixClient,
+        'room-id',
+        'abc123agentId',
+        [],
+      );
 
       await responder.ensureThinkingMessageSent();
 
@@ -1001,10 +1074,16 @@ module('Responding', (hooks) => {
   test('`to-device` streaming mode: previews carry tool requests in the room-event wire shape', async () => {
     process.env.AI_BOT_STREAMING_MODE = 'to-device';
     try {
-      responder = new Responder(fakeMatrixClient, 'room-id', 'abc123agentId', {
-        userId: '@alice:example.com',
-        deviceId: 'DEVICEALICE',
-      });
+      responder = new Responder(
+        fakeMatrixClient,
+        'room-id',
+        'abc123agentId',
+        [],
+        {
+          userId: '@alice:example.com',
+          deviceId: 'DEVICEALICE',
+        },
+      );
 
       await responder.ensureThinkingMessageSent();
 
