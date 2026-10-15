@@ -107,6 +107,15 @@ export default class KeepScrollWhileBuried extends Modifier<Signature> {
     }
     let scroller = event.target;
     if (scroller instanceof Element) {
+      if (!this.#offsets.has(scroller)) {
+        // A scroller the card has since re-rendered away is never restored,
+        // so it shouldn't keep its detached subtree alive either.
+        for (let recorded of this.#offsets.keys()) {
+          if (!recorded.isConnected) {
+            this.#offsets.delete(recorded);
+          }
+        }
+      }
       this.#offsets.set(scroller, {
         top: scroller.scrollTop,
         left: scroller.scrollLeft,
