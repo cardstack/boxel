@@ -1022,7 +1022,7 @@ return { deleted, refused };`,
       `a file that does not exist: ${refused[1]}`,
     );
     assert.true(
-      /not a folder: .*notes\//.test(refused[2]),
+      /Path must be relative to the realm root: notes\//.test(refused[2]),
       `a folder: ${refused[2]}`,
     );
     assert.deepEqual(

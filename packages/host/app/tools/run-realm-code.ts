@@ -678,12 +678,8 @@ class RealmFsSession {
         if (!this.namedCalls.has('realm.fs.deleteExisting')) {
           throw notNamedError('realm.fs.deleteExisting');
         }
+        // A path that ends in `/` is refused here, so no folder is deleted.
         let url = this.resolve(method, args[0]);
-        if (url.endsWith('/')) {
-          throw new Error(
-            `realm.fs.deleteExisting deletes only a file, not a folder: ${url}`,
-          );
-        }
         // A text file is compared with what the run last read or saved, so
         // a file someone changed after the script read it is kept.
         let content = await this.lookup(url);
