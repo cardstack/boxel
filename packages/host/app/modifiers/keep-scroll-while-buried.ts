@@ -18,18 +18,23 @@ interface Signature {
   };
 }
 
+// A scroller's offset, and the size of its content when the offset was taken.
 interface Offset {
   top: number;
   left: number;
+  width: number;
+  height: number;
 }
 
 // Restoring gives up after this long, leaving the content wherever the last
-// re-apply put it, so a saved offset that is no longer reachable (the content
-// got shorter) can't hold the scroller forever.
-const RESTORE_CAP_MS = 1000;
-// The restore is done once every saved offset sticks and the scrollers' geometry
-// has gone this many consecutive rendered frames, and this long in wall-clock
-// time, without changing. During the item's grow-back transition the geometry
+// re-apply put it. It only runs this long when the content never returns to
+// the size it had (it changed while the item was buried), so the saved offset
+// can't hold the scroller forever.
+const RESTORE_CAP_MS = 5000;
+// The restore is done once every saved offset sticks, the content is back at
+// the size it had when the offset was taken, and the scrollers' geometry has
+// gone this many consecutive rendered frames, and this long in wall-clock time,
+// without changing. During the item's grow-back transition the geometry
 // changes every frame, so the frame count is what tells "still moving" from
 // "stopped"; the wall-clock floor keeps the window from collapsing on
 // high-refresh displays.
@@ -45,15 +50,17 @@ const GESTURE_EVENTS = ['wheel', 'touchmove', 'pointerdown', 'keydown'];
 // While the item is on top, every scroll inside the content (the card's own
 // scroller and any nested one) records that scroller's offset. Burying the item
 // hides its content. The browser keeps each scroller's offset while it is
-// hidden, but applies it only once, as the content reappears, and clamps it to
-// the content's height at that moment. Content that lays itself out from its own
-// measurements (fitted tiles, virtualized lists) collapses while hidden and is
-// still growing back then, so the offset clamps short and stays there.
+// hidden, but applies it only once, as the content reappears, against whatever
+// layout the content has at that moment. Content that lays itself out from its
+// own measurements (fitted tiles, virtualized lists, live previews that remount)
+// is not at its settled size then: shorter content clamps the offset, and
+// content that settles from taller to shorter carries the offset with it
+// through scroll anchoring. Either way it lands away from where it was left.
 //
 // So when the item is on top again, the saved offsets are re-applied every frame
-// until they stick and the content has stopped changing size. A user gesture
-// inside the content ends the restore, so it never fights the user's own
-// scrolling.
+// until they stick and the content is back at the size it had when they were
+// taken. A user gesture inside the content ends the restore, so it never fights
+// the user's own scrolling.
 export default class KeepScrollWhileBuried extends Modifier<Signature> {
   #element: HTMLElement | undefined;
   #buried = false;
@@ -103,6 +110,8 @@ export default class KeepScrollWhileBuried extends Modifier<Signature> {
       this.#offsets.set(scroller, {
         top: scroller.scrollTop,
         left: scroller.scrollLeft,
+        width: scroller.scrollWidth,
+        height: scroller.scrollHeight,
       });
     }
   };
@@ -134,6 +143,12 @@ export default class KeepScrollWhileBuried extends Modifier<Signature> {
           Math.abs(scroller.scrollTop - top) <= 1 &&
           Math.abs(scroller.scrollLeft - left) <= 1,
       );
+    let atSavedSize = () =>
+      saved.every(
+        ([scroller, { width, height }]) =>
+          Math.abs(scroller.scrollWidth - width) <= 1 &&
+          Math.abs(scroller.scrollHeight - height) <= 1,
+      );
     let geometry = () =>
       saved
         .map(
@@ -162,6 +177,7 @@ export default class KeepScrollWhileBuried extends Modifier<Signature> {
       }
       let settled =
         stuck() &&
+        atSavedSize() &&
         quietFrames >= QUIET_FRAMES &&
         now - lastChangeAt >= QUIET_MS;
       if (settled || now - startedAt >= RESTORE_CAP_MS) {

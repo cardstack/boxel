@@ -30,6 +30,7 @@ import { setupMockMatrix } from '../../helpers/mock-matrix';
 import { setupApplicationTest } from '../../helpers/setup';
 
 const ARTICLE = `${testRealmURL}Article/long`;
+const SETTLING_ARTICLE = `${testRealmURL}Article/settles`;
 const NOTE = `${testRealmURL}Note/aside`;
 
 const stackCard = (stack: number, index: number) =>
@@ -64,8 +65,15 @@ async function scrollCard(stackItem: string, offset: number) {
   return scroller.scrollTop;
 }
 
-/** the card's scroll offset once it has stopped moving */
+/** the card's scroll offset once its content has settled and it has stopped moving */
 async function restingOffset(stackItem: string) {
+  await waitUntil(
+    () =>
+      !document.querySelector(
+        `${stackItem} .lead.tall, ${stackItem} .row.short`,
+      ),
+    { timeout: 5000, timeoutMessage: 'the article never settled' },
+  );
   let last = -1;
   let stableSince = performance.now();
   await waitUntil(
@@ -75,9 +83,9 @@ async function restingOffset(stackItem: string) {
         last = current;
         stableSince = performance.now();
       }
-      return performance.now() - stableSince >= 250;
+      return performance.now() - stableSince >= 300;
     },
-    { timeout: 3000, timeoutMessage: 'the scroll offset never settled' },
+    { timeout: 5000, timeoutMessage: 'the scroll offset never settled' },
   );
   return last;
 }
@@ -107,24 +115,43 @@ module(
         @field body = contains(StringField);
       }
       // Much taller than the stack, with the linked note at its end. The long
-      // read lays itself out from its own measurements, the way fitted tiles
-      // and virtualized lists do: with no box (while a card covers it) it
-      // collapses, and once it has a box again it takes a frame to grow back.
-      // So as the article is uncovered its content is briefly short, which
-      // clamps whatever offset the browser kept for it.
+      // read lays itself out from its own measurements, the way fitted tiles,
+      // virtualized lists and live previews do: it reflows while it has no box
+      // (while a card covers it), and only settles back to its laid-out height
+      // some time after it has a box again. So as the article is uncovered its
+      // content isn't at its settled size. Content that `grows` back is short
+      // at that moment, which clamps the offset the browser kept for it.
+      // Content that `shrinks` back keeps a tall lead above the rows for a
+      // while, then drops it, and scroll anchoring moves the offset to keep the
+      // rows in view where they were.
       class Article extends CardDef {
         static displayName = 'Article';
         @field note = linksTo(Note);
+        @field reflow = contains(StringField);
         static isolated = class Isolated extends Component<typeof Article> {
-          layout = new TrackedObject({ laidOut: true });
+          rows = Array.from({ length: 40 }, (_, index) => index);
+          layout = new TrackedObject({ state: 'laid-out', settling: false });
 
           measure = modifier((element: HTMLElement) => {
             let observer = new ResizeObserver(([entry]) => {
               if (entry.contentRect.width === 0) {
-                this.layout.laidOut = false;
-              } else if (!this.layout.laidOut) {
-                // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- models content that lays out a frame after it gets a box
-                requestAnimationFrame(() => (this.layout.laidOut = true));
+                this.layout.state =
+                  this.args.model.reflow === 'shrinks' ? 'tall' : 'short';
+              } else if (
+                this.layout.state !== 'laid-out' &&
+                !this.layout.settling
+              ) {
+                this.layout.settling = true;
+                let settle = () => {
+                  this.layout.state = 'laid-out';
+                  this.layout.settling = false;
+                };
+                if (this.layout.state === 'short') {
+                  // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- models content that lays out a frame after it gets a box
+                  requestAnimationFrame(settle);
+                } else {
+                  setTimeout(settle, 1000);
+                }
               }
             });
             observer.observe(element);
@@ -133,19 +160,24 @@ module(
 
           <template>
             <div {{this.measure}}>
-              <div class={{if this.layout.laidOut 'long-read' 'short-read'}}>
-                A long read
-              </div>
+              <div class='lead {{this.layout.state}}'></div>
+              {{#each this.rows}}
+                <div class='row {{this.layout.state}}'>A long read</div>
+              {{/each}}
               <div data-test-article-end>
                 <@fields.note />
               </div>
             </div>
             <style scoped>
-              .long-read {
-                height: 200rem;
+              .lead.tall {
+                height: 40rem;
               }
-              .short-read {
-                height: 10rem;
+              .row {
+                height: 5rem;
+              }
+              .row.short {
+                height: 0.25rem;
+                overflow: hidden;
               }
             </style>
           </template>
@@ -157,7 +189,14 @@ module(
         contents: {
           'article.gts': { Article, Note },
           'Note/aside.json': new Note({ body: 'An aside' }),
-          'Article/long.json': new Article({ note: new Note({ id: NOTE }) }),
+          'Article/long.json': new Article({
+            note: new Note({ id: NOTE }),
+            reflow: 'grows',
+          }),
+          'Article/settles.json': new Article({
+            note: new Note({ id: NOTE }),
+            reflow: 'shrinks',
+          }),
         },
       });
     });
@@ -179,6 +218,25 @@ module(
         await restingOffset(stackCard(0, 0)),
         left,
         'the article is where it was left',
+      );
+    });
+
+    test('a card whose content settles shorter after it is uncovered returns to where it was scrolled', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: SETTLING_ARTICLE, format: 'isolated' }]],
+      });
+      await waitFor(`${stackCard(0, 0)} [data-test-article-end]`);
+      let left = await scrollCard(stackCard(0, 0), 1200);
+
+      await click(`${stackCard(0, 0)} [data-test-card="${NOTE}"]`);
+      await waitFor(`${stackCard(0, 1)}[data-test-stack-card="${NOTE}"]`);
+      await click(`${stackCard(0, 1)} [data-test-close-button]`);
+      await waitFor(stackCard(0, 1), { count: 0 });
+
+      assert.strictEqual(
+        await restingOffset(stackCard(0, 0)),
+        left,
+        'the article is where it was left once its content has settled',
       );
     });
 
