@@ -2418,8 +2418,6 @@ throw new Error('stop here');`,
   });
 
   module('realm.cards.update', function () {
-    const recipeRef = `{ module: ${JSON.stringify(`${testRealmURL}recipe`)}, name: 'Recipe' }`;
-
     async function run(code: string) {
       let toolService = getService('tool-service');
       let command = new RunRealmCodeTool(toolService.toolContext);
@@ -2483,7 +2481,7 @@ return name.length;`);
       assert.strictEqual(data.attributes.name, expected);
     });
 
-    test('a search-then-update loop saves every card, past the file limit, in one batch', async function (assert) {
+    test('updates more cards than the file limit in one run, and saves them all', async function (assert) {
       let cardService = getService('card-service');
       for (let n = 0; n < 25; n++) {
         await cardService.saveSource(
@@ -2498,17 +2496,37 @@ return name.length;`);
         );
       }
 
+      // The cards are named by path: a search would depend on the index
+      // having caught up with the saves above.
       let result = await run(`
-const { cards } = await realm.cards.search({ filter: { eq: { cuisine: 'batch' }, on: ${recipeRef} } });
-for (const card of cards) {
-  await realm.cards.update(card.path, { cuisine: 'done' });
-}
-return cards.length;`);
+for (let n = 0; n < 25; n++) {
+  await realm.cards.update('Recipe/batch/r' + n, { cuisine: 'done' });
+}`);
 
-      assert.strictEqual(JSON.parse(result.scriptResult!), 25);
       assert.strictEqual(result.files.length, 25, 'the result names each card');
-      let { data } = await cardJSON('Recipe/batch/r24.json');
-      assert.strictEqual(data.attributes.cuisine, 'done');
+      for (let n of [0, 24]) {
+        let { data } = await cardJSON(`Recipe/batch/r${n}.json`);
+        assert.strictEqual(data.attributes.cuisine, 'done');
+        assert.strictEqual(data.attributes.name, `R${n}`);
+      }
+    });
+
+    test('refuses an update that makes a card larger than the card size limit, counted in bytes', async function (assert) {
+      // Each emoji is 2 UTF-16 code units but 4 bytes in UTF-8.
+      let result = await run(`
+try {
+  await realm.cards.update('Pet/mango', { name: '\u{1F600}'.repeat(200000) });
+} catch (error) {
+  return error.message;
+}`);
+
+      assert.true(
+        /Card is too large after this update: .*Pet\/mango\.json/.test(
+          JSON.parse(result.scriptResult!),
+        ),
+        result.scriptResult,
+      );
+      assert.deepEqual(result.files, [], 'nothing is saved');
     });
 
     test('two updates to the same card in one run both apply', async function (assert) {

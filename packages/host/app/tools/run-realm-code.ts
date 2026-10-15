@@ -15,6 +15,7 @@ import {
   rri,
   searchEntryWireQueryFromQuery,
   SupportedMimeType,
+  validateWriteSize,
   type CardResource,
   type EntryCollectionDocument,
   type Format,
@@ -75,6 +76,7 @@ import UpdateRoomSkillsTool from './update-room-skills';
 import type { RealmRunnerCallMethod } from '../lib/realm-runner/types';
 
 import type CardService from '../services/card-service';
+import type EnvironmentService from '../services/environment-service';
 import type MatrixService from '../services/matrix-service';
 import type NetworkService from '../services/network';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
@@ -438,6 +440,8 @@ class RealmFsSession {
     private namedCalls: Set<ClickRequiredCall>,
     private index: IndexActions,
     private mayWrite: boolean,
+    // The most bytes a card file may hold, as the realm enforces it.
+    private cardSizeLimitBytes: number,
     readonly room: RoomActions,
   ) {
     this.captures = new RealmCaptures(captureURL);
@@ -990,8 +994,18 @@ class RealmFsSession {
       (_target: unknown, source: unknown) =>
         Array.isArray(source) ? source : undefined,
     );
-    if (JSON.stringify(doc, null, 2).length > MAX_FILE_SIZE) {
-      throw new Error(`Card is too large after this update: ${url}`);
+    // The realm refuses the whole batch for one card over the limit, and only
+    // after the script has ended, so the call that makes it too large fails.
+    try {
+      validateWriteSize(
+        JSON.stringify(doc, null, 2),
+        this.cardSizeLimitBytes,
+        'card',
+      );
+    } catch (error) {
+      throw new Error(
+        `Card is too large after this update: ${url}. ${coerceErrorMessage(error, '')}`.trim(),
+      );
     }
     this.cardUpdates.set(url, { expected: pending.expected, doc });
     return {
@@ -1704,6 +1718,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
   typeof BaseToolModule.RunRealmCodeResult
 > {
   @service declare private cardService: CardService;
+  @service declare private environmentService: EnvironmentService;
   @service declare private matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private network: NetworkService;
@@ -1844,6 +1859,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
         cancelJob: () => this.realm.cancelIndexingJob(realmURL),
       },
       this.realm.canWrite(realmURL),
+      this.environmentService.cardSizeLimitBytes,
       new RoomActions({
         checkSkill: (id) => this.checkSkill(id),
         knownModels: () => this.knownModels(roomId),
