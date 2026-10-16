@@ -94,7 +94,7 @@ test.describe('the secure window signs in on its own', () => {
 
     await secure.locator('[data-test-secure-password]').fill(password);
     await secure.locator('[data-test-secure-password-submit]').click();
-    await expect(secure.locator('[data-test-secure-sign-out]')).toBeVisible();
+    await expect(secure.locator('[data-test-secure-signed-in]')).toBeVisible();
     expect(
       JSON.parse(
         (await secure.evaluate(
@@ -144,7 +144,8 @@ test.describe('the secure window signs in on its own', () => {
     }, secureOriginURL);
     expect(typeof ticket.ticket).toBe('string');
 
-    await secure.locator('[data-test-secure-sign-out]').click();
+    // The window has no sign-out control; its console function signs out.
+    await secure.evaluate(() => (window as any).boxelSignOut());
     await expect(secure.locator('[data-test-secure-username]')).toBeVisible();
     expect(
       await secure.evaluate((key) => localStorage.getItem(key), STORAGE_KEY),
@@ -194,7 +195,7 @@ test.describe('the secure window signs in on its own', () => {
     await signInAtGoogle(secure, identity);
 
     // Google returns to the secure window, which finishes on its own.
-    await expect(secure.locator('[data-test-secure-sign-out]')).toBeVisible({
+    await expect(secure.locator('[data-test-secure-signed-in]')).toBeVisible({
       timeout: 30000,
     });
     expect(

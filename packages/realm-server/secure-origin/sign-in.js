@@ -65,15 +65,21 @@ function cliCallback(params) {
 
 export function signInMode(root) {
   let config = readConfig();
+  // The window has no sign-out control; this ends its session from the
+  // browser's console. Signed out here, the window shows its sign-in again.
+  window.boxelSignOut = async () => {
+    await signOut(config);
+    signInMode(root);
+  };
   let session = storedSession();
   if (session) {
-    renderSignedIn(root, config);
+    renderSignedIn(root);
   } else {
     renderSignIn(root, config, {
       client: 'window',
       onSignedIn(signedIn) {
         storeSession(signedIn);
-        renderSignedIn(root, config);
+        renderSignedIn(root);
       },
     });
   }
@@ -138,7 +144,7 @@ export async function googleCallbackMode(root) {
   // Back to the window's own address, so a reload shows the signed-in window
   // rather than this callback.
   history.replaceState(null, '', signInURL());
-  renderSignedIn(root, config);
+  renderSignedIn(root);
 }
 
 function page(title, ...content) {
@@ -175,34 +181,15 @@ function showError(element, message) {
   element.hidden = !message;
 }
 
-function renderSignedIn(root, config) {
-  let error = errorLine();
-  let button = h(
-    'button',
-    {
-      type: 'button',
-      class: 'secure-button secondary',
-      'data-test-secure-sign-out': true,
-      async onclick() {
-        button.disabled = true;
-        try {
-          await signOut(config);
-        } catch (e) {
-          // The session is already forgotten here; the server ends it when it
-          // expires.
-          showError(error, e.message);
-        }
-        signInMode(root);
-      },
-    },
-    'Sign out',
-  );
+function renderSignedIn(root) {
   root.replaceChildren(
     page(
       'You’re signed in',
-      h('p', { class: 'secure-subtitle' }, 'You can close this window.'),
-      error,
-      button,
+      h(
+        'p',
+        { class: 'secure-subtitle', 'data-test-secure-signed-in': true },
+        'You can close this window.',
+      ),
     ),
   );
 }
