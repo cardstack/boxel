@@ -145,10 +145,10 @@ export async function secureSignIn(
     let signInUrl = buildSecureSignInUrl(secureOriginUrl, callback, username);
     let opened = await openBrowserFn(signInUrl);
     if (opened) {
-      log('Opening the secure window in your browser to confirm it’s you...');
+      log('Opening your browser to sign in to Boxel...');
       log(`If it didn't open, visit:\n  ${signInUrl}`);
     } else {
-      log(`Open this URL in your browser to confirm it’s you:\n  ${signInUrl}`);
+      log(`Open this URL in your browser to sign in to Boxel:\n  ${signInUrl}`);
     }
     stopCopyKey = watchForCopyKey(signInUrl, {
       log,

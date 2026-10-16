@@ -103,13 +103,13 @@ export function registerKeysCommand(program: Command): void {
   let keys = program
     .command('keys')
     .description(
-      "Manage your own keys. Changing one needs a sign-in through the browser's secure window",
+      'Manage your own keys. Changing one needs you to sign in through the browser',
     );
 
   keys
     .command('sign-in')
     .description(
-      'Confirm it’s you in the browser’s secure window, so this CLI can change your keys',
+      'Sign in to Boxel in the browser, so this CLI can change your keys',
     )
     .option('--timeout <seconds>', 'How long to wait for the browser')
     .action((options: SignInOptions) => run(() => keysSignIn(options)));

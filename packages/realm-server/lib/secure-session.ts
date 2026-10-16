@@ -115,7 +115,7 @@ function unavailable() {
   return new SecureSessionError(
     503,
     'unavailable',
-    'signing in to the secure window is unavailable',
+    'signing in is unavailable right now; try again later',
   );
 }
 

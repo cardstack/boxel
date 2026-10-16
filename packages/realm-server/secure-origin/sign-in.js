@@ -214,11 +214,6 @@ function renderSignedIn(root, config, session) {
         h('strong', { 'data-test-secure-user': true }, session.user),
         ` until ${formatTime(session.expiresAt)}.`,
       ),
-      h(
-        'p',
-        { class: 'secure-note' },
-        'This window keeps its own sign-in. Cards in the app can’t see or use it.',
-      ),
       error,
       button,
     ),
@@ -306,15 +301,13 @@ function renderSignIn(
   );
   root.replaceChildren(
     page(
-      client === 'cli'
-        ? 'Sign in the Boxel CLI'
-        : 'Sign in to the secure window',
+      'Sign in to Boxel',
       h(
         'p',
-        {},
+        { class: 'secure-subtitle' },
         client === 'cli'
-          ? 'Confirm it’s you to let the Boxel CLI on this computer manage your keys.'
-          : 'Confirm it’s you to manage your keys here, where cards in the app can’t reach.',
+          ? 'to let the Boxel CLI on this computer manage your keys'
+          : 'to manage your keys',
       ),
       googleSlot,
       form,

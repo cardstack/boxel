@@ -90,7 +90,9 @@ body {
   gap: 1rem;
 }
 
-.secure-note {
+/* A line that reads on from the title, as Google's "to continue to …" does. */
+.secure-card .secure-subtitle {
+  margin-top: -0.75rem;
   color: var(--secure-muted);
 }
 

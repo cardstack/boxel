@@ -65,7 +65,7 @@ function requireSecureOrigin(ctxt: Koa.Context, secureOriginURL?: URL) {
     throw new SecureSessionError(
       403,
       'forbidden',
-      'signing in here is only for the secure window',
+      'this sign-in can’t be used here',
     );
   }
 }
