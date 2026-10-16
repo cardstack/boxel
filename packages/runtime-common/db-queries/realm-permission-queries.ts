@@ -216,6 +216,28 @@ export async function isDirectWriter(
 }
 
 /**
+ * `isDirectWriter`, asked inside the caller's transaction with the person's
+ * permission row locked until it ends. Anything that takes something on in a
+ * person's name on the strength of the answer asks it this way, so a change
+ * to that row made meanwhile waits for the caller's work to commit and then
+ * sees it.
+ */
+export async function isDirectWriterLocked(
+  txQuerier: Querier,
+  realmURL: URL,
+  userId: string,
+): Promise<boolean> {
+  let [row] = (await txQuerier([
+    `SELECT write FROM realm_user_permissions WHERE realm_url =`,
+    param(realmURL.href),
+    `AND username =`,
+    param(userId),
+    `FOR SHARE`,
+  ])) as { write: boolean }[];
+  return !!row && isDirectWriterRow(userId, row.write);
+}
+
+/**
  * The realm's direct writers, as `isDirectWriter` answers it, in username
  * order.
  */
