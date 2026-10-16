@@ -1,14 +1,19 @@
 #!/usr/bin/env node
-// Lists the ADRs in docs/adr/ whose `scope` globs match the given repo-relative
-// paths. With no paths, lists every ADR with its scope.
+// Lists the ADRs in docs/adr/ whose `scope` globs match the given paths. With no
+// paths, lists every ADR with its scope.
+//
+// A relative path is matched both as relative to the working directory and as
+// relative to the repo root, so a path named from inside a package and the
+// repo-relative output of `gh pr diff --name-only` both work from anywhere.
 //
 //   node scripts/adr-for.mts packages/postgres/migrations/x.js
 //   node scripts/adr-for.mts $(gh pr diff 1234 --name-only)
 
 import { readdirSync, readFileSync } from 'node:fs';
-import { join, matchesGlob } from 'node:path';
+import { isAbsolute, join, matchesGlob, relative, resolve } from 'node:path';
 
-const adrDir = join(import.meta.dirname, '..', 'docs', 'adr');
+const repoRoot = join(import.meta.dirname, '..');
+const adrDir = join(repoRoot, 'docs', 'adr');
 
 interface Adr {
   file: string;
@@ -67,11 +72,16 @@ let adrs = readdirSync(adrDir)
   .sort()
   .map(parseAdr);
 
-let paths = process.argv.slice(2);
+let paths = process.argv.slice(2).map((arg) => {
+  let fromCwd = relative(repoRoot, resolve(arg));
+  return isAbsolute(arg) || fromCwd === arg ? [fromCwd] : [fromCwd, arg];
+});
 
 for (let adr of adrs) {
+  let inScope = (path: string) =>
+    adr.scope.some((glob) => matchesGlob(path, glob));
   let matched = paths.length
-    ? paths.filter((path) => adr.scope.some((glob) => matchesGlob(path, glob)))
+    ? paths.flatMap((readings) => readings.find(inScope) ?? [])
     : adr.scope;
   if (matched.length === 0) {
     continue;
