@@ -344,6 +344,9 @@ export class ProfileManager implements RealmAuthenticator {
       matrixDeviceId: auth.deviceId,
       realmTokens: urlsChanged ? undefined : existing?.realmTokens,
       realmServerToken: urlsChanged ? undefined : existing?.realmServerToken,
+      // The key-management sign-in is for this profile's realm server, so it
+      // carries over a re-authentication against the same one.
+      secureSession: urlsChanged ? undefined : existing?.secureSession,
     };
 
     this.config.profiles[matrixId] = profile;
@@ -451,6 +454,7 @@ export class ProfileManager implements RealmAuthenticator {
     if (changed) {
       profile.realmTokens = undefined;
       profile.realmServerToken = undefined;
+      profile.secureSession = undefined;
       this.saveConfig();
     }
     return changed;

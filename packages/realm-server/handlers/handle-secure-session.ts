@@ -1,5 +1,10 @@
 import type Koa from 'koa';
-import { logger, SupportedMimeType } from '@cardstack/runtime-common';
+import {
+  CLIENT_IP_HEADER,
+  logger,
+  SupportedMimeType,
+} from '@cardstack/runtime-common';
+import { SignInLimiter } from '../lib/sign-in-limiter.ts';
 import {
   sendResponseForError,
   setContextResponse,
@@ -165,14 +170,23 @@ async function sendSession(ctxt: Koa.Context, session: unknown) {
 // POST /_secure-session: signs in with a username, email address or Matrix id
 // and the account's password.
 export function handlePasswordSignIn(args: CreateRoutesArgs): Handler {
+  let limiter = new SignInLimiter();
   return secureSessionHandler(async (ctxt) => {
     requireSecureOrigin(ctxt, args.secureOriginURL);
     let attributes = await readAttributes(ctxt, 'secure-session');
     let { username, password } = attributes;
+    let account = typeof username === 'string' ? username : '';
+    if (!limiter.allow(account, ctxt.get(CLIENT_IP_HEADER) || undefined)) {
+      throw new SecureSessionError(
+        429,
+        'rate-limited',
+        'too many attempts; wait a moment and try again',
+      );
+    }
     await sendSession(
       ctxt,
       await signInWithPassword(deps(args), {
-        username: typeof username === 'string' ? username : '',
+        username: account,
         password: typeof password === 'string' ? password : '',
         client: clientOf(attributes),
       }),

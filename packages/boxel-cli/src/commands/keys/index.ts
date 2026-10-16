@@ -64,10 +64,12 @@ export async function keysSignOut(
   let pm = options.profileManager ?? getProfileManager();
   let { profile } = activeProfile(pm);
   let session = pm.getSecureSession();
-  pm.clearSecureSession();
   if (session) {
+    // Forgotten only once the server has ended it, so a failed sign-out can
+    // be tried again.
     await secureSignOut(profile.realmServerUrl, session.token);
   }
+  pm.clearSecureSession();
   console.log('Signed out of managing keys.');
 }
 

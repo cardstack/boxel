@@ -420,6 +420,25 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('password sign-ins are limited per account', async function (assert) {
+      let { username, password } = await registerPasswordUser(dbAdapter);
+      let statuses = [];
+      for (let attempt = 0; attempt < 5; attempt++) {
+        statuses.push(
+          (await passwordSignIn(username, `${password}-wrong-${attempt}`))
+            .status,
+        );
+      }
+      assert.deepEqual(statuses, [401, 401, 401, 401, 401]);
+      let limited = await passwordSignIn(username, password);
+      assert.strictEqual(
+        limited.status,
+        429,
+        'even the right password waits once the limit is reached',
+      );
+      assert.strictEqual(limited.body.errors[0].code, 'rate-limited');
+    });
+
     test('signing in is answered only for the secure origin', async function (assert) {
       let { username, password, userId } =
         await registerPasswordUser(dbAdapter);
