@@ -666,6 +666,12 @@ module(basename(import.meta.filename), function () {
       const INHERITING_MEMBER =
         'readonly_inheriting_member_for_incoming_webhooks_test';
       const OUTSIDER = 'outsider_for_incoming_webhooks_test';
+      const COLUMN_MEMBER = 'readonly_column_member_for_incoming_webhooks_test';
+      const DELEGATOR = 'delegator_for_incoming_webhooks_test';
+      const DELEGATED_MEMBER =
+        'readonly_delegated_member_for_incoming_webhooks_test';
+      const DROPPED_MEMBER =
+        'readonly_dropped_member_for_incoming_webhooks_test';
 
       async function createRole(name: string) {
         await dbAdapter.execute(
@@ -688,14 +694,25 @@ module(basename(import.meta.filename), function () {
         }
       }
 
+      // Every grant on the table and on its columns, with who made it.
       async function tableGrants() {
         return await dbAdapter.execute(
-          `SELECT grantee_role.rolname AS grantee, acl.privilege_type, acl.is_grantable
+          `SELECT NULL::text AS column_name, grantee_role.rolname AS grantee,
+             grantor_role.rolname AS grantor, acl.privilege_type, acl.is_grantable
            FROM pg_class tbl
            CROSS JOIN LATERAL aclexplode(tbl.relacl) acl
            JOIN pg_roles grantee_role ON grantee_role.oid = acl.grantee
+           JOIN pg_roles grantor_role ON grantor_role.oid = acl.grantor
            WHERE tbl.oid = 'incoming_webhooks'::regclass
-           ORDER BY 1, 2, 3`,
+           UNION ALL
+           SELECT col.attname::text, grantee_role.rolname, grantor_role.rolname,
+             acl.privilege_type, acl.is_grantable
+           FROM pg_attribute col
+           CROSS JOIN LATERAL aclexplode(col.attacl) acl
+           JOIN pg_roles grantee_role ON grantee_role.oid = acl.grantee
+           JOIN pg_roles grantor_role ON grantor_role.oid = acl.grantor
+           WHERE col.attrelid = 'incoming_webhooks'::regclass
+           ORDER BY 1 NULLS FIRST, 2, 3, 4, 5`,
         );
       }
 
@@ -709,12 +726,18 @@ module(basename(import.meta.filename), function () {
       ];
 
       function selectGranteesIn(
-        grants: { grantee: string; privilege_type: string }[],
+        grants: {
+          column_name: string | null;
+          grantee: string;
+          privilege_type: string;
+        }[],
       ) {
         return grants
           .filter(
-            ({ grantee, privilege_type }) =>
-              privilege_type === 'SELECT' && rolesUnderTest.includes(grantee),
+            ({ column_name, grantee, privilege_type }) =>
+              column_name === null &&
+              privilege_type === 'SELECT' &&
+              rolesUnderTest.includes(grantee),
           )
           .map(({ grantee }) => grantee);
       }
@@ -816,6 +839,89 @@ module(basename(import.meta.filename), function () {
         assert.deepEqual(
           selectGranteesIn(await tableGrants()).sort(),
           [OUTSIDER, 'readonly_role'].sort(),
+        );
+      });
+
+      test('restores the SELECT grants a member held on individual columns', async function (assert) {
+        await createRole(COLUMN_MEMBER);
+        await dbAdapter.execute(`GRANT readonly_role TO ${COLUMN_MEMBER}`);
+        await dbAdapter.execute(
+          `GRANT SELECT (id) ON TABLE incoming_webhooks TO ${COLUMN_MEMBER} WITH GRANT OPTION`,
+        );
+        await dbAdapter.execute(
+          `GRANT SELECT (webhook_path) ON TABLE incoming_webhooks TO ${COLUMN_MEMBER}`,
+        );
+        let before = await tableGrants();
+
+        await runMigration('up');
+        assert.notOk(
+          (await tableGrants()).some(
+            ({ grantee }: { grantee: string }) => grantee === COLUMN_MEMBER,
+          ),
+          'up revokes the column grants with the table grant',
+        );
+
+        await runMigration('down');
+        assert.deepEqual(await tableGrants(), before);
+      });
+
+      test("leaves a member's grant from another role as it was", async function (assert) {
+        await createRole(DELEGATOR);
+        await createRole(DELEGATED_MEMBER);
+        await dbAdapter.execute(`GRANT readonly_role TO ${DELEGATED_MEMBER}`);
+        await dbAdapter.execute(
+          `GRANT SELECT ON TABLE incoming_webhooks TO ${DELEGATOR} WITH GRANT OPTION`,
+        );
+        await dbAdapter.withTransaction(async (query: any) => {
+          await query([`SET LOCAL ROLE ${DELEGATOR}`]);
+          await query([
+            `GRANT SELECT ON TABLE incoming_webhooks TO ${DELEGATED_MEMBER}`,
+          ]);
+        });
+        let before = await tableGrants();
+
+        await runMigration('up');
+        await runMigration('down');
+
+        assert.deepEqual(
+          await tableGrants(),
+          before,
+          'down adds no second grant from the owner',
+        );
+      });
+
+      test('skips a recorded role that was dropped before down', async function (assert) {
+        await createRole(DROPPED_MEMBER);
+        await dbAdapter.execute(`GRANT readonly_role TO ${DROPPED_MEMBER}`);
+        await dbAdapter.execute(
+          `GRANT SELECT ON TABLE incoming_webhooks TO ${DROPPED_MEMBER}`,
+        );
+        let before = (await tableGrants()).filter(
+          ({ grantee }: { grantee: string }) => grantee !== DROPPED_MEMBER,
+        );
+
+        await runMigration('up');
+        await dbAdapter.execute(`DROP OWNED BY ${DROPPED_MEMBER}`);
+        await dbAdapter.execute(`DROP ROLE ${DROPPED_MEMBER}`);
+        await runMigration('down');
+
+        assert.deepEqual(await tableGrants(), before);
+      });
+
+      test("leaves the other sealing migration's record in place", async function (assert) {
+        await runMigration('up');
+        await dbAdapter.execute(
+          `INSERT INTO readonly_role_revoked_select_grants (table_name, grants)
+           VALUES ('proxy_endpoints', '[]'::jsonb)`,
+        );
+
+        await runMigration('down');
+
+        assert.deepEqual(
+          await dbAdapter.execute(
+            `SELECT table_name FROM readonly_role_revoked_select_grants`,
+          ),
+          [{ table_name: 'proxy_endpoints' }],
         );
       });
     });

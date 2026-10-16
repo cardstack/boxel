@@ -14,8 +14,9 @@
 // (staging and production), so the revoke is skipped wherever it doesn't.
 // Every statement is idempotent, so running `up` again changes nothing.
 //
-// Before revoking, `up` records which of those roles held SELECT on the table
-// directly, and whether each could grant it on, as this table's row in
+// Before revoking, `up` records the SELECT grants the revoke removes: each
+// one the table's owner gave those roles on the table or on one of its
+// columns, and whether the role could grant it on, as this table's row in
 // `readonly_role_revoked_select_grants`. That table is created only where the
 // read-only role exists, and a second `up` keeps the first record. `down`
 // grants back exactly the recorded grants, so every role ends up with the
@@ -52,19 +53,37 @@ exports.up = (pgm) => {
             'incoming_webhooks',
             COALESCE(
               jsonb_agg(
-                jsonb_build_object('grantee', grantee, 'grantable', grantable)
-                ORDER BY grantee
+                jsonb_build_object(
+                  'grantee', grantee,
+                  'column', column_name,
+                  'grantable', grantable
+                )
+                ORDER BY grantee, column_name NULLS FIRST
               ),
               '[]'::jsonb
             )
           FROM (
             SELECT grantee_role.rolname AS grantee,
-              bool_or(acl.is_grantable) AS grantable
-            FROM pg_class tbl
-            CROSS JOIN LATERAL aclexplode(tbl.relacl) acl
-            JOIN pg_roles grantee_role ON grantee_role.oid = acl.grantee
-            WHERE tbl.oid = 'incoming_webhooks'::regclass
-              AND acl.privilege_type = 'SELECT'
+              owned_grant.column_name,
+              bool_or(owned_grant.is_grantable) AS grantable
+            FROM (
+              SELECT NULL::name AS column_name, acl.*
+              FROM pg_class tbl
+              CROSS JOIN LATERAL aclexplode(tbl.relacl) acl
+              WHERE tbl.oid = 'incoming_webhooks'::regclass
+                AND acl.grantor = tbl.relowner
+              UNION ALL
+              SELECT col.attname, acl.*
+              FROM pg_class tbl
+              JOIN pg_attribute col ON col.attrelid = tbl.oid
+              CROSS JOIN LATERAL aclexplode(col.attacl) acl
+              WHERE tbl.oid = 'incoming_webhooks'::regclass
+                AND col.attnum > 0
+                AND NOT col.attisdropped
+                AND acl.grantor = tbl.relowner
+            ) owned_grant
+            JOIN pg_roles grantee_role ON grantee_role.oid = owned_grant.grantee
+            WHERE owned_grant.privilege_type = 'SELECT'
               AND (
                 grantee_role.rolname = 'readonly_role'
                 OR grantee_role.oid IN (
@@ -74,8 +93,8 @@ exports.up = (pgm) => {
                   WHERE grp.rolname = 'readonly_role'
                 )
               )
-            GROUP BY grantee_role.rolname
-          ) direct_grants
+            GROUP BY grantee_role.rolname, owned_grant.column_name
+          ) revoked_grants
           ON CONFLICT (table_name) DO NOTHING;
         REVOKE SELECT ON TABLE incoming_webhooks FROM readonly_role;
         FOR member_name IN
@@ -115,11 +134,27 @@ exports.down = (pgm) => {
       ELSE
         FOR revoked IN SELECT jsonb_array_elements(recorded)
         LOOP
-          IF EXISTS (
+          IF NOT EXISTS (
             SELECT 1 FROM pg_roles WHERE rolname = revoked->>'grantee'
           ) THEN
+            CONTINUE;
+          END IF;
+          IF revoked->>'column' IS NULL THEN
             EXECUTE format(
               'GRANT SELECT ON TABLE incoming_webhooks TO %I%s',
+              revoked->>'grantee',
+              CASE WHEN (revoked->>'grantable')::boolean
+                THEN ' WITH GRANT OPTION' ELSE '' END
+            );
+          ELSIF EXISTS (
+            SELECT 1 FROM pg_attribute
+            WHERE attrelid = 'incoming_webhooks'::regclass
+              AND attname = revoked->>'column'
+              AND NOT attisdropped
+          ) THEN
+            EXECUTE format(
+              'GRANT SELECT (%I) ON TABLE incoming_webhooks TO %I%s',
+              revoked->>'column',
               revoked->>'grantee',
               CASE WHEN (revoked->>'grantable')::boolean
                 THEN ' WITH GRANT OPTION' ELSE '' END
