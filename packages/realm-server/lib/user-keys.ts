@@ -17,9 +17,10 @@ import type {
 // where a key may be sent, and the value is sealed to the key alone.
 //
 // A key is added, replaced, deleted, shared into a realm or swapped into a
-// share only with a key write ticket: short-lived, single-use, minted for the
-// signed-in user and for one change (an add; a replace or delete of one key; a
-// share of one key into one realm; or a swap of one key into one share), and
+// share, and a share suspended by a writer is resumed, only with a key write
+// ticket: short-lived, single-use, minted for the signed-in user and for one
+// change (an add; a replace or delete of one key; a share of one key into one
+// realm; a swap of one key into one share; or a resume of one share), and
 // consumed in the same transaction as that change. The routes mint tickets only for requests from
 // the secure origin and for clients that send no `Origin`, as the CLI does, so
 // card code in the app page can't change a key from inside the browser.
@@ -37,6 +38,7 @@ export const KEY_WRITE_ACTIONS = [
   'delete',
   'share',
   'swap',
+  'resume',
 ] as const;
 export type KeyWriteAction = (typeof KEY_WRITE_ACTIONS)[number];
 
@@ -74,15 +76,17 @@ function sha256(value: string): string {
 }
 
 // The change a key write ticket is minted for: an add; a replace or delete of
-// one key; a share of one key into one realm; or a swap of one key into one
-// share.
+// one key; a share of one key into one realm; a swap of one key into one
+// share; or a resume of one share.
 export interface KeyWriteTarget {
   action: KeyWriteAction;
-  // The key a replace, delete, share or swap uses; an add names none.
+  // The key a replace, delete, share or swap uses; an add or a resume names
+  // none.
   keyId: string | null;
   // The realm a share puts the key into; only a share names one.
   realmURL: string | null;
-  // The share a swap puts the key into; only a swap names one.
+  // The share a swap puts the key into, or a resume resumes; only those name
+  // one.
   shareId: string | null;
 }
 
@@ -107,14 +111,22 @@ export function validateKeyWriteTarget({
   if (named(realm) && action !== 'share') {
     throw new UserKeyError(400, `a ticket to ${action} names no realm`);
   }
-  if (named(shareId) && action !== 'swap') {
+  if (named(shareId) && action !== 'swap' && action !== 'resume') {
     throw new UserKeyError(400, `a ticket to ${action} names no share`);
   }
-  if (action === 'add') {
+  if (action === 'add' || action === 'resume') {
     if (named(keyId)) {
-      throw new UserKeyError(400, 'a ticket to add a key names no key');
+      throw new UserKeyError(400, `a ticket to ${action} names no key`);
     }
-    return { action, keyId: null, realmURL: null, shareId: null };
+    if (action === 'add') {
+      return { action, keyId: null, realmURL: null, shareId: null };
+    }
+    return {
+      action,
+      keyId: null,
+      realmURL: null,
+      shareId: validShareId(shareId, action),
+    };
   }
   if (typeof keyId !== 'string') {
     throw new UserKeyError(400, `a ticket to ${action} a key names the key`);
@@ -127,10 +139,12 @@ export function validateKeyWriteTarget({
     return { action, keyId, realmURL: realmURL.href, shareId: null };
   }
   if (action === 'swap') {
-    if (typeof shareId !== 'string') {
-      throw new UserKeyError(400, 'a ticket to swap a key names the share');
-    }
-    return { action, keyId, realmURL: null, shareId };
+    return {
+      action,
+      keyId,
+      realmURL: null,
+      shareId: validShareId(shareId, action),
+    };
   }
   return {
     action: action as KeyWriteAction,
@@ -207,6 +221,17 @@ export async function consumeKeyWriteTicket(
   if (rows.length === 0) {
     throw new UserKeyError(403, INVALID_TICKET_MESSAGE);
   }
+}
+
+// A share's id is a UUID; anything else names no share.
+function validShareId(shareId: unknown, action: KeyWriteAction): string {
+  if (typeof shareId !== 'string') {
+    throw new UserKeyError(400, `a ticket to ${action} names the share`);
+  }
+  if (!UUID.test(shareId)) {
+    throw new UserKeyError(404, 'no such share');
+  }
+  return shareId;
 }
 
 function matches(column: string, value: string | null): Expression {
@@ -427,7 +452,7 @@ export async function replaceUserKeyValue(
 
 // Deletes a key. Every share holding it is suspended in the same statement,
 // by a trigger on `user_keys`, and keeps its place in its realm for a direct
-// writer to swap another key into; `listKeyShares` with the key's id lists
+// writer to swap another key into; `listOwnShares` with the key's id lists
 // the shares a delete would suspend.
 export async function deleteUserKey(
   dbAdapter: DBAdapter,

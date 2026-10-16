@@ -5,7 +5,11 @@ import { createRequire } from 'module';
 import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
-import { insertPermissions } from '@cardstack/runtime-common';
+import {
+  insertPermissions,
+  removeRealmPermissions,
+} from '@cardstack/runtime-common';
+import { removeRealmDatabaseArtifacts } from '../handlers/realm-destruction-utils.ts';
 import {
   setupDB,
   setupSimpleRealmServerTemplate,
@@ -174,6 +178,15 @@ module(basename(import.meta.filename), function () {
       return await request
         .post(`/_key-shares/${shareId}/${action}`)
         .set('Authorization', auth(user));
+    }
+
+    async function resume(user: string, shareId: string, ticket?: string) {
+      ticket ??= await ticketFor(user, { action: 'resume', shareId });
+      return await request
+        .post(`/_key-shares/${shareId}/resume`)
+        .set('Authorization', auth(user))
+        .set('Content-Type', 'application/json')
+        .send({ meta: { ticket } });
     }
 
     async function realmShares(user: string, realm = REALM) {
@@ -497,7 +510,24 @@ module(basename(import.meta.filename), function () {
         'the suspension is noticed',
       );
 
-      let resumed = await act(OWNER, shareId, 'resume');
+      let noTicket = await request
+        .post(`/_key-shares/${shareId}/resume`)
+        .set('Authorization', auth(OWNER))
+        .set('Content-Type', 'application/json')
+        .send({});
+      assert.strictEqual(noTicket.status, 403, 'lifting one needs a ticket');
+      let otherShare = await sharedId(OWNER, 'Other');
+      let otherTicket = await ticketFor(OWNER, {
+        action: 'resume',
+        shareId: otherShare,
+      });
+      assert.strictEqual(
+        (await resume(OWNER, shareId, otherTicket)).status,
+        403,
+        `a ticket to resume one share doesn't resume another`,
+      );
+
+      let resumed = await resume(OWNER, shareId);
       assert.strictEqual(resumed.status, 200, resumed.text);
       assert.strictEqual(resumed.body.data.attributes.state, 'active');
     });
@@ -508,7 +538,7 @@ module(basename(import.meta.filename), function () {
       await insertPermissions(dbAdapter, new URL(REALM), {
         [OWNER]: ['read'],
       });
-      let resumed = await act(WRITER, shareId, 'resume');
+      let resumed = await resume(WRITER, shareId);
       assert.strictEqual(resumed.status, 200, resumed.text);
       assert.deepEqual(
         [
@@ -598,6 +628,21 @@ module(basename(import.meta.filename), function () {
         `a ticket for the writer's key doesn't swap in another`,
       );
 
+      let otherShare = await sharedId(WRITER, 'Other');
+      await act(WRITER, otherShare, 'suspend');
+      let writerKey = await keyFor(WRITER, 'third');
+      let otherShareTicket = await ticketFor(WRITER, {
+        action: 'swap',
+        keyId: writerKey,
+        shareId: otherShare,
+      });
+      let wrongShare = await swap(WRITER, shareId, writerKey, otherShareTicket);
+      assert.strictEqual(
+        wrongShare.status,
+        403,
+        `a ticket to swap into one share doesn't swap into another`,
+      );
+
       let state = await shareState(shareId);
       assert.deepEqual(
         [state!.owner, state!.state],
@@ -659,6 +704,99 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(swapped.status, 200, 'a writer swaps a key into it');
     });
 
+    test(`deleting the key of a share a writer suspended records a notice`, async function (assert) {
+      let keyId = await keyFor(OWNER);
+      let shared = await share(OWNER, { realm: REALM, keyId, label: 'A' });
+      let shareId = shared.body.data.id;
+      await act(WRITER, shareId, 'suspend');
+
+      let ticket = await ticketFor(OWNER, { action: 'delete', keyId });
+      await request
+        .delete(`/_user-keys/${keyId}`)
+        .set('Authorization', auth(OWNER))
+        .set('Content-Type', 'application/json')
+        .send({ meta: { ticket } });
+
+      let state = await shareState(shareId);
+      assert.deepEqual(
+        [state?.state, state?.reason, state?.keyId],
+        ['suspended', 'key-deleted', null],
+      );
+      let listed = await notices(WRITER);
+      assert.deepEqual(
+        listed.body.data.map(
+          (n: { attributes: Record<string, unknown> }) => n.attributes.reason,
+        ),
+        ['key-deleted', 'suspended-by-writer'],
+        'the writers learn the key is gone',
+      );
+    });
+
+    test('deleting a realm deletes its shares', async function (assert) {
+      let shareId = await sharedId();
+      let elsewhere = await sharedId(OWNER, 'Elsewhere', OTHER_REALM);
+      await removeRealmPermissions(dbAdapter, new URL(REALM));
+      await removeRealmDatabaseArtifacts({ dbAdapter, realmURL: REALM });
+      assert.strictEqual(await shareState(shareId), undefined);
+      let [{ count }] = await dbAdapter.execute(
+        `SELECT COUNT(*)::int AS count FROM key_share_notices WHERE share_id = $1`,
+        { bind: [shareId] },
+      );
+      assert.strictEqual(count, 0, 'its notices go with it');
+
+      await insertPermissions(dbAdapter, new URL(REALM), {
+        [OWNER]: ['read', 'write'],
+      });
+      assert.deepEqual(
+        (
+          await request.get('/_key-shares').set('Authorization', auth(OWNER))
+        ).body.data.map((s: { id: string }) => s.id),
+        [elsewhere],
+        'a realm later made at the same URL gets none of them back',
+      );
+    });
+
+    test('ids that are not UUIDs name nothing', async function (assert) {
+      let shareId = await sharedId();
+      let keyId = await keyFor(WRITER);
+      assert.strictEqual(
+        (await mint(WRITER, { action: 'swap', keyId, shareId: 'nope' })).status,
+        404,
+        'no swap ticket is minted for a malformed share id',
+      );
+      assert.strictEqual(
+        (await mint(WRITER, { action: 'resume', shareId: 'nope' })).status,
+        404,
+        'no resume ticket is minted for a malformed share id',
+      );
+      let ticket = await ticketFor(WRITER, { action: 'swap', keyId, shareId });
+      assert.strictEqual(
+        (await swap(WRITER, 'nope', keyId, ticket)).status,
+        404,
+      );
+      assert.strictEqual(
+        (await swap(WRITER, shareId, 'nope', ticket)).status,
+        404,
+      );
+      assert.strictEqual((await act(WRITER, 'nope', 'suspend')).status, 404);
+      assert.strictEqual((await resume(WRITER, 'nope', ticket)).status, 404);
+      assert.strictEqual(
+        (
+          await share(
+            WRITER,
+            { realm: REALM, keyId: 'nope', label: 'X' },
+            ticket,
+          )
+        ).status,
+        404,
+      );
+      assert.strictEqual(
+        (await swap(WRITER, shareId, keyId, ticket)).status,
+        409,
+        'the refusals left the ticket unspent',
+      );
+    });
+
     test(`a reader sees nothing of a realm's shares`, async function (assert) {
       let shareId = await sharedId();
       for (let user of [READER, STRANGER]) {
@@ -668,7 +806,7 @@ module(basename(import.meta.filename), function () {
           .get('/_key-shares')
           .set('Authorization', auth(user));
         assert.deepEqual(own.body.data, [], `${user} owns no shares`);
-        assert.strictEqual((await act(user, shareId, 'resume')).status, 404);
+        assert.strictEqual((await resume(user, shareId)).status, 404);
         let unshare = await request
           .delete(`/_key-shares/${shareId}`)
           .set('Authorization', auth(user));

@@ -23,12 +23,15 @@
 // - On `realm_user_permissions`, any change to a person's row suspends that
 //   person's active shares in the realm when the row no longer grants write,
 //   and resumes the ones it suspended for that reason when it does again.
-//   Only a direct writer (see `isDirectWriter`) can share or swap a key in,
-//   and a wildcard or bot account owns no key, so a share's owner is always a
-//   person and their own row is the whole answer.
-// - On `user_keys`, deleting a key suspends every share holding it.
-// - On `key_shares`, a share going from active to suspended records a row in
-//   `key_share_notices` for the realm's direct writers.
+//   A share's owner is always a person whose own row granted write when they
+//   shared or swapped a key in, since only a direct writer (see
+//   `isDirectWriter`, which refuses wildcard rows and bot accounts) can do
+//   either; so their own row is the whole answer.
+// - On `user_keys`, deleting a key suspends every share holding it, whatever
+//   it was suspended for before, since the share then holds no key.
+// - On `key_shares`, a share going from active to suspended, or a suspended
+//   share whose key is deleted, records a row in `key_share_notices` for the
+//   realm's direct writers.
 //
 // Both tables are withheld from the read-only role used by dashboards and
 // read-only database access, and from every role that is a member of it, as
@@ -194,14 +197,24 @@ exports.up = (pgm) => {
   pgm.sql(`DROP TRIGGER IF EXISTS key_shares_notice_suspension ON key_shares`);
   pgm.sql(`
     CREATE TRIGGER key_shares_notice_suspension
-      AFTER UPDATE OF state ON key_shares
+      AFTER UPDATE OF state, suspension_reason ON key_shares
       FOR EACH ROW
-      WHEN (OLD.state = 'active' AND NEW.state = 'suspended')
+      WHEN (
+        NEW.state = 'suspended'
+        AND (
+          OLD.state = 'active'
+          OR (
+            NEW.suspension_reason = 'key-deleted'
+            AND OLD.suspension_reason IS DISTINCT FROM 'key-deleted'
+          )
+        )
+      )
       EXECUTE FUNCTION key_shares_record_suspension()
   `);
 
   // A ticket to share a key names the key and the realm it goes into; a
-  // ticket to swap a key in names the key and the share it goes into.
+  // ticket to swap a key in names the key and the share it goes into; a
+  // ticket to resume a share names the share.
   pgm.sql(`
     ALTER TABLE key_write_tickets ADD COLUMN IF NOT EXISTS realm_url varchar
   `);
@@ -219,6 +232,7 @@ exports.up = (pgm) => {
         OR (action IN ('replace', 'delete') AND key_id IS NOT NULL AND realm_url IS NULL AND share_id IS NULL)
         OR (action = 'share' AND key_id IS NOT NULL AND realm_url IS NOT NULL AND share_id IS NULL)
         OR (action = 'swap' AND key_id IS NOT NULL AND realm_url IS NULL AND share_id IS NOT NULL)
+        OR (action = 'resume' AND key_id IS NULL AND realm_url IS NULL AND share_id IS NOT NULL)
       )
   `);
 
@@ -254,7 +268,7 @@ exports.up = (pgm) => {
 
 exports.down = (pgm) => {
   pgm.sql(`
-    DELETE FROM key_write_tickets WHERE action IN ('share', 'swap')
+    DELETE FROM key_write_tickets WHERE action IN ('share', 'swap', 'resume')
   `);
   pgm.sql(`
     ALTER TABLE key_write_tickets

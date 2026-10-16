@@ -24,8 +24,8 @@ import {
 
 // The shares API: sharing the signed-in user's keys into realms, and what a
 // realm's direct writers do with its shares. Who may do what is set out in
-// `lib/key-shares.ts`. Sharing and swapping each take a key write ticket in
-// `meta`, so, as for the keys API, nothing here logs a body and the request
+// `lib/key-shares.ts`. Sharing, swapping and resuming each take a key write
+// ticket in `meta`, so, as for the keys API, nothing here logs a body and the request
 // log keeps only the method and path of these routes.
 
 type Handler = (ctxt: Koa.Context, next: Koa.Next) => Promise<void>;
@@ -141,9 +141,11 @@ export function handleSuspendKeyShare({
 export function handleResumeKeyShare({ dbAdapter }: CreateRoutesArgs): Handler {
   return keysHandler(async (ctxt) => {
     let user = ownerOf(ctxt);
+    let body = await readJSON(ctxt);
     let share = await resumeShare(dbAdapter, {
       user,
       shareId: ctxt.params.shareId,
+      ticket: ticketOf(body),
     });
     await sendJSON(ctxt, 200, { data: serialize(share) });
   });

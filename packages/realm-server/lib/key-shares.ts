@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 import {
-  isDirectWriter,
   isDirectWriterLocked,
   param,
   query,
@@ -21,8 +20,9 @@ import { consumeKeyWriteTicket, UserKeyError } from './user-keys.ts';
 //   that key and that realm.
 // - Only a share's owner unshares it, whether or not they still write the
 //   realm: withdrawing one's own key needs no write.
-// - Any direct writer of the realm suspends an active share, and lifts a
-//   suspension a direct writer made.
+// - Any direct writer of the realm suspends an active share. Any direct writer
+//   lifts a suspension a direct writer made, with a key write ticket for that
+//   share: lifting one puts a key back into use.
 // - Any direct writer of the realm swaps one of their own keys into a
 //   suspended share, which makes them its owner and resumes it. Swapping takes
 //   a key write ticket for that key and that share. Nobody swaps in another
@@ -36,7 +36,8 @@ import { consumeKeyWriteTicket, UserKeyError } from './user-keys.ts';
 // they hold however the change is made: a share is suspended when its owner
 // stops being a direct writer of the realm, and resumes when they are one
 // again; and it is suspended, keeping its place, when its key is deleted.
-// Every share going from active to suspended records a notice.
+// Every share going from active to suspended records a notice, as does a
+// suspended share whose key is deleted. Deleting a realm deletes its shares.
 //
 // Every check that a person is a direct writer runs inside the change's
 // transaction with their permission row locked (`isDirectWriterLocked`), so a
@@ -108,6 +109,10 @@ function toShare(
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+export function isUUID(value: unknown): value is string {
+  return typeof value === 'string' && UUID.test(value);
+}
+
 function noSuchShare() {
   return new UserKeyError(404, 'no such share');
 }
@@ -154,16 +159,34 @@ export function validateShareLabel(label: unknown): string {
   return trimmed;
 }
 
+// Locks are taken in the order the triggers take them: permission rows, then
+// the key, then the share. A permission change locks its row and then,
+// through its trigger, the shares it suspends or resumes; deleting a key locks
+// the key and then the shares holding it. Taking a share before a row either
+// of them holds would deadlock against them.
+
+// Whether each of `users` is a direct writer of the realm, with their
+// permission rows locked in username order, so two changes locking the same
+// rows can't wait on each other.
+async function lockDirectWriters(
+  txQuery: Querier,
+  realmURL: URL,
+  users: string[],
+): Promise<Map<string, boolean>> {
+  let writers = new Map<string, boolean>();
+  for (let user of [...new Set(users)].sort()) {
+    writers.set(user, await isDirectWriterLocked(txQuery, realmURL, user));
+  }
+  return writers;
+}
+
 // The user's own key, locked against a concurrent delete until the caller's
 // transaction ends. Another user's key answers as one that doesn't exist.
 async function lockOwnKey(
   txQuery: Querier,
   owner: string,
-  keyId: unknown,
-): Promise<string> {
-  if (typeof keyId !== 'string' || !UUID.test(keyId)) {
-    throw noSuchKey();
-  }
+  keyId: string,
+): Promise<void> {
   let rows = await txQuery([
     `SELECT id FROM user_keys WHERE id = `,
     param(keyId),
@@ -174,37 +197,64 @@ async function lockOwnKey(
   if (rows.length === 0) {
     throw noSuchKey();
   }
-  return keyId;
 }
 
 // The share, locked for the caller's change, if `user` may see it: as its
 // owner, or as a direct writer of its realm. Any other share answers as one
-// that doesn't exist.
+// that doesn't exist. The user's permission row is locked first, and with
+// `withOwner` the share's owner's too; with `ownKeyId`, the user's key is
+// locked next. A swap made between reading the share's owner and locking the
+// share changes the owner, so the locks are taken again for the new one.
 async function lockVisibleShare(
   txQuery: Querier,
   user: string,
   shareId: string,
-): Promise<{ row: Record<string, unknown>; isWriter: boolean }> {
-  if (!UUID.test(shareId)) {
+  {
+    withOwner = false,
+    ownKeyId,
+  }: { withOwner?: boolean; ownKeyId?: string } = {},
+): Promise<{
+  row: Record<string, unknown>;
+  isWriter: boolean;
+  ownerIsWriter: boolean;
+}> {
+  if (!isUUID(shareId)) {
     throw noSuchShare();
   }
-  let [row] = await txQuery([
-    `SELECT ${SHARE_COLUMNS} FROM key_shares WHERE id = `,
-    param(shareId),
-    ` FOR UPDATE`,
-  ]);
-  if (!row) {
-    throw noSuchShare();
+  for (;;) {
+    let [current] = await txQuery([
+      `SELECT realm_url, owner FROM key_shares WHERE id = `,
+      param(shareId),
+    ]);
+    if (!current) {
+      throw noSuchShare();
+    }
+    let owner = current.owner as string;
+    let writers = await lockDirectWriters(
+      txQuery,
+      new URL(current.realm_url as string),
+      withOwner ? [user, owner] : [user],
+    );
+    if (ownKeyId !== undefined) {
+      await lockOwnKey(txQuery, user, ownKeyId);
+    }
+    let [row] = await txQuery([
+      `SELECT ${SHARE_COLUMNS} FROM key_shares WHERE id = `,
+      param(shareId),
+      ` FOR UPDATE`,
+    ]);
+    if (!row) {
+      throw noSuchShare();
+    }
+    if (withOwner && row.owner !== owner) {
+      continue;
+    }
+    let isWriter = writers.get(user)!;
+    if (!isWriter && row.owner !== user) {
+      throw noSuchShare();
+    }
+    return { row, isWriter, ownerIsWriter: writers.get(owner) ?? false };
   }
-  let isWriter = await isDirectWriterLocked(
-    txQuery,
-    new URL(row.realm_url as string),
-    user,
-  );
-  if (!isWriter && row.owner !== user) {
-    throw noSuchShare();
-  }
-  return { row, isWriter };
 }
 
 export async function shareKey(
@@ -225,8 +275,11 @@ export async function shareKey(
 ): Promise<KeyShare> {
   let realmURL = validateRealm(realm);
   let validLabel = validateShareLabel(label);
-  if (typeof keyId !== 'string') {
+  if (keyId === undefined || keyId === null) {
     throw new UserKeyError(400, 'a share names the key it holds');
+  }
+  if (!isUUID(keyId)) {
+    throw noSuchKey();
   }
   let id = randomUUID();
   return await dbAdapter.withTransaction(async (txQuery) => {
@@ -280,7 +333,8 @@ export async function unshareKey(
 }
 
 // A direct writer suspends an active share, for abuse or any other reason of
-// theirs. The realm's direct writers get a notice of it.
+// theirs. The realm's direct writers get a notice of it. Suspending takes no
+// ticket: it only stops a key being used.
 export async function suspendShare(
   dbAdapter: DBAdapter,
   { user, shareId }: { user: string; shareId: string },
@@ -304,15 +358,31 @@ export async function suspendShare(
   });
 }
 
-// A direct writer lifts a suspension a direct writer made. If the share's
-// owner is no longer a direct writer, the share stays suspended for that
-// reason instead, and resumes when they are one again.
+// A direct writer lifts a suspension a direct writer made, with a key write
+// ticket for that share: lifting one puts a key back into use, which card
+// code in the writer's app page must not be able to do. If the share's owner
+// is no longer a direct writer, the share stays suspended for that reason
+// instead, and resumes when they are one again.
 export async function resumeShare(
   dbAdapter: DBAdapter,
-  { user, shareId }: { user: string; shareId: string },
+  { user, shareId, ticket }: { user: string; shareId: string; ticket: unknown },
 ): Promise<KeyShare> {
+  if (!isUUID(shareId)) {
+    throw noSuchShare();
+  }
   return await dbAdapter.withTransaction(async (txQuery) => {
-    let { row, isWriter } = await lockVisibleShare(txQuery, user, shareId);
+    await consumeKeyWriteTicket(txQuery, user, ticket, {
+      action: 'resume',
+      keyId: null,
+      realmURL: null,
+      shareId,
+    });
+    let { row, isWriter, ownerIsWriter } = await lockVisibleShare(
+      txQuery,
+      user,
+      shareId,
+      { withOwner: true },
+    );
     if (!isWriter) {
       throw notADirectWriter();
     }
@@ -324,13 +394,8 @@ export async function resumeShare(
           : 'only a suspension a writer made is lifted; swap a key in instead',
       );
     }
-    let ownerWrites = await isDirectWriterLocked(
-      txQuery,
-      new URL(row.realm_url as string),
-      row.owner as string,
-    );
     let [updated] = await txQuery([
-      ownerWrites
+      ownerIsWriter
         ? `UPDATE key_shares SET state = 'active', suspension_reason = NULL, suspended_at = NULL`
         : `UPDATE key_shares SET suspension_reason = 'owner-lost-write'`,
       `, suspended_by = NULL, updated_at = NOW() WHERE id = `,
@@ -353,8 +418,14 @@ export async function swapKeyIntoShare(
     ticket,
   }: { user: string; shareId: string; keyId: unknown; ticket: unknown },
 ): Promise<KeyShare> {
-  if (typeof keyId !== 'string') {
+  if (keyId === undefined || keyId === null) {
     throw new UserKeyError(400, 'a swap names the key it puts in');
+  }
+  if (!isUUID(keyId)) {
+    throw noSuchKey();
+  }
+  if (!isUUID(shareId)) {
+    throw noSuchShare();
   }
   return await dbAdapter.withTransaction(async (txQuery) => {
     await consumeKeyWriteTicket(txQuery, user, ticket, {
@@ -363,14 +434,15 @@ export async function swapKeyIntoShare(
       realmURL: null,
       shareId,
     });
-    let { row, isWriter } = await lockVisibleShare(txQuery, user, shareId);
+    let { row, isWriter } = await lockVisibleShare(txQuery, user, shareId, {
+      ownKeyId: keyId,
+    });
     if (!isWriter) {
       throw notADirectWriter();
     }
     if (row.state !== 'suspended') {
       throw new UserKeyError(409, 'only a suspended share takes another key');
     }
-    await lockOwnKey(txQuery, user, keyId);
     let [updated] = await txQuery([
       `UPDATE key_shares SET owner = `,
       param(user),
@@ -391,7 +463,7 @@ export async function listOwnShares(
   owner: string,
   { keyId }: { keyId?: string } = {},
 ): Promise<KeyShare[]> {
-  if (keyId !== undefined && !UUID.test(keyId)) {
+  if (keyId !== undefined && !isUUID(keyId)) {
     return [];
   }
   let rows = await query(dbAdapter, [
@@ -403,14 +475,24 @@ export async function listOwnShares(
   return rows.map((row) => toShare(row, { withKey: true }));
 }
 
-async function assertDirectWriter(
+// Reads `realm`'s rows for one of its direct writers, with their permission
+// row locked for the read, so write removed meanwhile can't let them read on.
+async function readAsDirectWriter(
   dbAdapter: DBAdapter,
-  realmURL: URL,
   user: string,
-): Promise<void> {
-  if (!(await isDirectWriter(dbAdapter, realmURL, user))) {
-    throw new UserKeyError(403, `only a realm's direct writers see its shares`);
-  }
+  realm: unknown,
+  read: (txQuery: Querier, realmURL: URL) => Promise<Record<string, unknown>[]>,
+): Promise<Record<string, unknown>[]> {
+  let realmURL = validateRealm(realm);
+  return await dbAdapter.withTransaction(async (txQuery) => {
+    if (!(await isDirectWriterLocked(txQuery, realmURL, user))) {
+      throw new UserKeyError(
+        403,
+        `only a realm's direct writers see its shares`,
+      );
+    }
+    return await read(txQuery, realmURL);
+  });
 }
 
 // A realm's shares, by label, for one of its direct writers.
@@ -419,30 +501,39 @@ export async function listRealmShares(
   user: string,
   realm: unknown,
 ): Promise<KeyShare[]> {
-  let realmURL = validateRealm(realm);
-  await assertDirectWriter(dbAdapter, realmURL, user);
-  let rows = await query(dbAdapter, [
-    `SELECT ${SHARE_COLUMNS} FROM key_shares WHERE realm_url = `,
-    param(realmURL.href),
-    ` ORDER BY label`,
-  ]);
+  let rows = await readAsDirectWriter(
+    dbAdapter,
+    user,
+    realm,
+    async (txQuery, realmURL) =>
+      await txQuery([
+        `SELECT ${SHARE_COLUMNS} FROM key_shares WHERE realm_url = `,
+        param(realmURL.href),
+        ` ORDER BY label`,
+      ]),
+  );
   return rows.map((row) => toShare(row, { withKey: row.owner === user }));
 }
 
-// The notices recorded when one of a realm's shares was suspended, newest
-// first, for one of its direct writers.
+// The notices recorded when one of a realm's shares was suspended, or when
+// deleting its key changed why it is suspended, newest first, for one of its
+// direct writers.
 export async function listRealmShareNotices(
   dbAdapter: DBAdapter,
   user: string,
   realm: unknown,
 ): Promise<KeyShareNotice[]> {
-  let realmURL = validateRealm(realm);
-  await assertDirectWriter(dbAdapter, realmURL, user);
-  let rows = await query(dbAdapter, [
-    `SELECT id, share_id, realm_url, label, owner, reason, suspended_by, created_at FROM key_share_notices WHERE realm_url = `,
-    param(realmURL.href),
-    ` ORDER BY created_at DESC, id DESC LIMIT ${MAX_KEY_SHARE_NOTICES}`,
-  ]);
+  let rows = await readAsDirectWriter(
+    dbAdapter,
+    user,
+    realm,
+    async (txQuery, realmURL) =>
+      await txQuery([
+        `SELECT id, share_id, realm_url, label, owner, reason, suspended_by, created_at FROM key_share_notices WHERE realm_url = `,
+        param(realmURL.href),
+        ` ORDER BY created_at DESC, id DESC LIMIT ${MAX_KEY_SHARE_NOTICES}`,
+      ]),
+  );
   return rows.map((row) => ({
     id: String(row.id),
     shareId: row.share_id as string,

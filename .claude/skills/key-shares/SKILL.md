@@ -29,13 +29,17 @@ always carries one reason:
 `key_shares_state_check` enforces these combinations. Only an active share is
 suspended: a share suspended for one reason keeps that reason when another
 applies too, so a share a writer suspended stays suspended when its owner
-loses write and regains it. Resuming a `suspended-by-writer` share whose
+loses write and regains it. The exception is deleting the key: a share then
+holds no key, so whatever it was suspended for, it becomes `key-deleted`
+(clearing `suspended_by`), and the realm's writers get a notice of it. Resuming a `suspended-by-writer` share whose
 owner is no longer a direct writer leaves it suspended as `owner-lost-write`,
 and it resumes when they write again.
 
-A suspension keeps the share's place, label and history: nothing but its
-owner's unshare deletes a share, so cards that name it by label keep
-working once it is brought back.
+A suspension keeps the share's place, label and history: only its owner's
+unshare, or deleting its realm, deletes a share, so cards that name it by
+label keep working once it is brought back. Deleting a realm deletes its
+shares and their notices, so a realm later made at the same URL gets none of
+them back.
 
 ## Triggers
 
@@ -52,7 +56,8 @@ admin permission upsert, publishing, deleting a realm, a database writer):
 - `key_shares_follow_key_delete` on `user_keys`, before a delete: suspends
   every share holding the key as `key-deleted` and clears `key_id`.
 - `key_shares_notice_suspension` on `key_shares`: each share going from active
-  to suspended records a row in `key_share_notices`.
+  to suspended, and each suspended share whose key is deleted, records a row
+  in `key_share_notices`.
 
 Sharing and swapping lock the person's permission row (`isDirectWriterLocked`)
 until they commit, so a concurrent removal of their write waits and then
@@ -65,7 +70,7 @@ suspends what they made.
 | Share   | The key's owner, into a realm where they are a direct writer                                                               | `share` for that key + realm |
 | Unshare | The share's owner, whether or not they still write the realm                                                               | none                         |
 | Suspend | Any direct writer of the realm, on an active share                                                                         | none                         |
-| Resume  | Any direct writer of the realm, on a `suspended-by-writer` share                                                           | none                         |
+| Resume  | Any direct writer of the realm, on a `suspended-by-writer` share                                                           | `resume` for that share      |
 | Swap    | Any direct writer of the realm, putting one of their own keys into a suspended share; they become its owner and it resumes | `swap` for that key + share  |
 
 A direct writer is a person whose own permission row grants write
@@ -112,8 +117,9 @@ All routes take the user's realm-server session and refuse a delegated or a
 realm-authority session, as the keys API does. Bodies are JSON:API with type
 `key-share`; a ticket goes in `meta.ticket`, minted from
 `POST /_key-write-tickets` by a secure session (see the `user-keys` skill)
-with `attributes.{action: 'share', keyId, realm}` or
-`attributes.{action: 'swap', keyId, shareId}`. The request log keeps only the
+with `attributes.{action: 'share', keyId, realm}`,
+`attributes.{action: 'swap', keyId, shareId}` or
+`attributes.{action: 'resume', shareId}`. The request log keeps only the
 method and path of these routes.
 
 | Route                                 | Does                                                                           |
@@ -122,7 +128,7 @@ method and path of these routes.
 | `POST /_key-shares`                   | Share: `attributes.{realm, keyId, label}`, `meta.{ticket}`                     |
 | `DELETE /_key-shares/:id`             | Unshare                                                                        |
 | `POST /_key-shares/:id/suspend`       | Suspend an active share                                                        |
-| `POST /_key-shares/:id/resume`        | Lift a writer's suspension                                                     |
+| `POST /_key-shares/:id/resume`        | Lift a writer's suspension: `meta.{ticket}`                                    |
 | `POST /_key-shares/:id/swap`          | Swap a key in: `attributes.{keyId}`, `meta.{ticket}`                           |
 | `GET /_key-share-notices?realm=<url>` | A realm's suspension notices                                                   |
 
