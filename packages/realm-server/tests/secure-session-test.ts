@@ -1,6 +1,7 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
-import { basename, join } from 'path';
+import { basename, dirname, join } from 'path';
+import { createRequire } from 'module';
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { createHash, randomBytes, randomUUID } from 'crypto';
 import { createServer, type Server as HttpServer } from 'http';
@@ -217,6 +218,14 @@ class FakeGoogle {
   }
 }
 
+const SECURE_SESSIONS_MIGRATION = join(
+  dirname(
+    createRequire(import.meta.url).resolve('@cardstack/postgres/package.json'),
+  ),
+  'migrations',
+  '1792107467874_add-secure-sessions.js',
+);
+
 // Every source file of the realm server outside its tests and dependencies.
 function serverSources(dir: string): string[] {
   let files: string[] = [];
@@ -326,6 +335,16 @@ module(basename(import.meta.filename), function () {
         req = req.set('Origin', origin);
       }
       return req.send(ADD_TICKET);
+    }
+
+    async function runSecureSessionsMigration() {
+      let statements: string[] = [];
+      createRequire(import.meta.url)(SECURE_SESSIONS_MIGRATION).up({
+        sql: (statement: string) => statements.push(statement),
+      });
+      for (let statement of statements) {
+        await dbAdapter.execute(statement);
+      }
     }
 
     test('signing in with a password gives a session that mints key write tickets', async function (assert) {
@@ -742,6 +761,89 @@ module(basename(import.meta.filename), function () {
           `${path} keeps only method and path`,
         );
       }
+    });
+
+    test("the read-only role can't select secure_sessions, and its owner still can", async function (assert) {
+      // The role and its blanket grant as staging and production have them,
+      // a member that inherits it and was also granted SELECT directly, then
+      // the migration that withholds the table.
+      for (let role of [
+        'readonly_role',
+        'readonly_member_for_secure_sessions',
+      ]) {
+        await dbAdapter.execute(
+          `DO $$
+           BEGIN
+             CREATE ROLE ${role};
+           EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL;
+           END
+           $$`,
+        );
+      }
+      await dbAdapter.execute(
+        `GRANT SELECT ON ALL TABLES IN SCHEMA public TO readonly_role`,
+      );
+      await dbAdapter.execute(
+        `GRANT readonly_role TO readonly_member_for_secure_sessions`,
+      );
+      await dbAdapter.execute(
+        `GRANT SELECT ON TABLE secure_sessions TO readonly_member_for_secure_sessions`,
+      );
+      await runSecureSessionsMigration();
+
+      async function selectAs(role: string, sql: string) {
+        return await dbAdapter.withTransaction(async (query: any) => {
+          await query([`SET LOCAL ROLE ${role}`]);
+          return await query([sql]);
+        });
+      }
+      for (let role of [
+        'readonly_role',
+        'readonly_member_for_secure_sessions',
+      ]) {
+        await assert.rejects(
+          selectAs(role, `SELECT * FROM secure_sessions`),
+          /permission denied for table secure_sessions/,
+          `${role} can't select secure_sessions`,
+        );
+      }
+      let [{ owner }] = (await dbAdapter.execute(
+        `SELECT pg_get_userbyid(relowner) AS owner FROM pg_class
+          WHERE oid = 'secure_sessions'::regclass`,
+      )) as { owner: string }[];
+      assert.deepEqual(
+        await selectAs(
+          owner,
+          `SELECT COUNT(*) >= 0 AS readable FROM secure_sessions`,
+        ),
+        [{ readable: true }],
+        "the table's owner keeps reading it",
+      );
+
+      // A grant the migration's revokes can't remove, made by another role
+      // holding the grant option, stops the migration.
+      await dbAdapter.execute(
+        `DO $$
+         BEGIN
+           CREATE ROLE granter_for_secure_sessions;
+         EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL;
+         END
+         $$`,
+      );
+      await dbAdapter.execute(
+        `GRANT SELECT ON TABLE secure_sessions TO granter_for_secure_sessions WITH GRANT OPTION`,
+      );
+      await dbAdapter.withTransaction(async (query: any) => {
+        await query([`SET LOCAL ROLE granter_for_secure_sessions`]);
+        await query([
+          `GRANT SELECT ON TABLE secure_sessions TO readonly_member_for_secure_sessions`,
+        ]);
+      });
+      await assert.rejects(
+        runSecureSessionsMigration(),
+        /readonly_member_for_secure_sessions can read secure_sessions/,
+        'the migration names the role that can still read it',
+      );
     });
 
     test('the secure origin is published for clients outside the browser', async function (assert) {
