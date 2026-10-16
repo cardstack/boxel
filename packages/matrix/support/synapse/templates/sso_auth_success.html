@@ -1,0 +1,12 @@
+{% extends "_base.html" %} {% block title %}You’ve confirmed it’s you{% endblock
+%} {% block body %}
+<p style="margin: 0" data-test-sso-confirmed>
+  You can close this window. Boxel continues on its own.
+</p>
+<script>
+  // A window opened to confirm the user closes itself once they have; the
+  // page that opened it continues by asking the server, not by hearing from
+  // this one.
+  window.close();
+</script>
+{% endblock %}
