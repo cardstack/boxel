@@ -202,6 +202,12 @@ export class LineGrid extends Component<LineGridSignature> {
       amount: this.kindOf(c) === 'amount',
     }));
   }
+  // The balance pair shares a scale; the difference is read in the first column's.
+  get balanceScale() {
+    let key = this.args.balance?.[0];
+    let c = this.columns.find((col) => col.key === key);
+    return c ? this.scaleOf(c) : 2;
+  }
   get balanceText() {
     let s = this.state;
     if (!this.args.balance) return '';
@@ -209,7 +215,7 @@ export class LineGrid extends Component<LineGridSignature> {
     let gap = new Intl.NumberFormat(this.args.locale, {
       style: 'currency',
       currency: this.currency,
-    }).format(Math.abs(s.difference) / 100);
+    }).format(Math.abs(s.difference) / 10 ** this.balanceScale);
     return `Out of balance by ${gap}`;
   }
 
@@ -230,9 +236,10 @@ export class LineGrid extends Component<LineGridSignature> {
   remove = (index: number) => this.args.onRemove?.(index);
   add = () => {
     if (!this.canAdd) return;
+    let added = this.rows.length;
     this.args.onAdd!();
     let first = this.columns[0];
-    if (first) this.focusAt = { row: this.rows.length, col: first.key };
+    if (first) this.focusAt = { row: added, col: first.key };
   };
 
   // Enter walks down a column (adding a line at the bottom); Shift+Enter walks up. An open

@@ -200,6 +200,13 @@ module('Pretui | components/line-grid', function (hooks) {
       ) as HTMLElement,
     );
     assert.strictEqual(host.rows.length, 2, 'Add appended a line');
+    assert.strictEqual(
+      document.activeElement
+        ?.closest('[data-line-cell]')
+        ?.getAttribute('data-row'),
+      '1',
+      'focus moved into the new line',
+    );
     await render(
       <template>
         <LineGrid
@@ -225,6 +232,31 @@ module('Pretui | components/line-grid', function (hooks) {
       '2',
       'the caret moved into it',
     );
+  });
+
+  test('the balance difference is read in the balance columns’ scale', async function (assert) {
+    let cols: LineGridColumn[] = [
+      { key: 'account', label: 'Account', kind: 'code' },
+      { key: 'dr', label: 'Debit', kind: 'amount', scale: 0, total: true },
+      { key: 'cr', label: 'Credit', kind: 'amount', scale: 0, total: true },
+    ];
+    let host = new Host([
+      { account: '6950', dr: 30 },
+      { account: '2600', cr: 18 },
+    ]);
+    await render(
+      <template>
+        <LineGrid
+          @label='l'
+          @columns={{cols}}
+          @rows={{host.rows}}
+          @balance={{BALANCE}}
+          @onChange={{host.change}}
+          @locale='en-US'
+        />
+      </template>,
+    );
+    assert.strictEqual(text(q('[role="status"]')), 'Out of balance by $12.00');
   });
 
   test('remove buttons are named per line and respect @minRows', async function (assert) {
