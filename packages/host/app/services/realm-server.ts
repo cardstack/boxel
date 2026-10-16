@@ -41,7 +41,10 @@ import {
 } from '@cardstack/runtime-common/realm-auth-client';
 
 import ENV from '@cardstack/host/config/environment';
-import { resolvedRealmURLHref } from '@cardstack/host/lib/realm-utils';
+import {
+  resolvedRealmURLHref,
+  serverRealmURLHref,
+} from '@cardstack/host/lib/realm-utils';
 import {
   RealmServerSessionLocalStorageKey,
   SessionLocalStorageKey,
@@ -548,10 +551,8 @@ export default class RealmServerService
 
     for (let realmURL of realms) {
       let normalizedRealmURL = ensureTrailingSlash(realmURL);
-      // A realm identifier may be a registered prefix, which neither carries an
-      // origin to compare nor matches the URL a session token is filed under.
-      // Resolve once and let both questions below ask in URL form, so the
-      // function is form-agnostic end to end rather than only at the skip.
+      // A realm identifier may be a registered prefix, which carries no origin
+      // to compare, so the skip below asks in resolved URL form.
       let resolvedRealmURL = resolvedRealmURLHref(
         this.network.virtualNetwork,
         normalizedRealmURL,
@@ -564,15 +565,10 @@ export default class RealmServerService
       ) {
         continue;
       }
-      // A token is filed under the realm resource's own url, which is whatever
-      // spelling created the resource — so try the identifier as given and its
-      // resolved form. Missing the token does not fail loudly: the loop would
-      // `continue`, and a realm that is the only entry would leave the set
-      // empty and answer with this realm server instead of the realm's.
-      let token =
-        sessionTokens[normalizedRealmURL] ??
-        sessionTokens[realmURL] ??
-        sessionTokens[resolvedRealmURL];
+      // Missing the token does not fail loudly: the loop would `continue`,
+      // and a realm that is the only entry would leave the set empty and
+      // answer with this realm server instead of the realm's.
+      let token = this.sessionTokenFor(sessionTokens, realmURL);
       if (!token) {
         continue;
       }
@@ -1833,11 +1829,36 @@ export default class RealmServerService
     return this.token;
   }
 
+  // A token is filed under the realm resource's own url, which is whatever
+  // spelling created the resource: a registered prefix, the URL it resolves
+  // to, or the URL the realm server knows the realm by (the base realm's
+  // alias). So a realm's token is looked up under every spelling of it.
+  private sessionTokenFor(
+    sessionTokens: Record<string, string>,
+    realm: string,
+  ): string | undefined {
+    let { virtualNetwork } = this.network;
+    let normalized = ensureTrailingSlash(realm);
+    let spellings = new Set([
+      normalized,
+      realm,
+      serverRealmURLHref(virtualNetwork, normalized),
+      ...virtualNetwork.equivalentURLForms(
+        resolvedRealmURLHref(virtualNetwork, normalized),
+      ),
+    ]);
+    for (let spelling of spellings) {
+      if (sessionTokens[spelling]) {
+        return sessionTokens[spelling];
+      }
+    }
+    return undefined;
+  }
+
   private getRealmTokenForRealms(realms: string[]): string | undefined {
     let sessionTokens = this.readSessionTokens();
     for (let realmURL of realms) {
-      let normalizedRealmURL = ensureTrailingSlash(realmURL);
-      let token = sessionTokens[normalizedRealmURL] ?? sessionTokens[realmURL];
+      let token = this.sessionTokenFor(sessionTokens, realmURL);
       // An expired token buys nothing: the server rejects it, so sending it
       // spends a round trip to learn what its own `exp` claim already says.
       // Skipping it lets a publicly-readable realm answer the unauthenticated

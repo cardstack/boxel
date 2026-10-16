@@ -703,6 +703,138 @@ module(`Integration | search resource`, function (hooks) {
     assert.strictEqual(search.instances[2].id, `${testRealmURL}books/3`);
   });
 
+  test(`a live search of a realm named by a registered prefix re-runs on that realm's events`, async function (assert) {
+    // The realm's events are keyed by its URL, so the search must listen
+    // there while it keeps searching by the caller's spelling. A remapped
+    // live realm canonicalizes its module refs differently, so the query is
+    // left untyped: only the subscription and the re-run are under test.
+    let { virtualNetwork } = getService('network');
+    virtualNetwork.addRealmMapping('@test/mapped/', testRealmURL);
+    let messageService = getService('message-service');
+    let originalSubscribe = messageService.subscribe.bind(messageService);
+    let subscribedTo: string[] = [];
+    messageService.subscribe = (realmURL, cb) => {
+      subscribedTo.push(realmURL);
+      return originalSubscribe(realmURL, cb);
+    };
+    let originalSearchWithMeta = storeService.searchWithMeta.bind(storeService);
+    let searchedRealms: string[][] = [];
+    storeService.searchWithMeta = (async (query, realms, opts) => {
+      searchedRealms.push([...(realms ?? [])]);
+      return await originalSearchWithMeta(query, realms, opts);
+    }) as typeof storeService.searchWithMeta;
+
+    try {
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query: {},
+          realms: ['@test/mapped/'],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+      // Other services subscribe to the realm too, so only the forms matter.
+      assert.true(
+        subscribedTo.includes(testRealmURL),
+        'the search listens on the URL the realm is known by',
+      );
+      assert.false(
+        subscribedTo.includes('@test/mapped/'),
+        'nothing listens on the prefix, which no event carries',
+      );
+      let runsBefore = searchedRealms.length;
+      assert.deepEqual(
+        searchedRealms[runsBefore - 1],
+        ['@test/mapped/'],
+        'the search itself keeps the caller spelling',
+      );
+
+      await realm.write(
+        'books/3.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: {
+              author: { firstName: 'Paper', lastName: 'Abdel-Rahman' },
+            },
+            meta: { adoptsFrom: { module: testRRI('book'), name: 'Book' } },
+          },
+        } as LooseSingleCardDocument),
+      );
+      await waitUntil(() => searchedRealms.length > runsBefore, {
+        timeout: 10_000,
+      });
+      assert.ok(true, "the realm's event re-ran the search");
+    } finally {
+      messageService.subscribe = originalSubscribe;
+      storeService.searchWithMeta = originalSearchWithMeta;
+      virtualNetwork.removeRealmMapping('@test/mapped/');
+    }
+  });
+
+  test(`a seed older than an event's generation is declined for a realm named by a registered prefix`, async function (assert) {
+    // The event raises the realm's floor under the caller's spelling, the seed
+    // names the realm by the URL the server reports; both have to land on one
+    // floor for the stale seed to be turned away.
+    let { virtualNetwork } = getService('network');
+    virtualNetwork.addRealmMapping('@test/mapped/', testRealmURL);
+    let originalSearchWithMeta = storeService.searchWithMeta.bind(storeService);
+    let runs = 0;
+    storeService.searchWithMeta = (async (query, realms, opts) => {
+      let result = await originalSearchWithMeta(query, realms, opts);
+      runs++;
+      return result;
+    }) as typeof storeService.searchWithMeta;
+
+    try {
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query: {},
+          realms: ['@test/mapped/'],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+      let runsBefore = runs;
+      getService('message-service').relayRealmEvent({
+        eventName: 'index',
+        indexType: 'incremental',
+        invalidations: [`${testRealmURL}books/1.json`],
+        generation: 10,
+        realmURL: testRealmURL,
+      });
+      await waitUntil(() => runs > runsBefore, { timeout: 10_000 });
+      await settled();
+      let held = search.instances.map((instance) => instance.id);
+
+      let stale = await storeService.addWithoutPersisting(
+        new cardApi.CardDef({ cardTitle: 'Stale' }),
+      );
+      search.reseed!({
+        cards: [stale],
+        identity: 'stale-seed',
+        generation: 5,
+        realm: testRealmURL,
+      });
+      await settled();
+
+      assert.deepEqual(
+        search.instances.map((instance) => instance.id),
+        held,
+        'the stale seed does not replace the set the event refreshed',
+      );
+    } finally {
+      storeService.searchWithMeta = originalSearchWithMeta;
+      virtualNetwork.removeRealmMapping('@test/mapped/');
+    }
+  });
+
   test(`a burst of realm events coalesces into a single live re-run`, async function (assert) {
     let realmServer = getService('realm-server') as RealmServerService;
     let fetchCalls = 0;
@@ -1521,6 +1653,30 @@ module(`Integration | search resource`, function (hooks) {
       );
     });
 
+    test(`a realm named by a registered prefix coalesces with the same realm named by URL`, async function (assert) {
+      (
+        globalThis as unknown as { __boxelRenderContext?: boolean }
+      ).__boxelRenderContext = true;
+      let { virtualNetwork } = getService('network');
+      virtualNetwork.addRealmMapping('@test/mapped/', testRealmURL);
+      try {
+        let p1 = storeService.search(bookQuery, ['@test/mapped/']);
+        let p2 = storeService.search(bookQuery, [
+          testRealmURL,
+          '@test/mapped/',
+        ]);
+        assert.strictEqual(
+          fetchCalls,
+          1,
+          'both spellings key one in-flight fetch',
+        );
+        releaseFetch.fulfill();
+        await Promise.all([p1, p2]);
+      } finally {
+        virtualNetwork.removeRealmMapping('@test/mapped/');
+      }
+    });
+
     test(`concurrent same-key store.search calls do NOT coalesce outside a prerender`, async function (assert) {
       // __boxelRenderContext stays unset — this is the live-SPA path
       let p1 = storeService.search(bookQuery, [testRealmURL]);
@@ -1694,6 +1850,26 @@ module(`Integration | search resource`, function (hooks) {
         (r2 as { id?: string }[]).map((i) => i.id ?? null),
         'cached doc returns the same instance set',
       );
+    });
+
+    test(`a realm named by a registered prefix hits the same-realm cache of its URL`, async function (assert) {
+      // The consuming realm is the realm's URL, so the prefix has to be
+      // canonicalized before the same-realm check for the cache to apply.
+      enterPrerender('job-1', testRealmURL);
+      releaseFetch.fulfill();
+      let { virtualNetwork } = getService('network');
+      virtualNetwork.addRealmMapping('@test/mapped/', testRealmURL);
+      try {
+        await storeService.search(bookQuery, ['@test/mapped/']);
+        await storeService.search(bookQuery, [testRealmURL]);
+        assert.strictEqual(
+          fetchCalls,
+          1,
+          "the second spelling is served from the first one's cache entry",
+        );
+      } finally {
+        virtualNetwork.removeRealmMapping('@test/mapped/');
+      }
     });
 
     test(`cache bypasses outside a prerender (live SPA path)`, async function (assert) {

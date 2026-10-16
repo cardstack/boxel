@@ -51,7 +51,7 @@ import {
   LiveSearchTypeGate,
   stripJsonSuffix,
 } from '../lib/live-search-type-gate';
-import { normalizeRealms } from '../lib/realm-utils';
+import { serverRealmURLs } from '../lib/realm-utils';
 import { searchErrorEntry } from '../lib/search-error-entry';
 
 import type LoaderService from '../services/loader-service';
@@ -333,7 +333,14 @@ export class SearchEntriesResource extends Resource<Args> {
     // realms array turns a render into a federated scan across the whole
     // server. A host-owned search (not card-initiated) keeps the all-realms
     // default.
-    let realms = normalizeRealms(
+    //
+    // The list is held in the form the realm server knows realms by (see
+    // `serverRealmURLs`): rows carry their realm in that form and realm events
+    // arrive keyed by it, so a realm named by a registered prefix such as
+    // `@cardstack/catalog/` still matches its subscription, the partial
+    // refresh and each row's `realmUrl`.
+    let realms = serverRealmURLs(
+      this.network.virtualNetwork,
       query.realms && query.realms.length > 0
         ? query.realms
         : this.#cardInitiated

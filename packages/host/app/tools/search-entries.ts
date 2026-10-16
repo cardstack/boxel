@@ -223,7 +223,8 @@ export default class SearchEntriesTool extends HostBaseTool<
     '`range`/`any`/`every`/`not` and full-text `matches` — whose bare words are ' +
     'ANDed, with `OR` supported between alternatives — plus optional `sort`). ' +
     'Also optional ' +
-    '`realms` (realm URLs; defaults to every realm you can read), optional `scope` ' +
+    '`realms` (realm URLs or identifiers such as `@cardstack/catalog/`; defaults to ' +
+    'every realm you can read), optional `scope` ' +
     "('cards' | 'files' | 'all', default 'all'), and optional `limit` (default " +
     `${DEFAULT_LIMIT}, max ${MAX_LIMIT}) — a cap on the returned rows, while ` +
     '`total` reports the full match count across realms. Relevance-ranked ' +

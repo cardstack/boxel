@@ -1,5 +1,6 @@
 import {
   isUrlLike,
+  PREFIX_REALMS,
   RealmPaths,
   ri,
   rri,
@@ -78,6 +79,58 @@ export function resolvedRealmURLHref(
   return virtualNetwork.isRegisteredPrefix(realmIdentifier)
     ? virtualNetwork.toURL(realmIdentifier).href
     : realmIdentifier;
+}
+
+/**
+ * The URL the realm server knows a realm by, for a realm named by a
+ * registered prefix. The server registers each realm under the `--fromUrl` it
+ * was started with, and that is the URL search requests, realm events and
+ * session tokens all carry. For most prefixed realms it is the URL the prefix
+ * resolves to. The base realm is the exception: it is registered under its
+ * declared alias (`https://cardstack.com/base/`), not the URL it is served
+ * from, so a prefix with an alias resolves to the alias.
+ *
+ * Anything other than a registered prefix — a URL, an unregistered prefix —
+ * comes back untouched: a URL mapping does not say which of its two sides the
+ * server registered, so a URL is never rewritten.
+ *
+ * @example
+ * // with '@cardstack/catalog/' mapped to 'https://realms.example.com/catalog/'
+ * serverRealmURLHref(vn, '@cardstack/catalog/') // 'https://realms.example.com/catalog/'
+ * serverRealmURLHref(vn, '@cardstack/base/')    // 'https://cardstack.com/base/'
+ * serverRealmURLHref(vn, 'https://x.test/r/')   // 'https://x.test/r/'
+ */
+export function serverRealmURLHref(
+  virtualNetwork: VirtualNetwork,
+  realmIdentifier: string,
+): string {
+  if (!virtualNetwork.isRegisteredPrefix(realmIdentifier)) {
+    return realmIdentifier;
+  }
+  for (let { prefix, alias } of PREFIX_REALMS) {
+    if (alias && realmIdentifier.startsWith(prefix)) {
+      return `${alias}${realmIdentifier.slice(prefix.length)}`;
+    }
+  }
+  return virtualNetwork.toURL(realmIdentifier).href;
+}
+
+/**
+ * A realm list in the form the realm server knows realms by: each entry with
+ * its trailing slash, a registered prefix replaced by `serverRealmURLHref`,
+ * and duplicates dropped, first spelling first.
+ */
+export function serverRealmURLs(
+  virtualNetwork: VirtualNetwork,
+  realms: string[],
+): string[] {
+  return [
+    ...new Set(
+      normalizeRealms(realms).map((realm) =>
+        serverRealmURLHref(virtualNetwork, realm),
+      ),
+    ),
+  ];
 }
 
 /**

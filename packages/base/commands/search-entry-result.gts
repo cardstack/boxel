@@ -19,7 +19,8 @@ export class SearchEntriesInput extends CardDef {
   static displayName = 'Search Entries';
   static icon = IconSearchThick;
   @field query = contains(QueryField);
-  // Realm URLs to search; empty means every realm the user can read.
+  // Realm URLs or identifiers such as `@cardstack/catalog/` to search; empty
+  // means every realm the user can read.
   @field realms = containsMany(StringField);
   // 'cards' | 'files' | 'all'; the tool validates and defaults to 'all'.
   @field scope = contains(StringField);

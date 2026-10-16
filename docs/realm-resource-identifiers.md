@@ -170,7 +170,13 @@ Practical consequences:
   compare two identifiers, compare them as strings, or use `RealmPaths`.
 - Don't thread a `VirtualNetwork` into rendering, serialization, or store code
   to resolve something. Reaching for VN at an in-memory site is a signal that
-  resolution is happening at the wrong layer.
+  resolution is happening at the wrong layer. A list of realms is the
+  exception: a realm is keyed by the URL the realm server registered it under,
+  which is also what its realm events carry, so code that keys searches,
+  caches or subscriptions by realm converts the list once with
+  `serverRealmURLs` (`packages/host/app/lib/realm-utils.ts`). That URL is not
+  always the one the prefix resolves to: the base realm is registered under
+  its alias `https://cardstack.com/base/` and served elsewhere.
 - Serialization writes RRI form. Deserialization canonicalizes to RRI on entry,
   which is what makes the rule hold for data arriving from the network.
 
@@ -185,7 +191,12 @@ Realm request handling accepts RRI-form identifiers where clients send them for
 the same reason — a client shouldn't have to know a realm's serving URL to
 reference a card in it. Atomic-operation hrefs are the clearest example: the
 realm resolves a registered prefix to a real URL before doing path math, and
-leaves plain URL and relative hrefs untouched.
+leaves plain URL and relative hrefs untouched. The realm server's federated
+endpoints (`_federated-search`, `_federated-info`, `_federated-types`,
+`_federated-index-counts`) do the same for the realms a request names: each
+may be a registered prefix, the URL the realm is registered under, or the URL
+it is served from, and `registeredRealmURL` (`packages/runtime-common/search-utils.ts`)
+reads all three as the registered URL.
 
 ## RealmPaths
 

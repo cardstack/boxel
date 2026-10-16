@@ -115,6 +115,7 @@ import {
   jobIdHeader,
   loggingCorrelationIdHeader,
 } from '../lib/prerender-fetch-headers';
+import { serverRealmURLs } from '../lib/realm-utils';
 import { searchCacheKey } from '../lib/search-cache-key';
 import { searchInFlightKey } from '../lib/search-in-flight-key';
 import { errorJsonApiToErrorEntry } from '../lib/window-error-handler';
@@ -1525,13 +1526,17 @@ export default class StoreService extends Service implements StoreInterface {
     await this.addResourceFromSearchData(resource);
   }
 
-  // Canonicalize a realm list to RealmPaths URLs, dropping unparseable entries.
-  // No fallback: an empty input yields an empty list (the card path relies on
-  // this to mean "search nothing" rather than "search everything").
+  // Canonicalize a realm list to the URLs the realm server knows realms by
+  // (see `serverRealmURLs`), so a registered prefix such as
+  // `@cardstack/catalog/` names the realm `_federated-search` will find.
+  // Everything downstream reads this one list — the prerender same-realm
+  // cache gate, the in-flight key, the realm-server and token lookups and the
+  // request body — so it is canonicalized here rather than at the fetch.
+  // Anything else passes through, so the server still answers an unknown
+  // realm. No fallback: an empty input yields an empty list (the card path
+  // relies on this to mean "search nothing" rather than "search everything").
   private normalizeRealmPaths(realms: string[] | undefined): string[] {
-    return (realms ?? [])
-      .map((realm) => new RealmPaths(ri(realm)).url)
-      .filter(Boolean);
+    return serverRealmURLs(this.network.virtualNetwork, realms ?? []);
   }
 
   // The host default: an absent/empty realm list means every realm the user can

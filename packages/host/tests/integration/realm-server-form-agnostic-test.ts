@@ -115,4 +115,64 @@ module('Integration | realm-server | identifier forms', function (hooks) {
       'both spellings are accepted as token keys',
     );
   });
+
+  test('a realm named by its URL finds a token filed under its prefix', function (assert) {
+    // A search names its realms in URL form, while a realm resource that
+    // logged in through the prefix filed its token under the prefix.
+    getService('network').virtualNetwork.addRealmMapping(
+      PREFIX,
+      MAPPED_REALM_URL,
+    );
+    window.localStorage.setItem(
+      SessionLocalStorageKey,
+      JSON.stringify({
+        [PREFIX]: sessionToken({ realmServerURL: REALM_SERVER_URL }),
+      }),
+    );
+
+    let realmServer = getService('realm-server');
+    assert.deepEqual(
+      realmServer.getRealmServersForRealms([MAPPED_REALM_URL]),
+      [REALM_SERVER_URL],
+      'the URL form finds the token filed under the prefix',
+    );
+  });
+
+  module('the per-realm token fallback', function (hooks) {
+    // The fallback is read only without a realm-server session.
+    hooks.beforeEach(function () {
+      getService('realm-server').logout();
+      getService('network').virtualNetwork.addRealmMapping(
+        PREFIX,
+        MAPPED_REALM_URL,
+      );
+    });
+
+    let unexpired = () =>
+      sessionToken({ exp: Math.floor(Date.now() / 1000) + 3600 });
+
+    test('a realm named by its URL finds a token filed under its prefix', function (assert) {
+      let token = unexpired();
+      window.localStorage.setItem(
+        SessionLocalStorageKey,
+        JSON.stringify({ [PREFIX]: token }),
+      );
+      assert.strictEqual(
+        getService('realm-server').tokenForRealms([MAPPED_REALM_URL]),
+        token,
+      );
+    });
+
+    test('a realm named by its prefix finds a token filed under its URL', function (assert) {
+      let token = unexpired();
+      window.localStorage.setItem(
+        SessionLocalStorageKey,
+        JSON.stringify({ [MAPPED_REALM_URL]: token }),
+      );
+      assert.strictEqual(
+        getService('realm-server').tokenForRealms([PREFIX]),
+        token,
+      );
+    });
+  });
 });
