@@ -34,20 +34,27 @@
 //   realm's direct writers.
 //
 // Both tables are withheld from the read-only role used by dashboards and
-// read-only database access, as `user_keys` is. `up` revokes SELECT from the
-// role and from each direct member that reads through it: one that inherits
-// its privileges or can SET ROLE to it. A member holding only the ADMIN option
-// reads nothing through the role (on Postgres 16 and later the role that
-// creates `readonly_role` holds that membership), and a table's owner reads it
-// by owning it, so neither loses SELECT. SELECT granted to PUBLIC, or to
-// another role a member also belongs to, still lets them read, and revoking it
-// isn't a migration's call, so `up` then asks `has_column_privilege` about
-// every column of both tables, for `readonly_role` and every role that reads
-// through it directly or through other roles, and stops, naming the role and
-// the column, if any of them can still read one. `readonly_role` exists only
-// where it was provisioned (staging and production), so both steps are
-// skipped wherever it doesn't. Every statement is idempotent, so running `up`
-// again changes nothing.
+// read-only database access, as `user_keys` is, and from every role that reads
+// with its privileges: one granted it with INHERIT or SET, directly or through
+// other roles granted that way. A role that only administers the membership
+// isn't one (on Postgres 16 the role that creates `readonly_role` holds that
+// membership, and it is often the tables' owner), and a table's owner is never
+// treated as one, so its own privileges are left alone.
+//
+// A REVOKE removes only the grants its grantor made, so `up` revokes each
+// SELECT grant those roles hold on a table or its columns acting as the role
+// that made it, with CASCADE, which also removes every grant passed on from
+// it. Acting as another role needs the migrating role to be a superuser or able
+// to SET ROLE to it; where it isn't, `up` stops and names the grant rather than
+// leave the table readable. SELECT granted to PUBLIC, or to a role outside the
+// read-only role that one of its readers also belongs to, still lets them read,
+// and revoking it isn't a migration's call, so `up` then asks
+// `has_column_privilege` about every column of both tables for each reader and
+// stops, naming the role and the column, if any of them can still read one.
+//
+// `readonly_role` exists only where it was provisioned (staging and
+// production), so both steps are skipped wherever it doesn't. Every statement
+// is idempotent, so running `up` again changes nothing.
 
 exports.up = (pgm) => {
   pgm.sql(`
@@ -250,28 +257,97 @@ exports.up = (pgm) => {
   pgm.sql(`
     DO $$
     DECLARE
-      member_name name;
+      migrating_role name := current_user;
       table_name text;
+      grantor_name name;
+      grantee_name name;
+      revoked_grantor oid;
+      revoked_grantee oid;
     BEGIN
       IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'readonly_role') THEN
         FOREACH table_name IN ARRAY ARRAY['key_shares', 'key_share_notices']
         LOOP
-          EXECUTE format('REVOKE SELECT ON TABLE %I FROM readonly_role', table_name);
-          FOR member_name IN
-            SELECT member.rolname
-            FROM pg_auth_members membership
-            JOIN pg_roles grp ON grp.oid = membership.roleid
-            JOIN pg_roles member ON member.oid = membership.member
-            JOIN pg_class tbl ON tbl.oid = to_regclass(table_name)
-            WHERE grp.rolname = 'readonly_role'
-              AND (membership.inherit_option OR membership.set_option)
-              AND member.oid <> tbl.relowner
           LOOP
+            -- One SELECT grant the read-only role or a member of it still
+            -- holds on the table or one of its columns. A grant the table's
+            -- owner made has no grantor name.
+            SELECT
+              CASE WHEN held.grantor <> held.relowner
+                THEN grantor_role.rolname END,
+              grantee_role.rolname,
+              held.grantor,
+              held.grantee
+            INTO grantor_name, grantee_name, revoked_grantor, revoked_grantee
+            FROM (
+              SELECT tbl.relowner, acl.*
+              FROM pg_class tbl
+              CROSS JOIN LATERAL aclexplode(tbl.relacl) acl
+              WHERE tbl.oid = table_name::regclass
+              UNION ALL
+              SELECT tbl.relowner, acl.*
+              FROM pg_class tbl
+              JOIN pg_attribute col ON col.attrelid = tbl.oid
+              CROSS JOIN LATERAL aclexplode(col.attacl) acl
+              WHERE tbl.oid = table_name::regclass
+                AND col.attnum > 0
+                AND NOT col.attisdropped
+            ) held
+            JOIN pg_roles grantor_role ON grantor_role.oid = held.grantor
+            JOIN pg_roles grantee_role ON grantee_role.oid = held.grantee
+            WHERE held.privilege_type = 'SELECT'
+              AND grantee_role.oid <> held.relowner
+              AND grantee_role.oid IN (
+                WITH RECURSIVE reader(oid) AS (
+                  SELECT oid FROM pg_roles WHERE rolname = 'readonly_role'
+                  UNION
+                  SELECT membership.member
+                  FROM pg_auth_members membership
+                  JOIN reader ON membership.roleid = reader.oid
+                  WHERE membership.inherit_option OR membership.set_option
+                )
+                SELECT oid FROM reader
+              )
+            LIMIT 1;
+            EXIT WHEN NOT FOUND;
+            IF grantor_name IS NOT NULL THEN
+              BEGIN
+                EXECUTE format('SET ROLE %I', grantor_name);
+              EXCEPTION WHEN insufficient_privilege THEN
+                RAISE EXCEPTION
+                  'cannot revoke the SELECT on % that % granted to %',
+                  table_name, grantor_name, grantee_name
+                  USING HINT = format(
+                    'Run the migration as a superuser or as a role that can SET ROLE %I.',
+                    grantor_name
+                  );
+              END;
+            END IF;
             EXECUTE format(
-              'REVOKE SELECT ON TABLE %I FROM %I',
+              'REVOKE SELECT ON TABLE %I FROM %I CASCADE',
               table_name,
-              member_name
+              grantee_name
             );
+            EXECUTE format('SET ROLE %I', migrating_role);
+            IF EXISTS (
+              SELECT 1
+              FROM pg_class tbl
+              CROSS JOIN LATERAL aclexplode(tbl.relacl) acl
+              WHERE tbl.oid = table_name::regclass
+                AND acl.privilege_type = 'SELECT'
+                AND acl.grantor = revoked_grantor
+                AND acl.grantee = revoked_grantee
+              UNION ALL
+              SELECT 1
+              FROM pg_attribute col
+              CROSS JOIN LATERAL aclexplode(col.attacl) acl
+              WHERE col.attrelid = table_name::regclass
+                AND acl.privilege_type = 'SELECT'
+                AND acl.grantor = revoked_grantor
+                AND acl.grantee = revoked_grantee
+            ) THEN
+              RAISE EXCEPTION 'the SELECT on % that % granted to % survived its REVOKE',
+                table_name, COALESCE(grantor_name, 'the owner'), grantee_name;
+            END IF;
           END LOOP;
         END LOOP;
       END IF;

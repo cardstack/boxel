@@ -931,6 +931,41 @@ module(basename(import.meta.filename), function () {
       });
     });
 
+    test('revokes a grant another role made, and every grant passed on from it', async function (assert) {
+      // A role outside the read-only role holds SELECT with the grant option
+      // and passes it to a member, which passes it to the role itself.
+      await createRole(OTHER_ROLE);
+      await dbAdapter.execute(
+        `GRANT SELECT ON TABLE key_shares TO ${OTHER_ROLE} WITH GRANT OPTION`,
+      );
+      await withMemberships([['readonly_role', MEMBER]], async () => {
+        await dbAdapter.withTransaction(async (query: any) => {
+          await query([`SET LOCAL ROLE ${OTHER_ROLE}`]);
+          await query([
+            `GRANT SELECT ON TABLE key_shares TO ${MEMBER} WITH GRANT OPTION`,
+          ]);
+        });
+        await dbAdapter.withTransaction(async (query: any) => {
+          await query([`SET LOCAL ROLE ${MEMBER}`]);
+          await query([
+            `GRANT SELECT (owner) ON TABLE key_shares TO readonly_role`,
+          ]);
+        });
+
+        await runUp();
+
+        assert.false(await canSelect(MEMBER, 'key_shares'));
+        let [{ readable }] = await dbAdapter.execute(
+          `SELECT has_column_privilege('readonly_role', 'key_shares', 'owner', 'SELECT') AS readable`,
+        );
+        assert.false(readable as boolean, 'the grant passed on is gone too');
+        assert.true(
+          await canSelect(OTHER_ROLE, 'key_shares'),
+          'the role outside the read-only role keeps its own',
+        );
+      });
+    });
+
     test('stops when PUBLIC can read a column', async function (assert) {
       await dbAdapter.execute(
         `GRANT SELECT (owner) ON TABLE key_shares TO PUBLIC`,
