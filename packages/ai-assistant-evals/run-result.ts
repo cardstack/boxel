@@ -39,6 +39,8 @@ export interface RunResult {
   // Skill features enabled in the room before the first prompt
   // (EVAL_SKILL_FEATURES).
   skillFeatures: string[];
+  // The evaluation's own time budget per prompt, when it sets one.
+  secondsPerPrompt?: number;
   username: string;
   stoppedBy:
     | 'idle'
@@ -86,9 +88,11 @@ export function grade(result: RunResult): { grade: Grade; misses: string[] } {
   let a = result.analysis;
   let misses: string[] = [];
   // Every prompt after the first gets the same turn and time budget again.
+  // An evaluation with a bigger task than hello-world sets its own time
+  // budget per prompt.
   let prompts = Math.max(1, result.prompts.length);
   let maxTurns = BENCHMARKS.maxTurns * prompts;
-  let maxSeconds = BENCHMARKS.maxSeconds * prompts;
+  let maxSeconds = (result.secondsPerPrompt ?? BENCHMARKS.maxSeconds) * prompts;
   if (a.turns > maxTurns) {
     misses.push(`${a.turns} turns (target ≤ ${maxTurns})`);
   }

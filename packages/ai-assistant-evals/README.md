@@ -31,8 +31,10 @@ endpoint is the URL.
   a judge scores against, `initialCards` and `initialFiles` copied into the
   test workspace before the prompt (same path relative to the realm root, so
   relative `adoptsFrom` references keep working; the cards are opened in the
-  stack so they are in the message context), and a query-backed
-  `sessionReports` list.
+  stack so they are in the message context), `skillFeatures` switched on in
+  each room before the first prompt (added to `EVAL_SKILL_FEATURES`),
+  `secondsPerPrompt` replacing the default 200 s time target for each prompt,
+  and a query-backed `sessionReports` list.
 - **EvaluationResult**: one per model per session. The runner fills the
   mechanical fields (verdict, turns, cost, caching rate, start and end, tool
   calls, notes, the screenshot, the skills the room had). A judge fills
@@ -43,7 +45,7 @@ endpoint is the URL.
 - **EvaluationReport**: one per session, with a query-backed `results` table
   and the total cost.
 
-Four evaluations ship. `hello-world` is the smallest build there is, one
+These evaluations ship, among others. `hello-world` is the smallest build there is, one
 definition and one instance shown on screen — the one to start from, and the
 one to reach for when checking that a change did not break the basics.
 `linkedin-profile-computed-edit-restyle` is the step up: one definition with a
@@ -57,6 +59,10 @@ the assistant edits its own work in place instead of writing it again.
 card with three instances, then a list and a closing line the user asks for once
 everything is saved. It catches a final reply that shrinks to a one-sentence
 acknowledgement after the write passes its correctness check.
+`reuse-service-desk-build` and `reuse-listing-ownership` grade catalog reuse:
+how much of a brief the assistant answers from catalog parts, and whether it
+references a catalog definition or installs its own copy. The `search-route-*`
+evaluations check that a search runs through a `run-realm-code` script.
 
 Add one by adding a JSON file under `eval-realm/Evaluation/` and running setup
 again. An evaluation that wants a card or a file already in the test workspace

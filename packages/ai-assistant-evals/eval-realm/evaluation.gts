@@ -118,6 +118,10 @@ export class EvaluationCard extends CardDef {
   // between `<!-- feature:<name> -->` markers is left out of the prompt
   // otherwise, so an evaluation of that section must name it here.
   @field skillFeatures = containsMany(StringField);
+  // The GOOD grade's time budget per prompt, in seconds, for an evaluation
+  // whose task is bigger than the hello-world the default of 200 was set on.
+  // Empty means the default.
+  @field secondsPerPrompt = contains(NumberField);
 
   @field sessionReports = linksToMany(() => EvaluationReportCard, {
     query: {

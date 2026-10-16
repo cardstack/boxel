@@ -896,6 +896,7 @@ async function runModel(
     let { evaluation, prompts } = await loadPrompts();
     result.prompts = prompts;
     result.evalCardUrl = evaluation?.url;
+    result.secondsPerPrompt = evaluation?.secondsPerPrompt;
     // Human-readable stamp so the workspace list reads "Models Claude Opus
     // 4.8 2026-09-07 12:43"; the endpoint gets the same stamp, slug-safe.
     let now = new Date();
