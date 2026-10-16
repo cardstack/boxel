@@ -25,7 +25,9 @@ import { getCardCollection } from '@cardstack/host/resources/card-collection';
 import { getCard } from '@cardstack/host/resources/card-resource';
 
 import type { RoomResource } from '@cardstack/host/resources/room';
+import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
+import RunRealmCodeTool from '@cardstack/host/tools/run-realm-code';
 
 import { setupRealmServerEndpoints } from '../../helpers';
 import { setupMockMatrix } from '../../helpers/mock-matrix';
@@ -546,6 +548,97 @@ module('Integration | Component | RoomMessage', function (hooks) {
         'compact preparing indicator does not clip the full-size pill',
       );
     assert.dom(`${indicator} svg`).exists('a spinner is shown instead');
+  });
+
+  test('a run-realm-code call that waits for the click names each risky call and why', async function (assert) {
+    let testScenario = await setupTestScenario({
+      isStreaming: false,
+      minutesAgoForCreated: 2,
+      minutesAgoForUpdated: 1,
+      messageContent: 'Running a script.',
+    });
+    let scenario = testScenario as any;
+    scenario.getActiveLLMModeForMessage = () => 'ask';
+    scenario.isDisplayingCode = () => false;
+    scenario.monacoSDK = { editor: { getEditors: () => [] } };
+    // The calls are this tab's own, so this tab offers their click.
+    scenario.message.agentId = (
+      this.owner.lookup('service:matrix-service') as MatrixService
+    ).agentId;
+    let deleteCode = `await realm.workspaces.delete('http://test-realm/testuser/old/');`;
+    let runCall = (
+      id: string,
+      code: string,
+      status: 'ready' | 'applied' | 'invalid' = 'ready',
+      failureReason?: string,
+    ) =>
+      new MessageTool(
+        scenario.message,
+        {
+          id,
+          name: 'run-realm-code_abcd',
+          arguments: { attributes: { code } },
+        },
+        undefined,
+        'event-1',
+        true,
+        'Run',
+        status,
+        undefined,
+        this.owner,
+        failureReason,
+        {
+          neverAutoExecutesFor:
+            RunRealmCodeTool.neverAutoExecutesFor.bind(RunRealmCodeTool),
+          clickReasonsFor: RunRealmCodeTool.clickReasonsFor,
+        },
+      );
+    scenario.message.tools = [
+      runCall('one-call', deleteCode),
+      runCall(
+        'two-calls',
+        [
+          `await realm.images.generate({ prompt: 'a cat' });`,
+          `await realm.fs.download('https://example.com/a.png', 'a.png');`,
+        ].join('\n'),
+      ),
+      runCall('no-calls', `await realm.fs.writeText('a.json', '{}');`),
+      runCall('applied-call', deleteCode, 'applied'),
+      runCall('invalid-call', deleteCode, 'invalid', 'Unexpected argument'),
+    ];
+    await renderRoomMessageComponent(testScenario);
+
+    let reasons = (id: string) =>
+      `[data-test-tool-call-id="${id}"] [data-test-tool-call-click-reasons]`;
+    assert.dom(`${reasons('one-call')} li`).exists({ count: 1 });
+    assert
+      .dom(
+        `${reasons('one-call')} [data-test-tool-call-click-reason="realm.workspaces.delete"]`,
+      )
+      .containsText('Deletes a workspace');
+
+    assert.dom(`${reasons('two-calls')} li`).exists({ count: 2 });
+    assert
+      .dom(
+        `${reasons('two-calls')} [data-test-tool-call-click-reason="realm.images.generate"]`,
+      )
+      .containsText('uses your credit');
+    assert
+      .dom(
+        `${reasons('two-calls')} [data-test-tool-call-click-reason="realm.fs.download"]`,
+      )
+      .containsText('outside URL');
+
+    assert.dom(reasons('no-calls')).doesNotExist();
+
+    assert
+      .dom(reasons('applied-call'))
+      .doesNotExist('a call that already ran offers no click');
+    assert
+      .dom(
+        `${reasons('invalid-call')} [data-test-tool-call-click-reason="realm.workspaces.delete"]`,
+      )
+      .exists('a call that offers Try Anyway still says what the click allows');
   });
 
   test('a message carrying only bot-executed tool calls is marked bot-tools-only', async function (assert) {
