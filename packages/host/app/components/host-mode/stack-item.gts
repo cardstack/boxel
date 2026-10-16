@@ -21,6 +21,7 @@ interface Signature {
     cardId: string;
     index: number;
     stackItemCardIds: string[];
+    isNarrow?: boolean;
     close?: (cardId: string) => void;
   };
 }
@@ -76,14 +77,14 @@ export default class HostModeStackItem extends Component<Signature> {
       ? 'calc(100% - var(--boxel-sp-2xl) * 2)'
       : `${stackItemMaxWidth / Math.pow(RATIO, invertedIndex)}rem`;
 
-    // Width goes through custom properties so the phone-width rule below can
-    // override it without !important.
+    // Width and offset go through custom properties so the phone-width rule
+    // below can override them without !important.
     let styles = `
       height: calc(100% - ${marginTopPx}px);
       --host-stack-item-width: ${width};
       --host-stack-item-max-width: ${maxWidthPercent}%;
+      --host-stack-item-margin-top: ${marginTopPx}px;
       z-index: calc(${this.args.index} + 1);
-      margin-top: ${marginTopPx}px;
     `; // using margin-top instead of padding-top to hide scrolled content from view
 
     if (this.isTopCard) {
@@ -150,6 +151,7 @@ export default class HostModeStackItem extends Component<Signature> {
         {{if this.doClosingAnimation "closing-animation"}}
         {{if this.doMovingForwardAnimation "move-forward-animation"}}
         {{if this.isItemFullWidth "full-width"}}
+        {{if @isNarrow "narrow"}}
         {{if this.isTesting "testing"}}'
       style={{this.styleForStackedCard}}
       data-host-mode-stack-item
@@ -216,26 +218,34 @@ export default class HostModeStackItem extends Component<Signature> {
         width: var(--host-stack-item-width);
         max-width: var(--host-stack-item-max-width);
         height: inherit;
+        margin-top: var(--host-stack-item-margin-top);
         padding-top: var(--boxel-sp-2xl);
         z-index: 0;
         pointer-events: none;
       }
 
       .host-mode-stack-item:not(.buried) {
-        padding-bottom: var(--boxel-sp-xxl);
+        padding-bottom: var(--boxel-sp-2xl);
+        /* The top card fills its item; otherwise it keeps its 50rem default
+           and is clipped when the item is narrower. Buried cards keep 50rem,
+           so they don't reflow every time the stack changes. */
+        --host-mode-card-width: 100%;
       }
 
       .host-mode-stack-item.full-width {
         max-width: 100%;
       }
 
-      /* Same breakpoint as the operator-mode phone layout. The top card,
-         wide-format or not, takes the width with a small gutter; buried
-         cards keep their narrower widths so the stack still reads. */
-      @media (max-width: 30rem) {
-        .host-mode-stack-item:not(.buried) {
-          width: calc(100% - var(--boxel-sp-xs) * 2);
-        }
+      /* When host mode is narrow, only the top card shows, wide-format or
+         not, with a small gutter. */
+      .host-mode-stack-item.narrow:not(.buried) {
+        width: calc(100% - var(--boxel-sp-xs) * 2);
+        margin-top: 0;
+        padding-block: var(--boxel-sp-xs);
+      }
+
+      .host-mode-stack-item.narrow.buried {
+        display: none;
       }
 
       .host-mode-stack-item.opening-animation {
