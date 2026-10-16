@@ -95,6 +95,13 @@ export interface AnimatedImageSignature {
     /** Hide the built-in control. Only do this when the caller supplies its
      * own — an animation with no pause fails WCAG 2.2.2. */
     hideControl?: boolean;
+    /** Fill the container's width and drop the frame (radius, hairline,
+     * muted ground). For an animation that IS the media, such as a screen
+     * recording or a film loop set full-bleed in an article. Default `false`. */
+    fill?: boolean;
+    /** Which bottom corner holds the control. Default `'start'`; use `'end'`
+     * when the caller puts its own control in the start corner. */
+    controlPlacement?: 'start' | 'end';
   };
   Element: HTMLDivElement;
 }
@@ -127,6 +134,10 @@ export class AnimatedImage extends Component<AnimatedImageSignature> {
     return this.args.defaultPlaying ?? !prefersReducedMotion();
   }
 
+  get controlPlacement(): 'start' | 'end' {
+    return this.args.controlPlacement === 'end' ? 'end' : 'start';
+  }
+
   get controlLabel(): string {
     return this.playing ? 'Pause animation' : 'Play animation';
   }
@@ -147,6 +158,8 @@ export class AnimatedImage extends Component<AnimatedImageSignature> {
     <div
       class='pretui-animated'
       data-playing={{if this.playing 'true' 'false'}}
+      data-fill={{if @fill 'true'}}
+      data-control-placement={{this.controlPlacement}}
       data-test-pretui-animated-image
       {{framePause this.playing @src}}
       ...attributes
@@ -196,6 +209,17 @@ export class AnimatedImage extends Component<AnimatedImageSignature> {
           max-inline-size: 100%;
           block-size: auto;
         }
+        /* Full-bleed: the animation is the content, not an image set in a
+           card, so it takes the container's width and loses the frame. */
+        .pretui-animated[data-fill='true'] {
+          inline-size: 100%;
+          border-radius: 0;
+          background: transparent;
+          box-shadow: none;
+        }
+        .pretui-animated[data-fill='true'] .pretui-animated-img {
+          inline-size: 100%;
+        }
         .pretui-animated-canvas {
           position: absolute;
           inset: 0;
@@ -226,15 +250,24 @@ export class AnimatedImage extends Component<AnimatedImageSignature> {
           place-items: center;
           border: 0;
           border-radius: 999px;
-          background: color-mix(in oklch, var(--card) 84%, transparent);
-          color: var(--foreground);
+          /* The control sits on arbitrary pixels, not on a surface, so it is
+             a media scrim with light ink, as on every video player. A theme's
+             card colour here reads as a sticker (a pink --card makes a pink
+             blob over the picture). */
+          background: var(--pretui-media-control, rgb(12 12 14 / 0.56));
+          color: var(--pretui-on-neutral, #fff);
           box-shadow: var(
             --pretui-shadow-control,
-            0 0 0 1px var(--border),
+            0 0 0 1px rgb(255 255 255 / 0.14),
             0 1px 2px rgb(0 0 0 / 0.3)
           );
           cursor: pointer;
-          backdrop-filter: blur(6px);
+          backdrop-filter: blur(8px);
+        }
+        .pretui-animated[data-control-placement='end']
+          .pretui-animated-control {
+          inset-inline-start: auto;
+          inset-inline-end: var(--space-3, 8px);
         }
         @media (any-pointer: coarse) {
           .pretui-animated-control {

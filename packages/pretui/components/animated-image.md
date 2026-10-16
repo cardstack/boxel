@@ -13,7 +13,13 @@ Browsers expose no pause API for animated images, which is why almost every one 
 @defaultPlaying?  — initial playback; defaults to false under reduced motion, true otherwise
 @onPlayingChange? — fires with the next playback state
 @hideControl?     — hide the built-in control
+@fill?            — fill the container's width and drop the frame. Default false
+@controlPlacement? — 'start' (default) | 'end': which bottom corner holds the control
 ```
+
+**`@fill` is for an animation that is the content itself** — a screen recording, a film loop set full-bleed in an article. It takes the container's width and drops the radius, hairline and muted ground, which belong to an image set *in* a card, not to media that *is* the page.
+
+**`@controlPlacement='end'`** moves the control to the other corner, for when the caller puts its own control (full screen, captions) in the start corner.
 
 **Pausing paints the current frame onto a canvas and lays it over the image.** That is what makes resuming frame-accurate rather than a rewind. The two common workarounds both lose the reader's place: reassigning `src` restarts the animation, and `display: none` discards it.
 
@@ -42,8 +48,6 @@ Where it is thinner: no scrubbing, no frame count, no loop count or "play once" 
 
 ## Theming
 
-The control rides the kit's shared surface and shadow tokens — `--pretui-shadow-control` for the button, `--pretui-shadow-hairline` for the frame — rather than carrying a token surface of its own.
-
-That is deliberate: an animated image should look like an image with a button on it, not like a media player. A season retunes the button everywhere and this follows, so the pause control here matches the controls on every other overlay in the product.
+The control is a media scrim — `--pretui-media-control` (default a 56% near-black) with `--pretui-on-neutral` ink — not the theme's card colour. It sits on arbitrary pixels rather than on a surface, so the card colour read as a sticker over the picture (a pink `--card` made a pink blob). `--pretui-shadow-control` still shapes its edge, and `--pretui-shadow-hairline` the frame.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

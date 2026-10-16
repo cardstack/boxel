@@ -5,7 +5,7 @@
 //
 // Run with `boxel test`; deployment leaves `*.test.gts` off the realm.
 import { module, test } from 'qunit';
-import { click, render, settled, waitUntil } from '@ember/test-helpers';
+import { clearRender, click, render, settled, waitUntil } from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { Image } from './image';
@@ -14,6 +14,10 @@ import type { ImageStatus } from './image';
 const GOOD = 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==';
 const BAD = 'data:image/png;base64,AAAA';
 const ALSO_BAD = 'data:image/png;base64,AAAB';
+// w descriptors scale naturalWidth to the drawn width, so a 1px image must
+// claim a 1–2px width or it reads as 0 wide, which Image treats as broken
+const GOOD_SET = `${GOOD} 1w, ${GOOD} 2w`;
+const BAD_SET = `${BAD} 480w`;
 
 class Src {
   @tracked src = BAD;
@@ -83,6 +87,24 @@ module('Pretui | components/image', function (hooks) {
     await render(<template><Image @src={{BAD}} @fallback={{GOOD}} @alt='Lot 7' /></template>);
     await statusIs('loaded');
     assert.strictEqual(img()?.getAttribute('src'), GOOD);
+  });
+
+  test('@srcset and @sizes reach the img, and the set is dropped once @fallback takes over', async function (assert) {
+    await render(<template>
+      <div class='t-a'><Image @src={{GOOD}} @srcset={{GOOD_SET}} @sizes='(max-width: 600px) 100vw, 640px' @alt='A' /></div>
+      <div class='t-b'><Image @src={{GOOD}} @sizes='640px' @alt='B' /></div>
+    </template>);
+    let a = document.querySelector('.t-a img') as HTMLImageElement;
+    assert.strictEqual(a.getAttribute('srcset'), GOOD_SET);
+    assert.strictEqual(a.getAttribute('sizes'), '(max-width: 600px) 100vw, 640px');
+    let b = document.querySelector('.t-b img') as HTMLImageElement;
+    assert.false(b.hasAttribute('sizes'), 'sizes without a set means nothing, so it is left off');
+
+    await clearRender();
+    await render(<template><Image @src={{BAD}} @srcset={{BAD_SET}} @fallback={{GOOD}} @alt='Lot 7' /></template>);
+    // the bad set fails like the bad src; the fallback must not inherit it
+    await waitUntil(() => img()?.getAttribute('src') === GOOD, { timeout: 2000 });
+    assert.false(img()!.hasAttribute('srcset'), 'the fallback is never shadowed by the failed set');
   });
 
   test('a fallback identical to the source is not retried', async function (assert) {
