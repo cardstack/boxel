@@ -22,7 +22,6 @@ import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
 import { OpenAIError } from 'openai';
 import { errorReporter } from '../lib/sentry.ts';
 import { collectUsedToolCallIds } from '../lib/tool-call-ids.ts';
-import { classifyToolCalls } from '../lib/bot-tools/index.ts';
 import { READ_URL_TOOL_NAME } from '../lib/bot-tools/read-url/read.ts';
 
 function snapshotWithContent(content: string): ChatCompletionSnapshot {
@@ -251,12 +250,7 @@ module('Responding', (hooks) => {
     // What runner.finalChatCompletion() hands back: the provider's ids.
     let completionMessage = snapshotWithToolCall(readUrlCall).choices[0]
       .message as any;
-    let { botToolCalls } = classifyToolCalls({
-      ...completionMessage,
-      tool_calls: responder.responseState.withPostedIds(
-        completionMessage.tool_calls,
-      ),
-    });
+    let botToolCalls = responder.postedBotToolCalls(completionMessage);
 
     assert.deepEqual(postedToolCallIds(), ['readUrl:0_1']);
     assert.deepEqual(

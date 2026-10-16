@@ -40,7 +40,6 @@ import { DelegatedUserRealmSessionManager } from './lib/user-delegated-realm-ser
 import {
   abandonedBotToolCalls,
   cancelBotToolCalls,
-  classifyToolCalls,
   fulfillBotToolCalls,
   offeredBotTools,
   startBotToolTurns,
@@ -941,16 +940,9 @@ Common issues are:
               // fulfills its commands, we fulfill ours, and getShouldRespond
               // waits for all of them before generating again.
               let message = completion.choices?.[0]?.message;
-              // The bot-tool results must name the ids the answer was posted
-              // with, not the provider's.
-              let { botToolCalls } = message
-                ? classifyToolCalls({
-                    ...message,
-                    tool_calls: responder.responseState.withPostedIds(
-                      message.tool_calls,
-                    ),
-                  })
-                : { botToolCalls: [] };
+              let botToolCalls = message
+                ? responder.postedBotToolCalls(message)
+                : [];
               // Only the bot tools this room was offered are run, and a call
               // held for the user's approval waits for it.
               botToolCalls = botToolCalls.filter(
