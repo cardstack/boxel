@@ -236,28 +236,11 @@ const Disclosure: TemplateOnlyComponent<{
   </style>
 </template>;
 
-// The content of one cell; the cell element itself (th or td) belongs to the row.
-const CellContent: TemplateOnlyComponent<{
-  Args: {
-    cell: CellView;
-    currency: string;
-    locale?: string;
-    onSelect?: () => void;
-  };
+// A cell's value: figures through FormatNumber, everything else as text.
+const CellValue: TemplateOnlyComponent<{
+  Args: { cell: CellView; currency: string; locale?: string };
 }> = <template>
-  {{#if @cell.select}}
-    {{#if @onSelect}}
-      <Button
-        class='pretui-statement-select'
-        @appearance='link'
-        @tone='neutral'
-        @size='s'
-        {{on 'click' @onSelect}}
-      >{{@cell.text}}</Button>
-    {{else}}
-      {{@cell.text}}
-    {{/if}}
-  {{else if @cell.numeric}}
+  {{#if @cell.numeric}}
     {{#if @cell.spoken}}
       <FormatNumber
         aria-hidden='true'
@@ -272,7 +255,10 @@ const CellContent: TemplateOnlyComponent<{
         @spoken='off'
         @placeholder={{@cell.placeholder}}
       />
-      <span class='pretui-statement-sr'>{{@cell.spoken}}</span>
+      <span
+        class='pretui-statement-sr'
+        data-test-pretui-statement-sr
+      >{{@cell.spoken}}</span>
     {{else}}
       <FormatNumber
         @value={{@cell.major}}
@@ -290,7 +276,6 @@ const CellContent: TemplateOnlyComponent<{
     {{@cell.text}}
   {{/if}}
   <style scoped>
-    @layer PretComponent, PretComposite;
     @layer PretComponent {
       .pretui-statement-sr {
         position: absolute;
@@ -301,6 +286,40 @@ const CellContent: TemplateOnlyComponent<{
         white-space: nowrap;
       }
     }
+  </style>
+</template>;
+
+// The content of one cell; the cell element itself (th or td) belongs to the row. A selectable
+// cell wraps its value, formatted as usual, in a link-styled button.
+const CellContent: TemplateOnlyComponent<{
+  Args: {
+    cell: CellView;
+    currency: string;
+    locale?: string;
+    onSelect?: () => void;
+  };
+}> = <template>
+  {{#if @onSelect}}
+    {{#if @cell.select}}
+      <Button
+        class='pretui-statement-select'
+        @appearance='link'
+        @tone='neutral'
+        @size='s'
+        {{on 'click' @onSelect}}
+      ><CellValue
+          @cell={{@cell}}
+          @currency={{@currency}}
+          @locale={{@locale}}
+        /></Button>
+    {{else}}
+      <CellValue @cell={{@cell}} @currency={{@currency}} @locale={{@locale}} />
+    {{/if}}
+  {{else}}
+    <CellValue @cell={{@cell}} @currency={{@currency}} @locale={{@locale}} />
+  {{/if}}
+  <style scoped>
+    @layer PretComponent, PretComposite;
     /* Composite: the drill-in Button sits in a table cell, so it drops its own block padding and
        height and starts its text where the cell's text starts. */
     @layer PretComposite {
@@ -356,6 +375,12 @@ export class StatementTable extends Component<StatementTableSignature> {
   get regionLabel() {
     return this.args.label ?? this.args.caption;
   }
+  get regionLabelledBy() {
+    return this.regionLabel ? undefined : this.args.labelledBy;
+  }
+  get named() {
+    return !!(this.regionLabel || this.args.labelledBy);
+  }
   get tableLabel() {
     return this.args.caption || this.args.labelledBy
       ? undefined
@@ -369,11 +394,24 @@ export class StatementTable extends Component<StatementTableSignature> {
   colStyle = (c: StatementColumn) =>
     c.width ? htmlSafe(`width: ${c.width}`) : undefined;
   kindOf = (c: StatementColumn): StatementColumnKind => c.kind ?? 'text';
+  // A subtotal or total is named by its row header: the first text cell that holds its label, so
+  // a total whose label sits past an empty code column is still announced by name.
+  headerKeyOf = (row: StatementRow, role: StatementRowRole) => {
+    if (role !== 'subtotal' && role !== 'total') return undefined;
+    let labelled = this.columns.find(
+      (c) =>
+        !NUMERIC.has(this.kindOf(c)) &&
+        row.cells?.[c.key] !== undefined &&
+        row.cells?.[c.key] !== null &&
+        row.cells?.[c.key] !== '',
+    );
+    return (labelled ?? this.columns[0])?.key;
+  };
 
   cell(
     row: StatementRow,
     column: StatementColumn,
-    index: number,
+    headerKey: string | undefined,
     role: StatementRowRole,
   ): CellView {
     let kind = this.kindOf(column),
@@ -385,7 +423,7 @@ export class StatementTable extends Component<StatementTableSignature> {
       kind,
       value,
       numeric,
-      header: index === 0 && (role === 'subtotal' || role === 'total'),
+      header: column.key === headerKey,
       select:
         role === 'line' &&
         column.key === this.selectKey &&
@@ -471,7 +509,9 @@ export class StatementTable extends Component<StatementTableSignature> {
           cells:
             role === 'heading'
               ? []
-              : this.columns.map((c, i) => this.cell(row, c, i, role)),
+              : this.columns.map((c) =>
+                  this.cell(row, c, this.headerKeyOf(row, role), role),
+                ),
         });
         if (expanded) walk(kids, key, depth);
       }
@@ -491,9 +531,11 @@ export class StatementTable extends Component<StatementTableSignature> {
       {{#if this.hasRows}}
         <div
           class='pretui-statement-scroll'
-          role={{if this.regionLabel 'region'}}
+          role={{if this.named 'region'}}
           aria-label={{this.regionLabel}}
-          tabindex={{if this.regionLabel '0'}}
+          aria-labelledby={{this.regionLabelledBy}}
+          tabindex={{if this.named '0'}}
+          data-test-pretui-statement-scroll
         >
           <table
             class='pretui-statement-table'

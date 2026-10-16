@@ -81,22 +81,32 @@ module('Pretui | components/statement-table', function (hooks) {
     assert.strictEqual(text(th), 'Income');
   });
 
-  test('a subtotal and a total lead with a row header; a line does not', async function (assert) {
+  test('a subtotal and a total are named by a row header on their label; a line has none', async function (assert) {
     await render(
       <template>
         <StatementTable @label='P&L' @columns={{COLS}} @rows={{ROWS}} />
       </template>,
     );
+    let subtotal = q('tr[data-role="subtotal"] th[scope="row"]');
     assert.strictEqual(
-      q('tr[data-role="subtotal"] > :first-child').tagName,
-      'TH',
+      text(subtotal),
+      'Total income',
+      'the label cell is the header, past the empty code column',
     );
     assert.strictEqual(
-      q('tr[data-role="subtotal"] > :first-child').getAttribute('scope'),
-      'row',
+      all('tr[data-role="subtotal"] th').length,
+      1,
+      'one row header',
     );
-    assert.strictEqual(q('tr[data-role="total"] > :first-child').tagName, 'TH');
-    assert.strictEqual(q('tr[data-role="line"] > :first-child').tagName, 'TD');
+    assert.strictEqual(
+      text(q('tr[data-role="total"] th[scope="row"]')),
+      'Net income',
+    );
+    assert.strictEqual(
+      all('tr[data-role="line"] th').length,
+      0,
+      'a line has no row header',
+    );
   });
 
   test('amounts are cents set as currency; a negative balance is in parentheses and spoken with a minus', async function (assert) {
@@ -121,7 +131,7 @@ module('Pretui | components/statement-table', function (hooks) {
       'the eye sees parentheses',
     );
     assert.strictEqual(
-      text(net.querySelector('.pretui-statement-sr')),
+      text(net.querySelector('[data-test-pretui-statement-sr]')),
       '-$168.00',
       'a screen reader hears the minus',
     );
@@ -142,7 +152,7 @@ module('Pretui | components/statement-table', function (hooks) {
     let net = q('tr[data-role="total"] [data-kind="amount"]');
     assert.strictEqual(text(net), '-$168.00');
     assert.notOk(
-      net.querySelector('.pretui-statement-sr'),
+      net.querySelector('[data-test-pretui-statement-sr]'),
       'nothing to mirror',
     );
   });
@@ -317,13 +327,30 @@ module('Pretui | components/statement-table', function (hooks) {
     assert.deepEqual(picked, ['4000']);
   });
 
+  test('a selectable figure keeps its format inside the button', async function (assert) {
+    let onSelect = () => {};
+    await render(
+      <template>
+        <StatementTable
+          @label='p'
+          @columns={{COLS}}
+          @rows={{ROWS}}
+          @onRowSelect={{onSelect}}
+          @selectColumn='amount'
+          @locale='en-US'
+        />
+      </template>,
+    );
+    assert.strictEqual(text(all('tbody button')[0]), '$4,812.00');
+  });
+
   test('a named table is a reachable scroll region; an unnamed one is not', async function (assert) {
     await render(
       <template>
         <StatementTable @label='Ledger' @columns={{COLS}} @rows={{ROWS}} />
       </template>,
     );
-    let region = q('.pretui-statement-scroll');
+    let region = q('[data-test-pretui-statement-scroll]');
     assert.strictEqual(region.getAttribute('role'), 'region');
     assert.strictEqual(region.getAttribute('tabindex'), '0');
     assert.strictEqual(region.getAttribute('aria-label'), 'Ledger');
@@ -335,8 +362,34 @@ module('Pretui | components/statement-table', function (hooks) {
     await render(
       <template><StatementTable @columns={{COLS}} @rows={{ROWS}} /></template>,
     );
-    assert.notOk(q('.pretui-statement-scroll').hasAttribute('role'));
-    assert.notOk(q('.pretui-statement-scroll').hasAttribute('tabindex'));
+    assert.notOk(q('[data-test-pretui-statement-scroll]').hasAttribute('role'));
+    assert.notOk(
+      q('[data-test-pretui-statement-scroll]').hasAttribute('tabindex'),
+    );
+  });
+
+  test('a table named by @labelledBy is a reachable region named the same way', async function (assert) {
+    await render(
+      <template>
+        <h2 id='ledger-heading'>Ledger</h2>
+        <StatementTable
+          @labelledBy='ledger-heading'
+          @columns={{COLS}}
+          @rows={{ROWS}}
+        />
+      </template>,
+    );
+    let region = q('[data-test-pretui-statement-scroll]');
+    assert.strictEqual(region.getAttribute('role'), 'region');
+    assert.strictEqual(region.getAttribute('tabindex'), '0');
+    assert.strictEqual(
+      region.getAttribute('aria-labelledby'),
+      'ledger-heading',
+    );
+    assert.strictEqual(
+      q('table').getAttribute('aria-labelledby'),
+      'ledger-heading',
+    );
   });
 
   test('@caption renders a real caption, and wins over @label for the table’s name', async function (assert) {
