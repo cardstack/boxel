@@ -184,7 +184,7 @@ function showError(element, message) {
 function renderSignedIn(root) {
   root.replaceChildren(
     page(
-      'You’re signed in',
+      'You’re signed in to Boxel',
       h(
         'p',
         { class: 'secure-subtitle', 'data-test-secure-signed-in': true },
