@@ -170,9 +170,13 @@ function toolCallsText(result: RunResult) {
   if (!a) {
     return '';
   }
-  return Object.entries(a.toolCalls)
+  let tools = Object.entries(a.toolCalls)
     .map(([name, count]) => `${name.replace(/_[0-9a-f]{4}$/, '')} ×${count}`)
     .join(', ');
+  let searches = Object.entries(a.realmSearches ?? {})
+    .map(([realm, count]) => `${realm} ×${count}`)
+    .join(', ');
+  return searches ? `${tools} (realm searches: ${searches})` : tools;
 }
 
 async function createReportCard(

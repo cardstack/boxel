@@ -20,6 +20,13 @@ export interface RoomAnalysis {
   cacheWindowCachedTokens: number;
   cacheWindowTurns: number;
   toolCalls: Record<string, number>;
+  // `realm.cards.search` and `realm.entries.search` calls inside
+  // run-realm-code scripts. A `realm.cards.search` key adds the realm the
+  // script ran in: `catalog`, `workspace` (no realm given, so the workspace the
+  // user is in) or the realm URL; `realm.entries.search` picks its realms in
+  // the call. A search the host refused still counts: it is the route the
+  // model chose.
+  realmSearches: Record<string, number>;
   failedToolCalls: { name: string; reason: string }[];
   // Requests the host never answered: the signature of a stuck host.
   unansweredToolCalls: number;
@@ -50,6 +57,14 @@ const WRITE_TOOL =
 // argument.
 const REALM_CODE_WRITE =
   /realm\.fs\.(?:(?:writeText|replace)\(\s*|copy\(\s*(?:(['"`])[^'"`]*\1|[^,()]+)\s*,\s*)(?:(['"`])([^'"`]+)\2)?/g;
+const REALM_SEARCH = /realm\.(cards|entries)\.search\(/g;
+
+function searchRealmLabel(realm: unknown): string {
+  if (typeof realm !== 'string' || realm === '') {
+    return 'workspace';
+  }
+  return /\/catalog\/?$/.test(realm) ? 'catalog' : realm;
+}
 
 function parseData(content: Record<string, any>): Record<string, any> {
   let data = content.data;
@@ -92,6 +107,7 @@ export function analyzeRoom(
     cacheWindowCachedTokens: 0,
     cacheWindowTurns: 0,
     toolCalls: {},
+    realmSearches: {},
     failedToolCalls: [],
     unansweredToolCalls: 0,
     realmCodeWrites: 0,
@@ -190,6 +206,20 @@ export function analyzeRoom(
       }
       if (WRITE_TOOL.test(name) && outcome?.key === 'applied') {
         result.toolWrites++;
+      }
+      if (name.startsWith('run-realm-code')) {
+        let args = parseArguments(request.arguments);
+        let code = args.attributes?.code ?? args.code;
+        let realmLabel = searchRealmLabel(args.attributes?.realm ?? args.realm);
+        for (let match of typeof code === 'string'
+          ? code.matchAll(REALM_SEARCH)
+          : []) {
+          let key =
+            match[1] === 'cards'
+              ? `cards.search ${realmLabel}`
+              : 'entries.search';
+          result.realmSearches[key] = (result.realmSearches[key] ?? 0) + 1;
+        }
       }
       if (name.startsWith('run-realm-code') && outcome?.key === 'applied') {
         // The host nests top-level fields under `attributes` before it runs a

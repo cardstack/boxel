@@ -1217,7 +1217,12 @@ test.afterAll(async () => {
               ([name, count]) =>
                 `${name.replace(/_[0-9a-f]{4}$/, '')}×${count}`,
             )
-            .join(', ')
+            .join(', ') +
+          (Object.keys(a.realmSearches ?? {}).length > 0
+            ? ` (realm searches: ${Object.entries(a.realmSearches)
+                .map(([realm, count]) => `${realm}×${count}`)
+                .join(', ')})`
+            : '')
         : '';
       let writes = a ? `${a.realmCodeWrites + a.toolWrites}` : '';
       return `| ${graded.grade} | ${r.modelId ?? r.requestedModel} | ${r.reasoningEffort ?? '–'} | ${r.verdict} | ${
