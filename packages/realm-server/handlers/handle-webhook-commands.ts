@@ -166,7 +166,8 @@ export function handleListWebhookCommandsRequest({
     }
 
     // An empty `incomingWebhookId` lists every command, the same as leaving
-    // it out. Any other value is an id, checked as every endpoint checks one.
+    // it out. Any other value, a repeated parameter included, is an id,
+    // checked as every endpoint checks one.
     let webhookIdParam = ctxt.request.query.incomingWebhookId;
     let incomingWebhookId: string | undefined;
     if (webhookIdParam !== undefined && webhookIdParam !== '') {

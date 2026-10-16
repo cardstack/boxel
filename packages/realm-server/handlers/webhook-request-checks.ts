@@ -70,19 +70,21 @@ export async function checkRequestingUserAndJSONBody(
 // An id the request names is a UUID exactly as given. It is not trimmed:
 // these ids are ones the server issued, so whitespace around one means the
 // client sent something other than the id, and every endpoint answers 400
-// for it. `name` is how the answer refers to the id.
+// for it. An id that is absent or empty is "required"; anything else that
+// isn't a UUID, blank or not a string at all, "must be a UUID". `name` is
+// how the answer refers to the id.
 export async function checkUUID(
   ctxt: Koa.Context,
   id: unknown,
   name: string,
 ): Promise<string | undefined> {
-  if (typeof id !== 'string' || !id.trim()) {
+  if (id === undefined || id === null || id === '') {
     await sendResponseForBadRequest(ctxt, `${name} is required`);
     return undefined;
   }
   // The id columns are Postgres uuids, so an id of any other shape would
   // fail the lookup's cast rather than match no row.
-  if (!uuidValidate(id)) {
+  if (typeof id !== 'string' || !uuidValidate(id)) {
     await sendResponseForBadRequest(ctxt, `${name} must be a UUID`);
     return undefined;
   }

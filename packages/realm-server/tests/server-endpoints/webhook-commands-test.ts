@@ -889,6 +889,13 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         ),
     };
 
+    function list(queryString: string) {
+      return context.request
+        .get(`/_webhook-commands${queryString ? `?${queryString}` : ''}`)
+        .set('Accept', 'application/vnd.api+json')
+        .set('Authorization', jwtFor(matrixUserId));
+    }
+
     async function insertIncomingWebhook(username: string, path: string) {
       let id = uuidv4();
       await query(context.dbAdapter, [
@@ -947,19 +954,35 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
             400,
             `${name} answers 400 for id ${JSON.stringify(id)}`,
           );
+          assert.deepEqual(
+            response.body.errors,
+            ['incomingWebhookId must be a UUID'],
+            `${name} says why for id ${JSON.stringify(id)}`,
+          );
         }
       }
 
-      let listed = await context.request
-        .get('/_webhook-commands')
-        .query({ incomingWebhookId: ` ${ownWebhookId}` })
-        .set('Accept', 'application/vnd.api+json')
-        .set('Authorization', jwtFor(matrixUserId));
-      assert.strictEqual(
-        listed.status,
-        400,
-        'listing webhook commands answers 400 for a whitespace-padded id',
-      );
+      for (let name of Object.keys(endpoints)) {
+        let response = await endpoints[name]('');
+        assert.deepEqual(
+          [response.status, response.body.errors],
+          [400, ['incomingWebhookId is required']],
+          `${name} answers 400 for an empty id`,
+        );
+      }
+
+      for (let queryString of [
+        `incomingWebhookId=%20${ownWebhookId}`,
+        `incomingWebhookId=%20`,
+        `incomingWebhookId=${ownWebhookId}&incomingWebhookId=${ownWebhookId}`,
+      ]) {
+        let listed = await list(queryString);
+        assert.deepEqual(
+          [listed.status, listed.body.errors],
+          [400, ['incomingWebhookId must be a UUID']],
+          `listing webhook commands answers 400 for ?${queryString}`,
+        );
+      }
 
       let webhooks = await context.dbAdapter.execute(
         `SELECT id FROM incoming_webhooks`,
@@ -969,6 +992,33 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         `SELECT id FROM webhook_commands`,
       );
       assert.strictEqual(commands.length, 0, 'no webhook command added');
+    });
+
+    test('an empty incomingWebhookId lists every webhook command', async function (assert) {
+      let firstWebhookId = await insertIncomingWebhook(
+        matrixUserId,
+        'whk_listall1',
+      );
+      let secondWebhookId = await insertIncomingWebhook(
+        matrixUserId,
+        'whk_listall2',
+      );
+      for (let webhookId of [firstWebhookId, secondWebhookId]) {
+        let added = await endpoints['add a webhook command'](webhookId);
+        assert.strictEqual(added.status, 201, 'webhook command added');
+      }
+
+      for (let queryString of ['', 'incomingWebhookId=']) {
+        let listed = await list(queryString);
+        assert.strictEqual(listed.status, 200, `?${queryString} is HTTP 200`);
+        assert.deepEqual(
+          listed.body.data
+            .map((command: any) => command.attributes.incomingWebhookId)
+            .sort(),
+          [firstWebhookId, secondWebhookId].sort(),
+          `?${queryString} lists the commands of every webhook`,
+        );
+      }
     });
 
     test("another user's webhook is forbidden to every endpoint", async function (assert) {
