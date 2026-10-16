@@ -874,9 +874,12 @@ function maskLoggedURL(urlString: string): string {
   }
 }
 
-// Opt-in signal a JSON-API card POST / PATCH caller sets to say "don't block my
-// write on the realm's in-flight incremental indexing — index deferred and
-// answer me from the document I sent". This is the write-side half of what
+// Opt-in signal a card-writing caller sets to say "don't block my write on the
+// realm's indexing — index deferred and answer me once my bytes are durable".
+// Every route that writes cards reads it the same way (see
+// `indexWaitOptions`): a JSON-API card POST / PATCH answers from the document
+// it sent, an `/_operations` batch answers with each entry's generation
+// pending, and a card DELETE answers 204. This is the write-side half of what
 // DURING_PRERENDER_HEADER does, without the search-path changes (cacheOnly-
 // Definitions, skipQueryBackedExpansion) that header also triggers, so an
 // ordinary interactive save can take it safely.
@@ -980,6 +983,69 @@ function renderHoldMaxMs(): number {
   return Number.isFinite(override) && override > 0
     ? override
     : DEFAULT_RENDER_HOLD_MAX_MS;
+}
+// How long a bounded write route waits for its own index pass before it
+// answers. The pass renders each file it visits in a prerender tab, so a
+// stalled or saturated prerender pool would otherwise hold a write whose bytes
+// are already durable until the job's own timeout. Past the budget the write
+// answers with what it stored and a pending generation, and the pass lands —
+// and its index event is broadcast — afterwards. Read per call, like the
+// render-hold cap, so it can be tuned or shortened for a test without a
+// restart.
+const DEFAULT_INDEX_WAIT_BUDGET_MS = 5_000;
+function indexWaitBudgetMs(): number {
+  let override = Number(
+    (globalThis as { process?: { env?: Record<string, string | undefined> } })
+      .process?.env?.INDEX_WAIT_BUDGET_MS,
+  );
+  return Number.isFinite(override) && override > 0
+    ? override
+    : DEFAULT_INDEX_WAIT_BUDGET_MS;
+}
+
+// Whether a write request answers without waiting for its own index pass:
+// one whose caller asked not to wait (`SKIP_INDEX_WAIT_HEADER`), and one made
+// from inside a render, whose pass would need the render slot that caller is
+// holding.
+function skipsIndexWait(request: Request): boolean {
+  return isDuringPrerenderRequest(request) || isSkipIndexWaitRequest(request);
+}
+
+// What a card-writing route hands its commit about waiting for the write's
+// own index pass. Every such route decides it here, so the opt-out means the
+// same thing on each of them: a request that skips the wait answers once its
+// bytes are durable. One that does not waits — for as long as the pass takes
+// on a route whose answer is read out of the index (a card+json POST or
+// PATCH), and for at most `indexWaitBudgetMs` on one whose answer is not
+// (`/_operations`, a card DELETE).
+function indexWaitOptions(
+  request: Request,
+  { bounded }: { bounded: boolean },
+): { waitForIndex?: false; indexWaitBudgetMs?: number } {
+  if (skipsIndexWait(request)) {
+    return { waitForIndex: false };
+  }
+  return bounded ? { indexWaitBudgetMs: indexWaitBudgetMs() } : {};
+}
+// Whether `work` settles within `ms`. A rejection counts as settling: the
+// caller awaits `work` itself to learn how it went, and that is where the
+// failure reaches it.
+async function landsWithin(work: Promise<unknown>, ms: number) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let elapsed = new Promise<false>((resolve) => {
+    timer = setTimeout(() => resolve(false), ms);
+  });
+  try {
+    return await Promise.race([
+      work.then(
+        () => true,
+        () => true,
+      ),
+      elapsed,
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 // Marks the realm's public operational endpoints, which answer a caller
 // without credentials and keep working while the realm is archived (see
@@ -2122,6 +2188,14 @@ export interface CommitBatchResult {
   // indexed — either because nothing changed on disk, or because the commit
   // did not wait for indexing and the generation is not known yet.
   generation: number | null;
+  // Set when the commit answered ahead of its own index pass — because it was
+  // asked not to wait (`waitForIndex: false`), or because it stopped waiting
+  // at its budget (`WriteOptions.indexWaitBudgetMs`). The pass is queued and
+  // still to land, which is why `generation` is null. Its absence says only
+  // that this commit did not answer ahead of a pass of its own; a commit that
+  // changed nothing on disk queues no pass, and another writer's pass for the
+  // same files may still be in flight.
+  indexPending?: true;
 }
 
 export interface WriteOptions {
@@ -2149,6 +2223,17 @@ export interface WriteOptions {
   // the JSON-API card handlers do not, writing a single file and instances
   // respectively.
   waitForIndex?: boolean | null;
+  // The longest a write that waits for its index pass waits for it, in
+  // milliseconds. Past it the write returns with the bytes durable and its
+  // generation unknown (`null`), and the pass carries on: it still lands, its
+  // invalidations are still broadcast, and `realm.incrementalIndexing()` still
+  // covers it until that broadcast is sent. Absent, the wait is unbounded.
+  // Ignored when `waitForIndex` is false, which does not wait at all.
+  //
+  // Only the write's own final pass is bounded. The drain ahead of staging and
+  // a mixed batch's module flush are what the write's serialization resolves
+  // against, so a write cannot proceed without them.
+  indexWaitBudgetMs?: number;
   // The matrix user whose request produced this write — the effective user
   // (post assume-user) that `checkPermission` records on the request context
   // as `authenticatedUser`. Tags the resulting incremental index job so read
@@ -2562,6 +2647,11 @@ export class Realm {
   // lane held; see `_commitBatchUnlocked`. A lane has an entry only while a
   // commit holds it.
   #renderHoldChains = new Map<string, { startedAt: number; depth: number }>();
+  // Index passes whose writes answered before the pass landed (see
+  // `WriteOptions.indexWaitBudgetMs`), each held until its index event is
+  // broadcast. The updater's own record of the pass ends when the pass lands,
+  // which is before that broadcast, so `incrementalIndexing()` folds these in.
+  #landingsAfterAnswer = new Set<Promise<void>>();
   // One line per card read that arrives while incremental indexing is
   // pending — see drainRequestersOwnIndexing for the outcome grammar.
   #readGateLog = logger('realm:read-index-gate');
@@ -3567,8 +3657,37 @@ export class Realm {
   // declared `async` on purpose — the `async` wrapper would force a Promise
   // return even in the no-pending case, defeating callers (and tests) that
   // synchronously check whether indexing is pending.
+  //
+  // That includes a pass whose write answered before it landed, up to the
+  // broadcast of its index event.
   incrementalIndexing(): Promise<void> | undefined {
-    return this.#realmIndexUpdater.incrementalIndexing();
+    let updating = this.#realmIndexUpdater.incrementalIndexing();
+    if (this.#landingsAfterAnswer.size === 0) {
+      return updating;
+    }
+    return Promise.all([updating, ...this.#landingsAfterAnswer]).then(
+      () => undefined,
+    );
+  }
+
+  // Holds a pass its write stopped waiting for until it has landed and been
+  // announced, and reports a failure there, which has no request left to
+  // answer with it. Returns the tracked promise, which never rejects.
+  #trackLandingAfterAnswer(
+    landing: Promise<void>,
+    changes: IndexChange[],
+    clientRequestId: string | null,
+  ): Promise<void> {
+    let tracked = landing.catch((err: unknown) => {
+      this.#log.error(
+        `Index pass that outlived its write's answer failed for ${this.url} (request ${clientRequestId ?? 'none'}, urls: ${changes
+          .map(({ url }) => url.href)
+          .join(', ')}): ${stringifyErrorForLog(err)}`,
+      );
+    });
+    this.#landingsAfterAnswer.add(tracked);
+    void tracked.finally(() => this.#landingsAfterAnswer.delete(tracked));
+    return tracked;
   }
 
   // The write path's gate: the in-flight passes that can move what a staging
@@ -4677,9 +4796,10 @@ export class Realm {
     if (
       changeCount < RENDER_HOLD_MIN_BATCH_SIZE ||
       // A commit that waits for its own indexing has nothing to hold the lane
-      // for: it awaits the index pass inline, so the render job exists and the
-      // realm is quiet again before the commit returns, and the hold would be
-      // released in the same breath it was taken. The merge window a hold buys
+      // for: it awaits the index pass inline, so the render job exists before
+      // the commit returns — or, for one whose wait is bounded and ran out,
+      // moments after — and the hold would be released in the same breath it
+      // was taken. The merge window a hold buys
       // opens only on the deferred path, where the pass — and the job it
       // spawns — outlive the commit.
       options?.waitForIndex !== false ||
@@ -5280,27 +5400,17 @@ export class Realm {
     // the caller may or may not be waiting for — so this is the boundary that
     // says how much of a slow write was the write.
     stageCursor?.mark('persist');
-    // And the boundary the write locks end at, for a commit that only wrote.
-    // Indexing reads the files back off disk rather than from anything this
-    // commit is holding, so the pass below indexes whatever the last write
-    // left — which is what the realm should hold however the writers
-    // interleaved.
+    // And the boundary the write locks end at. Indexing reads the files back
+    // off disk rather than from anything this commit is holding, so the pass
+    // below indexes whatever the last write left — which is what the realm
+    // should hold however the writers interleaved.
     //
-    // A commit that REMOVED something keeps its locks to the end instead,
-    // because a removal's place in the order is not settled when its bytes are
-    // gone. An index pass resolves a removal and a write of one url as the
-    // removal, whichever reached it first — `mergeIncrementalChanges` at the
-    // queue and the visit loop's own `operations` map both give `delete`
-    // precedence, and the visit is then skipped without asking whether the
-    // file came back. So a writer that recreated the path while this pass was
-    // still pending would have its write folded into this removal and the row
-    // dropped for a file that is on disk. Holding until the pass has run is
-    // what keeps the two ordered; the durable write alone does not, and
-    // neither would holding until the job is merely enqueued, since the
-    // absorption happens for as long as that job sits unclaimed.
-    if (deleteURLs.length === 0) {
-      options?.onDurable?.();
-    }
+    // That holds for a removal too. A removal's pass indexes its url by whether
+    // the file is on disk when the pass runs (`IndexRunner.incremental`), so a
+    // writer that recreates the path while that pass is still pending keeps
+    // its card, whichever pass runs first and whether or not the queue merged
+    // the two.
+    options?.onDurable?.();
     // What each file this commit wrote now holds, named the way the event's
     // `invalidations` names a card. That spelling is not a second opinion about
     // it: the index reports its own row keys and `RealmIndexUpdater` maps them
@@ -5328,22 +5438,56 @@ export class Realm {
         ...changes.map(({ url }) => url.href.replace(/\.json$/, '')),
       ]),
     ];
+    // Set when the write stops waiting for its own index pass at its budget:
+    // the pass and everything that follows it, which the write no longer
+    // waits for.
+    let landingAfterAnswer: Promise<void> | undefined;
+    // Whether the write answers ahead of its own pass, whether it stopped
+    // waiting or never waited.
+    let answeredAhead = false;
     if (changes.length > 0) {
       if (waitForIndex) {
-        await performIndex(changes);
-        this.broadcastIncrementalInvalidationEvent([...invalidations], {
-          clientRequestId,
-          ...(clientAuthored ? { clientAuthored } : {}),
-          versions,
-          generation: indexGeneration,
-          invalidatedTypes: invalidatedTypes.value,
-          passes,
-          ownChanges,
-        });
-        // Announcing what the pass invalidated is the last of the
-        // invalidation, so it accumulates into the same stage as the hooks
-        // that ran before it.
-        stageCursor?.mark('invalidate');
+        let landing = (async () => {
+          await performIndex(changes);
+          this.broadcastIncrementalInvalidationEvent([...invalidations], {
+            clientRequestId,
+            ...(clientAuthored ? { clientAuthored } : {}),
+            versions,
+            generation: indexGeneration,
+            invalidatedTypes: invalidatedTypes.value,
+            passes,
+            ownChanges,
+          });
+          // Announcing what the pass invalidated is the last of the
+          // invalidation, so it accumulates into the same stage as the hooks
+          // that ran before it.
+          stageCursor?.mark('invalidate');
+        })();
+        let budget = options?.indexWaitBudgetMs;
+        if (budget === undefined || (await landsWithin(landing, budget))) {
+          await landing;
+        } else {
+          // The bytes are durable and the pass is queued, so the write answers
+          // now and reports no generation. A mixed batch's module flush has
+          // already landed by this point and may have set one, but that is the
+          // flush's generation, not this write's.
+          indexGeneration = undefined;
+          stageCursor?.mark('awaitIndex');
+          landingAfterAnswer = landing.then(() =>
+            // Read when the pass has landed, which is when it is known whether
+            // the pass handed a deferred render set back.
+            this.enqueueDeferredPrerenderHtml(
+              deferredPrerenderHtml,
+              initiatingUser,
+            ),
+          );
+          answeredAhead = true;
+          this.#trackLandingAfterAnswer(
+            landingAfterAnswer,
+            changes,
+            clientRequestId,
+          );
+        }
       } else {
         // Two-phase: await the durable queue insert inline so pre-enqueue
         // failures (DB partial outage) propagate back to this method's
@@ -5410,11 +5554,12 @@ export class Realm {
         // caller has its answer, so they are nobody's latency and this write
         // reports no wait for them.
         stageCursor?.mark('enqueue');
+        answeredAhead = true;
         settled.catch((err: unknown) => {
           // Covers worker job rejection AND post-worker realm-side work
           // (onInvalidation / handleExecutableInvalidations / broadcast).
           this.#log.error(
-            `Deferred indexing chain failed for ${this.url} (urls: ${changes
+            `Deferred indexing chain failed for ${this.url} (request ${clientRequestId ?? 'none'}, urls: ${changes
               .map(({ url }) => url.href)
               .join(', ')}): ${stringifyErrorForLog(err)}`,
           );
@@ -5453,10 +5598,13 @@ export class Realm {
     // leaves the flush's deferred set with no later pass to fold it into.
     // Those URLs are real dependents of a module that did change, so the
     // commit still owes them a render — enqueue the job the flush skipped.
-    await this.enqueueDeferredPrerenderHtml(
-      deferredPrerenderHtml,
-      initiatingUser,
-    );
+    // A write that answered ahead of its pass does this once the pass lands.
+    if (!landingAfterAnswer) {
+      await this.enqueueDeferredPrerenderHtml(
+        deferredPrerenderHtml,
+        initiatingUser,
+      );
+    }
     return {
       writes: results.map(({ path, lastModified, contentHash }) => ({
         path,
@@ -5465,6 +5613,7 @@ export class Realm {
         created: createdMap.get(path)?.createdAt ?? null,
       })),
       generation: indexGeneration ?? null,
+      ...(answeredAhead ? { indexPending: true as const } : {}),
     };
   }
 
@@ -6326,6 +6475,12 @@ export class Realm {
             // place — which is the case the event's authorship naming exists
             // for, and the only front door that produces it.
             reportAuthorship: true,
+            // The caller is waiting on this request, and the batch's own index
+            // pass waits on the prerender pool. The wait is bounded, or skipped
+            // when the caller asks, so a stalled pool costs the caller a
+            // pending generation rather than an answer to a write that has
+            // already landed.
+            ...indexWaitOptions(request, { bounded: true }),
             ...this.#mintPosture(coarseDeclined),
             ...anonymousCommit,
           },
@@ -11209,9 +11364,10 @@ export class Realm {
   // asking for `application/vnd.card+json` — so both return as soon as the
   // bytes are durable. Indexing follows on the queue, reports its errors
   // through `error_doc` as it does for any write, and broadcasts to
-  // subscribers once the worker settles. The operations envelope has no such
-  // opt-out: it reports a generation per entry, which only exists once the
-  // index job has landed.
+  // subscribers once the worker settles. The operations envelope waits for
+  // its index job, since it reports a generation per entry and that only
+  // exists once the job has landed, but only as `indexWaitOptions` allows;
+  // otherwise an entry reports its generation as pending.
   private async replaceFileContent(
     request: Request,
     requestContext: RequestContext,
@@ -12175,14 +12331,13 @@ export class Realm {
     requestContext: RequestContext,
     timings: RequestTimings,
   ): Promise<Response> {
-    let duringPrerender = isDuringPrerenderRequest(request);
     // A skip-index-wait caller (see SKIP_INDEX_WAIT_HEADER) gets the same
     // write-side treatment as a prerender write: index deferred, answer from
     // the serialized echo. `answerFromEcho` gates exactly those two decisions
     // (whether the batch waits for indexing, and whether the new card is read
     // back out of the index or echoed) and nothing prerender-specific beyond
     // them.
-    let answerFromEcho = duringPrerender || isSkipIndexWaitRequest(request);
+    let answerFromEcho = skipsIndexWait(request);
     let body = await request.text();
     let json;
     try {
@@ -12269,7 +12424,7 @@ export class Realm {
           // the module off disk rather than out of the index, and the commit
           // drops a rewritten module's cached definition as it writes the
           // bytes.
-          ...(answerFromEcho ? { waitForIndex: false } : {}),
+          ...indexWaitOptions(request, { bounded: false }),
           reportStoredContent: answerFromEcho,
           // A side-load claiming another realm is not this realm's to
           // create, and a `POST` carrying one has always stored the card
@@ -12704,11 +12859,10 @@ export class Realm {
       return await admission.answer(methodNotAllowed(request, requestContext));
     }
 
-    let duringPrerender = isDuringPrerenderRequest(request);
     // A skip-index-wait caller (see SKIP_INDEX_WAIT_HEADER) takes the same
     // write-side path as a prerender write: index deferred, answer from the
     // serialized echo.
-    let answerFromEcho = duringPrerender || isSkipIndexWaitRequest(request);
+    let answerFromEcho = skipsIndexWait(request);
 
     let { data: patch, included: maybeIncluded } = await request.json();
     if (!isCardResource(patch)) {
@@ -12784,7 +12938,7 @@ export class Realm {
               : {}),
             // The same trade a create makes, for the same two reasons — see
             // `createCard`, where the deadlock this avoids is spelled out.
-            ...(answerFromEcho ? { waitForIndex: false } : {}),
+            ...indexWaitOptions(request, { bounded: false }),
             // Read by both answers a patch can give that do not come from the
             // index: the deferred write's echo, and the browser-test fallback
             // below.
@@ -14614,6 +14768,9 @@ export class Realm {
         [{ op: 'delete', href: url.href, ...admission.entry }],
         {
           ...admission.batch,
+          // A 204 reads nothing from the index, so the removal's own pass is
+          // waited for only as long as `indexWaitOptions` allows.
+          ...indexWaitOptions(request, { bounded: true }),
           ...(requestContext.authenticatedUser
             ? { actor: requestContext.authenticatedUser }
             : {}),

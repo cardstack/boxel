@@ -988,6 +988,13 @@ export interface OperationIdentityResult {
     // The token a later request passes as `baseVersion`.
     version: string;
     generation: number | null;
+    // The batch answered before its index pass landed, so `generation` is not
+    // known yet. The pass still lands, and the index event it broadcasts
+    // carries the generation. Its absence does not say the index is current:
+    // a write that left the file's bytes as they were queues no pass of its
+    // own and reports `generation: null` without it, while an earlier write's
+    // pass for the same file may still be in flight.
+    indexPending?: true;
     lastModified: number | null;
     // When the file behind this entry was first written, as the realm
     // recorded it. Reported for the same reason as `lastModified` beside it:
