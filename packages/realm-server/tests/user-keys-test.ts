@@ -916,6 +916,19 @@ module(basename(import.meta.filename), function () {
         'delegator_for_user_keys_test',
         `GRANT SELECT ON TABLE user_keys, key_write_tickets TO readonly_delegated_member_for_user_keys_test`,
       );
+      // A user that reaches the role through another role, and was granted
+      // SELECT on the tables directly.
+      await createRole('readonly_group_for_user_keys_test');
+      await createRole('readonly_group_member_for_user_keys_test');
+      await dbAdapter.execute(
+        `GRANT readonly_role TO readonly_group_for_user_keys_test`,
+      );
+      await dbAdapter.execute(
+        `GRANT readonly_group_for_user_keys_test TO readonly_group_member_for_user_keys_test`,
+      );
+      await dbAdapter.execute(
+        `GRANT SELECT ON TABLE user_keys, key_write_tickets TO readonly_group_member_for_user_keys_test`,
+      );
       let statements: string[] = [];
       require(USER_KEYS_MIGRATION).up({
         sql: (statement: string) => statements.push(statement),
@@ -940,6 +953,7 @@ module(basename(import.meta.filename), function () {
         'readonly_role',
         'readonly_member_for_user_keys_test',
         'readonly_delegated_member_for_user_keys_test',
+        'readonly_group_member_for_user_keys_test',
       ]) {
         for (let table of ['user_keys', 'key_write_tickets']) {
           await assert.rejects(

@@ -20,12 +20,12 @@
 // it doesn't. Every statement is idempotent, so running `up` again changes
 // nothing.
 //
-// A member of the read-only role is a role granted it with INHERIT or SET, so
-// one that reads with the role's privileges. A role that only administers the
-// membership isn't one: on Postgres 16 a role with CREATEROLE that creates the
-// read-only role is made an ADMIN-only member of it, and that role is often
-// their owner. A table's owner is never treated as a member, so its
-// own privileges are left alone.
+// A member of the read-only role is a role granted it with INHERIT or SET,
+// directly or through other roles granted that way, so one that reads with the
+// role's privileges. A role that only administers the membership isn't one: on
+// Postgres 16 a role with CREATEROLE that creates the read-only role is made an
+// ADMIN-only member of it, and that role is often their owner. A table's owner
+// is never treated as a member, so its own privileges are left alone.
 //
 // A role holding SELECT with the grant option can pass SELECT on, and a
 // REVOKE removes only the grants its grantor made. So `up` revokes each SELECT
@@ -112,16 +112,17 @@ exports.up = (pgm) => {
             JOIN pg_roles grantor_role ON grantor_role.oid = held.grantor
             JOIN pg_roles grantee_role ON grantee_role.oid = held.grantee
             WHERE held.privilege_type = 'SELECT'
-              AND (
-                grantee_role.rolname = 'readonly_role'
-                OR grantee_role.oid IN (
+              AND grantee_role.oid <> held.relowner
+              AND grantee_role.oid IN (
+                WITH RECURSIVE reader(oid) AS (
+                  SELECT oid FROM pg_roles WHERE rolname = 'readonly_role'
+                  UNION
                   SELECT membership.member
                   FROM pg_auth_members membership
-                  JOIN pg_roles grp ON grp.oid = membership.roleid
-                  WHERE grp.rolname = 'readonly_role'
-                    AND (membership.inherit_option OR membership.set_option)
-                    AND membership.member <> held.relowner
+                  JOIN reader ON membership.roleid = reader.oid
+                  WHERE membership.inherit_option OR membership.set_option
                 )
+                SELECT oid FROM reader
               )
             LIMIT 1;
             EXIT WHEN NOT FOUND;

@@ -1021,6 +1021,83 @@ module(basename(import.meta.filename), function () {
         }
       });
 
+      test("leaves the owner's own privileges when the owner also reads through the read-only role", async function (assert) {
+        const OWNER = 'reading_owner_for_incoming_webhooks_test';
+        await createRole(OWNER);
+        await dbAdapter.execute(
+          `ALTER TABLE incoming_webhooks OWNER TO ${OWNER}`,
+        );
+        await dbAdapter.execute(`GRANT readonly_role TO ${OWNER}`);
+        try {
+          let ownerGrants = async () =>
+            (await tableGrants()).filter(
+              ({ grantee }: { grantee: string }) => grantee === OWNER,
+            );
+          let before = await ownerGrants();
+          assert.ok(before.length > 0, 'the owner has its own ACL entry');
+
+          await runMigration('up');
+          assert.deepEqual(await ownerGrants(), before, 'up leaves them');
+
+          await runMigration('down');
+          assert.deepEqual(await ownerGrants(), before, 'down leaves them');
+        } finally {
+          await dbAdapter.execute(`REVOKE readonly_role FROM ${OWNER}`);
+        }
+      });
+
+      test('leaves the grant of a role that only administers the read-only role', async function (assert) {
+        const ADMINISTRATOR = 'administrator_for_incoming_webhooks_test';
+        await createRole(ADMINISTRATOR);
+        await dbAdapter.execute(
+          `GRANT readonly_role TO ${ADMINISTRATOR} WITH ADMIN TRUE, INHERIT FALSE, SET FALSE`,
+        );
+        try {
+          await dbAdapter.execute(
+            `GRANT SELECT ON TABLE incoming_webhooks TO ${ADMINISTRATOR}`,
+          );
+
+          await runMigration('up');
+
+          assert.deepEqual(
+            await selectAs(
+              ADMINISTRATOR,
+              'SELECT COUNT(*) >= 0 AS readable FROM incoming_webhooks',
+            ),
+            [{ readable: true }],
+            'the administrator keeps its own grant',
+          );
+        } finally {
+          await dbAdapter.execute(`REVOKE readonly_role FROM ${ADMINISTRATOR}`);
+        }
+      });
+
+      test('revokes a grant to a role that reaches the read-only role through another role, and down restores it', async function (assert) {
+        const GROUP = 'readonly_group_for_incoming_webhooks_test';
+        const GROUP_MEMBER = 'readonly_group_member_for_incoming_webhooks_test';
+        await createRole(GROUP);
+        await createRole(GROUP_MEMBER);
+        await dbAdapter.execute(`GRANT readonly_role TO ${GROUP}`);
+        await dbAdapter.execute(`GRANT ${GROUP} TO ${GROUP_MEMBER}`);
+        await dbAdapter.execute(
+          `GRANT SELECT ON TABLE incoming_webhooks TO ${GROUP_MEMBER}`,
+        );
+        let before = await tableGrants();
+
+        await runMigration('up');
+        await assert.rejects(
+          selectAs(
+            GROUP_MEMBER,
+            'SELECT signing_secret FROM incoming_webhooks',
+          ),
+          /permission denied for table incoming_webhooks/,
+          'the role reading through the group is denied',
+        );
+
+        await runMigration('down');
+        assert.deepEqual(await tableGrants(), before);
+      });
+
       test('restores a record that names no grantors as grants from the owner', async function (assert) {
         let before = await tableGrants();
 
