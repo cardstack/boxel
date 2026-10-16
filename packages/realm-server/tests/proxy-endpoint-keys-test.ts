@@ -546,5 +546,269 @@ module(basename(import.meta.filename), function () {
         'the role keeps reading other tables',
       );
     });
+
+    module('the migration down', function (hooks) {
+      const DIRECT_MEMBER = 'readonly_direct_member_for_proxy_endpoints_test';
+      const INHERITING_MEMBER =
+        'readonly_inheriting_member_for_proxy_endpoints_test';
+      const OUTSIDER = 'outsider_for_proxy_endpoints_test';
+      const COLUMN_MEMBER = 'readonly_column_member_for_proxy_endpoints_test';
+      const DELEGATOR = 'delegator_for_proxy_endpoints_test';
+      const DELEGATED_MEMBER =
+        'readonly_delegated_member_for_proxy_endpoints_test';
+      const DROPPED_MEMBER = 'readonly_dropped_member_for_proxy_endpoints_test';
+
+      async function createRole(name: string) {
+        await dbAdapter.execute(
+          `DO $$
+           BEGIN
+             CREATE ROLE ${name};
+           EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL;
+           END
+           $$`,
+        );
+      }
+
+      async function runMigration(direction: 'up' | 'down') {
+        let statements: string[] = [];
+        require(SEAL_MIGRATION)[direction]({
+          sql: (statement: string) => statements.push(statement),
+        });
+        for (let statement of statements) {
+          await dbAdapter.execute(statement);
+        }
+      }
+
+      // Every grant on the table and on its columns, with who made it.
+      async function tableGrants() {
+        return await dbAdapter.execute(
+          `SELECT NULL::text AS column_name, grantee_role.rolname AS grantee,
+             grantor_role.rolname AS grantor, acl.privilege_type, acl.is_grantable
+           FROM pg_class tbl
+           CROSS JOIN LATERAL aclexplode(tbl.relacl) acl
+           JOIN pg_roles grantee_role ON grantee_role.oid = acl.grantee
+           JOIN pg_roles grantor_role ON grantor_role.oid = acl.grantor
+           WHERE tbl.oid = 'proxy_endpoints'::regclass
+           UNION ALL
+           SELECT col.attname::text, grantee_role.rolname, grantor_role.rolname,
+             acl.privilege_type, acl.is_grantable
+           FROM pg_attribute col
+           CROSS JOIN LATERAL aclexplode(col.attacl) acl
+           JOIN pg_roles grantee_role ON grantee_role.oid = acl.grantee
+           JOIN pg_roles grantor_role ON grantor_role.oid = acl.grantor
+           WHERE col.attrelid = 'proxy_endpoints'::regclass
+           ORDER BY 1 NULLS FIRST, 2, 3, 4, 5`,
+        );
+      }
+
+      // The roles this module sets up. The table's owner also shows up once
+      // the table has explicit grants, and the migration never touches it.
+      const rolesUnderTest = [
+        'readonly_role',
+        DIRECT_MEMBER,
+        INHERITING_MEMBER,
+        OUTSIDER,
+      ];
+
+      function selectGranteesIn(
+        grants: {
+          column_name: string | null;
+          grantee: string;
+          privilege_type: string;
+        }[],
+      ) {
+        return grants
+          .filter(
+            ({ column_name, grantee, privilege_type }) =>
+              column_name === null &&
+              privilege_type === 'SELECT' &&
+              rolesUnderTest.includes(grantee),
+          )
+          .map(({ grantee }) => grantee);
+      }
+
+      hooks.beforeEach(async function () {
+        // The roles are shared by every database on the server, so the test
+        // database may have been migrated while the read-only role existed,
+        // leaving that run's record behind. Each test starts from a database
+        // where the migration hasn't recorded anything yet.
+        await dbAdapter.execute(
+          `DROP TABLE IF EXISTS readonly_role_revoked_select_grants`,
+        );
+        // The role and its blanket grant as staging and production have them.
+        await createRole('readonly_role');
+        await dbAdapter.execute(
+          `GRANT SELECT ON ALL TABLES IN SCHEMA public TO readonly_role`,
+        );
+        // A member granted SELECT on the table directly, with the right to
+        // grant it on; a member that reads only through the role; and a role
+        // outside it with its own grant.
+        await createRole(DIRECT_MEMBER);
+        await createRole(INHERITING_MEMBER);
+        await createRole(OUTSIDER);
+        await dbAdapter.execute(`GRANT readonly_role TO ${DIRECT_MEMBER}`);
+        await dbAdapter.execute(`GRANT readonly_role TO ${INHERITING_MEMBER}`);
+        await dbAdapter.execute(`REVOKE readonly_role FROM ${OUTSIDER}`);
+        await dbAdapter.execute(
+          `GRANT SELECT ON TABLE proxy_endpoints TO ${DIRECT_MEMBER} WITH GRANT OPTION`,
+        );
+        await dbAdapter.execute(
+          `REVOKE SELECT ON TABLE proxy_endpoints FROM ${INHERITING_MEMBER}`,
+        );
+        await dbAdapter.execute(
+          `GRANT SELECT ON TABLE proxy_endpoints TO ${OUTSIDER}`,
+        );
+      });
+
+      test('restores every grant up revoked, and no others', async function (assert) {
+        let before = await tableGrants();
+        assert.deepEqual(
+          selectGranteesIn(before).sort(),
+          [DIRECT_MEMBER, OUTSIDER, 'readonly_role'].sort(),
+          'the roles start with their direct grants',
+        );
+
+        await runMigration('up');
+        assert.deepEqual(
+          selectGranteesIn(await tableGrants()),
+          [OUTSIDER],
+          'up revokes the role and its member, and leaves the outsider',
+        );
+
+        await runMigration('down');
+        assert.deepEqual(
+          await tableGrants(),
+          before,
+          'every role has the privileges it had before up',
+        );
+        let [{ record }] = await dbAdapter.execute(
+          `SELECT to_regclass('readonly_role_revoked_select_grants') AS record`,
+        );
+        assert.strictEqual(record, null, 'down removes the empty record');
+      });
+
+      test('a read-only role with no direct grant before up gets none from down', async function (assert) {
+        await dbAdapter.execute(
+          `REVOKE SELECT ON TABLE proxy_endpoints FROM readonly_role`,
+        );
+        let before = await tableGrants();
+
+        await runMigration('up');
+        await runMigration('down');
+
+        assert.deepEqual(await tableGrants(), before);
+        assert.notOk(
+          selectGranteesIn(before).includes('readonly_role'),
+          'the read-only role still has no direct grant',
+        );
+      });
+
+      test('running up a second time keeps the record of the first', async function (assert) {
+        let before = await tableGrants();
+
+        await runMigration('up');
+        await runMigration('up');
+        await runMigration('down');
+
+        assert.deepEqual(await tableGrants(), before);
+      });
+
+      test('with no record, down grants SELECT back to the read-only role alone', async function (assert) {
+        await runMigration('up');
+        await dbAdapter.execute(
+          `DROP TABLE readonly_role_revoked_select_grants`,
+        );
+
+        await runMigration('down');
+
+        assert.deepEqual(
+          selectGranteesIn(await tableGrants()).sort(),
+          [OUTSIDER, 'readonly_role'].sort(),
+        );
+      });
+
+      test('restores the SELECT grants a member held on individual columns', async function (assert) {
+        await createRole(COLUMN_MEMBER);
+        await dbAdapter.execute(`GRANT readonly_role TO ${COLUMN_MEMBER}`);
+        await dbAdapter.execute(
+          `GRANT SELECT (id) ON TABLE proxy_endpoints TO ${COLUMN_MEMBER} WITH GRANT OPTION`,
+        );
+        await dbAdapter.execute(
+          `GRANT SELECT (url) ON TABLE proxy_endpoints TO ${COLUMN_MEMBER}`,
+        );
+        let before = await tableGrants();
+
+        await runMigration('up');
+        assert.notOk(
+          (await tableGrants()).some(
+            ({ grantee }: { grantee: string }) => grantee === COLUMN_MEMBER,
+          ),
+          'up revokes the column grants with the table grant',
+        );
+
+        await runMigration('down');
+        assert.deepEqual(await tableGrants(), before);
+      });
+
+      test("leaves a member's grant from another role as it was", async function (assert) {
+        await createRole(DELEGATOR);
+        await createRole(DELEGATED_MEMBER);
+        await dbAdapter.execute(`GRANT readonly_role TO ${DELEGATED_MEMBER}`);
+        await dbAdapter.execute(
+          `GRANT SELECT ON TABLE proxy_endpoints TO ${DELEGATOR} WITH GRANT OPTION`,
+        );
+        await dbAdapter.withTransaction(async (query: any) => {
+          await query([`SET LOCAL ROLE ${DELEGATOR}`]);
+          await query([
+            `GRANT SELECT ON TABLE proxy_endpoints TO ${DELEGATED_MEMBER}`,
+          ]);
+        });
+        let before = await tableGrants();
+
+        await runMigration('up');
+        await runMigration('down');
+
+        assert.deepEqual(
+          await tableGrants(),
+          before,
+          'down adds no second grant from the owner',
+        );
+      });
+
+      test('skips a recorded role that was dropped before down', async function (assert) {
+        await createRole(DROPPED_MEMBER);
+        await dbAdapter.execute(`GRANT readonly_role TO ${DROPPED_MEMBER}`);
+        await dbAdapter.execute(
+          `GRANT SELECT ON TABLE proxy_endpoints TO ${DROPPED_MEMBER}`,
+        );
+        let before = (await tableGrants()).filter(
+          ({ grantee }: { grantee: string }) => grantee !== DROPPED_MEMBER,
+        );
+
+        await runMigration('up');
+        await dbAdapter.execute(`DROP OWNED BY ${DROPPED_MEMBER}`);
+        await dbAdapter.execute(`DROP ROLE ${DROPPED_MEMBER}`);
+        await runMigration('down');
+
+        assert.deepEqual(await tableGrants(), before);
+      });
+
+      test("leaves the other sealing migration's record in place", async function (assert) {
+        await runMigration('up');
+        await dbAdapter.execute(
+          `INSERT INTO readonly_role_revoked_select_grants (table_name, grants)
+           VALUES ('incoming_webhooks', '[]'::jsonb)`,
+        );
+
+        await runMigration('down');
+
+        assert.deepEqual(
+          await dbAdapter.execute(
+            `SELECT table_name FROM readonly_role_revoked_select_grants`,
+          ),
+          [{ table_name: 'incoming_webhooks' }],
+        );
+      });
+    });
   });
 });
