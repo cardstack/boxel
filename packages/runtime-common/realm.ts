@@ -1258,7 +1258,7 @@ const SOURCE_ETAG_VARIANT = 'source';
 const CONDITIONAL_WRITE_INDEX_SETTLE_BUDGET_MS = 1_000;
 const CONDITIONAL_WRITE_INDEX_SETTLE_POLL_MS = 250;
 
-// Card+JSON ETag is `"<indexed_at>-<realmInfoHash>[-<captures>]:card"`
+// Card+JSON ETag is `"<indexed_at>-<realmInfoHash>[-<renderChannel>]:card"`
 // — quoted per RFC 9110 §8.8.3 so CDNs / browsers don't re-quote inbound
 // validators and split the cache key. Three inputs feed the base:
 //   - `indexed_at` on the primary card's index row, which bumps on
@@ -1268,9 +1268,10 @@ const CONDITIONAL_WRITE_INDEX_SETTLE_POLL_MS = 250;
 //     injects `meta.realmInfo` (name / icon / `lastPublishedAt`)
 //     into the assembled response at request time and that field
 //     can change without any card being re-indexed;
-//   - a fingerprint of the joined capture manifest, which lands on
-//     the prerendered_html channel without moving `indexed_at` (see
-//     `capturesEtagFingerprint`).
+//   - a fingerprint of what the response joins from the prerendered_html
+//     channel — the capture manifest and the current render error — which
+//     lands without moving `indexed_at` (see
+//     `renderChannelEtagFingerprint`).
 // `buildCardJsonEtag()` constructs the value; cards with foreign-
 // realm instance deps suppress emission entirely because cross-realm
 // invalidation doesn't cascade `indexed_at` today.
@@ -1697,15 +1698,16 @@ function buildEtag(
   return variant ? `${baseStr}:${variant}` : baseStr;
 }
 
-// Card+JSON ETag = `"<indexed_at>-<realmInfoHash>[-<capturesFingerprint>]:card"`.
+// Card+JSON ETag = `"<indexed_at>-<realmInfoHash>[-<renderChannelFingerprint>]:card"`.
 // The value is wrapped in double quotes to satisfy RFC 9110 §8.8.3 — CDNs and
 // browsers don't re-quote inbound validators and an unquoted token
 // would fail strict-validator parsing in some intermediaries.
 // `indexedAt` captures direct + dep-cascaded writes; the
 // `realmInfoHash` captures `attachRealmInfo()`'s request-time
 // injection of `meta.realmInfo` (which can flip without re-indexing
-// any card); the captures fingerprint captures the joined
-// `meta.captures` (see `capturesEtagFingerprint`). A null
+// any card); the render-channel fingerprint captures the joined
+// `meta.captures` and `meta.renderError` (see
+// `renderChannelEtagFingerprint`). A null
 // `indexedAt` suppresses ETag emission entirely.
 //
 // How much of a card's link graph a card+json body carries. `full` side-loads
@@ -1759,14 +1761,14 @@ function cardJsonShapeFor(links: LinkStrategy): CardJsonShape {
 function buildCardJsonEtag(
   indexedAt: number | null | undefined,
   realmInfoHash: string | undefined,
-  capturesFingerprint?: string,
+  renderChannelFingerprint?: string,
   shape: CardJsonShape = 'full',
   unboundedAssembly = false,
 ): string | undefined {
   if (indexedAt == null) {
     return undefined;
   }
-  let base = [`${indexedAt}`, realmInfoHash, capturesFingerprint]
+  let base = [`${indexedAt}`, realmInfoHash, renderChannelFingerprint]
     .filter(Boolean)
     .join('-');
   // A response that carries less of the card's link graph than a full read
@@ -1814,6 +1816,31 @@ function capturesEtagFingerprint(
     return undefined;
   }
   return computeContentHash(stableStringify(manifest) ?? '').slice(0, 8);
+}
+
+// Everything a card+json response joins from the prerendered_html channel,
+// as one validator component: the capture manifest (above) and the current
+// render error served as `meta.renderError`. A render error lands, and clears
+// when a later render succeeds, without moving `indexed_at`, so without it a
+// client would be 304'd past either change. A card with no render error gets
+// exactly the captures fingerprint, so its validator is unaffected.
+function renderChannelEtagFingerprint({
+  captures,
+  renderError,
+}: {
+  captures?: CaptureManifest | null;
+  renderError?: SerializedError | null;
+}): string | undefined {
+  let capturesFingerprint = capturesEtagFingerprint(captures);
+  if (!renderError) {
+    return capturesFingerprint;
+  }
+  let renderErrorFingerprint = computeContentHash(
+    stableStringify(renderError) ?? '',
+  ).slice(0, 8);
+  return [capturesFingerprint, `rerr${renderErrorFingerprint}`]
+    .filter(Boolean)
+    .join('-');
 }
 
 // The card+html / file-meta+html GET's composite validator. It encodes both
@@ -12803,14 +12830,14 @@ export class Realm {
       // server setting, or on whether the caller's last read was a write
       // echo, rather than on anything the caller did.
       let realmInfoHash = this.getCachedRealmInfoHash();
-      let captures = capturesEtagFingerprint(entry!.captures);
+      let renderChannel = renderChannelEtagFingerprint(entry!);
       let issued = new Set(
         CARD_JSON_SHAPES.flatMap((shape) =>
           [false, true].map((unboundedAssembly) =>
             buildCardJsonEtag(
               entry!.indexedAt,
               realmInfoHash,
-              captures,
+              renderChannel,
               shape,
               unboundedAssembly,
             ),
@@ -13227,7 +13254,7 @@ export class Realm {
       : buildCardJsonEtag(
           entry.indexedAt,
           this.getCachedRealmInfoHash(),
-          capturesEtagFingerprint(entry.captures),
+          renderChannelEtagFingerprint(entry),
           'write-echo',
         );
     this.#serveInstanceIdsAsRRI(doc);
@@ -13960,7 +13987,7 @@ export class Realm {
         : buildCardJsonEtag(
             result.indexedAt,
             this.getCachedRealmInfoHash(),
-            capturesEtagFingerprint(result.captures),
+            renderChannelEtagFingerprint(result),
             // The strategy the read reports, not the one this request asked
             // for: the type's declaration may narrow it further, and a `HEAD`
             // states the validator the `GET` would send.
@@ -14207,7 +14234,7 @@ export class Realm {
           peekEtag = buildCardJsonEtag(
             instanceEntry.indexedAt,
             realmInfoHash,
-            capturesEtagFingerprint(instanceEntry.captures),
+            renderChannelEtagFingerprint(instanceEntry),
             cardJsonShapeFor(
               effectiveLinkStrategy(plan.links, resolveLinksOnly),
             ),
@@ -14438,7 +14465,7 @@ export class Realm {
       : buildCardJsonEtag(
           headers.indexedAt,
           this.getCachedRealmInfoHash(),
-          capturesEtagFingerprint(headers.captures),
+          renderChannelEtagFingerprint(headers),
           // Read off the assembly for the same reason `deps` and `indexedAt`
           // are: the strategy this body was assembled under is the read's
           // answer, and the request's own `resolveLinksOnly` is only half of
@@ -14729,6 +14756,16 @@ export class Realm {
           request,
           requestContext,
           `markdown representation unavailable: ${maskLoggedURL(request.url)} has an indexing error`,
+        );
+      }
+      // The markdown is prerendered output, so a current render error makes
+      // it unavailable even though the card's data is intact: the row holds
+      // only the last-known-good markdown, which no longer describes the card.
+      if (instanceEntry.renderError) {
+        return notAcceptable(
+          request,
+          requestContext,
+          `markdown representation unavailable: ${maskLoggedURL(request.url)} has a rendering error`,
         );
       }
       if (instanceEntry.markdown == null) {

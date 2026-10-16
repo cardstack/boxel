@@ -174,7 +174,10 @@ type IndexRowWithHtml = BoxelIndexTable &
     | 'atom_html'
     | 'markdown'
     | 'captures'
-  >;
+  > & {
+    // `getInstance`'s `RENDER_ERROR_SELECT`; absent from the other paths.
+    render_error_doc?: SerializedError | null;
+  };
 
 export interface IndexedFile {
   type: 'file';
@@ -285,6 +288,15 @@ export interface IndexedInstance {
   // document, and it is empty for every file that reached disk outside the
   // realm's own write API.
   sourceContentHash: string | null;
+  // The error the card's current render recorded on the prerendered_html
+  // channel, while its index visit succeeded. The card's data is intact —
+  // `instance` is what that visit read — and only its prerendered output is
+  // affected: the HTML columns above hold the last-known-good rendering, or
+  // nothing when no render ever succeeded. A consumer serving the card's data
+  // reports this alongside it, and a consumer serving the prerendered output
+  // treats the card as errored. Null when the render channel holds no current
+  // error.
+  renderError: SerializedError | null;
 }
 
 // An instance's row as its index visit left it, and nothing from its render.
@@ -464,12 +476,16 @@ export class IndexQueryEngine {
       : this.#query(expression);
   }
 
+  // A card's row, read as its data: the instance its index visit read, or the
+  // error that visit recorded. Only the index channel decides between the two.
+  // A render failure leaves the data intact, so it comes back as the instance
+  // with `renderError` set rather than as an `instance-error`.
   async getInstance(
     url: URL,
     opts?: GetEntryOptions,
   ): Promise<InstanceOrError | undefined> {
     let result = (await this.#query([
-      `SELECT i.*, ${PRERENDERED_HTML_SELECTS}, ${EFFECTIVE_ERROR_SELECTS}`,
+      `SELECT i.*, ${PRERENDERED_HTML_SELECTS}, ${RENDER_ERROR_SELECT}`,
       `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
        WHERE`,
       ...every([
@@ -508,10 +524,11 @@ export class IndexQueryEngine {
   //
   // Returns a map keyed by the LOOKUP URL (matching either `i.url` or
   // `i.file_alias`), matching rows on the same type/tombstone predicate
-  // `getInstance` uses. A row that is absent, deleted, or errored on either
-  // channel is simply not in the map — which is what link expansion does with
+  // `getInstance` uses. A row that is absent, deleted, or whose index visit
+  // failed is simply not in the map — which is what link expansion does with
   // one anyway: it leaves the relationship naming a target the document does
-  // not carry.
+  // not carry. A target whose render failed is included: side-loading puts
+  // only its data into `included[]`, and that data is intact.
   async getLinkTargetInstances(
     urls: URL[],
     opts?: GetEntryOptions,
@@ -531,10 +548,8 @@ export class IndexQueryEngine {
       let chunkSet = new Set(chunk);
       let chunkParams = chunk.map((href) => [param(href)]);
       let rows = (await this.#query([
-        // The join carries two consumers: `ph.captures`, which is joined
-        // into the side-loaded resource's `meta`, and the effective-error
-        // expression below, which reads `ph.error_doc` / `ph.generation`. It
-        // stays for both even though every format column is gone.
+        // `ph.captures` is the join's only consumer: it is joined into the
+        // side-loaded resource's `meta`.
         `SELECT i.url, i.file_alias, i.pristine_doc,
                 ph.captures AS captures`,
         `FROM ${tableFromOpts(opts)} as i ${prerenderedJoin(opts)}
@@ -549,11 +564,11 @@ export class IndexQueryEngine {
           ]),
           ['i.type =', param('instance')],
           any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
-          // Errored on either channel is excluded here rather than after the
-          // fact, as the file leg of this same batch does: it keeps an
-          // errored target's document off the wire too, which is this read's
-          // own argument.
-          [`NOT ${effectiveHasError()}`],
+          // An index error is excluded here rather than after the fact, as
+          // the file leg of this same batch does: it keeps an errored
+          // target's document off the wire too, which is this read's own
+          // argument.
+          [`NOT ${INDEX_HAS_ERROR}`],
         ]),
       ] as Expression)) as unknown as {
         url: string | null;
@@ -598,11 +613,12 @@ export class IndexQueryEngine {
 
   // The live-instance row predicate, defined once: `getInstance`'s
   // url/file_alias match, instance type, and tombstone exclusion, plus the
-  // effective-error channel (a row `getInstance` would map to
-  // `instance-error` is not live). Every liveness gate — `hasLiveInstance`,
-  // `liveInstanceGeneration`, `liveInstanceCaptures` — spreads this one
-  // fragment, so the DSL and `?name=` capture routes' liveness semantics
-  // cannot silently split. (`findLiveInstanceGeneration` in media-cache.ts
+  // effective error across both channels. The gates below serve prerendered
+  // output, so a card whose render failed is not live to them even though
+  // `getInstance` reads its data as an instance. Every liveness gate —
+  // `hasLiveInstance`, `liveInstanceGeneration`, `liveInstanceCaptures` —
+  // spreads this one fragment, so the DSL and `?name=` capture routes'
+  // liveness semantics cannot silently split. (`findLiveInstanceGeneration` in media-cache.ts
   // is the realm-scoped raw-SQL twin, built from the same exported join
   // fragments.)
   #liveInstanceConditions(url: URL): Expression {
@@ -832,6 +848,7 @@ export class IndexQueryEngine {
       ...baseResult,
       type: 'instance',
       instance,
+      renderError: maybeResult.render_error_doc ?? null,
       lastModified:
         instanceEntry.last_modified != null
           ? parseInt(instanceEntry.last_modified)
@@ -869,7 +886,8 @@ export class IndexQueryEngine {
   // star select, and `deps` is the widest column on the row.
   //
   // Keys are the LOOKUP URLs the caller passed in (matching either `i.url` or
-  // `i.file_alias`).
+  // `i.file_alias`). As on the instance leg, only an index error keeps a file
+  // out: a file whose render failed still has the data side-loading reads.
   async getLinkTargetFiles(
     urls: URL[],
     opts?: GetEntryOptions,
@@ -887,9 +905,8 @@ export class IndexQueryEngine {
       let chunkSet = new Set(chunk);
       let chunkParams = chunk.map((href) => [param(href)]);
       let rows = (await this.#query([
-        // `ph.captures` is the join's only consumer here — the effective
-        // error expression below is in the WHERE, where this read already
-        // decided liveness before it was narrowed.
+        // `ph.captures` is the join's only consumer: it is joined into the
+        // side-loaded resource's `meta`.
         `SELECT i.url, i.file_alias, i.pristine_doc, i.search_doc, i.types,
                 i.last_modified, i.resource_created_at, i.realm_url,
                 ph.captures AS captures`,
@@ -904,7 +921,7 @@ export class IndexQueryEngine {
             ],
           ]),
           ['i.type =', param('file')],
-          [`NOT ${effectiveHasError()}`],
+          [`NOT ${INDEX_HAS_ERROR}`],
           any([['i.is_deleted = FALSE'], ['i.is_deleted IS NULL']]),
         ]),
       ] as Expression)) as unknown as {
@@ -2668,11 +2685,22 @@ export function prerenderedJoin(opts?: WIPOptions) {
 // index pass (e.g. the content was since fixed) and must not gate the row —
 // the fresh render lands on its own channel and re-runs live searches via
 // the prerender_html event.
+//
+// The effective state is for readers of the prerendered output: searches,
+// the liveness gates of the capture routes, publishing. A reader of the
+// card's data asks the index channel alone (`INDEX_HAS_ERROR`), because a
+// render failure leaves the data the index visit read intact.
 const RENDER_ERROR_IS_CURRENT = `(ph.url IS NOT NULL AND ph.error_doc IS NOT NULL AND ph.generation >= i.generation)`;
 
+const INDEX_HAS_ERROR = `COALESCE(i.has_error, FALSE)`;
+
 export function effectiveHasError(): string {
-  return `(COALESCE(i.has_error, FALSE) OR ${RENDER_ERROR_IS_CURRENT})`;
+  return `(${INDEX_HAS_ERROR} OR ${RENDER_ERROR_IS_CURRENT})`;
 }
+
+// The current render error, as a column beside a data read's `SELECT i.*`.
+// NULL when the render channel holds no current error.
+const RENDER_ERROR_SELECT = `CASE WHEN ${RENDER_ERROR_IS_CURRENT} THEN ph.error_doc END AS render_error_doc`;
 
 function effectiveErrorDoc(): string {
   return `CASE WHEN COALESCE(i.has_error, FALSE) THEN i.error_doc WHEN ${RENDER_ERROR_IS_CURRENT} THEN ph.error_doc ELSE i.error_doc END`;
