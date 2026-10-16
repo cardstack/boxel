@@ -659,8 +659,9 @@ export default class CodeSubmode extends Component<Signature> {
       kind === 'file'
         ? rri(cardId)
         : rri(cardId.endsWith('.json') ? cardId : `${cardId}.json`);
-    await this.operatorModeStateService.updateCodePath(codePath);
+    // Close first: resolving the canonical path is a network round-trip.
     this.operatorModeStateService.closeWorkspaceChooser();
+    await this.operatorModeStateService.updateCodePath(codePath);
   }
 
   get cardPreviewFormat() {
