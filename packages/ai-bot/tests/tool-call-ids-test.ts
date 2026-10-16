@@ -1,10 +1,16 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import {
+  APP_BOXEL_COMPACTION_EVENT_TYPE,
   APP_BOXEL_TOOL_REQUESTS_KEY,
   LEGACY_APP_BOXEL_COMMAND_REQUESTS_KEY,
 } from '@cardstack/runtime-common/matrix-constants';
-import { collectUsedToolCallIds, ToolCallIds } from '../lib/tool-call-ids.ts';
+import {
+  collectUsedToolCallIds,
+  MAX_CARRIED_TOOL_CALL_IDS,
+  ToolCallIds,
+  toolCallIdsToCarry,
+} from '../lib/tool-call-ids.ts';
 
 module('tool-call ids', () => {
   test('collects ids from requests, aggregated replacements and results', (assert) => {
@@ -44,6 +50,53 @@ module('tool-call ids', () => {
     let ids = new ToolCallIds(['x:0', 'x:0_1']);
     assert.strictEqual(ids.idFor(0, 'y:0'), 'y:0');
     assert.strictEqual(ids.idFor(1, 'x:0'), 'x:0_2');
+  });
+
+  test('suffixes past the highest suffix in use, not the lowest free one', (assert) => {
+    let ids = new ToolCallIds(['x:0', 'x:0_3']);
+    assert.strictEqual(ids.idFor(0, 'x:0'), 'x:0_4');
+  });
+
+  test('collects the ids a compaction carries for the history before its cut', (assert) => {
+    // The history starts at the cut; x:0 and x:0_4 were used before it.
+    let window = [
+      {
+        type: APP_BOXEL_COMPACTION_EVENT_TYPE,
+        content: {
+          status: 'done',
+          upToEventId: 'cut',
+          summary: 'summary',
+          usedToolCallIds: ['x:0', 'x:0_4'],
+        },
+      },
+      { type: 'app.boxel.toolResult', content: { commandRequestId: 'y:0' } },
+      {
+        type: APP_BOXEL_COMPACTION_EVENT_TYPE,
+        content: { status: 'failed', usedToolCallIds: ['z:0'] },
+      },
+    ] as any;
+    let used = collectUsedToolCallIds(window);
+    assert.deepEqual([...used], ['x:0', 'x:0_4', 'y:0']);
+    assert.strictEqual(new ToolCallIds(used).idFor(0, 'x:0'), 'x:0_5');
+  });
+
+  test('carries each used id with only its highest suffix', (assert) => {
+    assert.deepEqual(
+      toolCallIdsToCarry(['x:0', 'x:0_1', 'y:0', 'x:0_2', 'call_1', 'call_2']),
+      ['x:0', 'y:0', 'x:0_2', 'call_1', 'call_2'],
+      'ids that only look suffixed, with no base id, are all kept',
+    );
+  });
+
+  test('carries at most MAX_CARRIED_TOOL_CALL_IDS ids, the most recent', (assert) => {
+    let used = Array.from(
+      { length: MAX_CARRIED_TOOL_CALL_IDS + 10 },
+      (_, i) => `call-${i}`,
+    );
+    let carried = toolCallIdsToCarry(used);
+    assert.strictEqual(carried.length, MAX_CARRIED_TOOL_CALL_IDS);
+    assert.strictEqual(carried.at(-1), used.at(-1));
+    assert.strictEqual(carried[0], 'call-10');
   });
 
   test('an assignment is fixed for its position', (assert) => {

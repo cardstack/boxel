@@ -16,10 +16,12 @@ import {
   findCompactionCut,
   getLatestCompaction,
   getPromptParts,
+  toolSourceEventIdsToCarry,
   type CompactionEventContent,
   type PromptParts,
 } from '@cardstack/runtime-common/ai';
 import { buildChatCompletionRequest } from './chat-completion-request.ts';
+import { collectUsedToolCallIds, toolCallIdsToCarry } from './tool-call-ids.ts';
 
 let log = logger('ai-bot:compaction');
 
@@ -211,6 +213,8 @@ export async function compactRoomHistory(opts: {
     upToEventId: cut.upToEventId,
     summary,
     summaryVersion: COMPACTION_SUMMARY_VERSION,
+    usedToolCallIds: toolCallIdsToCarry(collectUsedToolCallIds(eventList)),
+    toolSourceEventIds: toolSourceEventIdsToCarry(eventList, aiBotUserId),
   });
   return {
     compacted: true,

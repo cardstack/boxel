@@ -70,12 +70,21 @@ function stateEvent(
   } as unknown as DiscreteMatrixEvent;
 }
 
-function compactionEvent(id: string, upToEventId: string) {
+function compactionEvent(
+  id: string,
+  upToEventId: string,
+  toolSourceEventIds?: string[],
+) {
   return {
     event_id: id,
     type: APP_BOXEL_COMPACTION_EVENT_TYPE,
     sender: AI_BOT_USER_ID,
-    content: { status: 'done', upToEventId, summary: 'summary' },
+    content: {
+      status: 'done',
+      upToEventId,
+      summary: 'summary',
+      ...(toolSourceEventIds ? { toolSourceEventIds } : {}),
+    },
     room_id: 'test-room-id',
   } as unknown as DiscreteMatrixEvent;
 }
@@ -106,12 +115,23 @@ function createMockedClient(timeline: DiscreteMatrixEvent[] = []) {
   const client = new FakeMatrixClient();
   client.getUserId = () => AI_BOT_USER_ID;
   const requests: MessagesRequest[] = [];
+  const eventRequests: string[] = [];
   client.http = {
     authedRequest: async (
       _method: Method,
-      _path: string,
+      path: string,
       queryParams: Record<string, string>,
     ) => {
+      let eventPath = /\/event\/([^/]+)$/.exec(path);
+      if (eventPath) {
+        let eventId = decodeURIComponent(eventPath[1]);
+        eventRequests.push(eventId);
+        let event = timeline.find((e) => e.event_id === eventId);
+        if (!event) {
+          throw new Error(`M_NOT_FOUND: ${eventId}`);
+        }
+        return event;
+      }
       let request: MessagesRequest = {
         dir: queryParams.dir,
         limit: queryParams.limit,
@@ -133,7 +153,7 @@ function createMockedClient(timeline: DiscreteMatrixEvent[] = []) {
       return chunk.length === 0 ? { chunk } : { chunk, end: String(next) };
     },
   } as any;
-  return { client, requests };
+  return { client, requests, eventRequests };
 }
 
 async function getErrorMessageFromSend(error: any) {
@@ -282,6 +302,35 @@ test('getRoomEvents - leaves out config events from after the trigger', async fu
 
   assert.true(ids.includes('skills'));
   assert.false(ids.includes('later-skills'));
+});
+
+test('getRoomEvents - fetches back the tool-source events a compaction lists from before its cut', async function (assert) {
+  const timeline = createRoomTimeline(3000);
+  placeAt(timeline, 1, stateEvent('skills', APP_BOXEL_ROOM_SKILLS_EVENT_TYPE));
+  placeAt(
+    timeline,
+    1700,
+    compactionEvent('compaction', 'event1500', [
+      'event20',
+      'event1400',
+      'event1600',
+      'missing',
+    ]),
+  );
+  const { client, eventRequests } = createMockedClient(timeline);
+
+  const result = await getRoomEvents('room123', client, 'event2999');
+
+  assert.deepEqual(
+    result.slice(0, 4).map((event) => event.event_id),
+    ['skills', 'event20', 'event1400', 'event1500'],
+    'tool sources from before the cut follow the config events, in order; one already in the history is not repeated, and one that cannot be fetched is left out',
+  );
+  assert.deepEqual(
+    eventRequests,
+    ['event20', 'missing'],
+    'only events paging did not already fetch are requested',
+  );
 });
 
 test('getRoomEvents - stops after ROOM_EVENTS_MAX_PAGES pages in a room with no compaction', async function (assert) {

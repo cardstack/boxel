@@ -18,6 +18,9 @@ export interface CompactionContent {
   upToEventId: string;
   summary: string;
   summaryVersion: number;
+  // The events that contributed the room's tools, which `getRoomEvents`
+  // fetches back when they are before the cut.
+  toolSourceEventIds?: string[];
 }
 
 export type CompactionStatus = 'running' | 'done' | 'failed';
@@ -30,6 +33,9 @@ export type CompactionStatus = 'running' | 'done' | 'failed';
 export interface CompactionEventContent extends Partial<CompactionContent> {
   status: CompactionStatus;
   responseEventId?: string;
+  // On a `done` event: the tool-call ids used in the room so far, so that
+  // ids stay unique although the history before the cut is not loaded.
+  usedToolCallIds?: string[];
 }
 
 // Appended to the history of the last turn the provider accepted, in place
@@ -90,6 +96,9 @@ export function getLatestCompaction(
         upToEventId: event.content.upToEventId,
         summary: event.content.summary,
         summaryVersion: event.content.summaryVersion ?? 1,
+        ...(Array.isArray(event.content.toolSourceEventIds)
+          ? { toolSourceEventIds: event.content.toolSourceEventIds }
+          : {}),
       };
     }
   }

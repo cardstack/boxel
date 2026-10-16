@@ -371,7 +371,9 @@ export async function fetchRoomEventsBackwards(
  * with no compaction it reaches back to the start of the room, or
  * `ROOM_EVENTS_MAX_PAGES` pages. When the history does not reach the start of
  * the room, the room config events older than it (`ROOM_CONFIG_EVENT_TYPES`)
- * are put ahead of it, so the room's skills, model and title are still known.
+ * are put ahead of it, so the room's skills, model and title are still known,
+ * and so are the events the compaction lists as having contributed the
+ * room's tools (`toolSourceEventIds`).
  *
  * @param lastEventId - The event that triggered the response; events after
  *                      it are left out. When it is not among the fetched
@@ -400,11 +402,11 @@ export async function getRoomEvents(
           afterTrigger: chronological.slice(triggerIndex + 1),
         };
   };
+  let latestCompaction = (history: DiscreteMatrixEvent[]) =>
+    aiBotUserId ? getLatestCompaction(history, aiBotUserId) : undefined;
   // Where the latest compaction cuts the history, or -1.
   let cutIndex = (history: DiscreteMatrixEvent[]) => {
-    let compaction = aiBotUserId
-      ? getLatestCompaction(history, aiBotUserId)
-      : undefined;
+    let compaction = latestCompaction(history);
     return compaction
       ? history.findIndex((event) => event.event_id === compaction.upToEventId)
       : -1;
@@ -439,14 +441,24 @@ export async function getRoomEvents(
     return history;
   }
 
-  let { events: configEvents } = await fetchRoomEventsBackwards(
-    roomId,
-    client,
-    { types: ROOM_CONFIG_EVENT_TYPES, maxPages: ROOM_CONFIG_MAX_PAGES },
-  );
   let excludedIds = new Set(
     [...history, ...afterTrigger].map((event) => event.event_id),
   );
+  let [{ events: configEvents }, toolSourceEvents] = await Promise.all([
+    fetchRoomEventsBackwards(roomId, client, {
+      types: ROOM_CONFIG_EVENT_TYPES,
+      maxPages: ROOM_CONFIG_MAX_PAGES,
+    }),
+    fetchRoomEventsById(
+      roomId,
+      client,
+      (latestCompaction(history)?.toolSourceEventIds ?? []).filter(
+        (eventId) => !excludedIds.has(eventId),
+      ),
+      // Paging may already have fetched some, before the cut.
+      events,
+    ),
+  ]);
   let trigger = history[history.length - 1];
   let olderConfigEvents = configEvents
     .filter(
@@ -456,7 +468,38 @@ export async function getRoomEvents(
         event.origin_server_ts <= trigger.origin_server_ts,
     )
     .reverse();
-  return [...olderConfigEvents, ...history];
+  return [...olderConfigEvents, ...toolSourceEvents, ...history];
+}
+
+// The events with these ids, in the same order. An event that can't be
+// fetched (redacted, or not visible to the bot) is left out.
+async function fetchRoomEventsById(
+  roomId: string,
+  client: MatrixClient,
+  eventIds: string[],
+  alreadyFetched: DiscreteMatrixEvent[],
+): Promise<DiscreteMatrixEvent[]> {
+  let fetched = new Map(alreadyFetched.map((event) => [event.event_id, event]));
+  let events = await Promise.all(
+    eventIds.map(async (eventId) => {
+      if (fetched.has(eventId)) {
+        return fetched.get(eventId);
+      }
+      try {
+        return (await (client as any).http.authedRequest(
+          Method.Get,
+          encodeUri('/rooms/$roomId/event/$eventId', {
+            $roomId: roomId,
+            $eventId: eventId,
+          }),
+        )) as DiscreteMatrixEvent;
+      } catch (error) {
+        getLog().warn(`Could not fetch event ${eventId} in ${roomId}`, error);
+        return undefined;
+      }
+    }),
+  );
+  return events.filter((event): event is DiscreteMatrixEvent => !!event);
 }
 
 export async function downloadFile(
