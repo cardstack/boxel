@@ -259,6 +259,29 @@ module('Pretui | components/line-grid', function (hooks) {
     assert.strictEqual(text(q('[role="status"]')), 'Out of balance by $12.00');
   });
 
+  test('a malformed @locale still renders the balance status', async function (assert) {
+    let host = new Host([
+      { account: '6950', dr: 1234, cr: 0 },
+      { account: '2600', dr: 0, cr: 1000 },
+    ]);
+    await render(
+      <template>
+        <LineGrid
+          @label='l'
+          @columns={{COLS}}
+          @rows={{host.rows}}
+          @balance={{BALANCE}}
+          @onChange={{host.change}}
+          @locale='en_US'
+        />
+      </template>,
+    );
+    assert.ok(
+      text(q('[role="status"]')).startsWith('Out of balance by'),
+      'the status still reads',
+    );
+  });
+
   test('remove buttons are named per line and respect @minRows', async function (assert) {
     let host = new Host([{ account: 'a' }, { account: 'b' }, { account: 'c' }]);
     await render(

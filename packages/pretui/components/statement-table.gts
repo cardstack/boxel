@@ -8,6 +8,7 @@ import { htmlSafe } from '@ember/template';
 import { modifier } from 'ember-modifier';
 import { eq } from '@cardstack/boxel-ui/helpers';
 import { FormatNumber } from './format-number';
+import { formatNumber, toNumber } from '../internal/reading-format';
 import { Button } from './button';
 import { EmptyState } from './empty-state';
 
@@ -191,12 +192,6 @@ const rowData = modifier((el: HTMLElement, [data]: [StatementRow['data']]) => {
   }
   return () => names.forEach((n) => el.removeAttribute(n));
 });
-
-const asNumber = (v: unknown): number | undefined => {
-  if (v === null || v === undefined || v === '') return undefined;
-  let n = typeof v === 'number' ? v : Number(v);
-  return Number.isFinite(n) ? n : undefined;
-};
 
 // The disclosure button that opens a row's children. A real Button: focus ring, press and pointer
 // sizing are the kit's; the state is aria-expanded, and the glyph follows it (Law 8: the state is
@@ -432,7 +427,7 @@ export class StatementTable extends Component<StatementTableSignature> {
       placeholder: '',
     };
     if (!numeric) return view;
-    let n = asNumber(value),
+    let n = toNumber(value as number | string | undefined),
       scale = column.scale ?? (kind === 'amount' ? 2 : 0),
       zero = this.args.zero ?? 'blank';
     let major = n === undefined ? undefined : n / 10 ** scale;
@@ -453,13 +448,13 @@ export class StatementTable extends Component<StatementTableSignature> {
         major < 0 &&
         view.currencySign === 'accounting'
       ) {
-        view.spoken = new Intl.NumberFormat(this.args.locale, {
+        view.spoken = formatNumber(major, this.args.locale, {
           style: 'currency',
           currency: this.currency,
           currencySign: 'standard',
           minimumFractionDigits: view.digits,
           maximumFractionDigits: view.digits,
-        }).format(major);
+        });
       }
     } else {
       view.style = kind === 'percent' ? 'percent' : 'decimal';

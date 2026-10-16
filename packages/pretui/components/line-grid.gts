@@ -11,6 +11,7 @@ import { Combobox, type ComboboxOption } from './combobox';
 import { Input } from './input';
 import { Button } from './button';
 import { FormatNumber } from './format-number';
+import { formatNumber } from '../internal/reading-format';
 import { StatusChip } from './status-chip';
 
 // ── LineGrid ← the bookkeeper's entry grid ──────────────────────────────
@@ -212,10 +213,11 @@ export class LineGrid extends Component<LineGridSignature> {
     let s = this.state;
     if (!this.args.balance) return '';
     if (s.balanced) return 'Balanced';
-    let gap = new Intl.NumberFormat(this.args.locale, {
-      style: 'currency',
-      currency: this.currency,
-    }).format(Math.abs(s.difference) / 10 ** this.balanceScale);
+    let gap = formatNumber(
+      Math.abs(s.difference) / 10 ** this.balanceScale,
+      this.args.locale,
+      { style: 'currency', currency: this.currency },
+    );
     return `Out of balance by ${gap}`;
   }
 

@@ -137,6 +137,25 @@ module('Pretui | components/statement-table', function (hooks) {
     );
   });
 
+  test('a malformed @locale still renders the table and its spoken negatives', async function (assert) {
+    await render(
+      <template>
+        <StatementTable
+          @label='P&L'
+          @columns={{COLS}}
+          @rows={{ROWS}}
+          @locale='en_US'
+        />
+      </template>,
+    );
+    let net = q('tr[data-role="total"]');
+    assert.ok(net, 'the table rendered');
+    assert.ok(
+      text(net.querySelector('[data-test-pretui-statement-sr]')).length > 0,
+      'the negative still has its spoken mirror',
+    );
+  });
+
   test('@negative="minus" sets a negative with a sign and no mirror', async function (assert) {
     await render(
       <template>
