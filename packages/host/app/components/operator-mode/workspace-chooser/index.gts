@@ -604,7 +604,7 @@ export default class WorkspaceChooser extends Component<Signature> {
               as |option|
             >
               <option.icon width='16' height='16' />
-              {{option.label}}
+              <span class='sort-label'>{{option.label}}</span>
             </BoxelSelect>
           </div>
         {{/in-element}}
@@ -795,17 +795,33 @@ export default class WorkspaceChooser extends Component<Signature> {
       .sort-controls {
         display: flex;
         align-items: center;
-        /* Keep the trigger on a single line at narrow top-bar widths rather
-           than letting its label wrap under the icon. */
         white-space: nowrap;
       }
       .sort-select {
         flex-shrink: 0;
+        /* Keep the icon and label on one line at narrow top-bar widths. */
+        --boxel-select-trigger-content-wrap: nowrap;
         --boxel-select-background-color: var(--boxel-800);
         --boxel-select-text-color: var(--boxel-light);
         --boxel-select-border-color: var(--boxel-light-25);
         --boxel-select-focus-border-color: var(--boxel-light-50);
         --icon-color: var(--boxel-light);
+      }
+      /* Below this top-bar width the label would push the trigger over the
+         profile button, so show the icon only and keep the label for screen
+         readers. */
+      @container (width <= 20rem) {
+        .sort-select {
+          --boxel-select-trigger-gap: var(--boxel-sp-2xs);
+        }
+        .sort-select .sort-label {
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          margin: -1px;
+          overflow: hidden;
+          clip-path: inset(50%);
+        }
       }
       :global(.boxel-select__dropdown.workspace-chooser-sort-dropdown) {
         --boxel-dropdown-background-color: var(--boxel-650);
