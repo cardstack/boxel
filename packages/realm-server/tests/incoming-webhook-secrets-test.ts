@@ -991,6 +991,36 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test("leaves the owner's own privileges when the owner administers the read-only role", async function (assert) {
+        // As Postgres 16 makes a role with CREATEROLE that creates the
+        // read-only role: a member with ADMIN alone, neither inheriting nor
+        // able to SET ROLE to it. Here that role owns the table.
+        const OWNER = 'admin_owner_for_incoming_webhooks_test';
+        await createRole(OWNER);
+        await dbAdapter.execute(
+          `ALTER TABLE incoming_webhooks OWNER TO ${OWNER}`,
+        );
+        await dbAdapter.execute(
+          `GRANT readonly_role TO ${OWNER} WITH ADMIN TRUE, INHERIT FALSE, SET FALSE`,
+        );
+        try {
+          let ownerGrants = async () =>
+            (await tableGrants()).filter(
+              ({ grantee }: { grantee: string }) => grantee === OWNER,
+            );
+          let before = await ownerGrants();
+          assert.ok(before.length > 0, 'the owner has its own ACL entry');
+
+          await runMigration('up');
+          assert.deepEqual(await ownerGrants(), before, 'up leaves them');
+
+          await runMigration('down');
+          assert.deepEqual(await ownerGrants(), before, 'down leaves them');
+        } finally {
+          await dbAdapter.execute(`REVOKE readonly_role FROM ${OWNER}`);
+        }
+      });
+
       test('restores a record that names no grantors as grants from the owner', async function (assert) {
         let before = await tableGrants();
 

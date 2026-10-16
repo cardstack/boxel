@@ -794,6 +794,69 @@ module(basename(import.meta.filename), function () {
       }
     });
 
+    test("the migration leaves the owner's own privileges when the owner administers the read-only role", async function (assert) {
+      await dbAdapter.execute(
+        `DO $$
+         BEGIN
+           CREATE ROLE readonly_role;
+         EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL;
+         END
+         $$`,
+      );
+      await dbAdapter.execute(
+        `GRANT SELECT ON ALL TABLES IN SCHEMA public TO readonly_role`,
+      );
+      // As Postgres 16 makes a role with CREATEROLE that creates the
+      // read-only role: a member with ADMIN alone, neither inheriting nor
+      // able to SET ROLE to it. Here that role owns both tables.
+      const OWNER = 'admin_owner_for_user_keys_test';
+      await dbAdapter.execute(
+        `DO $$
+         BEGIN
+           CREATE ROLE ${OWNER};
+         EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL;
+         END
+         $$`,
+      );
+      await dbAdapter.execute(`ALTER TABLE user_keys OWNER TO ${OWNER}`);
+      await dbAdapter.execute(
+        `ALTER TABLE key_write_tickets OWNER TO ${OWNER}`,
+      );
+      await dbAdapter.execute(
+        `GRANT readonly_role TO ${OWNER} WITH ADMIN TRUE, INHERIT FALSE, SET FALSE`,
+      );
+      try {
+        let ownerSelects = async () => {
+          return await dbAdapter.execute(
+            `SELECT tbl.relname::text AS table_name
+             FROM pg_class tbl
+             CROSS JOIN LATERAL aclexplode(tbl.relacl) acl
+             WHERE tbl.relname IN ('user_keys', 'key_write_tickets')
+               AND acl.grantee = tbl.relowner
+               AND acl.privilege_type = 'SELECT'
+             ORDER BY 1`,
+          );
+        };
+        let before = await ownerSelects();
+        assert.deepEqual(before, [
+          { table_name: 'key_write_tickets' },
+          { table_name: 'user_keys' },
+        ]);
+
+        let statements: string[] = [];
+        require(USER_KEYS_MIGRATION).up({
+          sql: (statement: string) => statements.push(statement),
+        });
+        for (let statement of statements) {
+          await dbAdapter.execute(statement);
+        }
+
+        assert.deepEqual(await ownerSelects(), before);
+      } finally {
+        await dbAdapter.execute(`REVOKE readonly_role FROM ${OWNER}`);
+      }
+    });
+
     test("the read-only role can't select either table", async function (assert) {
       // The role and its blanket grant as staging and production have them,
       // then the migration that withholds these tables.

@@ -20,6 +20,13 @@
 // it doesn't. Every statement is idempotent, so running `up` again changes
 // nothing.
 //
+// A member of the read-only role is a role granted it with INHERIT or SET, so
+// one that reads with the role's privileges. A role that only administers the
+// membership isn't one: on Postgres 16 a role with CREATEROLE that creates the
+// read-only role is made an ADMIN-only member of it, and that role is often
+// their owner. A table's owner is never treated as a member, so its
+// own privileges are left alone.
+//
 // A role holding SELECT with the grant option can pass SELECT on, and a
 // REVOKE removes only the grants its grantor made. So `up` revokes each SELECT
 // grant those roles hold on a table or its columns acting as the role that
@@ -112,6 +119,8 @@ exports.up = (pgm) => {
                   FROM pg_auth_members membership
                   JOIN pg_roles grp ON grp.oid = membership.roleid
                   WHERE grp.rolname = 'readonly_role'
+                    AND (membership.inherit_option OR membership.set_option)
+                    AND membership.member <> held.relowner
                 )
               )
             LIMIT 1;
