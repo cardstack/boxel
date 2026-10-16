@@ -203,7 +203,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     let response = await post(
       envelope(
         invoke('lookup', {
-          data: { name: '../admin', meta: { adoptsFrom: REPO } },
+          data: { name: 'a b?#%', meta: { adoptsFrom: REPO } },
         }),
       ),
     );
@@ -212,10 +212,24 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     assert.strictEqual(response.body['atomic:results'][0].status, 404);
     assert.strictEqual(
       vendor.requests[0].path,
-      '/items/..%2Fadmin',
-      'the value is encoded as one segment, and resolves nowhere else',
+      '/items/a%20b%3F%23%25',
+      'the value is encoded as one segment, and reaches neither the query nor the fragment',
     );
   });
+
+  for (let name of ['../admin', '..\\admin', 'a/b']) {
+    test(`a path value holding a path separator (${JSON.stringify(name)}) is refused before anything is sent`, async function (assert) {
+      let response = await post(
+        envelope(
+          invoke('lookup', { data: { name, meta: { adoptsFrom: REPO } } }),
+        ),
+      );
+      assert.strictEqual(response.status, 400, JSON.stringify(response.body));
+      assert.strictEqual(response.body.errors[0].code, 'invalid-params');
+      assert.strictEqual(response.body.errors[0].meta.path, 'path.name');
+      assert.strictEqual(vendor.requests.length, 0);
+    });
+  }
 
   test('a path value that is a dot segment is refused before anything is sent', async function (assert) {
     let response = await post(

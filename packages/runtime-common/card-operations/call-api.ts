@@ -847,10 +847,13 @@ function slotToken(index: number): string {
   return `boxel_slot_${index}_${random}`;
 }
 
-// One path segment, whatever the value holds. `encodeURIComponent` encodes
-// `/`, so a value cannot add a segment; a value that is a dot segment once
-// decoded would still be resolved away by the URL, so it is refused rather
-// than sent somewhere else.
+// One path segment, whatever the value holds, to the URL and to the vendor
+// alike. `encodeURIComponent` keeps a `/` from adding a segment to the URL as
+// written, but a vendor that decodes `%2F` (or reads `%5C` as a separator)
+// before routing would split the segment and could step out of the approved
+// destination, so a value holding `/` or `\` is refused. A value that is a dot
+// segment would be resolved away by the URL, so it is refused rather than sent
+// somewhere else.
 function encodeSegment(name: string, segment: string, value: string): string {
   if (value === '' || value === '.' || value === '..') {
     throw invalidValue(
@@ -859,6 +862,13 @@ function encodeSegment(name: string, segment: string, value: string): string {
       value === ''
         ? 'is empty, and fills no segment'
         : `is "${value}", which a URL resolves as a step through the path rather than a segment`,
+    );
+  }
+  if (/[/\\]/.test(value)) {
+    throw invalidValue(
+      name,
+      `path.${segment}`,
+      'holds a path separator, which a vendor that decodes the segment reads as more than one segment',
     );
   }
   return encodeURIComponent(value);
