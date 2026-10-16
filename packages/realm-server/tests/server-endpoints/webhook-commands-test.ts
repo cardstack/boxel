@@ -680,6 +680,83 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       assert.strictEqual(response.status, 204, 'HTTP 204 status');
     });
 
+    test('a retried delete of a webhook command answers the same as the first', async function (assert) {
+      let matrixUserId = '@user:localhost';
+      await insertUser(
+        context.dbAdapter,
+        matrixUserId,
+        'cus_123',
+        'user@example.com',
+      );
+
+      let incomingWebhookId = uuidv4();
+      await query(context.dbAdapter, [
+        `INSERT INTO incoming_webhooks (id, username, webhook_path, verification_type, verification_config, signing_secret, created_at, updated_at) VALUES (`,
+        param(incomingWebhookId),
+        `,`,
+        param(matrixUserId),
+        `,`,
+        param('whk_delretry1'),
+        `,`,
+        param('HMAC_SHA256_HEADER'),
+        `,`,
+        `'{"header": "X-Hub-Signature-256", "encoding": "hex"}'::jsonb`,
+        `,`,
+        param('testsecret'),
+        `,`,
+        `CURRENT_TIMESTAMP`,
+        `,`,
+        `CURRENT_TIMESTAMP`,
+        `)`,
+      ]);
+
+      let webhookCommandId = uuidv4();
+      await query(context.dbAdapter, [
+        `INSERT INTO webhook_commands (id, incoming_webhook_id, command, command_filter, created_at, updated_at) VALUES (`,
+        param(webhookCommandId),
+        `,`,
+        param(incomingWebhookId),
+        `,`,
+        param('https://example.com/handler'),
+        `,`,
+        `'{"eventType": "push"}'::jsonb`,
+        `,`,
+        `CURRENT_TIMESTAMP`,
+        `,`,
+        `CURRENT_TIMESTAMP`,
+        `)`,
+      ]);
+
+      let deleteCommand = () =>
+        context.request
+          .delete('/_webhook-commands')
+          .set('Accept', 'application/vnd.api+json')
+          .set('Content-Type', 'application/vnd.api+json')
+          .set(
+            'Authorization',
+            `Bearer ${createRealmServerJWT(
+              { user: matrixUserId, sessionRoom: 'session-room-test' },
+              realmSecretSeed,
+            )}`,
+          )
+          .send({
+            data: {
+              type: 'webhook-command',
+              id: webhookCommandId,
+            },
+          });
+
+      let first = await deleteCommand();
+      assert.strictEqual(first.status, 204, 'first delete is HTTP 204');
+      let retry = await deleteCommand();
+      assert.strictEqual(retry.status, 204, 'retried delete is HTTP 204');
+
+      let rows = await context.dbAdapter.execute(
+        `SELECT id FROM webhook_commands WHERE id = '${webhookCommandId}'`,
+      );
+      assert.strictEqual(rows.length, 0, 'webhook command is deleted');
+    });
+
     test('rejects deleting another user webhook command', async function (assert) {
       let matrixUserId = '@user:localhost';
       let otherMatrixUserId = '@other-user:localhost';
