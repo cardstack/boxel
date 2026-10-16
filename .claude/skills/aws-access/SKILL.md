@@ -453,11 +453,13 @@ else
   done
 
   # 3) Browse. Caddy's autoindex returns HTML directory listings; serving
-  #    raw bytes for files. Both `curl` and a browser work.
-  curl -s http://localhost:$LOCAL_PORT/                      # public-realm root listing
-  curl -s http://localhost:$LOCAL_PORT/realms/               # user-realms root
-  curl -s http://localhost:$LOCAL_PORT/realms/buck/mar10/    # one user realm's contents
-  curl -s http://localhost:$LOCAL_PORT/base/index.json       # specific file
+  #    raw bytes for files. While the tunnel is open, a browser pointed at
+  #    http://localhost:$LOCAL_PORT/ works as well as curl. -sS keeps
+  #    curl's connection errors visible.
+  curl -sS http://localhost:$LOCAL_PORT/                      # public-realm root listing
+  curl -sS http://localhost:$LOCAL_PORT/realms/               # user-realms root
+  curl -sS http://localhost:$LOCAL_PORT/realms/buck/mar10/    # one user realm's contents
+  curl -sS http://localhost:$LOCAL_PORT/base/index.json       # specific file
 
   # 4) Tear down. `kill $TUNNEL_PID` alone leaves the forked
   #    session-manager-plugin holding the port.
