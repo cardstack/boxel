@@ -273,20 +273,7 @@ function renderSignIn(
     error,
     submit,
   );
-  root.replaceChildren(
-    page(
-      'Sign in to Boxel',
-      client === 'cli'
-        ? h(
-            'p',
-            { class: 'secure-subtitle' },
-            'to let the Boxel CLI on this computer manage your keys',
-          )
-        : undefined,
-      googleSlot,
-      form,
-    ),
-  );
+  root.replaceChildren(page('Sign in to Boxel', googleSlot, form));
   if (username) {
     passwordInput.focus();
   } else {
