@@ -1,5 +1,4 @@
 import type Koa from 'koa';
-import { validate as uuidValidate } from 'uuid';
 import {
   dbExpression,
   isUrlLike,
@@ -9,17 +8,20 @@ import {
   type PgPrimitive,
   uuidv4,
 } from '@cardstack/runtime-common';
-import { getUserByMatrixUserId } from '@cardstack/billing/billing-queries';
 import {
-  fetchRequestFromContext,
   sendResponseForBadRequest,
   sendResponseForForbiddenRequest,
-  sendResponseForNotFound,
   sendResponseForSystemError,
   setContextResponse,
 } from '../middleware/index.ts';
-import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
+import {
+  checkIncomingWebhookOwner,
+  checkRequestingUser,
+  checkRequestingUserAndJSONBody,
+  checkUUID,
+  sendResponseForIncomingWebhookNotFound,
+} from './webhook-request-checks.ts';
 
 interface WebhookCommandJSON {
   data: {
@@ -36,33 +38,15 @@ export function handleCreateWebhookCommandRequest({
   dbAdapter,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
-    let token = ctxt.state.token as RealmServerTokenClaim;
-    if (!token) {
-      await sendResponseForSystemError(
-        ctxt,
-        'token is required to add webhook command',
-      );
+    let checked = await checkRequestingUserAndJSONBody(
+      ctxt,
+      dbAdapter,
+      'add webhook command',
+    );
+    if (!checked) {
       return;
     }
-
-    let { user: createdBy } = token;
-    if (!(await getUserByMatrixUserId(dbAdapter, createdBy))) {
-      await sendResponseForNotFound(ctxt, 'user is not found');
-      return;
-    }
-
-    let request = await fetchRequestFromContext(ctxt);
-    let rawBody = await request.text();
-    let json: Record<string, any>;
-    try {
-      json = JSON.parse(rawBody);
-    } catch (_error) {
-      await sendResponseForBadRequest(
-        ctxt,
-        'Request body is not valid JSON-API - invalid JSON',
-      );
-      return;
-    }
+    let { requestingUserId: createdBy, json } = checked;
 
     try {
       assertIsWebhookCommandJSON(json);
@@ -74,13 +58,12 @@ export function handleCreateWebhookCommandRequest({
       return;
     }
 
-    let incomingWebhookId = json.data.attributes.incomingWebhookId.trim();
+    let incomingWebhookId = await checkUUID(
+      ctxt,
+      json.data.attributes.incomingWebhookId,
+      'incomingWebhookId',
+    );
     if (!incomingWebhookId) {
-      await sendResponseForBadRequest(ctxt, 'incomingWebhookId is required');
-      return;
-    }
-    if (!uuidValidate(incomingWebhookId)) {
-      await sendResponseForBadRequest(ctxt, 'incomingWebhookId must be a UUID');
       return;
     }
 
@@ -96,31 +79,15 @@ export function handleCreateWebhookCommandRequest({
 
     let filter = json.data.attributes.filter ?? null;
 
-    let webhookRows;
-    try {
-      webhookRows = await query(dbAdapter, [
-        `SELECT username FROM incoming_webhooks WHERE id = `,
-        param(incomingWebhookId),
-        ` LIMIT 1`,
-      ]);
-    } catch (_error) {
-      await sendResponseForSystemError(
-        ctxt,
-        'failed to lookup incoming webhook',
-      );
+    let owner = await checkIncomingWebhookOwner(ctxt, dbAdapter, {
+      incomingWebhookId,
+      requestingUserId: createdBy,
+    });
+    if (!owner) {
       return;
     }
-
-    let webhookUsername = webhookRows[0]?.username;
-    if (!webhookUsername) {
-      await sendResponseForNotFound(ctxt, 'incoming webhook is not found');
-      return;
-    }
-    if (webhookUsername !== createdBy) {
-      await sendResponseForForbiddenRequest(
-        ctxt,
-        'incoming webhook belongs to a different user',
-      );
+    if (!owner.exists) {
+      await sendResponseForIncomingWebhookNotFound(ctxt);
       return;
     }
 
@@ -189,30 +156,26 @@ export function handleListWebhookCommandsRequest({
   dbAdapter,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
-    let token = ctxt.state.token as RealmServerTokenClaim;
-    if (!token) {
-      await sendResponseForSystemError(
-        ctxt,
-        'token is required to list webhook commands',
-      );
+    let requestingUserId = await checkRequestingUser(
+      ctxt,
+      dbAdapter,
+      'list webhook commands',
+    );
+    if (!requestingUserId) {
       return;
     }
 
-    let { user: requestingUserId } = token;
-    if (!(await getUserByMatrixUserId(dbAdapter, requestingUserId))) {
-      await sendResponseForNotFound(ctxt, 'user is not found');
-      return;
-    }
-
+    // An empty `incomingWebhookId` lists every command, the same as leaving
+    // it out. Any other value is an id, checked as every endpoint checks one.
     let webhookIdParam = ctxt.request.query.incomingWebhookId;
-    let incomingWebhookId =
-      typeof webhookIdParam === 'string' ? webhookIdParam.trim() : undefined;
-    if (incomingWebhookId) {
-      if (!uuidValidate(incomingWebhookId)) {
-        await sendResponseForBadRequest(
-          ctxt,
-          'incomingWebhookId must be a UUID',
-        );
+    let incomingWebhookId: string | undefined;
+    if (webhookIdParam !== undefined && webhookIdParam !== '') {
+      incomingWebhookId = await checkUUID(
+        ctxt,
+        webhookIdParam,
+        'incomingWebhookId',
+      );
+      if (!incomingWebhookId) {
         return;
       }
     }
@@ -272,41 +235,22 @@ export function handleDeleteWebhookCommandRequest({
   dbAdapter,
 }: CreateRoutesArgs): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
-    let token = ctxt.state.token as RealmServerTokenClaim;
-    if (!token) {
-      await sendResponseForSystemError(
-        ctxt,
-        'token is required to delete webhook command',
-      );
+    let checked = await checkRequestingUserAndJSONBody(
+      ctxt,
+      dbAdapter,
+      'delete webhook command',
+    );
+    if (!checked) {
       return;
     }
+    let { requestingUserId, json } = checked;
 
-    let { user: requestingUserId } = token;
-    if (!(await getUserByMatrixUserId(dbAdapter, requestingUserId))) {
-      await sendResponseForNotFound(ctxt, 'user is not found');
-      return;
-    }
-
-    let request = await fetchRequestFromContext(ctxt);
-    let rawBody = await request.text();
-    let json: Record<string, any>;
-    try {
-      json = JSON.parse(rawBody);
-    } catch (_error) {
-      await sendResponseForBadRequest(
-        ctxt,
-        'Request body is not valid JSON-API - invalid JSON',
-      );
-      return;
-    }
-
-    let webhookCommandId = json?.data?.id;
-    if (typeof webhookCommandId !== 'string' || !webhookCommandId.trim()) {
-      await sendResponseForBadRequest(ctxt, 'webhookCommandId is required');
-      return;
-    }
-    if (!uuidValidate(webhookCommandId)) {
-      await sendResponseForBadRequest(ctxt, 'webhookCommandId must be a UUID');
+    let webhookCommandId = await checkUUID(
+      ctxt,
+      json?.data?.id,
+      'webhookCommandId',
+    );
+    if (!webhookCommandId) {
       return;
     }
 
