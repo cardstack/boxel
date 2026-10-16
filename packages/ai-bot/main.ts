@@ -21,6 +21,7 @@ import {
   isInDebugMode,
   isToolResultStatusApplied,
   getRoomEvents,
+  fetchRoomEventsBackwards,
   sendPromptAsDebugMessage,
   constructHistory,
 } from '@cardstack/runtime-common/ai';
@@ -1217,15 +1218,26 @@ Common issues are:
       undefined,
     );
     try {
-      //TODO: optimise this so we don't need to sync room events within a reaction event
+      // Most rooms already have their title by now, and the name events
+      // alone settle that, so check them before fetching any history.
+      let { events: nameEvents } = await profTime(
+        event.getId()!,
+        'title:getNameEvents',
+        async () =>
+          fetchRoomEventsBackwards(room.roomId, client, {
+            types: ['m.room.name'],
+            limit: 2,
+            maxPages: 1,
+          }),
+      );
+      if (roomTitleAlreadySet(nameEvents)) {
+        return;
+      }
       let eventList = await profTime(
         event.getId()!,
         'title:getRoomEvents',
         async () => getRoomEvents(room.roomId, client, event.getId()),
       );
-      if (roomTitleAlreadySet(eventList)) {
-        return;
-      }
       let history: DiscreteMatrixEvent[] = await profTime(
         event.getId()!,
         'title:constructHistory',
