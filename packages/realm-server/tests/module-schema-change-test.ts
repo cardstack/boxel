@@ -306,6 +306,58 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a module-level binding is read whatever its value is', async function (assert) {
+      let head = `
+        import { CardDef, field, contains } from '@cardstack/base/card-api';
+        import StringField from '@cardstack/base/string';
+        import NumberField from '@cardstack/base/number';
+        import BooleanField from '@cardstack/base/boolean';
+        import enumField from '@cardstack/base/enum';
+      `;
+      assert.true(
+        await changed(
+          `${head}export const Priority = enumField(StringField, { options: [1, 2, 3] });`,
+          `${head}export const Priority = enumField(NumberField, { options: [1, 2, 3] });`,
+        ),
+        "a field factory's base",
+      );
+      assert.true(
+        await changed(
+          `${head}const F = StringField as typeof StringField;\nexport class P extends CardDef { @field a = contains(F); }`,
+          `${head}const F = BooleanField as typeof StringField;\nexport class P extends CardDef { @field a = contains(F); }`,
+        ),
+        'a cast',
+      );
+      assert.true(
+        await changed(
+          `${head}const { F } = { F: StringField };\nexport class P extends CardDef { @field a = contains(F); }`,
+          `${head}const { F } = { F: NumberField };\nexport class P extends CardDef { @field a = contains(F); }`,
+        ),
+        'a destructure',
+      );
+      assert.true(
+        await changed(
+          `${head}function makeOpts(o: object) { return o; }\nconst opts = makeOpts({});\nexport class P extends CardDef { @field a = contains(StringField, opts); }`,
+          `${head}function makeOpts(o: object) { return o; }\nconst opts = makeOpts({ query: {} });\nexport class P extends CardDef { @field a = contains(StringField, opts); }`,
+        ),
+        'options built by a call',
+      );
+      assert.true(
+        await changed(
+          `${head}function mk(F: typeof CardDef) { return class extends F {}; }\nexport const P = mk(CardDef);`,
+          `${head}function mk(_F: typeof CardDef) { return class extends NumberField {}; }\nexport const P = mk(CardDef);`,
+        ),
+        'a function an exported class is built with',
+      );
+      assert.false(
+        await changed(
+          `${head}const LABEL = 'a';\nexport class P extends CardDef { @field a = contains(StringField); get label() { return LABEL; } }`,
+          `${head}const LABEL = 'b';\nexport class P extends CardDef { @field a = contains(StringField); get label() { return LABEL; } }`,
+        ),
+        'while a constant only a method reads is no part of the schema',
+      );
+    });
+
     test('component state and unrelated imports are no part of the schema', async function (assert) {
       let head = `
         import { CardDef, field, contains, Component } from '@cardstack/base/card-api';

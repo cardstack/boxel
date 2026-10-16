@@ -113,20 +113,15 @@ function readSchema(src: string, url: string): Schema | undefined {
     },
   });
 
-  let bindings = readBindings(ast);
+  let bindings = readBindings(ast, classes);
 
-  // The imports the schema refers to, found by the names it spells. A name
-  // that only reads like one (a property key, say) costs at most an import
-  // too many in the schema, never one too few.
-  let referenced = new Set<string>();
-  for (let text of [
-    ...classes.flatMap((c) => [c.super ?? '', ...c.members]),
-    ...bindings,
-  ]) {
-    for (let name of text.match(/[A-Za-z_$][\w$]*/g) ?? []) {
-      referenced.add(name);
-    }
-  }
+  // The imports the schema refers to, found by the names it spells.
+  let referenced = new Set(
+    namesIn([
+      ...classes.flatMap((c) => [c.super ?? '', ...c.members]),
+      ...bindings,
+    ]),
+  );
   let imports = [...importsOf(ast)]
     .filter(([local]) => referenced.has(local))
     .map(([local, origin]) => `${local}=${origin}`);
@@ -271,19 +266,25 @@ function isNamed(
   );
 }
 
-// The module-level bindings that can stand in for a field's class or its
-// options, and every name the module exports.
+// The module-level declarations a schema can be built from, printed whole,
+// and every name the module exports, with what each one names.
 //
-// A binding counts when its value is another name (`const S = StringField`,
-// `export const Active = Base.StringField`) or an object (a field's options
-// held in a variable). So does every export that can name a class: one of a
-// class, of an alias, or of an imported binding, with where it comes from. An
-// export of a function or of any other value is left out, since neither names
-// a type, and a function's body is no part of a schema.
-function readBindings(ast: t.File): string[] {
+// A declaration counts when the module exports it, or when a class or another
+// counted declaration refers to it — followed until nothing new is reached.
+// What its value is does not matter: an alias (`const S = StringField`), a
+// field factory's result (`enumField(StringField, ...)`), a cast, a
+// destructure, an options object, or a function that a field or a class is
+// built with each print whole, so a shape this reading does not know reads as
+// a change rather than slipping past it. Compute functions are left out
+// wherever they stand, since what a field computes is no part of its schema.
+//
+// A function declaration nothing counted refers to is left out, exported or
+// not: its body moves no schema in this module until something here calls it.
+function readBindings(ast: t.File, classes: ClassSchema[]): string[] {
   let imports = importsOf(ast);
-  let bindings: string[] = [];
+  let declarations = new Map<string, string>();
   let kinds = new Map<string, string>();
+  let exported = new Set<string>();
   for (let statement of ast.program.body) {
     let declaration: t.Node | null | undefined = statement;
     if (statement.type === 'ExportNamedDeclaration') {
@@ -293,43 +294,64 @@ function readBindings(ast: t.File): string[] {
     }
     if (declaration?.type === 'VariableDeclaration') {
       for (let declarator of declaration.declarations) {
-        if (declarator.id.type !== 'Identifier') {
-          continue;
+        let text = print(withoutComputeFunctions(declarator));
+        for (let name of boundNames(declarator.id)) {
+          declarations.set(name, text);
+          kinds.set(name, 'binding');
         }
-        let init = declarator.init;
-        if (
-          init &&
-          (init.type === 'Identifier' ||
-            init.type === 'MemberExpression' ||
-            init.type === 'ObjectExpression')
-        ) {
-          let value =
-            init.type === 'ObjectExpression'
-              ? withoutComputeFunction(Babel.types.cloneNode(init, true, true))
-              : init;
-          bindings.push(`${declarator.id.name}=${print(value)}`);
-          kinds.set(declarator.id.name, 'alias');
-        } else {
-          kinds.set(declarator.id.name, 'value');
+      }
+    } else if (declaration?.type === 'FunctionDeclaration' && declaration.id) {
+      declarations.set(declaration.id.name, print(declaration));
+      kinds.set(declaration.id.name, 'function');
+    } else if (declaration?.type === 'ClassDeclaration' && declaration.id) {
+      // Read in full with every other class.
+      kinds.set(declaration.id.name, 'class');
+    }
+    if (statement.type === 'ExportNamedDeclaration') {
+      if (statement.declaration) {
+        for (let name of declaredNames(statement.declaration)) {
+          exported.add(name);
+        }
+      }
+      if (!statement.source) {
+        for (let specifier of statement.specifiers) {
+          if (specifier.type === 'ExportSpecifier') {
+            exported.add(specifier.local.name);
+          }
         }
       }
     } else if (
-      (declaration?.type === 'FunctionDeclaration' ||
-        declaration?.type === 'ClassDeclaration') &&
-      declaration.id
+      statement.type === 'ExportDefaultDeclaration' &&
+      statement.declaration.type === 'Identifier'
     ) {
-      kinds.set(
-        declaration.id.name,
-        declaration.type === 'FunctionDeclaration' ? 'function' : 'class',
-      );
+      exported.add(statement.declaration.name);
     }
   }
 
+  let counted = new Set<string>();
+  let pending = [
+    ...[...exported].filter((name) => kinds.get(name) !== 'function'),
+    ...classes.flatMap((c) => namesIn([c.super ?? '', ...c.members])),
+  ];
+  while (pending.length > 0) {
+    let name = pending.pop()!;
+    if (counted.has(name) || !declarations.has(name)) {
+      continue;
+    }
+    counted.add(name);
+    pending.push(...namesIn([declarations.get(name)!]));
+  }
+  let bindings = [...counted].map(
+    (name) => `${name}:${declarations.get(name)}`,
+  );
+
+  // An export of a function is left out with the function: neither names a
+  // type until something calls it.
   let origin = (local: string) =>
     imports.get(local) ?? `local:${kinds.get(local) ?? 'unknown'}:${local}`;
-  let exportBinding = (exported: string, from: string) => {
-    if (!from.startsWith('local:function') && !from.startsWith('local:value')) {
-      bindings.push(`export ${exported}=${from}`);
+  let exportBinding = (name: string, from: string) => {
+    if (!from.startsWith('local:function')) {
+      bindings.push(`export ${name}=${from}`);
     }
   };
   for (let statement of ast.program.body) {
@@ -342,16 +364,16 @@ function readBindings(ast: t.File): string[] {
         }
       }
       for (let specifier of statement.specifiers) {
-        let exported = nameOf(specifier.exported);
+        let exportedName = nameOf(specifier.exported);
         if (specifier.type === 'ExportSpecifier') {
           exportBinding(
-            exported,
+            exportedName,
             statement.source
               ? `${statement.source.value}#${specifier.local.name}`
               : origin(specifier.local.name),
           );
         } else {
-          bindings.push(`export ${exported}=${statement.source?.value}#*`);
+          bindings.push(`export ${exportedName}=${statement.source?.value}#*`);
         }
       }
     } else if (statement.type === 'ExportDefaultDeclaration') {
@@ -364,11 +386,62 @@ function readBindings(ast: t.File): string[] {
             ? 'local:function'
             : declaration.type === 'ClassDeclaration'
               ? `local:class:${declaration.id?.name ?? 'default'}`
-              : print(declaration),
+              : print(withoutComputeFunctions(declaration)),
       );
     }
   }
   return bindings;
+}
+
+// The names a binding pattern binds: `x`, and those inside `{ a, b: [c] }`.
+function boundNames(id: t.Node): string[] {
+  switch (id.type) {
+    case 'Identifier':
+      return [id.name];
+    case 'ObjectPattern':
+      return id.properties.flatMap((property) =>
+        property.type === 'RestElement'
+          ? boundNames(property.argument)
+          : boundNames(property.value as t.LVal),
+      );
+    case 'ArrayPattern':
+      return id.elements.flatMap((element) =>
+        element ? boundNames(element as t.LVal) : [],
+      );
+    case 'AssignmentPattern':
+      return boundNames(id.left);
+    case 'RestElement':
+      return boundNames(id.argument);
+    default:
+      return [];
+  }
+}
+
+// Every name a printed piece of code spells. A name that only reads like one
+// (a property key, say) costs at most a declaration or an import too many in
+// the schema, never one too few.
+function namesIn(texts: string[]): string[] {
+  return texts.flatMap((text) => text.match(/[A-Za-z_$][\w$]*/g) ?? []);
+}
+
+// A copy of `node` with every `computeVia` option's function swapped for a
+// marker, so the field still reads as computed, whatever it computes.
+function withoutComputeFunctions<T extends t.Node>(node: T): T {
+  let types = Babel.types;
+  let copy = types.cloneNode(node, true, true);
+  types.traverseFast(copy, (inner) => {
+    if (inner.type === 'ObjectExpression') {
+      inner.properties = inner.properties.map((property) =>
+        isNamed(property, 'computeVia')
+          ? types.objectProperty(
+              types.identifier('computeVia'),
+              types.identifier('computeVia'),
+            )
+          : property,
+      );
+    }
+  });
+  return copy;
 }
 
 function declaredNames(declaration: t.Declaration): string[] {
