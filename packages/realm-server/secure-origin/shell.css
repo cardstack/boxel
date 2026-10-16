@@ -161,9 +161,29 @@ body {
   cursor: pointer;
 }
 
+.secure-google {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.secure-google .secure-button {
+  width: 100%;
+}
+
+/* "or", between two rules, across the card's width. */
 .secure-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
   color: var(--secure-muted);
-  text-align: center;
+}
+
+.secure-divider::before,
+.secure-divider::after {
+  content: '';
+  flex: 1;
+  border-top: 1px solid var(--secure-border);
 }
 
 .secure-error {

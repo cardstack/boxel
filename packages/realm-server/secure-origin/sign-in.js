@@ -166,8 +166,19 @@ function errorLine() {
   });
 }
 
+// The server words its errors for an API; shown here, each reads as a
+// sentence.
+function asSentence(message) {
+  let text = String(message ?? '').trim();
+  if (!text) {
+    return '';
+  }
+  text = text[0].toUpperCase() + text.slice(1);
+  return /[.!?]$/.test(text) ? text : `${text}.`;
+}
+
 function showError(element, message) {
-  element.textContent = message ?? '';
+  element.textContent = asSentence(message);
   element.hidden = !message;
 }
 
