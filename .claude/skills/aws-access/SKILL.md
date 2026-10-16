@@ -458,7 +458,7 @@ else
   #    curl's connection errors visible.
   curl -sS http://localhost:$LOCAL_PORT/                      # public-realm root listing
   curl -sS http://localhost:$LOCAL_PORT/realms/               # user-realms root
-  curl -sS http://localhost:$LOCAL_PORT/realms/buck/mar10/    # one user realm's contents
+  curl -sS http://localhost:$LOCAL_PORT/catalog/              # one realm's contents; for a user realm, take a path from the /realms/ listing
   curl -sS http://localhost:$LOCAL_PORT/base/index.json       # specific file
 
   # 4) Tear down. `kill $TUNNEL_PID` alone leaves the forked

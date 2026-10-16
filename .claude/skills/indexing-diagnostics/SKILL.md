@@ -1052,24 +1052,30 @@ Different procedure, because this one is not per-render and not affinity-gated.
 3. **Wait.** Each task captures itself once, on an idle tick after its heap crosses the threshold, and logs `heap snapshot starting …`, `heap snapshot written bytes=… writeMs=…`, `heap snapshot uploaded …`. Nothing else is needed — if it never fires, check `heapUsedMB` on the dashboard against the threshold.
 4. **Pull it** from the artifacts bucket like any other artifact, and read it per _Reading each artifact_.
 
-To choose the moment instead — a particular heap size, or a task that has already spent its one automatic capture — `POST /heap-snapshot` on the task. The service has no load balancer, so reach it by SSM port-forward; the log line carries everything the target needs (`ecs:<cluster>_<taskId>_<container_id>`, where `container_id` is both the runtime id and prefixed by the task id). The forward's `host` must be the task's private IP, not `localhost`: the SSM agent refuses to forward to loopback addresses, and the prerender server listens on all interfaces. Tear the tunnel down with both kills, as the `aws-access` skill's "Tearing the tunnel down actually requires two kills" explains:
+To choose the moment instead — a particular heap size, or a task that has already spent its one automatic capture — `POST /heap-snapshot` on the task. The service has no load balancer, so reach it by SSM port-forward; the log line carries everything the target needs (`ecs:<cluster>_<taskId>_<container_id>`, where `container_id` is both the runtime id and prefixed by the task id). The forward's `host` must be the task's private IP, not `localhost`: the SSM agent refuses to forward to loopback addresses, and the prerender server listens on all interfaces. Check the port is free first and tear the tunnel down with both kills, as the `aws-access` skill's "A squatted port is a wrong-environment bug" and "Tearing the tunnel down actually requires two kills" explain:
 
 ```
 TASK_IP=$(aws --profile <profile> ecs describe-tasks --cluster <cluster> --tasks <taskId> \
   --query 'tasks[0].containers[?name==`boxel-prerender-server`] | [0].networkInterfaces[0].privateIpv4Address' \
   --output text)
-aws --profile <profile> ssm start-session \
-  --target "ecs:<cluster>_<taskId>_<container_id>" \
-  --document-name AWS-StartPortForwardingSessionToRemoteHost \
-  --parameters "{\"portNumber\":[\"4221\"],\"localPortNumber\":[\"54221\"],\"host\":[\"$TASK_IP\"]}" &
-TUNNEL_PID=$!
-for _ in $(seq 30); do
-  lsof -nP -iTCP:54221 -sTCP:LISTEN >/dev/null 2>&1 && break
-  sleep 1
-done
-curl -sS -X POST localhost:54221/heap-snapshot
-kill $TUNNEL_PID
-pkill -f "session-manager-plugin.*localPortNumber.*54221" 2>/dev/null
+if lsof -nP -iTCP:54221 -sTCP:LISTEN >/dev/null 2>&1; then
+  echo "port 54221 is already bound — pick another, and find out what is holding it"
+else
+  aws --profile <profile> ssm start-session \
+    --target "ecs:<cluster>_<taskId>_<container_id>" \
+    --document-name AWS-StartPortForwardingSessionToRemoteHost \
+    --parameters "{\"portNumber\":[\"4221\"],\"localPortNumber\":[\"54221\"],\"host\":[\"$TASK_IP\"]}" &
+  TUNNEL_PID=$!
+  for _ in $(seq 30); do
+    lsof -nP -iTCP:54221 -sTCP:LISTEN >/dev/null 2>&1 && break
+    sleep 1
+  done
+  curl -sS -X POST localhost:54221/heap-snapshot
+  kill $TUNNEL_PID
+  pkill -f "session-manager-plugin.*localPortNumber.*54221" 2>/dev/null
+  unset TUNNEL_PID
+  lsof -nP -iTCP:54221 -sTCP:LISTEN && echo "TUNNEL LEAKED — kill the pid above"
+fi
 ```
 
 **What it costs.** The write stops the event loop: measured at 6.9–15.9 s for heaps of 1559–1588 MB on a staging task, producing 198–512 MB files. Cost follows object count rather than bytes, so a heap of the same size with many more, smaller objects is far slower. Two consequences worth knowing before raising the threshold: a pause beyond the manager's **30 s heartbeat** gets the instance swept as stale until it re-registers, and one file can spend a large share of the 5 GiB `PRERENDER_PROFILE_MAX_SESSION_BYTES` budget shared with the profiler artifacts. Capture at 1–2 GB; the retention reads the same and every cost is smaller.
