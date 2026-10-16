@@ -73,13 +73,15 @@ export default class HostModeStackItem extends Component<Signature> {
 
     let maxWidthPercent = 100 - invertedIndex * maxWidthReductionPercent;
     let width = this.isItemFullWidth
-      ? 'calc(100% - var(--boxel-sp-xxl) * 2)'
+      ? 'calc(100% - var(--boxel-sp-2xl) * 2)'
       : `${stackItemMaxWidth / Math.pow(RATIO, invertedIndex)}rem`;
 
+    // Width goes through custom properties so the phone-width rule below can
+    // override it without !important.
     let styles = `
       height: calc(100% - ${marginTopPx}px);
-      width: ${width};
-      max-width: ${maxWidthPercent}%;
+      --host-stack-item-width: ${width};
+      --host-stack-item-max-width: ${maxWidthPercent}%;
       z-index: calc(${this.args.index} + 1);
       margin-top: ${marginTopPx}px;
     `; // using margin-top instead of padding-top to hide scrolled content from view
@@ -211,7 +213,8 @@ export default class HostModeStackItem extends Component<Signature> {
       .host-mode-stack-item {
         justify-self: center;
         position: absolute;
-        width: 89%;
+        width: var(--host-stack-item-width);
+        max-width: var(--host-stack-item-max-width);
         height: inherit;
         padding-top: var(--boxel-sp-2xl);
         z-index: 0;
@@ -224,6 +227,15 @@ export default class HostModeStackItem extends Component<Signature> {
 
       .host-mode-stack-item.full-width {
         max-width: 100%;
+      }
+
+      /* Same breakpoint as the operator-mode phone layout. The top card,
+         wide-format or not, takes the width with a small gutter; buried
+         cards keep their narrower widths so the stack still reads. */
+      @media (max-width: 30rem) {
+        .host-mode-stack-item:not(.buried) {
+          width: calc(100% - var(--boxel-sp-xs) * 2);
+        }
       }
 
       .host-mode-stack-item.opening-animation {
