@@ -2,7 +2,7 @@
 
 Design notes shared by **OtpInput**, **TimeInput**, **StepList**, **ButtonGroup**, **Divider**.
 
-controls territory, form-composites wave: segmented entry
+Form composites: segmented entry
 (OtpInput, TimeInput), progress structure (StepList), and grouping
 chrome (ButtonGroup, Divider). Semantics transcribed — not copied — from
 Web Awesome's wa-otp-input / wa-time-input / wa-button-group / wa-divider

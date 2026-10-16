@@ -89,16 +89,47 @@ function createCardAction(context: unknown): CreateCardAction | undefined {
 // resolves wherever it is written.
 const NOTE_REF = { module: siblingHref('./pretui-note'), name: 'PretuiNote' };
 
-// The stage as shown: capitalized, from the stored lowercase value.
-function stageLabel(stage: string | undefined): string {
-  let value = stage || 'planned';
-  return value.charAt(0).toUpperCase() + value.slice(1);
+// A stored enum value as shown, from its option label; '—' when unset.
+function optionLabel(
+  options: { value: string; label: string }[],
+  value: string | undefined,
+): string {
+  if (!value) return '—';
+  return options.find((option) => option.value === value)?.label ?? value;
 }
 
-// A live component's stage chip takes the success tone; every other stage
+// The status chip's label: the adoption status, or the implementation status
+// for a component nobody has adopted yet; undefined hides the chip.
+function statusLabel(
+  adoptionStatus: string | undefined,
+  implementationStatus: string | undefined,
+): string | undefined {
+  if (adoptionStatus) return optionLabel(ADOPTION_OPTIONS, adoptionStatus);
+  if (implementationStatus) {
+    return optionLabel(IMPLEMENTATION_OPTIONS, implementationStatus);
+  }
+  return undefined;
+}
+
+function isInUse(status: string | undefined): boolean {
+  return status === 'in-use';
+}
+
+// An in-use component's status chip takes the success tone and a deprecated
+// one the danger tone (warning is the Featured star's); every other status
 // keeps StatusChip's muted pill with its name-derived dot.
-function stageTone(stage: string | undefined): 'success' | undefined {
-  return stage === 'live' ? 'success' : undefined;
+function adoptionTone(
+  status: string | undefined,
+): 'success' | 'danger' | undefined {
+  if (isInUse(status)) return 'success';
+  return status === 'deprecated' ? 'danger' : undefined;
+}
+
+// The kit release the "New" chip marks: a component introduced in it is new.
+// Bump this with each release so the chip clears itself.
+export const CURRENT_RELEASE = '0.4.0';
+function isNewIn(introducedVersion: string | undefined): boolean {
+  return introducedVersion === CURRENT_RELEASE;
 }
 
 // A component name split at its camel-case humps ("ApprovalFooter" →
@@ -377,7 +408,8 @@ function examplesLoadFor(name: string): Loaded<ExampleSpec[]> {
 
 // Closed vocabularies for the Spec's classification fields: the edit form
 // offers these as dropdowns. Each list covers every value the catalog's
-// Specs store, so existing instances read unchanged.
+// Specs store, so existing instances read unchanged, plus the taxonomy's
+// values (host, planned, designed, deprecated; docs/catalog-taxonomy.md).
 const CATEGORY_OPTIONS = [
   'Actions',
   'Agentic',
@@ -405,11 +437,18 @@ const TIER_OPTIONS = [
 const OWNERSHIP_OPTIONS = [
   { value: 'pretui', label: 'Pret UI' },
   { value: 'boxel-ui', label: 'boxel-ui' },
+  { value: 'host', label: 'Host' },
+];
+const IMPLEMENTATION_OPTIONS = [
+  { value: 'planned', label: 'Planned' },
+  { value: 'designed', label: 'Designed' },
+  { value: 'implemented', label: 'Implemented' },
 ];
 const ADOPTION_OPTIONS = [
   { value: 'in-use', label: 'In use' },
   { value: 'demo-ready', label: 'Demo ready' },
   { value: 'experimental', label: 'Experimental' },
+  { value: 'deprecated', label: 'Deprecated' },
 ];
 const SOURCE_OPTIONS = [
   { value: 'design-v1', label: 'design-v1' },
@@ -432,7 +471,7 @@ export class PretUISpec extends Spec {
   // boxel-ui icon export name ('@cardstack/boxel-ui/icons'), resolved at
   // render time via icon-registry.gts — data, never a static icon
   @field icon = contains(StringField);
-  // ── taxonomy axes (catalog-taxonomy.md) ──
+  // ── taxonomy axes (docs/catalog-taxonomy.md) ──
   // category = the primary user-facing home; tier = compositional
   // complexity; tags = cross-cutting capabilities. Independent axes — never
   // infer one from another.
@@ -444,17 +483,15 @@ export class PretUISpec extends Spec {
   @field ownership = contains(
     enumField(StringField, { options: OWNERSHIP_OPTIONS }),
   );
-  @field implementationStatus = contains(StringField);
+  @field implementationStatus = contains(
+    enumField(StringField, { options: IMPLEMENTATION_OPTIONS }),
+  );
   @field adoptionStatus = contains(
     enumField(StringField, { options: ADOPTION_OPTIONS }),
   );
   @field introducedVersion = contains(StringField);
-  // ── legacy axes, retained through the migration ──
-  @field territory = contains(StringField);
-  @field stage = contains(StringField);
-  @field source = contains(
-    enumField(StringField, { options: SOURCE_OPTIONS }),
-  );
+  // ── provenance ──
+  @field source = contains(enumField(StringField, { options: SOURCE_OPTIONS }));
   @field lineage = contains(StringField);
   @field version = contains(StringField);
   @field brief = contains(StringField);
@@ -464,15 +501,11 @@ export class PretUISpec extends Spec {
   /** a hand-picked flagship of the kit, the components to look at first;
    *  shown as a gold star on the Spec page and its fitted card */
   @field featured = contains(BooleanField);
-  @field isNew = contains(BooleanField);
   @field hasDesign = contains(BooleanField);
   @field hasExamples = contains(BooleanField);
-  @field liveInUse = contains(BooleanField);
   // cross-library demand signal, 1-5 — how many independent kits converged
   // on this component (sourcing/index.md dupe density)
-  @field demand = contains(
-    enumField(NumberField, { options: DEMAND_OPTIONS }),
-  );
+  @field demand = contains(enumField(NumberField, { options: DEMAND_OPTIONS }));
   // the write-up lives in the sibling <name>.md; the indexer extracts its
   // content into the linked MarkdownDef, so the .md stays the single source.
   // searchable puts that content in the spec's search doc, once.
@@ -485,7 +518,12 @@ export class PretUISpec extends Spec {
     get demoLoad() {
       let m = this.args.model;
       return m.componentName
-        ? demoLoadFor({ name: m.componentName, stage: m.stage, tier: m.tier })
+        ? demoLoadFor({
+            name: m.componentName,
+            implementationStatus: m.implementationStatus,
+            ownership: m.ownership,
+            tier: m.tier,
+          })
         : undefined;
     }
     get demo() {
@@ -495,7 +533,9 @@ export class PretUISpec extends Spec {
     // the brief stands in for a missing usage page; hidden while one loads,
     // so it doesn't show and then vanish
     get showBrief() {
-      return Boolean(this.args.model.brief) && !this.demo && !this.isDemoLoading;
+      return (
+        Boolean(this.args.model.brief) && !this.demo && !this.isDemoLoading
+      );
     }
     get examples() {
       let name = this.args.model.componentName;
@@ -505,11 +545,10 @@ export class PretUISpec extends Spec {
       return this.demoLoad?.state === 'loading';
     }
     get isHost() {
-      return this.args.model.stage === 'host';
+      return this.args.model.ownership === 'host';
     }
     get isDemoExcluded() {
-      let model = this.args.model;
-      return model.stage === 'host' || model.tier === 'Runtime';
+      return this.isHost || this.args.model.tier === 'Runtime';
     }
     get demoPolicy() {
       if (this.demo) return 'included';
@@ -519,12 +558,23 @@ export class PretUISpec extends Spec {
     get metaItems() {
       let m = this.args.model;
       let rows: { key: string; value: string; dots?: boolean[] }[] = [
-        { key: 'Category', value: m.category ?? m.territory ?? '—' },
+        { key: 'Category', value: m.category ?? '—' },
         { key: 'Tier', value: m.tier ?? '—' },
-        { key: 'Stage', value: m.stage ? stageLabel(m.stage) : '—' },
+        {
+          key: 'Implementation',
+          value: optionLabel(IMPLEMENTATION_OPTIONS, m.implementationStatus),
+        },
+        {
+          key: 'Adoption',
+          value: optionLabel(ADOPTION_OPTIONS, m.adoptionStatus),
+        },
+        {
+          key: 'Ownership',
+          value: optionLabel(OWNERSHIP_OPTIONS, m.ownership),
+        },
         // versions are earned by use — nothing worn shows no number
-        ...(m.liveInUse
-          ? [{ key: 'Version', value: m.version ?? '0.0.0' }]
+        ...(isInUse(m.adoptionStatus)
+          ? [{ key: 'Version', value: m.version || '0.0.0' }]
           : []),
         { key: 'Source', value: m.source ?? '—' },
       ];
@@ -551,14 +601,10 @@ export class PretUISpec extends Spec {
       return [
         { label: 'design', on: m.hasDesign },
         { label: 'brief', on: Boolean(m.brief) },
-        { label: 'impl', on: m.stage === 'live' },
+        { label: 'impl', on: m.implementationStatus === 'implemented' },
         { label: 'examples', on: m.hasExamples },
-        { label: 'in use', on: m.liveInUse },
+        { label: 'in use', on: isInUse(m.adoptionStatus) },
       ];
-    }
-    get toolbarMeta() {
-      let m = this.args.model;
-      return `${m.territory ?? ''} · ${m.source ?? ''}`;
     }
     // the same five facets, handed to the kit's StepList as an ordered
     // pipeline: it owns the list semantics, the per-step state text and the
@@ -689,11 +735,7 @@ export class PretUISpec extends Spec {
             <div class='wb-crumb' data-test-pretui-spec-crumb>
               <span>Pret UI</span>
               <span aria-hidden='true'>/</span>
-              <span>{{if
-                  @model.category
-                  @model.category
-                  (if @model.territory @model.territory 'components')
-                }}</span>
+              <span>{{if @model.category @model.category 'components'}}</span>
               <span aria-hidden='true'>/</span>
               <span class='wb-here'>{{if
                   @model.componentName
@@ -702,16 +744,34 @@ export class PretUISpec extends Spec {
                 }}</span>
             </div>
             <div class='wb-badges'>
-              {{#if @model.liveInUse}}
-                <Token @value={{if @model.version @model.version '0.0.0'}} />
+              {{#if (isInUse @model.adoptionStatus)}}
+                <Token
+                  @value={{if @model.version @model.version '0.0.0'}}
+                  data-test-pretui-version
+                />
               {{/if}}
-              <StatusChip
-                @value={{stageLabel @model.stage}}
-                @tone={{stageTone @model.stage}}
-              />
-              {{#if @model.isNew}}<Chip @label='New' @tone='attention' />{{/if}}
+              {{#let
+                (statusLabel @model.adoptionStatus @model.implementationStatus)
+                as |label|
+              }}
+                {{#if label}}
+                  <StatusChip
+                    @value={{label}}
+                    @tone={{adoptionTone @model.adoptionStatus}}
+                    data-test-pretui-status
+                  />
+                {{/if}}
+              {{/let}}
+              {{#if (isNewIn @model.introducedVersion)}}<Chip
+                  @label='New'
+                  @tone='attention'
+                  data-test-pretui-new
+                />{{/if}}
               {{#if @model.featured}}
-                <Tooltip @content='Featured: a flagship component' @side='bottom'>
+                <Tooltip
+                  @content='Featured: a flagship component'
+                  @side='bottom'
+                >
                   <Chip @tone='warning' @dot={{false}}><StarIcon
                       class='wb-star'
                       width='12'
@@ -735,11 +795,13 @@ export class PretUISpec extends Spec {
                 {{/if}}
               {{/let}}
               <span class='wb-title-text'>{{#each
-                  (nameParts (if @model.componentName @model.componentName 'Component'))
+                  (nameParts
+                    (if @model.componentName @model.componentName 'Component')
+                  )
                   as |part i|
                 }}{{#if i}}<wbr />{{/if}}{{part}}{{/each}}</span>
             </h1>
-              {{! Sticky notes sit beside the title, where you left them, and
+            {{! Sticky notes sit beside the title, where you left them, and
                 the first few stay visible: an annotation hidden behind a
                 disclosure is an annotation nobody reads. }}
             {{#if this.showNotes}}
@@ -819,7 +881,9 @@ export class PretUISpec extends Spec {
                               {{on 'click' (fn this.openNote n.id)}}
                               data-test-pretui-note
                             >
-                              <span class='note-title'>{{noteSummary n.note}}</span>
+                              <span class='note-title'>{{noteSummary
+                                  n.note
+                                }}</span>
                               {{#let (noteExcerpt n.note) as |excerpt|}}
                                 {{#if excerpt}}
                                   <span class='note-excerpt'>{{excerpt}}</span>
@@ -851,7 +915,7 @@ export class PretUISpec extends Spec {
                 {{#if this.isHost}}
                   <EmptyState
                     @title='Catalog infrastructure — demo excluded'
-                    @message='Host chrome stays in boxel-ui by design. It is indexed here for vocabulary coverage, not as a Pret UI demo target.'
+                    @message='Host chrome is indexed here for vocabulary coverage, not as a Pret UI demo target.'
                   />
                 {{else}}
                   <EmptyState
@@ -864,7 +928,7 @@ export class PretUISpec extends Spec {
               <section class='panel'>
                 <EmptyState
                   @title='No usage page yet'
-                  @message='This component has no freestyle page in the fitting room yet — see the kit showcase for the territory rail.'
+                  @message='This component has no freestyle page in the fitting room yet — see the kit showcase.'
                 />
               </section>
             {{/if}}
@@ -1324,21 +1388,29 @@ export class PretUISpec extends Spec {
                   /><VisuallyHidden>Featured: a flagship component</VisuallyHidden></span>{{/if}}
             </div>
             <div class='fit-sub'>
-              <span>{{if
-                  @model.category
-                  @model.category
-                  @model.territory
-                }}</span>
-              {{#if @model.liveInUse}}
+              {{#if @model.category}}<span>{{@model.category}}</span>{{/if}}
+              {{#if (isInUse @model.adoptionStatus)}}
                 <span>{{if @model.version @model.version '0.0.0'}}</span>
               {{/if}}
             </div>
             <div class='fit-extra'>
-              <StatusChip
-                @value={{stageLabel @model.stage}}
-                @tone={{stageTone @model.stage}}
-              />
-              {{#if @model.isNew}}<Chip @label='New' @tone='attention' />{{/if}}
+              {{#let
+                (statusLabel @model.adoptionStatus @model.implementationStatus)
+                as |label|
+              }}
+                {{#if label}}
+                  <StatusChip
+                    @value={{label}}
+                    @tone={{adoptionTone @model.adoptionStatus}}
+                    data-test-pretui-status
+                  />
+                {{/if}}
+              {{/let}}
+              {{#if (isNewIn @model.introducedVersion)}}<Chip
+                  @label='New'
+                  @tone='attention'
+                  data-test-pretui-new
+                />{{/if}}
             </div>
             {{#if @model.brief}}<div
                 class='fit-brief'
@@ -1463,6 +1535,12 @@ export class PretUISpec extends Spec {
             white-space: normal;
           }
         }
+        /* last, so it beats the display rules above: a row with nothing in
+           it takes no space */
+        .fit-sub:not(:has(*)),
+        .fit-extra:not(:has(*)) {
+          display: none;
+        }
       </style>
     </template>
   } as unknown as typeof Spec.fitted;
@@ -1476,17 +1554,22 @@ export class PretUISpec extends Spec {
               @model.componentName
               'Component'
             }}</span>
-          <StatusChip
-            @value={{stageLabel @model.stage}}
-            @tone={{stageTone @model.stage}}
-          />
+          {{#let
+            (statusLabel @model.adoptionStatus @model.implementationStatus)
+            as |label|
+          }}
+            {{#if label}}
+              <StatusChip
+                @value={{label}}
+                @tone={{adoptionTone @model.adoptionStatus}}
+                data-test-pretui-status
+              />
+            {{/if}}
+          {{/let}}
         </div>
         <div class='tile-meta'>
-          <span class='territory'>{{if
-              @model.category
-              @model.category
-              @model.territory
-            }}</span>
+          {{! always rendered, so the source token keeps the right edge }}
+          <span class='category'>{{@model.category}}</span>
           {{#if @model.source}}<Token @value={{@model.source}} />{{/if}}
         </div>
       </div>
@@ -1515,7 +1598,7 @@ export class PretUISpec extends Spec {
           justify-content: space-between;
           gap: var(--boxel-sp-xs);
         }
-        .territory {
+        .category {
           font-family: var(--font-mono);
           font-size: var(--boxel-eyebrow-font-size);
           letter-spacing: var(--boxel-eyebrow-letter-spacing);
@@ -1532,10 +1615,7 @@ export class PretUISpec extends Spec {
     // ids for the captions that name editors a <label> can't wrap
     captionId = (key: string) => `${guidFor(this)}-${key}`;
     // the yes/no signals are switches that write the field directly
-    setFlag = (
-      key: 'featured' | 'isNew' | 'hasDesign' | 'hasExamples' | 'liveInUse',
-      on: boolean,
-    ) => {
+    setFlag = (key: 'featured' | 'hasDesign' | 'hasExamples', on: boolean) => {
       this.args.model[key] = on;
     };
     <template>
@@ -1610,14 +1690,6 @@ export class PretUISpec extends Spec {
             </label>
             <label class='wb-switch-row'>
               <Switch
-                @checked={{@model.isNew}}
-                @onCheckedChange={{fn this.setFlag 'isNew'}}
-                @disabled={{not @canEdit}}
-              />
-              <span class='wb-cap'>New</span>
-            </label>
-            <label class='wb-switch-row'>
-              <Switch
                 @checked={{@model.hasDesign}}
                 @onCheckedChange={{fn this.setFlag 'hasDesign'}}
                 @disabled={{not @canEdit}}
@@ -1632,23 +1704,6 @@ export class PretUISpec extends Spec {
               />
               <span class='wb-cap'>Has examples</span>
             </label>
-            <label class='wb-switch-row'>
-              <Switch
-                @checked={{@model.liveInUse}}
-                @onCheckedChange={{fn this.setFlag 'liveInUse'}}
-                @disabled={{not @canEdit}}
-              />
-              <span class='wb-cap'>Live in use</span>
-            </label>
-          </div>
-        </fieldset>
-
-        <fieldset class='wb-group'>
-          <legend>Legacy axes</legend>
-          <div class='wb-fields'>
-            <label><span class='wb-cap'>Territory</span>
-              <@fields.territory /></label>
-            <label><span class='wb-cap'>Stage</span> <@fields.stage /></label>
           </div>
         </fieldset>
 
@@ -1660,8 +1715,7 @@ export class PretUISpec extends Spec {
               role='group'
               aria-labelledby={{this.captionId 'writeup'}}
             >
-              <span id={{this.captionId 'writeup'}} class='wb-cap'>Linked
-                file</span>
+              <span id={{this.captionId 'writeup'}} class='wb-cap'>Linked file</span>
               <@fields.writeup />
             </div>
           </div>
