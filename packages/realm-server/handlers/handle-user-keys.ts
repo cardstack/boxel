@@ -7,6 +7,7 @@ import {
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
 import { secretsKeyring } from '../lib/secrets-at-rest/index.ts';
+import { isSecureSession } from '../lib/secure-session.ts';
 import {
   addUserKey,
   deleteUserKey,
@@ -194,18 +195,16 @@ function statusText(status: UserKeyError['status']): string {
   }[status];
 }
 
-// Whether this request may mint a key write ticket: one from the secure
-// origin, or one with no `Origin` at all, as the CLI sends. A browser always
+// Whether this request may mint a key write ticket by where it comes from:
+// the secure origin, or no `Origin` at all, as the CLI sends. A browser always
 // sends `Origin` on a POST and page script can't change it, so a request made
 // from the app page, where card code runs, names the app's origin and is
-// refused: card code can't get a ticket, or write a key, from inside the
-// browser.
+// refused.
 //
-// This is not a defence against a session that has left the browser. Card
-// code can read the user's realm-server session, and a client outside a
-// browser can send any `Origin` or none, so a stolen session can mint a
-// ticket exactly as the CLI does. Nothing the server sees tells the two apart;
-// closing that needs card code that can't reach the user's session at all.
+// A client outside a browser can send any `Origin` or none, so this alone
+// doesn't keep a session card code carried out of the browser from minting a
+// ticket. What does is that minting also requires a session signed in on the
+// secure origin (`isSecureSession`), which card code can't obtain.
 export function mayMintKeyWriteTicket(
   ctxt: Koa.Context,
   secureOriginURL: URL | undefined,
@@ -227,6 +226,17 @@ export function handleMintKeyWriteTicket({
       throw new UserKeyError(
         403,
         'key write tickets are issued only to the secure window and the CLI',
+      );
+    }
+    if (
+      !(await isSecureSession(
+        dbAdapter,
+        ctxt.state.token as RealmServerTokenClaim | undefined,
+      ))
+    ) {
+      throw new UserKeyError(
+        403,
+        'key write tickets are issued only to a session signed in on the secure origin',
       );
     }
     let body = await readJSON(ctxt);

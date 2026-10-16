@@ -1,15 +1,171 @@
+/*
+  The secure window. It is styled after the app's sign-in screens so the two
+  read as one product, but loads nothing from the app: every rule is here.
+*/
+
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: swap;
+  src:
+    local('IBM Plex Sans Var'),
+    local('IBMPlexSansVar'),
+    url('./IBMPlexSansVar-Roman.woff2') format('woff2');
+}
+
 :root {
-  color-scheme: light dark;
-  font-family: system-ui, sans-serif;
+  color-scheme: dark;
+  --secure-background: #191624;
+  --secure-card: #272330;
+  --secure-border: #4a4553;
+  --secure-text: #ffffff;
+  --secure-muted: #afafb7;
+  --secure-highlight: #00ffba;
+  --secure-highlight-hover: #00ebac;
+  --secure-danger: #ff5050;
+  font-family:
+    'IBM Plex Sans',
+    system-ui,
+    -apple-system,
+    sans-serif;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+[hidden] {
+  display: none !important;
 }
 
 body {
   margin: 0;
+  min-height: 100dvh;
+  background-color: var(--secure-background);
+  color: var(--secure-text);
 }
 
 #secure-shell {
-  box-sizing: border-box;
-  max-width: 32rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 100dvh;
+  max-width: 28rem;
   margin: 0 auto;
   padding: 1.5rem 1rem;
+}
+
+.secure-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 2rem;
+  border: 1px solid var(--secure-border);
+  border-radius: 15px;
+  background-color: var(--secure-card);
+  font-size: 0.875rem;
+}
+
+.secure-card h1 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.secure-card p {
+  margin: 0;
+}
+
+.secure-card strong {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.secure-card form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.secure-note {
+  color: var(--secure-muted);
+}
+
+.secure-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  font-weight: 600;
+}
+
+.secure-field input {
+  height: 2.5rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--secure-border);
+  border-radius: 6px;
+  background-color: var(--secure-background);
+  color: var(--secure-text);
+  font: inherit;
+  font-weight: 400;
+}
+
+.secure-field input:focus {
+  outline: 2px solid var(--secure-highlight);
+  outline-offset: -1px;
+}
+
+.secure-button {
+  height: 2.5rem;
+  padding: 0 1.25rem;
+  border: 1px solid var(--secure-highlight);
+  border-radius: 100px;
+  background-color: var(--secure-highlight);
+  color: #000;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.secure-button:hover:not(:disabled) {
+  background-color: var(--secure-highlight-hover);
+}
+
+.secure-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.secure-button.secondary,
+.secure-button.google {
+  border-color: var(--secure-border);
+  background-color: transparent;
+  color: var(--secure-text);
+}
+
+.secure-button.secondary:hover:not(:disabled),
+.secure-button.google:hover:not(:disabled) {
+  background-color: var(--secure-border);
+}
+
+.secure-link {
+  align-self: flex-start;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--secure-muted);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.secure-divider {
+  color: var(--secure-muted);
+  text-align: center;
+}
+
+.secure-error {
+  color: var(--secure-danger);
 }

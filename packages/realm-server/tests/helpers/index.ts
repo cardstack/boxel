@@ -1811,6 +1811,7 @@ export async function runTestRealmServerWithRealms({
   linkShapePolicy,
   mediaCacheAdapter,
   clientAddress,
+  secureOriginURL,
 }: {
   realmsRootPath: string;
   realms: {
@@ -1845,6 +1846,8 @@ export async function runTestRealmServerWithRealms({
   // that tells callers apart trusts one hop and names each in
   // `X-Forwarded-For`.
   clientAddress?: ConstructorParameters<typeof RealmServer>[0]['clientAddress'];
+  // Where the server's secure origin is, for a test that signs in on it.
+  secureOriginURL?: URL;
 }) {
   stripTlsEnvVars();
   ensureDirSync(realmsRootPath);
@@ -1951,6 +1954,7 @@ export async function runTestRealmServerWithRealms({
     linkShapePolicy,
     mediaCacheAdapter,
     ...(clientAddress ? { clientAddress } : {}),
+    ...(secureOriginURL ? { secureOriginURL } : {}),
   });
   let testRealmHttpServer = await awaitListening(
     testRealmServer.listen(parseInt(serverURL.port)),

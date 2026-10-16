@@ -78,6 +78,16 @@ export interface Profile {
   matrixDeviceId: string;
   realmTokens?: Record<string, string>;
   realmServerToken?: string;
+  // A session signed in on the secure origin, through the browser (`boxel
+  // keys sign-in`). Only it can authorize a change to the user's keys; the
+  // `realmServerToken` above, from the CLI's ordinary sign-in, can't.
+  secureSession?: SecureSessionRecord;
+}
+
+export interface SecureSessionRecord {
+  token: string;
+  userId: string;
+  expiresAt: string;
 }
 
 export interface ProfilesConfig {
@@ -475,6 +485,33 @@ export class ProfileManager implements RealmAuthenticator {
   getRealmServerToken(): string | undefined {
     let active = this.getActiveProfile();
     return active?.profile.realmServerToken;
+  }
+
+  setSecureSession(session: SecureSessionRecord): void {
+    let active = this.getActiveProfile();
+    if (!active) {
+      return;
+    }
+    active.profile.secureSession = session;
+    this.saveConfig();
+  }
+
+  // The active profile's secure session, while it lasts.
+  getSecureSession(): SecureSessionRecord | undefined {
+    let session = this.getActiveProfile()?.profile.secureSession;
+    if (!session || Date.parse(session.expiresAt) <= Date.now()) {
+      return undefined;
+    }
+    return session;
+  }
+
+  clearSecureSession(): void {
+    let active = this.getActiveProfile();
+    if (!active?.profile.secureSession) {
+      return;
+    }
+    active.profile.secureSession = undefined;
+    this.saveConfig();
   }
 
   // Return the Matrix credentials stored for a profile. Sync — reads only

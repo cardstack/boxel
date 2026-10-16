@@ -869,15 +869,21 @@ export class RealmServer {
     this.clientAddress =
       clientAddressSettings ?? clientAddressSettingsFromEnv(process.env);
     this.secureOrigin = secureOriginURL
-      ? createSecureOrigin(secureOriginURL, {
-          matrixURL: matrixClient.matrixURL,
-          appOrigins: [
-            ...new Set([
-              serverURL.origin,
-              ...secureOriginAppOrigins.map((origin) => new URL(origin).origin),
-            ]),
-          ],
-        })
+      ? createSecureOrigin(
+          secureOriginURL,
+          {
+            matrixURL: matrixClient.matrixURL,
+            appOrigins: [
+              ...new Set([
+                serverURL.origin,
+                ...secureOriginAppOrigins.map(
+                  (origin) => new URL(origin).origin,
+                ),
+              ]),
+            ],
+          },
+          { realmServerURL: serverURL },
+        )
       : undefined;
   }
 

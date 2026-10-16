@@ -106,8 +106,15 @@ import {
   KEY_WRITE_TICKETS_PATH,
   OPENROUTER_PASSTHROUGH_PATH,
   REQUEST_FORWARD_PATH,
+  SECURE_SESSION_PATH,
   USER_KEYS_PATH,
 } from './lib/request-telemetry.ts';
+import {
+  handleCompleteSecureSignIn,
+  handleEndSecureSession,
+  handleSecureOriginInfo,
+  handleStartSecureSignIn,
+} from './handlers/handle-secure-session.ts';
 import {
   handleAddUserKey,
   handleDeleteUserKey,
@@ -175,8 +182,9 @@ export type CreateRoutesArgs = {
   liveSearchCache?: LiveSearchCache;
   // Decides how much of each result's link graph a live search carries.
   linkShapePolicy?: LinkShapePolicy;
-  // The secure origin's shell URL, when this server serves one. Key write
-  // tickets are minted for requests from its origin and for the CLI.
+  // The secure origin's shell URL, when this server serves one. Signing in on
+  // the secure origin is answered only for requests from its origin, and key
+  // write tickets are minted for requests from its origin and for the CLI.
   secureOriginURL?: URL;
 };
 
@@ -257,6 +265,14 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_user',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleCreateUserRequest(args),
+  );
+  router.get('/_secure-origin', handleSecureOriginInfo(args));
+  router.post(`${SECURE_SESSION_PATH}/sign-in`, handleStartSecureSignIn(args));
+  router.post(SECURE_SESSION_PATH, handleCompleteSecureSignIn(args));
+  router.delete(
+    SECURE_SESSION_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleEndSecureSession(args),
   );
   router.post(
     KEY_WRITE_TICKETS_PATH,
