@@ -32,6 +32,12 @@ import { initSharedState } from './shared-state';
 //   and so its `notifyCardTracking`, runs a microtask after the write, which
 //   would otherwise leave a read in the same turn on the pre-mutation array.
 //
+// Every read in a turn is handed the same value. A reader must not mutate a
+// computed's result in place (`this.args.model.days.sort(...)`): a computed
+// containsMany returns its array as-is, not wrapped in a `WatchedArray`, so the
+// mutation drops nothing and every later reader in the turn sees it. Copy
+// first (`[...days].sort(...)`).
+//
 // The holder lives in shared state so a drop raised through one loader's copy
 // of this module reaches a memo held by another's.
 interface ComputedTurnMemo {

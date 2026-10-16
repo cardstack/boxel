@@ -21,6 +21,7 @@ import { module, test } from 'qunit';
 
 import {
   PermissionsContextName,
+  realmURL,
   type Permissions,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
@@ -955,6 +956,33 @@ module('Integration | computeds', function (hooks) {
       ledger.title,
       'Float: 10',
       'a computed derived from a memoized one sees a write to its other dependency',
+    );
+  });
+
+  test('a computed that reads realm meta sees a meta assignment in the same turn', async function (assert) {
+    class Note extends CardDef {
+      @field home = contains(StringField, {
+        computeVia: function (this: Note) {
+          return this[realmURL]?.href ?? 'nowhere';
+        },
+      });
+    }
+
+    let note = new Note();
+    note[meta] = {
+      ...note[meta],
+      realmURL: 'http://example.com/first/',
+    } as (typeof note)[typeof meta];
+    assert.strictEqual(note.home, 'http://example.com/first/');
+
+    note[meta] = {
+      ...note[meta],
+      realmURL: 'http://example.com/second/',
+    } as (typeof note)[typeof meta];
+    assert.strictEqual(
+      note.home,
+      'http://example.com/second/',
+      'the read after the assignment is not served the memoized value',
     );
   });
 
