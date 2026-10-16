@@ -18,13 +18,16 @@ import { initSharedState } from './shared-state';
 // - a tracked write between two reads invalidates the entry, so the read after
 //   a setter assignment recomputes.
 //
-// Two things drop the whole memo, for state the tags do not see:
+// Three things drop the whole memo, for state the tags do not see:
+// - an assignment to an instance's realm meta (the `[meta]` accessor on
+//   `BaseDef`), which computeds read untracked and which is written outside
+//   `notifyCardTracking`;
 // - a microtask queued when the memo opens. It runs after the microtasks
 //   already queued at that point, so continuations resuming in that same
 //   checkpoint share the memo, and none resuming later does. State a
-//   `computeVia` reads without tracking (the clock, an instance's realm meta,
-//   a plain object mutated in place) is therefore never served stale past the
-//   microtask checkpoint it was read in;
+//   `computeVia` reads without tracking (the clock, a plain object mutated in
+//   place) is therefore never served stale past the microtask checkpoint it
+//   was read in;
 // - a `WatchedArray` mutation (`dropComputedTurnMemo`). The array's subscriber,
 //   and so its `notifyCardTracking`, runs a microtask after the write, which
 //   would otherwise leave a read in the same turn on the pre-mutation array.
