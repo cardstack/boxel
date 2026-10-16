@@ -868,10 +868,19 @@ function encodeSegment(name: string, segment: string, value: string): string {
     throw invalidValue(
       name,
       `path.${segment}`,
-      'holds a path separator, which a vendor that decodes the segment reads as more than one segment',
+      'a path separator (`/` or `\\`), which a vendor that decodes the segment reads as more than one segment',
     );
   }
-  return encodeURIComponent(value);
+  try {
+    return encodeURIComponent(value);
+  } catch {
+    // A lone surrogate has no UTF-8 encoding.
+    throw invalidValue(
+      name,
+      `path.${segment}`,
+      'text that is not valid Unicode',
+    );
+  }
 }
 
 function invalidValue(

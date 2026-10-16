@@ -227,9 +227,27 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function (hooks) {
       assert.strictEqual(response.status, 400, JSON.stringify(response.body));
       assert.strictEqual(response.body.errors[0].code, 'invalid-params');
       assert.strictEqual(response.body.errors[0].meta.path, 'path.name');
+      assert.true(
+        response.body.errors[0].detail.includes('path separator'),
+        response.body.errors[0].detail,
+      );
       assert.strictEqual(vendor.requests.length, 0);
     });
   }
+
+  test('a path value that is not valid Unicode is refused before anything is sent', async function (assert) {
+    let response = await post(
+      envelope(
+        invoke('lookup', {
+          data: { name: '\ud800', meta: { adoptsFrom: REPO } },
+        }),
+      ),
+    );
+    assert.strictEqual(response.status, 400, JSON.stringify(response.body));
+    assert.strictEqual(response.body.errors[0].code, 'invalid-params');
+    assert.strictEqual(response.body.errors[0].meta.path, 'path.name');
+    assert.strictEqual(vendor.requests.length, 0);
+  });
 
   test('a path value that is a dot segment is refused before anything is sent', async function (assert) {
     let response = await post(
