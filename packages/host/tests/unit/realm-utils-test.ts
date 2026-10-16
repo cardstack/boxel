@@ -1,11 +1,16 @@
 import { module, test } from 'qunit';
 
-import { VirtualNetwork, baseRealm } from '@cardstack/runtime-common';
+import {
+  VirtualNetwork,
+  baseRealm,
+  registeredRealmURL,
+} from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
 import {
   realmIdentifierSegments,
   resolvedRealmURLHref,
+  serverRealmURLs,
 } from '@cardstack/host/lib/realm-utils';
 
 let { resolvedBaseRealmURL } = ENV;
@@ -105,6 +110,76 @@ module('Unit | realm-utils', function (hooks) {
       assert.throws(
         () => virtualNetwork.toURL('@unmapped/thing/'),
         'the underlying VirtualNetwork call is the one that throws',
+      );
+    });
+  });
+
+  // The realm server registers base under its alias and serves it elsewhere,
+  // while every other prefixed realm is registered at the URL its prefix
+  // resolves to. Federated requests name realms by the registered URL.
+  module('serverRealmURLs', function (hooks) {
+    hooks.beforeEach(function () {
+      virtualNetwork.addRealmMapping(
+        '@test/mapped/',
+        'https://realms.example.com/mapped/',
+      );
+    });
+
+    test('names a prefixed realm by the URL its prefix resolves to', function (assert) {
+      assert.deepEqual(serverRealmURLs(virtualNetwork, ['@test/mapped']), [
+        'https://realms.example.com/mapped/',
+      ]);
+    });
+
+    test('names the base realm by its alias', function (assert) {
+      assert.deepEqual(serverRealmURLs(virtualNetwork, ['@cardstack/base/']), [
+        baseRealm.url,
+      ]);
+    });
+
+    test('leaves URLs alone, even one a URL mapping covers, and dedupes', function (assert) {
+      assert.deepEqual(
+        serverRealmURLs(virtualNetwork, [
+          '@test/mapped/',
+          'https://realms.example.com/mapped/',
+          resolvedBaseRealmURL,
+          '@unmapped/thing/',
+        ]),
+        [
+          'https://realms.example.com/mapped/',
+          new URL(resolvedBaseRealmURL).href,
+          '@unmapped/thing/',
+        ],
+      );
+    });
+  });
+
+  // The realm server's own reading of a federated request's realms, against
+  // a network set up the way its boot sets it up (the same alias and prefix
+  // mappings as above).
+  module('registeredRealmURL', function () {
+    test('names base by its alias whichever spelling the request uses', function (assert) {
+      for (let spelling of [
+        '@cardstack/base/',
+        baseRealm.url,
+        new URL(resolvedBaseRealmURL).href,
+      ]) {
+        assert.strictEqual(
+          registeredRealmURL(virtualNetwork, spelling),
+          baseRealm.url,
+          spelling,
+        );
+      }
+    });
+
+    test('returns anything it cannot place as given', function (assert) {
+      assert.strictEqual(
+        registeredRealmURL(virtualNetwork, 'https://example.com/realm/'),
+        'https://example.com/realm/',
+      );
+      assert.strictEqual(
+        registeredRealmURL(virtualNetwork, '@unmapped/thing/'),
+        '@unmapped/thing/',
       );
     });
   });

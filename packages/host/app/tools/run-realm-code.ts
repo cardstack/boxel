@@ -2333,10 +2333,12 @@ export default class RunRealmCodeTool extends HostBaseTool<
   // the message name the identifiers that do resolve.
   private assertKnownRealmIdentifiers(realms: string[] | undefined): void {
     let { virtualNetwork } = this.network;
+    // Only a realm prefix itself names a realm: a package namespace such as
+    // `@cardstack/boxel-ui/`, or a path beneath a realm prefix, does not.
     let unknown = (realms ?? []).find(
       (realm) =>
         realm.startsWith('@') &&
-        !virtualNetwork.isRegisteredPrefix(ensureTrailingSlash(realm)),
+        virtualNetwork.prefixKind(ensureTrailingSlash(realm)) !== 'realm',
     );
     if (unknown !== undefined) {
       throw new Error(

@@ -50,6 +50,7 @@ import type { Filter, Query } from '@cardstack/runtime-common/query';
 
 import { LiveSearchRefreshScheduler } from '../lib/live-search-refresh-scheduler';
 import { LiveSearchTypeGate } from '../lib/live-search-type-gate';
+import { serverRealmURLs } from '../lib/realm-utils';
 import { searchErrorEntry } from '../lib/search-error-entry';
 
 import type LoaderService from '../services/loader-service';
@@ -640,9 +641,14 @@ export class SearchResource<
       }
       this.subscriptions = this.realmsToSearch.map((realm) => {
         this.#log.info(`search-resource calling subscribeToRealm for ${realm}`);
+        // Realm events arrive keyed by the URL the realm server knows the
+        // realm by, which a realm named by a registered prefix is not. Only
+        // the subscription takes that form: the callback, the refresh floors
+        // and the membership checks all keep the caller's spelling.
+        let [href] = serverRealmURLs(this.network.virtualNetwork, [realm]);
         return {
-          url: `${realm}_message`,
-          unsubscribe: subscribeToRealm(realm, (event: RealmEventContent) => {
+          url: `${href}_message`,
+          unsubscribe: subscribeToRealm(href, (event: RealmEventContent) => {
             this.#log.info(
               `search-resource received realm event on ${realm}: ${JSON.stringify(event)}`,
             );
@@ -803,7 +809,9 @@ export class SearchResource<
     // before it. The comparison needs a realm and a generation on both sides;
     // absent any of them the identity check above decides alone.
     let seedFloor =
-      seed.realm != null ? this.#resultGenerations.get(seed.realm) : undefined;
+      seed.realm != null
+        ? this.#resultGenerations.get(this.#generationKey(seed.realm))
+        : undefined;
     if (
       seed.generation != null &&
       seedFloor != null &&
@@ -860,10 +868,20 @@ export class SearchResource<
     if (realm == null || generation == null) {
       return;
     }
-    let current = this.#resultGenerations.get(realm);
+    let key = this.#generationKey(realm);
+    let current = this.#resultGenerations.get(key);
     if (current == null || generation > current) {
-      this.#resultGenerations.set(realm, generation);
+      this.#resultGenerations.set(key, generation);
     }
+  }
+
+  // A seed names its realm as the realm server does, and a refresh floor as
+  // the caller spelled it; a realm named by a registered prefix is spelled
+  // differently by the two. Generations are kept under the server's form so
+  // the two compare.
+  #generationKey(realm: string): string {
+    let [key] = serverRealmURLs(this.network.virtualNetwork, [realm]);
+    return key;
   }
 
   // Both routes to a result set count as loading. A seeded resource commonly
@@ -1053,22 +1071,24 @@ export class SearchResource<
       return !this.policyScopedRealms.some((realm) => realm.inRealm(id));
     }
     let realm = this.realmsToSearch.find((realm) =>
-      new RealmPaths(realm).inRealm(id),
+      new RealmPaths(realm, this.network.virtualNetwork).inRealm(id),
     );
     return realm !== undefined && this.realm.canRead(realm);
   }
 
-  // The realms the current result set marks policy-scoped.
+  // The realms the current result set marks policy-scoped. The server marks
+  // a realm by its URL, while the store's ids name a realm by its registered
+  // prefix where it has one, so each mark matches across the two forms.
   @cached
   private get policyScopedRealms(): RealmPaths[] {
     return (this._meta?.policyScopedRealms ?? []).map(
-      (realm) => new RealmPaths(ri(realm)),
+      (realm) => new RealmPaths(ri(realm), this.network.virtualNetwork),
     );
   }
 
   private isInTargetRealm(id: RealmResourceIdentifier): boolean {
     return this.realmsToSearch.some((realm) =>
-      new RealmPaths(realm).inRealm(id),
+      new RealmPaths(realm, this.network.virtualNetwork).inRealm(id),
     );
   }
 
@@ -1076,7 +1096,7 @@ export class SearchResource<
   get instancesByRealm() {
     return this.realmsToSearch
       .map((realm) => {
-        let realmPath = new RealmPaths(realm);
+        let realmPath = new RealmPaths(realm, this.network.virtualNetwork);
         let cards = this.instances.filter((card) => realmPath.inRealm(card.id));
         return { realm, cards };
       })
@@ -1334,7 +1354,9 @@ export class SearchResource<
             this.#raiseResultGeneration(realm, generation);
           }
           this._meta = meta;
-          this.answeredRealms = realms.map((realm) => new RealmPaths(realm));
+          this.answeredRealms = realms.map(
+            (realm) => new RealmPaths(realm, this.network.virtualNetwork),
+          );
           this._errors = undefined;
           await this.updateInstances(
             instances as T[],

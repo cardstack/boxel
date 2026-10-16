@@ -4,7 +4,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { SupportedMimeType } from '@cardstack/runtime-common';
+import { baseRealm, SupportedMimeType } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
@@ -1776,6 +1776,19 @@ return { total, incomplete, urls: entries.map((entry) => entry.url) };`,
         [[virtualNetwork.toURL('@cardstack/catalog/').href]],
         'the prefix goes out as its URL, once',
       );
+
+      // The realm server registers the base realm under its alias, not the
+      // URL it is served from, so that is the URL its prefix goes out as.
+      await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.entries.search({}, { realms: ['@cardstack/base/'] });`,
+      });
+      assert.deepEqual(
+        sentRealms[1],
+        [baseRealm.url],
+        'the base prefix goes out as the alias the server knows it by',
+      );
     } finally {
       virtualNetwork.unmount(spy);
     }
@@ -1794,6 +1807,15 @@ return { total, incomplete, urls: entries.map((entry) => entry.url) };`,
       (error: Error) =>
         error.message.includes('Unknown realm identifier "@nope/realm/"') &&
         error.message.includes('@cardstack/catalog/'),
+    );
+    // A package namespace resolves, but names no realm.
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.entries.search({}, { realms: ['@cardstack/boxel-ui/'] });`,
+      }),
+      /Unknown realm identifier "@cardstack\/boxel-ui\/"/,
     );
   });
 

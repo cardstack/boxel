@@ -14,6 +14,7 @@ import {
   MAX_REALMS_PER_SEARCH_REQUEST,
   param,
   parseRealmsFromPayload,
+  registeredRealmURL,
   parseSearchRequestPayload,
   query,
   SearchRequestError,
@@ -117,7 +118,12 @@ export function multiRealmAuthorization(
     let realmList: string[];
     try {
       let payload = await parseSearchRequestPayload(request);
-      realmList = parseRealmsFromPayload(payload);
+      // A realm may be named by its registered prefix or by the URL it is
+      // served from; every check below, and every handler after it, asks in
+      // the URL the realm is registered under.
+      realmList = parseRealmsFromPayload(payload, (realm) =>
+        registeredRealmURL(virtualNetwork, realm),
+      );
       (ctxt.state as Record<string, unknown>)[SEARCH_REQUEST_PAYLOAD_STATE] =
         payload;
     } catch (e: any) {
@@ -172,7 +178,7 @@ export function multiRealmAuthorization(
     if (unknownRealms.length > 0) {
       await sendResponseForNotFound(
         ctxt,
-        `Realms not found: ${unknownRealms.join(', ')}. realms takes the served URLs of realms`,
+        `Realms not found: ${unknownRealms.join(', ')}. Each entry in realms must be the URL of a realm on this server, or an identifier registered for one such as @cardstack/catalog/`,
       );
       return;
     }

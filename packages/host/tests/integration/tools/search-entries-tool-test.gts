@@ -426,6 +426,36 @@ module('Integration | tools | search-entries', function (hooks) {
     assert.strictEqual(result.results[0].url, `${testRealmURL}Author/mark`);
   });
 
+  test('realms input accepts a realm named by a registered prefix', async function (assert) {
+    // Mapping a prefix onto the already-loaded realm changes how its module
+    // refs canonicalize, so the query is untyped: only which realm answers
+    // is under test.
+    let { virtualNetwork } = getService('network');
+    virtualNetwork.addRealmMapping('@test/mapped/', testRealmURL);
+    try {
+      let byURL = await runSearch({
+        query: {},
+        realms: [testRealmURL],
+        scope: 'cards',
+        limit: 10,
+      });
+      let byPrefix = await runSearch({
+        query: {},
+        realms: ['@test/mapped/'],
+        scope: 'cards',
+        limit: 10,
+      });
+      assert.ok(byURL.results.length > 0, 'the realm has cards to find');
+      assert.deepEqual(
+        byPrefix.results.map((row) => row.url).sort(),
+        byURL.results.map((row) => row.url).sort(),
+        'the prefix searches the realm it names',
+      );
+    } finally {
+      virtualNetwork.removeRealmMapping('@test/mapped/');
+    }
+  });
+
   test('the tool module has a default export (skill declarations use name: default)', function (assert) {
     // The top-of-file `import SearchEntriesTool from ...` is a default import;
     // it resolving to the class is the declaration-shape guard.

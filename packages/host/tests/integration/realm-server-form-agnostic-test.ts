@@ -117,8 +117,8 @@ module('Integration | realm-server | identifier forms', function (hooks) {
   });
 
   test('a realm named by its URL finds a token filed under its prefix', function (assert) {
-    // A search now sends a prefix-named realm in URL form, while the realm
-    // resource that logged in through the prefix filed its token there.
+    // A search names its realms in URL form, while a realm resource that
+    // logged in through the prefix filed its token under the prefix.
     getService('network').virtualNetwork.addRealmMapping(
       PREFIX,
       MAPPED_REALM_URL,
