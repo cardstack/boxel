@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { param, query, type DBAdapter } from '@cardstack/runtime-common';
 import type { Expression, Querier } from '@cardstack/runtime-common/expression';
+import { normalizeRealmURL } from '../utils/realm-url.ts';
 import type {
   SealedSecret,
   SecretBinding,
@@ -15,10 +16,11 @@ import type {
 // A key is only its secret. It records no destination: nothing here says
 // where a key may be sent, and the value is sealed to the key alone.
 //
-// A key is added, replaced or deleted only with a key write ticket:
-// short-lived, single-use, minted for the signed-in user and for one change
-// (an add, or a replace or delete of one key), and consumed in the same
-// transaction as that change. The routes mint tickets only for requests from
+// A key is added, replaced, deleted, shared into a realm or swapped into a
+// share only with a key write ticket: short-lived, single-use, minted for the
+// signed-in user and for one change (an add; a replace or delete of one key; a
+// share of one key into one realm; or a swap of one key into one share), and
+// consumed in the same transaction as that change. The routes mint tickets only for requests from
 // the secure origin and for clients that send no `Origin`, as the CLI does, so
 // card code in the app page can't change a key from inside the browser.
 
@@ -29,7 +31,13 @@ export type UserKeyKind = (typeof USER_KEY_KINDS)[number];
 
 export type UserKeyState = 'active';
 
-export const KEY_WRITE_ACTIONS = ['add', 'replace', 'delete'] as const;
+export const KEY_WRITE_ACTIONS = [
+  'add',
+  'replace',
+  'delete',
+  'share',
+  'swap',
+] as const;
 export type KeyWriteAction = (typeof KEY_WRITE_ACTIONS)[number];
 
 export const KEY_WRITE_TICKET_TTL_MS = 10 * 60 * 1000;
@@ -65,45 +73,82 @@ function sha256(value: string): string {
   return createHash('sha256').update(value, 'utf8').digest('hex');
 }
 
-// The change a key write ticket is minted for: an add, or a replace or delete
-// of one key.
+// The change a key write ticket is minted for: an add; a replace or delete of
+// one key; a share of one key into one realm; or a swap of one key into one
+// share.
 export interface KeyWriteTarget {
   action: KeyWriteAction;
-  // The key a replace or delete changes; an add names none.
+  // The key a replace, delete, share or swap uses; an add names none.
   keyId: string | null;
+  // The realm a share puts the key into; only a share names one.
+  realmURL: string | null;
+  // The share a swap puts the key into; only a swap names one.
+  shareId: string | null;
 }
 
-export function validateKeyWriteTarget(
-  action: unknown,
-  keyId: unknown,
-): KeyWriteTarget {
+export function validateKeyWriteTarget({
+  action,
+  keyId,
+  realm,
+  shareId,
+}: {
+  action: unknown;
+  keyId?: unknown;
+  realm?: unknown;
+  shareId?: unknown;
+}): KeyWriteTarget {
   if (!KEY_WRITE_ACTIONS.includes(action as KeyWriteAction)) {
     throw new UserKeyError(
       400,
       `a ticket's action is one of: ${KEY_WRITE_ACTIONS.join(', ')}`,
     );
   }
+  let named = (value: unknown) => value !== undefined && value !== null;
+  if (named(realm) && action !== 'share') {
+    throw new UserKeyError(400, `a ticket to ${action} names no realm`);
+  }
+  if (named(shareId) && action !== 'swap') {
+    throw new UserKeyError(400, `a ticket to ${action} names no share`);
+  }
   if (action === 'add') {
-    if (keyId !== undefined && keyId !== null) {
+    if (named(keyId)) {
       throw new UserKeyError(400, 'a ticket to add a key names no key');
     }
-    return { action, keyId: null };
+    return { action, keyId: null, realmURL: null, shareId: null };
   }
   if (typeof keyId !== 'string') {
     throw new UserKeyError(400, `a ticket to ${action} a key names the key`);
   }
-  return { action: action as KeyWriteAction, keyId };
+  if (action === 'share') {
+    let realmURL = typeof realm === 'string' ? normalizeRealmURL(realm) : null;
+    if (!realmURL) {
+      throw new UserKeyError(400, 'a ticket to share a key names the realm');
+    }
+    return { action, keyId, realmURL: realmURL.href, shareId: null };
+  }
+  if (action === 'swap') {
+    if (typeof shareId !== 'string') {
+      throw new UserKeyError(400, 'a ticket to swap a key names the share');
+    }
+    return { action, keyId, realmURL: null, shareId };
+  }
+  return {
+    action: action as KeyWriteAction,
+    keyId,
+    realmURL: null,
+    shareId: null,
+  };
 }
 
-// Mints a ticket for `owner` and one change. A ticket to replace or delete a
-// key is minted only for a key the owner has; another user's key answers as
-// one that doesn't exist. Only the ticket's SHA-256 is stored, so the ticket
+// Mints a ticket for `owner` and one change. A ticket that names a key is
+// minted only for a key the owner has; another user's key answers as one that
+// doesn't exist. Only the ticket's SHA-256 is stored, so the ticket
 // itself exists only in the response that carries it to the caller. Expired
 // tickets are swept on the way.
 export async function mintKeyWriteTicket(
   dbAdapter: DBAdapter,
   owner: string,
-  { action, keyId }: KeyWriteTarget,
+  { action, keyId, realmURL, shareId }: KeyWriteTarget,
 ): Promise<{ ticket: string; expiresAt: string }> {
   if (keyId !== null) {
     await getUserKey(dbAdapter, owner, keyId);
@@ -114,7 +159,7 @@ export async function mintKeyWriteTicket(
     `DELETE FROM key_write_tickets WHERE expires_at <= NOW()`,
   ]);
   await query(dbAdapter, [
-    `INSERT INTO key_write_tickets (ticket_sha256, owner, action, key_id, expires_at) VALUES (`,
+    `INSERT INTO key_write_tickets (ticket_sha256, owner, action, key_id, realm_url, share_id, expires_at) VALUES (`,
     param(sha256(ticket)),
     `, `,
     param(owner),
@@ -122,6 +167,10 @@ export async function mintKeyWriteTicket(
     param(action),
     `, `,
     param(keyId),
+    `, `,
+    param(realmURL),
+    `, `,
+    param(shareId),
     `, `,
     param(expiresAt.toISOString()),
     `)`,
@@ -131,14 +180,14 @@ export async function mintKeyWriteTicket(
 
 // Consumes `ticket` inside the caller's transaction, so a write that fails
 // afterwards leaves the ticket unused. A ticket spends only on the change it
-// was minted for: its owner, its action and, for a replace or delete, its key.
-// Deleting the row is what makes a ticket single-use: a concurrent second use
-// waits on the row and then finds it gone.
-async function consumeKeyWriteTicket(
+// was minted for: its owner, its action and whatever that action names (its
+// key, realm or share). Deleting the row is what makes a ticket single-use: a
+// concurrent second use waits on the row and then finds it gone.
+export async function consumeKeyWriteTicket(
   txQuery: Querier,
   owner: string,
   ticket: unknown,
-  { action, keyId }: KeyWriteTarget,
+  { action, keyId, realmURL, shareId }: KeyWriteTarget,
 ): Promise<void> {
   if (typeof ticket !== 'string' || ticket.length === 0) {
     throw new UserKeyError(403, INVALID_TICKET_MESSAGE);
@@ -150,14 +199,20 @@ async function consumeKeyWriteTicket(
     param(owner),
     ` AND action = `,
     param(action),
-    ...(keyId === null
-      ? [` AND key_id IS NULL`]
-      : [` AND key_id = `, param(keyId)]),
+    ...matches('key_id', keyId),
+    ...matches('realm_url', realmURL),
+    ...matches('share_id', shareId),
     ` AND expires_at > NOW() RETURNING ticket_sha256`,
   ]);
   if (rows.length === 0) {
     throw new UserKeyError(403, INVALID_TICKET_MESSAGE);
   }
+}
+
+function matches(column: string, value: string | null): Expression {
+  return value === null
+    ? [` AND ${column} IS NULL`]
+    : [` AND ${column} = `, param(value)];
 }
 
 export function validateUserKeyName(name: unknown): string {
@@ -309,6 +364,8 @@ export async function addUserKey(
     await consumeKeyWriteTicket(txQuery, owner, ticket, {
       action: 'add',
       keyId: null,
+      realmURL: null,
+      shareId: null,
     });
     let sealed = keyring.seal(validValue, binding(owner, id));
     let rows = await txQuery([
@@ -348,6 +405,8 @@ export async function replaceUserKeyValue(
     await consumeKeyWriteTicket(txQuery, owner, ticket, {
       action: 'replace',
       keyId: id,
+      realmURL: null,
+      shareId: null,
     });
     let sealed = keyring.seal(validValue, binding(owner, id));
     let [updated] = await txQuery([
@@ -366,8 +425,10 @@ export async function replaceUserKeyValue(
   });
 }
 
-// Deletes a key. Nothing else refers to a key: no table records a key shared
-// into a realm or approved for an operation.
+// Deletes a key. Every share holding it is suspended in the same statement,
+// by a trigger on `user_keys`, and keeps its place in its realm for a direct
+// writer to swap another key into; `listKeyShares` with the key's id lists
+// the shares a delete would suspend.
 export async function deleteUserKey(
   dbAdapter: DBAdapter,
   { owner, id, ticket }: { owner: string; id: string; ticket: unknown },
@@ -377,6 +438,8 @@ export async function deleteUserKey(
     await consumeKeyWriteTicket(txQuery, owner, ticket, {
       action: 'delete',
       keyId: id,
+      realmURL: null,
+      shareId: null,
     });
     let rows = await txQuery([
       `DELETE FROM user_keys WHERE id = `,

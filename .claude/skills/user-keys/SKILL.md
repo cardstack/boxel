@@ -34,9 +34,11 @@ has lost track of a value replaces it.
 | `created_at`, `updated_at`                                     | `timestamptz`                                                                                               |
 
 `key_write_tickets` — one row per unused ticket: `ticket_sha256`, `owner`,
-`action` (`add`, `replace` or `delete`), `key_id` (the key a replace or
-delete changes; null for an add, enforced by
-`key_write_tickets_action_key_id_check`) and `expires_at`. Only the SHA-256
+`action` (`add`, `replace`, `delete`, `share` or `swap`), `key_id` (the key
+a replace, delete, share or swap uses; null for an add), `realm_url` (the
+realm a share puts the key into; null otherwise), `share_id` (the share a swap
+puts the key into; null otherwise) and `expires_at`.
+`key_write_tickets_action_key_id_check` enforces which action names what. Only the SHA-256
 is stored; the ticket itself exists only in the response that minted it.
 
 Both are excluded from the SQLite schema dump and withheld from
@@ -63,14 +65,17 @@ A value moved to another row or owner by a database writer does not open:
 
 ## Key write tickets
 
-A key is added, replaced or deleted only with a ticket: minted for the
-signed-in user and for one change, valid for 10 minutes, single use. A ticket
-names its change when it is minted: `add`, or `replace` or `delete` of one of
-the user's keys. It spends only on that change, so a ticket that leaks can't
+A key is added, replaced, deleted, shared into a realm or swapped into a
+share only with a ticket: minted for the signed-in user and for one change,
+valid for 10 minutes, single use. A ticket names its change when it is
+minted: `add`; `replace` or `delete` of one of the user's keys; `share` of one
+of them into one realm; or `swap` of one of them into one share (see the
+`key-shares` skill). It spends only on that change, so a ticket that leaks can't
 be put to a different one: a ticket to add a key replaces or deletes nothing,
 and a ticket to replace or delete one key does nothing to another, nor the
-other action to the same key. A ticket for a key the user doesn't have is
-refused with 404 at minting, as for no key.
+other action to the same key, and a ticket to share a key into one realm or
+swap it into one share does nothing elsewhere. A ticket for a key the user
+doesn't have is refused with 404 at minting, as for no key.
 
 The change consumes the ticket in the same transaction, so a change refused
 for another reason (a duplicate name, an unknown key, the wrong ticket for
@@ -98,20 +103,20 @@ the ticket goes in `meta`. A body is at most
 exceed that. A query string on these routes is ignored, and left out of the
 request log line and Sentry breadcrumbs.
 
-| Route                      | Does                                                                                                                           |
-| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `POST /_key-write-tickets` | Mint a ticket for one change: type `key-write-ticket`, `attributes.{action, keyId?}`; answers `attributes.{ticket, expiresAt}` |
-| `GET /_user-keys`          | List the user's keys' metadata, by name                                                                                        |
-| `GET /_user-keys/:id`      | One key's metadata                                                                                                             |
-| `POST /_user-keys`         | Add: `attributes.{name, kind?, value}`, `meta.{ticket}` (a ticket to `add`)                                                    |
-| `PATCH /_user-keys/:id`    | Replace the value: `attributes.{value}`, `meta.{ticket}` (a ticket to `replace` this key)                                      |
-| `DELETE /_user-keys/:id`   | Delete: `meta.{ticket}` (a ticket to `delete` this key)                                                                        |
+| Route                      | Does                                                                                                                                             |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `POST /_key-write-tickets` | Mint a ticket for one change: type `key-write-ticket`, `attributes.{action, keyId?, realm?, shareId?}`; answers `attributes.{ticket, expiresAt}` |
+| `GET /_user-keys`          | List the user's keys' metadata, by name                                                                                                          |
+| `GET /_user-keys/:id`      | One key's metadata                                                                                                                               |
+| `POST /_user-keys`         | Add: `attributes.{name, kind?, value}`, `meta.{ticket}` (a ticket to `add`)                                                                      |
+| `PATCH /_user-keys/:id`    | Replace the value: `attributes.{value}`, `meta.{ticket}` (a ticket to `replace` this key)                                                        |
+| `DELETE /_user-keys/:id`   | Delete: `meta.{ticket}` (a ticket to `delete` this key); suspends every share holding it (`GET /_key-shares?key=<id>` lists them first)          |
 
 An attribute other than these, such as a `destination`, is refused with 400.
 
 | Status | Means                                                                                                                                                                                  |
 | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 400    | Malformed body, a missing or over-long name or value, an attribute that can't be set, a ticket request with no valid action or with the wrong `keyId` for it                           |
+| 400    | Malformed body, a missing or over-long name or value, an attribute that can't be set, a ticket request with no valid action or with the wrong `keyId`, `realm` or `shareId` for it     |
 | 401    | No session, an invalid one, or a delegated one                                                                                                                                         |
 | 403    | No valid ticket (missing, used, expired, another user's, or minted for a different change); a ticket asked for without a secure session, or by the app page; a realm-authority session |
 | 404    | No such key — also what another user's key answers, including when a ticket is asked for to change it                                                                                  |

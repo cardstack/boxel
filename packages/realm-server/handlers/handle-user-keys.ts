@@ -20,7 +20,8 @@ import {
   type UserKeyMetadata,
 } from '../lib/user-keys.ts';
 
-// The management API for the signed-in user's own keys. Every route answers
+// The management API for the signed-in user's own keys. The shares API
+// (`handle-key-shares.ts`) answers with the same helpers. Every route answers
 // for the token's user alone, and no route returns a key's value. Adding,
 // replacing and deleting a key each take a key write ticket minted for that
 // change. A request body
@@ -51,7 +52,11 @@ function serialize(key: UserKeyMetadata) {
   return { type: 'user-key', id, attributes };
 }
 
-async function sendJSON(ctxt: Koa.Context, status: number, body: unknown) {
+export async function sendJSON(
+  ctxt: Koa.Context,
+  status: number,
+  body: unknown,
+) {
   await setContextResponse(
     ctxt,
     new Response(JSON.stringify(body), {
@@ -65,7 +70,7 @@ async function sendJSON(ctxt: Koa.Context, status: number, body: unknown) {
 // session check ahead of these routes already refuses a delegated session; a
 // realm-authority session is a realm acting on its own authority, not the
 // user, so it is refused here.
-function ownerOf(ctxt: Koa.Context): string {
+export function ownerOf(ctxt: Koa.Context): string {
   let token = ctxt.state.token as RealmServerTokenClaim | undefined;
   if (!token?.user) {
     throw new UserKeyError(403, 'keys are managed by a signed-in user');
@@ -100,7 +105,9 @@ async function readRawBody(ctxt: Koa.Context): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-async function readJSON(ctxt: Koa.Context): Promise<Record<string, unknown>> {
+export async function readJSON(
+  ctxt: Koa.Context,
+): Promise<Record<string, unknown>> {
   let raw = await readRawBody(ctxt);
   let json: unknown;
   try {
@@ -114,7 +121,7 @@ async function readJSON(ctxt: Koa.Context): Promise<Record<string, unknown>> {
   return json as Record<string, unknown>;
 }
 
-function ticketOf(body: { meta?: unknown }): unknown {
+export function ticketOf(body: { meta?: unknown }): unknown {
   let meta = body.meta;
   return meta && typeof meta === 'object'
     ? (meta as Record<string, unknown>).ticket
@@ -158,7 +165,7 @@ function attributesOf(
 // Runs a handler, answering a `UserKeyError` with its status and message and
 // anything else with a bare 500. Only an error's message is logged, never the
 // request.
-function keysHandler(fn: (ctxt: Koa.Context) => Promise<void>): Handler {
+export function keysHandler(fn: (ctxt: Koa.Context) => Promise<void>): Handler {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     try {
       await fn(ctxt);
@@ -246,10 +253,12 @@ export function handleMintKeyWriteTicket({
     if (!data || typeof data !== 'object' || data.type !== 'key-write-ticket') {
       throw new UserKeyError(400, `the resource type is 'key-write-ticket'`);
     }
-    let target = validateKeyWriteTarget(
-      data.attributes?.action,
-      data.attributes?.keyId,
-    );
+    let target = validateKeyWriteTarget({
+      action: data.attributes?.action,
+      keyId: data.attributes?.keyId,
+      realm: data.attributes?.realm,
+      shareId: data.attributes?.shareId,
+    });
     let { ticket, expiresAt } = await mintKeyWriteTicket(
       dbAdapter,
       owner,
