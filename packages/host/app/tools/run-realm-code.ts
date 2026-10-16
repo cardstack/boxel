@@ -3,6 +3,7 @@ import { service } from '@ember/service';
 import {
   assertQuery,
   coerceErrorMessage,
+  ensureTrailingSlash,
   isBinaryContentType,
   isCardInstance,
   isRelativePath,
@@ -970,7 +971,9 @@ class RealmFsSession {
       (!Array.isArray(realms) ||
         realms.some((realm) => typeof realm !== 'string'))
     ) {
-      throw new TypeError('realms must be an array of realm URLs');
+      throw new TypeError(
+        'realms must be an array of realm URLs or identifiers such as @cardstack/catalog/',
+      );
     }
     if (scope !== undefined && typeof scope !== 'string') {
       throw new TypeError("scope must be one of 'cards', 'files', 'all'");
@@ -1608,7 +1611,10 @@ export default class RunRealmCodeTool extends HostBaseTool<
       (reference, base) =>
         this.network.virtualNetwork.resolveURL(reference, base).href,
       (id) => this.readCard(id),
-      (query, realms) => this.store.searchEntries(query, realms),
+      (query, realms) => {
+        this.assertKnownRealmIdentifiers(realms);
+        return this.store.searchEntries(query, realms);
+      },
       (url, options, doneBy, signal) =>
         this.captureURL(url, options, doneBy, signal),
       (reference) =>
@@ -2320,6 +2326,23 @@ export default class RunRealmCodeTool extends HostBaseTool<
     return virtualNetwork.isRegisteredPrefix(realm)
       ? virtualNetwork.toURL(realm).href
       : new URL(realm).href;
+  }
+
+  // A scoped identifier the host has no mapping for would reach the realm
+  // server as-is and come back as "Realms not found". Refusing it here lets
+  // the message name the identifiers that do resolve.
+  private assertKnownRealmIdentifiers(realms: string[] | undefined): void {
+    let { virtualNetwork } = this.network;
+    let unknown = (realms ?? []).find(
+      (realm) =>
+        realm.startsWith('@') &&
+        !virtualNetwork.isRegisteredPrefix(ensureTrailingSlash(realm)),
+    );
+    if (unknown !== undefined) {
+      throw new Error(
+        `Unknown realm identifier "${unknown}". Pass a realm URL, or one of: ${virtualNetwork.knownRealms().join(', ')}`,
+      );
+    }
   }
 }
 

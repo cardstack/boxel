@@ -115,6 +115,7 @@ import {
   jobIdHeader,
   loggingCorrelationIdHeader,
 } from '../lib/prerender-fetch-headers';
+import { resolvedRealmURLHref } from '../lib/realm-utils';
 import { searchCacheKey } from '../lib/search-cache-key';
 import { searchInFlightKey } from '../lib/search-in-flight-key';
 import { errorJsonApiToErrorEntry } from '../lib/window-error-handler';
@@ -1525,13 +1526,23 @@ export default class StoreService extends Service implements StoreInterface {
     await this.addResourceFromSearchData(resource);
   }
 
-  // Canonicalize a realm list to RealmPaths URLs, dropping unparseable entries.
+  // Canonicalize a realm list to the served URLs `_federated-search` names
+  // realms by, deduped and with unparseable entries dropped. A registered
+  // prefix such as `@cardstack/catalog/` resolves to its URL; the trailing
+  // slash goes on first, since a prefix is only recognized with it. Anything
+  // else passes through, so the server still answers an unknown realm.
   // No fallback: an empty input yields an empty list (the card path relies on
   // this to mean "search nothing" rather than "search everything").
   private normalizeRealmPaths(realms: string[] | undefined): string[] {
-    return (realms ?? [])
-      .map((realm) => new RealmPaths(ri(realm)).url)
-      .filter(Boolean);
+    let virtualNetwork = this.network.virtualNetwork;
+    return [
+      ...new Set(
+        (realms ?? [])
+          .map((realm) => new RealmPaths(ri(realm)).url)
+          .filter(Boolean)
+          .map((realm) => resolvedRealmURLHref(virtualNetwork, realm)),
+      ),
+    ];
   }
 
   // The host default: an absent/empty realm list means every realm the user can

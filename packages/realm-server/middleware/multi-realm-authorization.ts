@@ -172,7 +172,7 @@ export function multiRealmAuthorization(
     if (unknownRealms.length > 0) {
       await sendResponseForNotFound(
         ctxt,
-        `Realms not found: ${unknownRealms.join(', ')}`,
+        `Realms not found: ${unknownRealms.join(', ')}. realms takes the served URLs of realms`,
       );
       return;
     }

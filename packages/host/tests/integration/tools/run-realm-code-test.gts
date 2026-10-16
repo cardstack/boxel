@@ -1717,6 +1717,86 @@ return { count: entries.length, kind: entries[0].kind, more: total > 1, truncate
     });
   });
 
+  test('realm.entries.search finds the entries of a realm named by a registered prefix', async function (assert) {
+    let { virtualNetwork } = getService('network');
+    virtualNetwork.addRealmMapping('@test/mapped/', otherRealmURL);
+    try {
+      let toolService = getService('tool-service');
+      let command = new RunRealmCodeTool(toolService.toolContext);
+
+      let result = await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `const { entries, total, incomplete } = await realm.entries.search(
+  {
+    filter: {
+      on: { module: ${JSON.stringify(`${testRealmURL}recipe`)}, name: 'Recipe' },
+      eq: { name: 'Elsewhere' },
+    },
+  },
+  { realms: ['@test/mapped'], scope: 'cards' },
+);
+return { total, incomplete, urls: entries.map((entry) => entry.url) };`,
+      });
+
+      assert.deepEqual(JSON.parse(result.scriptResult!), {
+        total: 1,
+        incomplete: false,
+        urls: [`${otherRealmURL}Recipe/elsewhere`],
+      });
+    } finally {
+      virtualNetwork.removeRealmMapping('@test/mapped/');
+    }
+  });
+
+  test('realm.entries.search sends a realm named by a registered prefix as its URL', async function (assert) {
+    let { virtualNetwork } = getService('network');
+    let sentRealms: string[][] = [];
+    let spy = async (request: Request) => {
+      if (new URL(request.url).pathname.endsWith('/_federated-search')) {
+        sentRealms.push(JSON.parse(await request.clone().text()).realms);
+      }
+      return null;
+    };
+    virtualNetwork.mount(spy, { prepend: true });
+    try {
+      let toolService = getService('tool-service');
+      let command = new RunRealmCodeTool(toolService.toolContext);
+
+      await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.entries.search({}, { realms: ['@cardstack/catalog/', ${JSON.stringify(
+          virtualNetwork.toURL('@cardstack/catalog/').href,
+        )}] });`,
+      });
+
+      assert.deepEqual(
+        sentRealms,
+        [[virtualNetwork.toURL('@cardstack/catalog/').href]],
+        'the prefix goes out as its URL, once',
+      );
+    } finally {
+      virtualNetwork.unmount(spy);
+    }
+  });
+
+  test('realm.entries.search refuses a scoped identifier no realm is registered under', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.entries.search({}, { realms: ['@nope/realm/'] });`,
+      }),
+      (error: Error) =>
+        error.message.includes('Unknown realm identifier "@nope/realm/"') &&
+        error.message.includes('@cardstack/catalog/'),
+    );
+  });
+
   test('realm.entries.search refuses a page and an unknown scope', async function (assert) {
     let toolService = getService('tool-service');
     let command = new RunRealmCodeTool(toolService.toolContext);

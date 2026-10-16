@@ -410,6 +410,22 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       );
     });
 
+    test('a realm the server does not know is refused with a hint that realms takes URLs', async function (assert) {
+      let response = await postSearch({
+        filter: personFilter(),
+        realms: [testRealm.url, '@cardstack/nope/'],
+      });
+      assert.strictEqual(response.status, 404, 'HTTP 404 status');
+      assert.true(
+        response.text.includes('Realms not found: @cardstack/nope/'),
+        `the unknown realm is named: ${response.text}`,
+      );
+      assert.true(
+        response.text.includes('realms takes the served URLs of realms'),
+        `the hint is given: ${response.text}`,
+      );
+    });
+
     test('cardUrls narrows results across the federation', async function (assert) {
       let response = await postSearch({
         filter: personFilter(),

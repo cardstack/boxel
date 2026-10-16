@@ -51,7 +51,7 @@ import {
   LiveSearchTypeGate,
   stripJsonSuffix,
 } from '../lib/live-search-type-gate';
-import { normalizeRealms } from '../lib/realm-utils';
+import { normalizeRealms, resolvedRealmURLHref } from '../lib/realm-utils';
 import { searchErrorEntry } from '../lib/search-error-entry';
 
 import type LoaderService from '../services/loader-service';
@@ -333,13 +333,23 @@ export class SearchEntriesResource extends Resource<Args> {
     // realms array turns a render into a federated scan across the whole
     // server. A host-owned search (not card-initiated) keeps the all-realms
     // default.
-    let realms = normalizeRealms(
-      query.realms && query.realms.length > 0
-        ? query.realms
-        : this.#cardInitiated
-          ? this.#currentRealmList()
-          : this.realmServer.availableRealmIdentifiers,
-    );
+    //
+    // A realm named by a registered prefix such as `@cardstack/catalog/` is
+    // held as the URL it resolves to: rows carry their realm in URL form, and
+    // realm events arrive keyed by URL, so the subscriptions, the partial
+    // refresh and each row's `realmUrl` all compare in one form.
+    let virtualNetwork = this.network.virtualNetwork;
+    let realms = [
+      ...new Set(
+        normalizeRealms(
+          query.realms && query.realms.length > 0
+            ? query.realms
+            : this.#cardInitiated
+              ? this.#currentRealmList()
+              : this.realmServer.availableRealmIdentifiers,
+        ).map((realm) => resolvedRealmURLHref(virtualNetwork, realm)),
+      ),
+    ];
     this.realmsToSearch = realms;
 
     let realmsChanged = !isEqual(realms, this.#previousRealms);
@@ -893,7 +903,7 @@ export class SearchEntriesResource extends Resource<Args> {
   // carry as `realmUrl`. One RealmPaths per searched realm per call.
   private realmUrlResolver(): (id: string) => string {
     let realmPaths = this.realmsToSearch.map(
-      (realm) => new RealmPaths(ri(realm)),
+      (realm) => new RealmPaths(ri(realm), this.network.virtualNetwork),
     );
     return (id: string): string => {
       let idRRI = rri(id);

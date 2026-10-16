@@ -565,14 +565,17 @@ export default class RealmServerService
         continue;
       }
       // A token is filed under the realm resource's own url, which is whatever
-      // spelling created the resource — so try the identifier as given and its
-      // resolved form. Missing the token does not fail loudly: the loop would
-      // `continue`, and a realm that is the only entry would leave the set
-      // empty and answer with this realm server instead of the realm's.
+      // spelling created the resource — so try the identifier as given and
+      // both of its forms. Missing the token does not fail loudly: the loop
+      // would `continue`, and a realm that is the only entry would leave the
+      // set empty and answer with this realm server instead of the realm's.
       let token =
         sessionTokens[normalizedRealmURL] ??
         sessionTokens[realmURL] ??
-        sessionTokens[resolvedRealmURL];
+        sessionTokens[resolvedRealmURL] ??
+        sessionTokens[
+          this.network.virtualNetwork.unresolveURL(resolvedRealmURL)
+        ];
       if (!token) {
         continue;
       }
@@ -1835,9 +1838,19 @@ export default class RealmServerService
 
   private getRealmTokenForRealms(realms: string[]): string | undefined {
     let sessionTokens = this.readSessionTokens();
+    let virtualNetwork = this.network.virtualNetwork;
     for (let realmURL of realms) {
       let normalizedRealmURL = ensureTrailingSlash(realmURL);
-      let token = sessionTokens[normalizedRealmURL] ?? sessionTokens[realmURL];
+      // A token is filed under whatever spelling created the realm resource,
+      // which may be a registered prefix or the URL it resolves to, so try
+      // the identifier as given and both of its forms.
+      let token =
+        sessionTokens[normalizedRealmURL] ??
+        sessionTokens[realmURL] ??
+        sessionTokens[
+          resolvedRealmURLHref(virtualNetwork, normalizedRealmURL)
+        ] ??
+        sessionTokens[virtualNetwork.unresolveURL(normalizedRealmURL)];
       // An expired token buys nothing: the server rejects it, so sending it
       // spends a round trip to learn what its own `exp` claim already says.
       // Skipping it lets a publicly-readable realm answer the unauthenticated
