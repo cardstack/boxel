@@ -74,9 +74,13 @@ export function collectUsedToolCallIds(
 
 // The used ids a compaction event carries forward. `ToolCallIds` suffixes a
 // used id past the highest suffix in use, so of `x`, `x_1` and `x_2` only `x`
-// and `x_2` need to be kept. When there are still too many, the most recent
-// are kept.
-export function toolCallIdsToCarry(used: Iterable<string>): string[] {
+// and `x_2` need to be kept. When there are still more than `max`, the most
+// recent are kept, and a base id stays as long as its highest suffix does:
+// with the base gone, the provider's next `x` would be issued as `x` again.
+export function toolCallIdsToCarry(
+  used: Iterable<string>,
+  max = MAX_CARRIED_TOOL_CALL_IDS,
+): string[] {
   let ids = [...used];
   let present = new Set(ids);
   let highestSuffix = new Map<string, number>();
@@ -98,7 +102,33 @@ export function toolCallIdsToCarry(used: Iterable<string>): string[] {
       Number(match[2]) < highestSuffix.get(match[1])!
     );
   });
-  return carried.slice(-MAX_CARRIED_TOOL_CALL_IDS);
+  if (carried.length <= max) {
+    return carried;
+  }
+  // Each base id goes with its highest suffix, and the pair is as recent as
+  // that suffix.
+  let lineage = (id: string) => {
+    let match = SUFFIXED_ID.exec(id);
+    return match && highestSuffix.has(match[1]) ? match[1] : id;
+  };
+  let lastPosition = new Map<string, number>();
+  carried.forEach((id, position) => lastPosition.set(lineage(id), position));
+  let size = new Map<string, number>();
+  for (let id of carried) {
+    size.set(lineage(id), (size.get(lineage(id)) ?? 0) + 1);
+  }
+  let kept = new Set<string>();
+  let count = 0;
+  for (let key of [...lastPosition.keys()].sort(
+    (a, b) => lastPosition.get(b)! - lastPosition.get(a)!,
+  )) {
+    if (count + size.get(key)! > max) {
+      break;
+    }
+    kept.add(key);
+    count += size.get(key)!;
+  }
+  return carried.filter((id) => kept.has(lineage(id)));
 }
 
 // Assigns the ids for one reply's tool calls, by their position in the

@@ -9633,6 +9633,23 @@ module('markdown skill tools', (hooks) => {
     );
   });
 
+  test('a compaction carries the same tool from each skill that declares it', async () => {
+    const otherSkillUrl = 'http://test-realm/other-skill/SKILL.md';
+    assert.deepEqual(
+      toolSourceEventIdsToCarry(
+        [
+          readResultEvent('read-1', 1000, [discoveredDef('plan-trip_ab12')]),
+          readResultEvent('read-2', 2000, [
+            discoveredDef('plan-trip_ab12', { skillUrl: otherSkillUrl }),
+          ]),
+        ],
+        '@aibot:localhost',
+      ),
+      ['read-1', 'read-2'],
+      'disabling the first skill leaves the tool from the second',
+    );
+  });
+
   test('a re-read of a skill cannot mutate or remove earlier definitions', async () => {
     // The tools array renders ahead of message history, so a later read of
     // an edited skill file must not rewrite bytes the cache has already

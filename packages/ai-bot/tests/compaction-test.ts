@@ -21,7 +21,9 @@ import {
 import {
   buildCompactionRequest,
   compactRoomHistory,
+  fitCompactionContent,
   isContextLengthExceededError,
+  MAX_COMPACTION_CONTENT_BYTES,
   summaryFromCompletion,
 } from '../lib/compaction.ts';
 import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
@@ -708,6 +710,31 @@ module('compaction', (hooks) => {
       ]);
     });
 
+    test('carries forward the events that contributed tools', async () => {
+      eventList[0] = {
+        ...eventList[0],
+        content: {
+          ...eventList[0].content,
+          data: {
+            context: {
+              tools: [
+                {
+                  type: 'function',
+                  function: { name: 'planWedding', parameters: {} },
+                },
+              ],
+            },
+          },
+        },
+      } as unknown as DiscreteMatrixEvent;
+      let { result } = await compact(completion());
+
+      assert.true(result.compacted);
+      assert.deepEqual(client.getSentEvents()[1].content.toolSourceEventIds, [
+        'u1',
+      ]);
+    });
+
     test('marks the compaction failed when the summary is cut off', async () => {
       let { result, costs } = await compact(
         completion({ finish_reason: 'length' }),
@@ -771,5 +798,53 @@ module('compaction', (hooks) => {
       assert.strictEqual(requests.length, 0);
       assert.strictEqual(client.getSentEvents().length, 0);
     });
+  });
+});
+
+module('fitCompactionContent', () => {
+  test('trims what a compaction carries to fit the event size limit', () => {
+    let content = {
+      status: 'done' as const,
+      upToEventId: '$cut',
+      summary: 'x'.repeat(40_000),
+      summaryVersion: 1,
+      usedToolCallIds: Array.from(
+        { length: 600 },
+        (_, i) => `toolu_${String(i).padStart(30, '0')}`,
+      ),
+      toolSourceEventIds: Array.from(
+        { length: 200 },
+        (_, i) => `$${String(i).padStart(43, '0')}`,
+      ),
+    };
+    let fitted = fitCompactionContent(content);
+
+    assert.true(
+      Buffer.byteLength(JSON.stringify(fitted)) <= MAX_COMPACTION_CONTENT_BYTES,
+    );
+    assert.strictEqual(fitted.summary, content.summary);
+    assert.true(fitted.usedToolCallIds!.length < 600);
+    assert.deepEqual(
+      fitted.usedToolCallIds,
+      content.usedToolCallIds.slice(-fitted.usedToolCallIds!.length),
+      'the most recent used ids are kept',
+    );
+    assert.deepEqual(
+      fitted.toolSourceEventIds,
+      content.toolSourceEventIds.slice(0, fitted.toolSourceEventIds!.length),
+      'the earliest tool sources are kept',
+    );
+  });
+
+  test('leaves content that fits as it is', () => {
+    let content = {
+      status: 'done' as const,
+      upToEventId: '$cut',
+      summary: 'summary',
+      summaryVersion: 1,
+      usedToolCallIds: ['x:0'],
+      toolSourceEventIds: ['$source'],
+    };
+    assert.strictEqual(fitCompactionContent(content), content);
   });
 });

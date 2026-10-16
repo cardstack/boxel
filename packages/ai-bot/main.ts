@@ -21,7 +21,6 @@ import {
   isInDebugMode,
   isToolResultStatusApplied,
   getRoomEvents,
-  fetchRoomEventsBackwards,
   sendPromptAsDebugMessage,
   constructHistory,
 } from '@cardstack/runtime-common/ai';
@@ -66,11 +65,7 @@ import type { Tool } from '@cardstack/base/matrix-event';
 import { Responder } from './lib/responder.ts';
 import { collectUsedToolCallIds } from './lib/tool-call-ids.ts';
 import { buildChatCompletionRequest } from './lib/chat-completion-request.ts';
-import {
-  shouldSetRoomTitle,
-  setTitle,
-  roomTitleAlreadySet,
-} from './lib/set-title.ts';
+import { shouldSetRoomTitle, setTitle, roomHasTitle } from './lib/set-title.ts';
 import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
 import * as Sentry from '@sentry/node';
 
@@ -1247,17 +1242,11 @@ Common issues are:
     try {
       // Most rooms already have their title by now, and the name events
       // alone settle that, so check them before fetching any history.
-      let { events: nameEvents } = await profTime(
-        event.getId()!,
-        'title:getNameEvents',
-        async () =>
-          fetchRoomEventsBackwards(room.roomId, client, {
-            types: ['m.room.name'],
-            limit: 2,
-            maxPages: 1,
-          }),
-      );
-      if (roomTitleAlreadySet(nameEvents)) {
+      if (
+        await profTime(event.getId()!, 'title:roomHasTitle', async () =>
+          roomHasTitle(room.roomId, client),
+        )
+      ) {
         return;
       }
       let eventList = await profTime(

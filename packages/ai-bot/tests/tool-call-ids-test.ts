@@ -99,6 +99,28 @@ module('tool-call ids', () => {
     assert.strictEqual(carried[0], 'call-10');
   });
 
+  test('a base id stays carried as long as its highest suffix is', (assert) => {
+    // `x:0` and `x:0_9` are oldest and most recent: dropping the oldest ids
+    // one by one would drop `x:0` and keep `x:0_9`, and the next `x:0` would
+    // be issued as `x:0` again.
+    let used = [
+      'x:0',
+      ...Array.from({ length: MAX_CARRIED_TOOL_CALL_IDS }, (_, i) => `c-${i}`),
+      'x:0_9',
+    ];
+    let carried = toolCallIdsToCarry(used);
+    assert.true(carried.length <= MAX_CARRIED_TOOL_CALL_IDS);
+    assert.strictEqual(carried[0], 'x:0');
+    assert.strictEqual(carried.at(-1), 'x:0_9');
+    assert.false(carried.includes('c-0'));
+    assert.true(carried.includes(`c-${MAX_CARRIED_TOOL_CALL_IDS - 1}`));
+    assert.strictEqual(
+      new ToolCallIds(carried).idFor(0, 'x:0'),
+      'x:0_10',
+      'the next x:0 is suffixed past the carried highest suffix',
+    );
+  });
+
   test('an assignment is fixed for its position', (assert) => {
     let ids = new ToolCallIds(['x:0']);
     assert.strictEqual(ids.idFor(0, 'x:0'), 'x:0_1');

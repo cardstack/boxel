@@ -13,6 +13,7 @@ import {
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
 } from '@cardstack/runtime-common';
 import {
+  getPromptParts,
   getRoomEvents,
   ROOM_EVENTS_MAX_PAGES,
   ROOM_EVENTS_PAGE_SIZE,
@@ -70,10 +71,12 @@ function stateEvent(
   } as unknown as DiscreteMatrixEvent;
 }
 
+// A done compaction. `toolSourceEventIds: null` makes one that carries
+// nothing forward, as compactions made before carrying existed.
 function compactionEvent(
   id: string,
   upToEventId: string,
-  toolSourceEventIds?: string[],
+  toolSourceEventIds: string[] | null = [],
 ) {
   return {
     event_id: id,
@@ -83,7 +86,9 @@ function compactionEvent(
       status: 'done',
       upToEventId,
       summary: 'summary',
-      ...(toolSourceEventIds ? { toolSourceEventIds } : {}),
+      ...(toolSourceEventIds
+        ? { toolSourceEventIds, usedToolCallIds: [] }
+        : {}),
     },
     room_id: 'test-room-id',
   } as unknown as DiscreteMatrixEvent;
@@ -116,6 +121,8 @@ function createMockedClient(timeline: DiscreteMatrixEvent[] = []) {
   client.getUserId = () => AI_BOT_USER_ID;
   const requests: MessagesRequest[] = [];
   const eventRequests: string[] = [];
+  // Errors /event throws for these ids.
+  const eventFailures = new Map<string, Error>();
   client.http = {
     authedRequest: async (
       _method: Method,
@@ -127,8 +134,15 @@ function createMockedClient(timeline: DiscreteMatrixEvent[] = []) {
         let eventId = decodeURIComponent(eventPath[1]);
         eventRequests.push(eventId);
         let event = timeline.find((e) => e.event_id === eventId);
+        let failure = eventFailures.get(eventId);
+        if (failure) {
+          throw failure;
+        }
         if (!event) {
-          throw new Error(`M_NOT_FOUND: ${eventId}`);
+          throw Object.assign(new Error(`Event not found: ${eventId}`), {
+            errcode: 'M_NOT_FOUND',
+            httpStatus: 404,
+          });
         }
         return event;
       }
@@ -153,7 +167,7 @@ function createMockedClient(timeline: DiscreteMatrixEvent[] = []) {
       return chunk.length === 0 ? { chunk } : { chunk, end: String(next) };
     },
   } as any;
-  return { client, requests, eventRequests };
+  return { client, requests, eventRequests, eventFailures };
 }
 
 async function getErrorMessageFromSend(error: any) {
@@ -389,6 +403,179 @@ test('getRoomEvents - wholeRoom pages to the start past a compaction', async fun
   });
 
   assert.deepEqual(result, timeline);
+});
+
+test('getRoomEvents - a room that fits one page takes one request, stopping at its create event', async function (assert) {
+  const timeline = createRoomTimeline(20);
+  placeAt(timeline, 0, stateEvent('create', 'm.room.create'));
+  const { client, requests } = createMockedClient(timeline);
+
+  const result = await getRoomEvents('room123', client, 'event19');
+
+  assert.deepEqual(result, timeline);
+  assert.strictEqual(requests.length, 1);
+});
+
+test('getRoomEvents - takes the config events from paging when it reaches the start of the room past the cut', async function (assert) {
+  const timeline = createRoomTimeline(1800);
+  placeAt(timeline, 0, stateEvent('create', 'm.room.create'));
+  placeAt(timeline, 1, stateEvent('skills', APP_BOXEL_ROOM_SKILLS_EVENT_TYPE));
+  placeAt(timeline, 1700, compactionEvent('compaction', 'event300'));
+  const { client, requests } = createMockedClient(timeline);
+
+  const result = await getRoomEvents('room123', client, 'event1799');
+
+  assert.strictEqual(requests.length, 2, 'no request for config events');
+  assert.deepEqual(
+    result.slice(0, 2).map((event) => event.event_id),
+    ['skills', 'event300'],
+  );
+  assert.strictEqual(result.length, 1 + 1500);
+});
+
+test('getRoomEvents - pages past a compaction that carries no tools or tool-call ids', async function (assert) {
+  const timeline = createRoomTimeline(3000);
+  placeAt(timeline, 20, compactionEvent('earlier', 'event10'));
+  placeAt(timeline, 1700, compactionEvent('compaction', 'event1500', null));
+  const { client, requests } = createMockedClient(timeline);
+
+  const result = await getRoomEvents('room123', client, 'event2999');
+
+  assert.strictEqual(
+    unfilteredRequests(requests).length,
+    4,
+    'pages to the start of the room',
+  );
+  assert.strictEqual(
+    result[0].event_id,
+    'event0',
+    'the history before its cut is kept, and an older compaction does not cut it',
+  );
+  assert.strictEqual(result.length, 3000);
+});
+
+test('getRoomEvents - puts the events from before the cut in time order', async function (assert) {
+  const timeline = createRoomTimeline(3000);
+  placeAt(timeline, 1, stateEvent('skills', APP_BOXEL_ROOM_SKILLS_EVENT_TYPE));
+  placeAt(timeline, 30, stateEvent('llm', APP_BOXEL_ACTIVE_LLM));
+  placeAt(
+    timeline,
+    1700,
+    compactionEvent('compaction', 'event1500', ['event20', 'event40']),
+  );
+  const { client } = createMockedClient(timeline);
+
+  const result = await getRoomEvents('room123', client, 'event2999');
+
+  assert.deepEqual(
+    result.slice(0, 5).map((event) => event.event_id),
+    ['skills', 'event20', 'llm', 'event40', 'event1500'],
+  );
+});
+
+test('getRoomEvents - throws when a tool-source event fails to load for a reason other than not being there', async function (assert) {
+  const timeline = createRoomTimeline(3000);
+  placeAt(
+    timeline,
+    1700,
+    compactionEvent('compaction', 'event1500', ['event20']),
+  );
+  const { client, eventFailures } = createMockedClient(timeline);
+  eventFailures.set(
+    'event20',
+    Object.assign(new Error('Internal server error'), {
+      errcode: 'M_UNKNOWN',
+      httpStatus: 500,
+    }),
+  );
+
+  await assert.rejects(
+    getRoomEvents('room123', client, 'event2999'),
+    /Internal server error/,
+  );
+});
+
+test('getRoomEvents - stops paging when the end token does not advance', async function (assert) {
+  const { client, requests } = createMockedClient();
+  const pages = [
+    { chunk: [createMockEvent('event2', 'message 2')], end: 't1' },
+    { chunk: [createMockEvent('event1', 'message 1')], end: 't1' },
+    { chunk: [createMockEvent('event0', 'message 0')] },
+  ];
+  client.http = {
+    authedRequest: async (_method: Method, _path: string, queryParams: any) => {
+      requests.push(queryParams);
+      return pages.shift();
+    },
+  } as any;
+
+  const result = await getRoomEvents('room123', client, 'event2');
+
+  assert.deepEqual(
+    result.map((event) => event.event_id),
+    ['event1', 'event2'],
+  );
+  assert.strictEqual(requests.length, 2);
+});
+
+test('getRoomEvents - a history cut by a compaction builds the same tools and model as the whole room', async function (assert) {
+  const timeline = createRoomTimeline(3000);
+  placeAt(
+    timeline,
+    2,
+    stateEvent('llm', APP_BOXEL_ACTIVE_LLM, {
+      model: 'anthropic/claude-sonnet-4.6',
+    }),
+  );
+  for (let [index, name] of [
+    [20, 'first-tool'],
+    [40, 'second-tool'],
+  ] as const) {
+    let event = createMockEvent(`tools-${name}`, `use ${name}`);
+    event.content.data = {
+      context: {
+        tools: [
+          {
+            type: 'function',
+            function: { name, description: name, parameters: {} },
+          },
+        ],
+      },
+    } as any;
+    placeAt(timeline, index, event);
+  }
+  placeAt(
+    timeline,
+    1700,
+    compactionEvent('compaction', 'event1500', [
+      'tools-first-tool',
+      'tools-second-tool',
+    ]),
+  );
+  const { client } = createMockedClient(timeline);
+
+  const windowed = await getPromptParts(
+    await getRoomEvents('room123', client, 'event2999'),
+    AI_BOT_USER_ID,
+    client,
+  );
+  const whole = await getPromptParts(
+    await getRoomEvents('room123', client, 'event2999', { wholeRoom: true }),
+    AI_BOT_USER_ID,
+    client,
+  );
+
+  assert.strictEqual(windowed.model, 'anthropic/claude-sonnet-4.6');
+  assert.deepEqual(
+    windowed.tools?.map((tool) => tool.function.name),
+    ['first-tool', 'second-tool'],
+  );
+  assert.deepEqual(windowed.tools, whole.tools);
+  // Up to the context message, which carries the current time.
+  assert.deepEqual(
+    JSON.stringify(windowed.messages?.slice(0, -1)),
+    JSON.stringify(whole.messages?.slice(0, -1)),
+  );
 });
 
 test('sendErrorEvent - uses provider metadata when available', async function (assert) {

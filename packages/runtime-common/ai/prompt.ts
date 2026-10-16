@@ -1087,21 +1087,26 @@ export function toolSourceTools(
 }
 
 // The events a compaction carries forward for `getTools`: in order, each
-// event that contributes a tool no earlier one does. The history before the
-// compaction's cut is not loaded, and `getRoomEvents` fetches these
-// back by id.
+// event that contributes a tool, from a given skill, that no earlier one
+// does. The history before the compaction's cut is not loaded, and
+// `getRoomEvents` fetches these back by id. A tool is told apart by its skill
+// as well as its name: when two skills declare the same tool and the user
+// disables the first, `getTools` takes it from the second.
 export function toolSourceEventIdsToCarry(
   eventList: DiscreteMatrixEvent[],
   aiBotUserId: string,
 ): string[] {
-  let names = new Set<string>();
+  let seen = new Set<string>();
   let eventIds: string[] = [];
   for (let event of eventList) {
-    let newNames = toolSourceTools(event, aiBotUserId)
-      .map(({ tool }) => tool?.function?.name)
-      .filter((name): name is string => !!name && !names.has(name));
-    if (newNames.length) {
-      newNames.forEach((name) => names.add(name));
+    let newKeys = toolSourceTools(event, aiBotUserId)
+      .filter(({ tool }) => !!tool?.function?.name)
+      .map(({ tool, sourceSkillUrl }) =>
+        JSON.stringify([sourceSkillUrl ?? null, tool.function.name]),
+      )
+      .filter((key) => !seen.has(key));
+    if (newKeys.length) {
+      newKeys.forEach((key) => seen.add(key));
       eventIds.push(event.event_id);
     }
   }
