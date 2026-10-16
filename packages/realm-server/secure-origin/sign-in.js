@@ -276,13 +276,13 @@ function renderSignIn(
   root.replaceChildren(
     page(
       'Sign in to Boxel',
-      h(
-        'p',
-        { class: 'secure-subtitle' },
-        client === 'cli'
-          ? 'to let the Boxel CLI on this computer manage your keys'
-          : 'to manage your keys',
-      ),
+      client === 'cli'
+        ? h(
+            'p',
+            { class: 'secure-subtitle' },
+            'to let the Boxel CLI on this computer manage your keys',
+          )
+        : undefined,
       googleSlot,
       form,
     ),
