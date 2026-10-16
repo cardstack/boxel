@@ -585,8 +585,9 @@ module('Acceptance | code submode | create-file tests', function (hooks) {
       let realmService = getService('realm') as any;
       let realmA = realmService.realms.get(testRealmURL);
       let previousInfo = realmA.info;
+      // Several times the dropdown's width, so it truncates whatever font loads
       let longName =
-        'A workspace with a name far too long to fit inside the realm dropdown';
+        'A workspace with a name far too long to fit inside the realm dropdown, no matter which font the browser renders it in, because it keeps going well past the width of the modal';
       realmA.info = new TrackedObject({ ...previousInfo, name: longName });
       try {
         await openNewFileModal('Card Definition', longName);
