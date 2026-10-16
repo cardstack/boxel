@@ -18,8 +18,8 @@ const WorkspaceLoadingIndicator: TemplateOnlyComponent<Signature> = <template>
   </ItemContainer>
   <style scoped>
     .workspace {
-      min-width: var(--boxel-xxs-container);
-      width: var(--boxel-xxs-container);
+      min-width: var(--workspace-chooser-tile-width);
+      width: var(--workspace-chooser-tile-width);
       height: 10.375rem;
       display: flex;
       flex-direction: column;
