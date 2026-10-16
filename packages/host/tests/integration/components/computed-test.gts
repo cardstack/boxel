@@ -12,6 +12,7 @@ import {
   linksToMany,
   CardInfoField,
   Theme,
+  meta,
 } from '@cardstack/base/card-api';
 import NumberField from '@cardstack/base/number';
 import StringField from '@cardstack/base/string';
@@ -778,6 +779,86 @@ module('Integration | computeds', function (hooks) {
     });
 
     let timesheet = new Timesheet({ minutesByDay: [480, 450, 510, 300] });
+    await renderCard(loader, timesheet, 'isolated');
+    assert.dom('[data-test-days] [data-test-day]').exists({ count: 4 });
+    assert.dom('[data-test-each-day]').exists({ count: 4 });
+    assert.dom('[data-test-total-minutes]').hasText('1740');
+    assert.strictEqual(
+      daysCalls,
+      1,
+      'every row, the iteration and the derived total share one evaluation',
+    );
+  });
+
+  test('iterating a computed containsMany on a store-loaded card runs its computeVia once per render', async function (assert) {
+    let daysCalls = 0;
+    class Day extends FieldDef {
+      @field label = contains(StringField);
+      @field minutes = contains(NumberField);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <span data-test-day><@fields.label /> <@fields.minutes /></span>
+        </template>
+      };
+    }
+    class Timesheet extends CardDef {
+      @field minutesByDay = containsMany(NumberField);
+      @field days = containsMany(Day, {
+        computeVia: function (this: Timesheet) {
+          daysCalls++;
+          return this.minutesByDay.map(
+            (minutes, index) => new Day({ label: `Day ${index + 1}`, minutes }),
+          );
+        },
+      });
+      @field totalMinutes = contains(NumberField, {
+        computeVia: function (this: Timesheet) {
+          return this.days.reduce((sum, day) => sum + day.minutes, 0);
+        },
+      });
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div data-test-days><@fields.days /></div>
+          <ul>
+            {{#each @fields.days as |Day|}}
+              <li data-test-each-day><Day /></li>
+            {{/each}}
+          </ul>
+          <div data-test-total-minutes><@fields.totalMinutes /></div>
+        </template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Timesheet, Day },
+        'Timesheet/week.json': {
+          data: {
+            type: 'card',
+            attributes: { minutesByDay: [480, 450, 510, 300] },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}test-cards`,
+                name: 'Timesheet',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    let store = getService('store');
+    let timesheet = (await store.get(
+      `${testRealmURL}Timesheet/week`,
+    )) as Timesheet;
+    await store.loaded();
+    assert.ok(
+      timesheet[meta]?.realmURL,
+      'the instance carries the realm meta a served card has',
+    );
+
+    daysCalls = 0;
     await renderCard(loader, timesheet, 'isolated');
     assert.dom('[data-test-days] [data-test-day]').exists({ count: 4 });
     assert.dom('[data-test-each-day]').exists({ count: 4 });
