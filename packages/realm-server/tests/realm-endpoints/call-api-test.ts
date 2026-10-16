@@ -228,6 +228,23 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function (hooks) {
     assert.strictEqual(vendor.requests.length, 0);
   });
 
+  test('an http request to a host the guard does not allowlist is refused guard-refused before anything is sent', async function (assert) {
+    configureOutbound({ devAllowlist: ['localhost'] });
+    let response = await post(envelope(invoke('failing', { href: '/repo' })));
+    assert.strictEqual(response.status, 502, JSON.stringify(response.body));
+    assert.strictEqual(response.body.errors[0].code, 'guard-refused');
+    assert.strictEqual(response.body.errors[0].meta.reason, 'scheme');
+    assert.strictEqual(vendor.requests.length, 0, 'nothing was sent');
+  });
+
+  test('an http request to a host the guard allowlists is sent', async function (assert) {
+    configureOutbound({ devAllowlist: ['127.0.0.1'] });
+    let response = await post(envelope(invoke('failing', { href: '/repo' })));
+    assert.strictEqual(response.status, 200, JSON.stringify(response.body));
+    assert.strictEqual(response.body['atomic:results'][0].status, 500);
+    assert.strictEqual(vendor.requests.length, 1);
+  });
+
   test("a vendor's 500 is an answer, not a refusal", async function (assert) {
     let response = await post(envelope(invoke('failing', { href: '/repo' })));
     assert.strictEqual(response.status, 200);
