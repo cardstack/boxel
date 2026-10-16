@@ -46,6 +46,8 @@ import {
 } from '@cardstack/runtime-common';
 
 import ModalContainer from '@cardstack/host/components/modal-container';
+import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
+import { realmURLDisplayText } from '@cardstack/host/lib/realm-utils';
 import {
   publishedRealmURLsFromInfo,
   skillsRealmURL,
@@ -131,13 +133,18 @@ export default class Workspace extends Component<Signature> {
             {{#if @isFavoritesSection}}
               <div class='tile-scrim'></div>
               <div class='tile-content'>
-                <div class='realm-icon-wrapper'>
-                  <RealmIcon
-                    class='workspace-realm-icon'
-                    @realmInfo={{this.realmInfo}}
-                    @canAnimate={{true}}
-                  />
-                </div>
+                <RealmURLTooltip
+                  @realmURL={{@realmIdentifier}}
+                  @announce={{true}}
+                >
+                  <div class='realm-icon-wrapper'>
+                    <RealmIcon
+                      class='workspace-realm-icon'
+                      @realmInfo={{this.realmInfo}}
+                      @canAnimate={{true}}
+                    />
+                  </div>
+                </RealmURLTooltip>
                 <div class='tile-text'>
                   <span
                     class='tile-name'
@@ -167,13 +174,18 @@ export default class Workspace extends Component<Signature> {
                 </div>
               </div>
             {{else}}
-              <div class='realm-icon-wrapper'>
-                <RealmIcon
-                  class='workspace-realm-icon'
-                  @realmInfo={{this.realmInfo}}
-                  @canAnimate={{true}}
-                />
-              </div>
+              <RealmURLTooltip
+                @realmURL={{@realmIdentifier}}
+                @announce={{true}}
+              >
+                <div class='realm-icon-wrapper'>
+                  <RealmIcon
+                    class='workspace-realm-icon'
+                    @realmInfo={{this.realmInfo}}
+                    @canAnimate={{true}}
+                  />
+                </div>
+              </RealmURLTooltip>
             {{/if}}
           </div>
         </ItemContainer>
@@ -340,6 +352,10 @@ export default class Workspace extends Component<Signature> {
               />
               <div class='delete-modal__workspace-info'>
                 <span class='delete-modal__workspace-name'>{{this.name}}</span>
+                <span
+                  class='delete-modal__workspace-url'
+                  data-test-delete-modal-workspace-url
+                >{{this.realmURLText}}</span>
                 {{#if this.loadDeleteSummaryTask.isRunning}}
                   <span class='delete-modal__workspace-meta'>
                     Checking what will be removed from this workspace…
@@ -442,6 +458,10 @@ export default class Workspace extends Component<Signature> {
               </div>
               <div class='archive-modal__workspace-info'>
                 <span class='archive-modal__workspace-name'>{{this.name}}</span>
+                <span
+                  class='archive-modal__workspace-url'
+                  data-test-archive-modal-workspace-url
+                >{{this.realmURLText}}</span>
               </div>
             </div>
 
@@ -1240,6 +1260,10 @@ export default class Workspace extends Component<Signature> {
         font-weight: 600;
         color: var(--boxel-dark);
       }
+      .delete-modal__workspace-url {
+        overflow-wrap: anywhere;
+      }
+      .delete-modal__workspace-url,
       .delete-modal__workspace-meta {
         font-size: var(--boxel-font-size-xs);
         line-height: var(--boxel-line-height-xs);
@@ -1398,6 +1422,12 @@ export default class Workspace extends Component<Signature> {
         font-size: var(--boxel-font-size-sm);
         font-weight: 700;
         color: var(--boxel-dark);
+      }
+      .archive-modal__workspace-url {
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+        color: var(--boxel-450);
+        overflow-wrap: anywhere;
       }
       .archive-modal__info-box {
         background: var(--boxel-light-100);
@@ -1712,6 +1742,13 @@ export default class Workspace extends Component<Signature> {
 
   private get name() {
     return this.realmInfo.name;
+  }
+
+  private get realmURLText() {
+    return realmURLDisplayText(
+      this.network.virtualNetwork,
+      this.args.realmIdentifier,
+    );
   }
 
   // The selection ring is shown only once the user has actively engaged the

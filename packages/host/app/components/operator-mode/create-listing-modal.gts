@@ -30,6 +30,7 @@ import {
 
 import ModalContainer from '@cardstack/host/components/modal-container';
 import { SelectedTypePill } from '@cardstack/host/components/operator-mode/create-file-modal';
+import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
 import SearchResults from '@cardstack/host/components/search/search-results';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 
@@ -58,6 +59,10 @@ export default class CreateListingModal extends Component<Signature> {
 
   private get isModalOpen() {
     return Boolean(this.payload);
+  }
+
+  private get targetRealmURL() {
+    return this.payload?.targetRealm;
   }
 
   private get realmInfo() {
@@ -298,7 +303,9 @@ export default class CreateListingModal extends Component<Signature> {
           <FieldContainer @label='Create In' @tag='label' class='field'>
             <div class='field-contents' data-test-create-listing-target-realm>
               {{#if this.realmInfo}}
-                <RealmIcon class='realm-icon' @realmInfo={{this.realmInfo}} />
+                <RealmURLTooltip @urlInRealm={{this.targetRealmURL}}>
+                  <RealmIcon class='realm-icon' @realmInfo={{this.realmInfo}} />
+                </RealmURLTooltip>
                 <span>{{this.realmInfo.name}}</span>
               {{/if}}
             </div>

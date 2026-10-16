@@ -36,6 +36,7 @@ import { getPublishedRealmDomainOverrides } from '@cardstack/runtime-common/cons
 
 import ModalContainer from '@cardstack/host/components/modal-container';
 import PrivateDependencyViolationComponent from '@cardstack/host/components/operator-mode/private-dependency-violation';
+import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
 import WithLoadedRealm from '@cardstack/host/components/with-loaded-realm';
 
 import config from '@cardstack/host/config/environment';
@@ -1147,7 +1148,9 @@ export default class PublishRealmModal extends Component<Signature> {
 
             <div class='domain-details'>
               <WithLoadedRealm @realmURL={{this.currentRealmURL}} as |realm|>
-                <RealmIcon @realmInfo={{realm.info}} class='realm-icon' />
+                <RealmURLTooltip @realmURL={{this.currentRealmURL}}>
+                  <RealmIcon @realmInfo={{realm.info}} class='realm-icon' />
+                </RealmURLTooltip>
               </WithLoadedRealm>
               <div class='domain-url-container'>
                 <span class='domain-url'>
@@ -1235,7 +1238,9 @@ export default class PublishRealmModal extends Component<Signature> {
 
             <div class='domain-details'>
               <WithLoadedRealm @realmURL={{this.currentRealmURL}} as |realm|>
-                <RealmIcon @realmInfo={{realm.info}} class='realm-icon' />
+                <RealmURLTooltip @realmURL={{this.currentRealmURL}}>
+                  <RealmIcon @realmInfo={{realm.info}} class='realm-icon' />
+                </RealmURLTooltip>
               </WithLoadedRealm>
               {{#if this.unlistedRealmUrl}}
                 <div class='domain-url-container'>
@@ -1419,7 +1424,9 @@ export default class PublishRealmModal extends Component<Signature> {
                 </div>
               {{else if this.claimedDomain}}
                 <WithLoadedRealm @realmURL={{this.currentRealmURL}} as |realm|>
-                  <RealmIcon @realmInfo={{realm.info}} class='realm-icon' />
+                  <RealmURLTooltip @realmURL={{this.currentRealmURL}}>
+                    <RealmIcon @realmInfo={{realm.info}} class='realm-icon' />
+                  </RealmURLTooltip>
                 </WithLoadedRealm>
                 <div class='domain-url-container'>
                   <span class='domain-url'>
@@ -1569,7 +1576,12 @@ export default class PublishRealmModal extends Component<Signature> {
                       @realmURL={{this.currentRealmURL}}
                       as |realm|
                     >
-                      <RealmIcon @realmInfo={{realm.info}} class='realm-icon' />
+                      <RealmURLTooltip @realmURL={{this.currentRealmURL}}>
+                        <RealmIcon
+                          @realmInfo={{realm.info}}
+                          class='realm-icon'
+                        />
+                      </RealmURLTooltip>
                     </WithLoadedRealm>
                     <div class='domain-url-container'>
                       <span class='domain-url'>{{overrideUrl}}</span>

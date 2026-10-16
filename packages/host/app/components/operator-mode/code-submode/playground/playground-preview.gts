@@ -31,6 +31,7 @@ interface Signature {
     isFieldDef?: boolean;
     isFileDef?: boolean;
     realmInfo?: EnhancedRealmInfo;
+    realmURLText?: string;
     contextMenuItems?: MenuItem[];
     onEdit?: () => void;
     onFinishEditing?: () => void;
@@ -60,6 +61,7 @@ const PlaygroundPreview: TemplateOnlyComponent<Signature> = <template>
             (if @isFileDef (fileDefName @card) undefined)
           }}
           @realmInfo={{@realmInfo}}
+          @realmURLText={{@realmURLText}}
           @onEdit={{@onEdit}}
           @onFinishEditing={{@onFinishEditing}}
           @isTopCard={{true}}

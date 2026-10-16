@@ -1046,6 +1046,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
                   @lastSavedMessage={{this.cardResource.autoSaveState.lastSavedErrorMsg}}
                   @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
                   @realmInfo={{realmInfo}}
+                  @realmURLText={{this.realm.realmURLTextOf
+                    this.urlForRealmLookup
+                  }}
                   @utilityMenu={{this.utilityMenu}}
                   @onEdit={{if
                     this.canEdit
@@ -1069,6 +1072,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
                 @lastSavedMessage={{this.cardResource.autoSaveState.lastSavedErrorMsg}}
                 @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
                 @realmInfo={{realmInfo}}
+                @realmURLText={{this.realm.realmURLTextOf
+                  this.urlForRealmLookup
+                }}
                 @utilityMenu={{this.utilityMenu}}
                 @onEdit={{if
                   this.canEdit

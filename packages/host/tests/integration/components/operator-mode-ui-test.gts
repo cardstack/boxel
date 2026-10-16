@@ -27,7 +27,7 @@ module('Integration | operator-mode | ui', function (hooks) {
 
   let noop = () => {};
 
-  test('displays realm name in tooltip when hovering realm icon', async function (assert) {
+  test('displays realm name and URL in tooltip when hovering realm icon', async function (assert) {
     ctx.setCardInOperatorModeState(`${testRealmURL}Person/fadhlan`);
     await renderComponent(
       class TestDriver extends GlimmerComponent {
@@ -51,7 +51,10 @@ module('Integration | operator-mode | ui', function (hooks) {
     await triggerEvent(`[data-test-card-header-realm-icon]`, 'mouseenter');
     assert
       .dom('[data-test-tooltip-content]')
-      .hasText('In Operator Mode Workspace');
+      .includesText('In Operator Mode Workspace');
+    assert
+      .dom('[data-test-tooltip-content] [data-test-card-header-realm-url]')
+      .hasText('test-realm/test');
     await triggerEvent(`[data-test-card-header-realm-icon]`, 'mouseleave');
     assert
       .dom('[data-test-boxel-card-header-title]')
@@ -198,6 +201,28 @@ module('Integration | operator-mode | ui', function (hooks) {
     await waitFor('[data-test-submode-switcher]');
     assert.dom('[data-test-submode-switcher]').hasText('Interact');
     assert.dom('[data-test-submode-arrow-direction="down"]').exists();
+  });
+
+  test(`hovering the card url bar realm info shows the realm URL`, async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}BlogPost/1`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+
+    await waitFor('[data-test-submode-switcher]');
+    await click('[data-test-submode-switcher-button]');
+    await click('[data-test-boxel-menu-item-text="Code"]');
+    await waitFor(
+      '[data-test-card-url-bar-realm-info] [data-test-realm-url-tooltip-trigger]',
+    );
+
+    await triggerEvent(
+      '[data-test-card-url-bar-realm-info] [data-test-realm-url-tooltip-trigger]',
+      'mouseenter',
+    );
+    assert.dom('[data-test-realm-url-tooltip]').hasText('test-realm/test');
   });
 
   test(`card url bar shows realm info of valid URL`, async function (assert) {

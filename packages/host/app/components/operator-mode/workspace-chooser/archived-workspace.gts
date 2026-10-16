@@ -15,6 +15,7 @@ import {
 } from '@cardstack/boxel-ui/components';
 import { cssVar } from '@cardstack/boxel-ui/helpers';
 
+import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
 import type {
   ArchivedRealmInfo,
   default as RealmServerService,
@@ -81,12 +82,14 @@ export default class ArchivedWorkspace extends Component<Signature> {
           </:trigger>
           <:content>Archived workspace</:content>
         </Tooltip>
-        <div class='realm-icon-wrapper'>
-          <RealmIcon
-            class='workspace-realm-icon'
-            @realmInfo={{this.realmInfo}}
-          />
-        </div>
+        <RealmURLTooltip @realmURL={{@archivedRealm.url}} @announce={{true}}>
+          <div class='realm-icon-wrapper'>
+            <RealmIcon
+              class='workspace-realm-icon'
+              @realmInfo={{this.realmInfo}}
+            />
+          </div>
+        </RealmURLTooltip>
         {{#if this.restoreTask.isRunning}}
           <div class='restore-pending'>
             <LoadingIndicator class='restore-spinner' />
