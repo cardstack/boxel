@@ -25,10 +25,6 @@ import {
   type Saved,
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
-import {
-  APP_BOXEL_ACTIVE_LLM,
-  DEFAULT_FALLBACK_MODELS,
-} from '@cardstack/runtime-common/matrix-constants';
 
 import {
   generateImage,
@@ -833,7 +829,7 @@ class RealmFsSession {
       case 'room.disableSkills':
         return this.room.disableSkills(args[0]);
       case 'room.setModel':
-        return this.room.setModel(args[0]);
+        return await this.room.setModel(args[0]);
       case 'ui.switchSubmode': {
         let submode = args[0];
         if (submode !== 'interact' && submode !== 'code') {
@@ -1862,7 +1858,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
       this.environmentService.cardSizeLimitBytes,
       new RoomActions({
         checkSkill: (id) => this.checkSkill(id),
-        knownModels: () => this.knownModels(roomId),
+        knownModels: () => this.matrixService.pickableModelIds(roomId),
       }),
     );
     let runnerResult;
@@ -2023,22 +2019,6 @@ export default class RunRealmCodeTool extends HostBaseTool<
     if (!source) {
       throw new Error(`Not a skill card or skill markdown file: ${id}`);
     }
-  }
-
-  // The models the room's model picker offers: the configured ones, and any
-  // model the room has used before.
-  private knownModels(roomId: string): string[] {
-    let configs = this.matrixService.systemCard?.modelConfigurations;
-    let models = configs
-      ? configs.flatMap((config) => (config.modelId ? [config.modelId] : []))
-      : DEFAULT_FALLBACK_MODELS.map((model) => model.modelId);
-    // The same models the room resource's `usedLLMs` lists, read from the
-    // room's events, which exist whether or not the room is rendered.
-    let usedLLMs = (this.matrixService.getRoomData(roomId)?.events ?? [])
-      .filter((event) => event.type === APP_BOXEL_ACTIVE_LLM)
-      .map((event) => (event.content as { model?: string }).model)
-      .filter((model): model is string => !!model);
-    return [...new Set([...models, ...usedLLMs])];
   }
 
   // The files it saved, then the captures it took.

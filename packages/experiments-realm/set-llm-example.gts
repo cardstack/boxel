@@ -6,9 +6,10 @@ import SetActiveLLMTool from '@cardstack/boxel-host/commands/set-active-llm';
 import CreateAiAssistantRoomTool from '@cardstack/boxel-host/commands/create-ai-assistant-room';
 import OpenAiAssistantRoomTool from '@cardstack/boxel-host/commands/open-ai-assistant-room';
 import { Button } from '@cardstack/boxel-ui/components';
+import { DEFAULT_FALLBACK_MODEL_ID } from '@cardstack/runtime-common';
 
 class IsolatedTemplate extends Component<typeof SetLlmExample> {
-  @tracked modelId = 'microsoft/phi-4';
+  @tracked modelId = DEFAULT_FALLBACK_MODEL_ID;
   @tracked currentRoomId: string | null = null;
 
   @action

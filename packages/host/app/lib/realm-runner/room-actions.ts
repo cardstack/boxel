@@ -10,7 +10,7 @@ export interface RoomActionChecks {
   // Throws unless `id` names a skill card or a skill markdown file.
   checkSkill(id: string): Promise<void>;
   // The model ids the room may switch to.
-  knownModels(): string[];
+  knownModels(): Promise<string[]>;
 }
 
 export interface RequestedRoomChanges {
@@ -58,12 +58,12 @@ export class RoomActions {
     return { disable: ids, appliedAfterRun: true };
   }
 
-  setModel(model: unknown) {
+  async setModel(model: unknown) {
     if (typeof model !== 'string' || model.trim().length === 0) {
       throw new TypeError('room.setModel expects a model id string');
     }
     model = model.trim();
-    let known = this.checks.knownModels();
+    let known = await this.checks.knownModels();
     if (!known.includes(model as string)) {
       throw new Error(
         `Unknown model: ${model}. Models this room can use: ${known.join(', ')}`,
