@@ -877,6 +877,38 @@ module('Integration | computeds', function (hooks) {
     );
   });
 
+  test('a computed whose computeVia throws throws on every read in the turn', async function (assert) {
+    class Gauge extends CardDef {
+      @field reading = contains(NumberField);
+      @field level = contains(NumberField, {
+        computeVia: function (this: Gauge) {
+          if (this.reading < 0) {
+            throw new Error('negative reading');
+          }
+          return this.reading * 2;
+        },
+      });
+    }
+
+    let failing = new Gauge({ reading: -1 });
+    assert.throws(() => failing.level, /negative reading/);
+    assert.throws(
+      () => failing.level,
+      /negative reading/,
+      'a failed first evaluation is not served as a value',
+    );
+
+    let gauge = new Gauge({ reading: 1 });
+    assert.strictEqual(gauge.level, 2);
+    gauge.reading = -1;
+    assert.throws(() => gauge.level, /negative reading/);
+    assert.throws(
+      () => gauge.level,
+      /negative reading/,
+      'a failed recompute does not fall back to the last good value',
+    );
+  });
+
   test('CardDef.cardTheme resolves from cardInfo.theme', async function (assert) {
     class Article extends CardDef {
       static displayName = 'Article';

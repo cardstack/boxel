@@ -19,9 +19,12 @@ import { initSharedState } from './shared-state';
 //   a setter assignment recomputes.
 //
 // Two things drop the whole memo, for state the tags do not see:
-// - the end of the turn (a microtask), so state a `computeVia` reads without
-//   tracking (the clock, an instance's realm meta, a plain object mutated in
-//   place) is never served stale past the turn it was read in;
+// - a microtask queued when the memo opens. It runs after the microtasks
+//   already queued at that point, so continuations resuming in that same
+//   checkpoint share the memo, and none resuming later does. State a
+//   `computeVia` reads without tracking (the clock, an instance's realm meta,
+//   a plain object mutated in place) is therefore never served stale past the
+//   microtask checkpoint it was read in;
 // - a `WatchedArray` mutation (`dropComputedTurnMemo`). The array's subscriber,
 //   and so its `notifyCardTracking`, runs a microtask after the write, which
 //   would otherwise leave a read in the same turn on the pre-mutation array.
@@ -60,7 +63,17 @@ export function readComputedThroughTurnMemo<T>(
     cache = createCache(compute);
     perInstance.set(fieldName, cache);
   }
-  return getValue(cache) as T;
+  try {
+    return getValue(cache) as T;
+  } catch (err) {
+    // Glimmer marks a cache valid even when its function throws, and would
+    // serve the stored (undefined or previous) value on the next read. Drop
+    // the entry so every read of a failing computed throws.
+    if (perInstance.get(fieldName) === cache) {
+      perInstance.delete(fieldName);
+    }
+    throw err;
+  }
 }
 
 export function dropComputedTurnMemo(): void {
