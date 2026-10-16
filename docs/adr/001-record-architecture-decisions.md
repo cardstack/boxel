@@ -40,7 +40,7 @@ The frontmatter MUST contain:
 - `status`: `proposed`, `accepted`, `superseded`, or `deprecated`.
 - `date`: the date of the decision.
 - `scope`: a YAML list of globs for the code the decision governs, one glob
-  per line. `scripts/adr-for.mjs` reads it.
+  per line. `scripts/adr-for.mts` reads it.
 
 A superseding ADR MUST set `supersedes`, and the ADR it replaces MUST set
 `superseded-by`. A retroactive ADR (§1.7) MUST set `retroactive: true` and

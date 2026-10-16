@@ -1,7 +1,7 @@
 ---
 name: adr
 allowed-tools: Read, Grep, Glob, Bash, Write, Edit
-description: Write, supersede, or backfill Architecture Decision Records in docs/adr/ — short, normative records (BCP 14 MUST/SHOULD requirements, numbered sections) of why the codebase is shaped as it is, with the options each decision rejected. ADR 001 is the normative source for the format; this skill is the procedure. Covers when a change warrants an ADR, numbering and frontmatter (status, date, scope globs that scripts/adr-for.mjs matches against paths), drafting from the template, the deletion pass, the rule that every reason in a retroactive ADR cites a source or is listed as an open question, superseding instead of editing, citing ADRs by section, and keeping ADRs free of private-tracker IDs and production data. Use when making or proposing an architectural decision in a PR, when a PR's "Key decisions" outlive the PR, when asked to write/draft/backfill/supersede an ADR, and before changing or reversing a rule in code that an ADR's scope covers.
+description: Write, supersede, or backfill Architecture Decision Records in docs/adr/ — short, normative records (BCP 14 MUST/SHOULD requirements, numbered sections) of why the codebase is shaped as it is, with the options each decision rejected. ADR 001 is the normative source for the format; this skill is the procedure. Covers when a change warrants an ADR, numbering and frontmatter (status, date, scope globs that scripts/adr-for.mts matches against paths), drafting from the template, the deletion pass, the rule that every reason in a retroactive ADR cites a source or is listed as an open question, superseding instead of editing, citing ADRs by section, and keeping ADRs free of private-tracker IDs and production data. Use when making or proposing an architectural decision in a PR, when a PR's "Key decisions" outlive the PR, when asked to write/draft/backfill/supersede an ADR, and before changing or reversing a rule in code that an ADR's scope covers.
 ---
 
 # Architecture Decision Records
@@ -16,7 +16,7 @@ If you are about to reverse, work around, or loosen an established pattern,
 find the ADRs that govern the files you're touching:
 
 ```sh
-node scripts/adr-for.mjs <path>...
+node scripts/adr-for.mts <path>...
 ```
 
 Read each `accepted` or `proposed` ADR it lists. Follow its MUST requirements. If the change can't, tell the user
@@ -34,7 +34,7 @@ ADR (ADR 001 §1.6). Departing from a SHOULD needs a reason stated in the PR
 3. **Copy `docs/adr/template.md`** and fill it in (ADR 001 §1.2–§1.4):
    - Set `status: proposed`. Never set `accepted` (§1.6).
    - Write `scope` as a YAML list, one glob per line, precise enough that
-     `scripts/adr-for.mjs` finds this ADR from the code it governs. Check it
+     `scripts/adr-for.mts` finds this ADR from the code it governs. Check it
      by running the script on a file the ADR governs.
    - Write the summary paragraph last, once you know what the ADR says.
    - In the Decision, write one requirement per sentence with a BCP 14 key

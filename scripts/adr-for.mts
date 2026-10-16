@@ -2,27 +2,34 @@
 // Lists the ADRs in docs/adr/ whose `scope` globs match the given repo-relative
 // paths. With no paths, lists every ADR with its scope.
 //
-//   node scripts/adr-for.mjs packages/postgres/migrations/x.js
-//   node scripts/adr-for.mjs $(gh pr diff 1234 --name-only)
+//   node scripts/adr-for.mts packages/postgres/migrations/x.js
+//   node scripts/adr-for.mts $(gh pr diff 1234 --name-only)
 
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, matchesGlob } from 'node:path';
 
 const adrDir = join(import.meta.dirname, '..', 'docs', 'adr');
 
-function parseAdr(file) {
+interface Adr {
+  file: string;
+  status: string;
+  title: string;
+  scope: string[];
+}
+
+function parseAdr(file: string): Adr {
   let text = readFileSync(join(adrDir, file), 'utf8');
   let [, frontmatter = '', body = ''] =
     text.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/) ?? [];
   let lines = frontmatter.split('\n');
-  let field = (name) =>
+  let field = (name: string) =>
     lines
       .find((line) => line.startsWith(`${name}:`))
       ?.slice(name.length + 1)
       .replace(/#.*$/, '')
       .trim();
 
-  let scope = [];
+  let scope: string[] = [];
   let start = lines.findIndex((line) => line.startsWith('scope:'));
   if (start !== -1) {
     let inline = field('scope');

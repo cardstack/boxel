@@ -29,7 +29,7 @@ If the diff touches an area with a dedicated domain skill (index-query-engine, s
 3. **Bot findings are leads, not findings.** Verify reachability with a concrete path through the code before repeating one. Confirmed → fold it into the relevant comment along with the verification. Unverified → don't amplify it.
 4. **Check out the head branch** read-only in a worktree under `.claude/worktrees/`. Never commit to or push another author's branch. The diff shows what changed; the review is about how that lands in the code around it, which requires the whole tree.
 5. **Read beyond the diff.** For each non-trivial hunk, read the enclosing file, then the callers and callees of everything it touches. The highest-value findings usually live one call site away from the diff.
-6. **Read the ADRs that govern the diff.** Run `node scripts/adr-for.mjs $(gh pr diff {n} --name-only)` from the head worktree; it lists the ADRs whose scope globs match the changed files. Read every `accepted` or `proposed` ADR that matches before judging the change. Each one records a decision the change must keep, or must explicitly supersede.
+6. **Read the ADRs that govern the diff.** Run `node scripts/adr-for.mts $(gh pr diff {n} --name-only)` from the head worktree; it lists the ADRs whose scope globs match the changed files. Read every `accepted` or `proposed` ADR that matches before judging the change. Each one records a decision the change must keep, or must explicitly supersede.
 
 ## Phase 2 — Investigate like the next owner
 

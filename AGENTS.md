@@ -291,7 +291,7 @@ Symptom differs from triggers 1–2: the template body is silently dropped, so t
 
 ## Architecture decision records
 
-- `docs/adr/` records why the codebase is shaped as it is, as numbered MUST/SHOULD requirements. ADR 001 defines the format. Each ADR declares `scope` globs for the code it governs. Before reversing or working around an established pattern, run `node scripts/adr-for.mjs <path>...` and read the ADRs it lists. Don't silently break a MUST of an `accepted` ADR: follow it, or say that the change needs a superseding ADR. Cite a rule as "ADR NNN §x.y" rather than restating it.
+- `docs/adr/` records why the codebase is shaped as it is, as numbered MUST/SHOULD requirements. ADR 001 defines the format. Each ADR declares `scope` globs for the code it governs. Before reversing or working around an established pattern, run `node scripts/adr-for.mts <path>...` and read the ADRs it lists. Don't silently break a MUST of an `accepted` ADR: follow it, or say that the change needs a superseding ADR. Cite a rule as "ADR NNN §x.y" rather than restating it.
 - When a change makes a decision that outlives its PR (ADR 001 §1.1), load the `adr` skill and draft a `proposed` ADR in the same PR. Only a person marks an ADR `accepted`.
 
 ## Linear Ticket Process (Reusable)
