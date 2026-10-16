@@ -106,8 +106,12 @@ SELECT created_at, reason, owner, suspended_by
 FROM key_share_notices WHERE share_id = '<id>' ORDER BY created_at DESC;
 ```
 
-Both tables hold no secret, but they are withheld from `readonly_role` and its
-members like `user_keys`, and excluded from the SQLite schema dump.
+Both tables hold no secret, but they are withheld from `readonly_role`, like
+`user_keys`: the migration revokes SELECT from the role and from each member
+that inherits it or can SET ROLE to it (not a member holding only the ADMIN
+option, nor a table's owner), then stops, naming the role and the column, if
+any role reading through `readonly_role` can still read a column (through a
+PUBLIC grant, say). They are also excluded from the SQLite schema dump.
 `realm_url` is the realm's canonical URL, with a trailing slash, as
 `realm_user_permissions` stores it.
 

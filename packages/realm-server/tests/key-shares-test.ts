@@ -833,42 +833,37 @@ module(basename(import.meta.filename), function () {
   module('key shares tables', function (hooks) {
     let dbAdapter: PgAdapter;
 
+    // Roles and memberships are shared by every database on the server, so
+    // each test removes the memberships it makes, whatever happens.
+    const MEMBER = 'readonly_member_for_key_shares_test';
+    const ADMIN_MEMBER = 'readonly_admin_member_for_key_shares_test';
+    const OWNER = 'readonly_owner_for_key_shares_test';
+    const OTHER_ROLE = 'other_role_for_key_shares_test';
+    const TABLES = ['key_shares', 'key_share_notices'];
+
     setupDB(hooks, {
       beforeEach: async (_dbAdapter) => {
         dbAdapter = _dbAdapter;
+        // The role and its blanket grant as staging and production have them.
+        await createRole('readonly_role');
+        await dbAdapter.execute(
+          `GRANT SELECT ON ALL TABLES IN SCHEMA public TO readonly_role`,
+        );
       },
     });
 
-    test("the read-only role can't select either table", async function (assert) {
-      // The role and its blanket grant as staging and production have them,
-      // then the migration that withholds these tables.
+    async function createRole(name: string) {
       await dbAdapter.execute(
         `DO $$
          BEGIN
-           CREATE ROLE readonly_role;
+           CREATE ROLE ${name};
          EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL;
          END
          $$`,
       );
-      await dbAdapter.execute(
-        `GRANT SELECT ON ALL TABLES IN SCHEMA public TO readonly_role`,
-      );
-      // A user that inherits the role and was also granted SELECT on the
-      // tables directly.
-      await dbAdapter.execute(
-        `DO $$
-         BEGIN
-           CREATE ROLE readonly_member_for_key_shares_test;
-         EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL;
-         END
-         $$`,
-      );
-      await dbAdapter.execute(
-        `GRANT readonly_role TO readonly_member_for_key_shares_test`,
-      );
-      await dbAdapter.execute(
-        `GRANT SELECT ON TABLE key_shares, key_share_notices TO readonly_member_for_key_shares_test`,
-      );
+    }
+
+    async function runUp() {
       let statements: string[] = [];
       require(KEY_SHARES_MIGRATION).up({
         sql: (statement: string) => statements.push(statement),
@@ -876,26 +871,138 @@ module(basename(import.meta.filename), function () {
       for (let statement of statements) {
         await dbAdapter.execute(statement);
       }
+    }
 
-      async function selectAs(role: string, sql: string) {
-        return await dbAdapter.withTransaction(async (query: any) => {
-          await query([`SET LOCAL ROLE ${role}`]);
-          return await query([sql]);
-        });
+    async function withMemberships(
+      memberships: [role: string, member: string, options?: string][],
+      fn: () => Promise<void>,
+    ) {
+      for (let [role, member] of memberships) {
+        await createRole(role);
+        await createRole(member);
       }
-
-      for (let role of [
-        'readonly_role',
-        'readonly_member_for_key_shares_test',
-      ]) {
-        for (let table of ['key_shares', 'key_share_notices']) {
-          await assert.rejects(
-            selectAs(role, `SELECT * FROM ${table}`),
-            new RegExp(`permission denied for table ${table}`),
-            `${role} can't select ${table}`,
+      try {
+        for (let [role, member, options] of memberships) {
+          await dbAdapter.execute(
+            `GRANT ${role} TO ${member}${options ? ` WITH ${options}` : ''}`,
           );
         }
+        await fn();
+      } finally {
+        for (let [role, member] of [...memberships].reverse()) {
+          await dbAdapter.execute(`REVOKE ${role} FROM ${member}`);
+        }
       }
+    }
+
+    async function selectAs(role: string, sql: string) {
+      return await dbAdapter.withTransaction(async (query: any) => {
+        await query([`SET LOCAL ROLE ${role}`]);
+        return await query([sql]);
+      });
+    }
+
+    async function canSelect(role: string, table: string): Promise<boolean> {
+      let [{ readable }] = await dbAdapter.execute(
+        `SELECT has_table_privilege('${role}', '${table}', 'SELECT') AS readable`,
+      );
+      return readable as boolean;
+    }
+
+    test("the read-only role and its members can't select either table", async function (assert) {
+      // A member that inherits the role and was also granted SELECT on the
+      // tables directly.
+      await withMemberships([['readonly_role', MEMBER]], async () => {
+        await dbAdapter.execute(
+          `GRANT SELECT ON TABLE ${TABLES.join(', ')} TO ${MEMBER}`,
+        );
+
+        await runUp();
+
+        for (let role of ['readonly_role', MEMBER]) {
+          for (let table of TABLES) {
+            await assert.rejects(
+              selectAs(role, `SELECT * FROM ${table}`),
+              new RegExp(`permission denied for table ${table}`),
+              `${role} can't select ${table}`,
+            );
+          }
+        }
+      });
+    });
+
+    test('stops when PUBLIC can read a column', async function (assert) {
+      await dbAdapter.execute(
+        `GRANT SELECT (owner) ON TABLE key_shares TO PUBLIC`,
+      );
+
+      await assert.rejects(
+        runUp(),
+        /can read key_shares\.owner, which is withheld from readonly_role/,
+      );
+    });
+
+    test('stops when a member reads a table through another role', async function (assert) {
+      await withMemberships(
+        [
+          ['readonly_role', MEMBER],
+          [OTHER_ROLE, MEMBER],
+        ],
+        async () => {
+          await dbAdapter.execute(
+            `GRANT SELECT ON TABLE key_share_notices TO ${OTHER_ROLE}`,
+          );
+
+          await assert.rejects(
+            runUp(),
+            new RegExp(
+              `${MEMBER} can read key_share_notices\\.\\w+, which is withheld`,
+            ),
+          );
+        },
+      );
+    });
+
+    test('leaves SELECT to a member that holds only the ADMIN option on the role', async function (assert) {
+      // The role that creates the read-only role holds this membership on
+      // Postgres 16 and later, and reads nothing through it.
+      await withMemberships(
+        [
+          [
+            'readonly_role',
+            ADMIN_MEMBER,
+            'ADMIN TRUE, INHERIT FALSE, SET FALSE',
+          ],
+        ],
+        async () => {
+          await dbAdapter.execute(
+            `GRANT SELECT ON TABLE ${TABLES.join(', ')} TO ${ADMIN_MEMBER}`,
+          );
+
+          await runUp();
+
+          for (let table of TABLES) {
+            assert.true(
+              await canSelect(ADMIN_MEMBER, table),
+              `it still reads ${table}`,
+            );
+          }
+        },
+      );
+    });
+
+    test('leaves SELECT to a member that owns a table', async function (assert) {
+      await createRole(OWNER);
+      await dbAdapter.execute(`ALTER TABLE key_shares OWNER TO ${OWNER}`);
+      await withMemberships([['readonly_role', OWNER]], async () => {
+        await runUp();
+
+        assert.true(await canSelect(OWNER, 'key_shares'), 'the owner reads it');
+        assert.false(
+          await canSelect('readonly_role', 'key_shares'),
+          'the role itself still does not',
+        );
+      });
     });
   });
 });
