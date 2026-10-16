@@ -54,12 +54,7 @@ export class PreferencePicker<T extends string> extends Component<
   };
 
   <template>
-    <details
-      name='header-preferences'
-      class='header-picker'
-      ...attributes
-      {{on 'keydown' dismiss}}
-    >
+    <details class='header-picker' ...attributes {{on 'keydown' dismiss}}>
       <summary
         class='header-picker-pill'
         aria-label={{@label}}
@@ -132,7 +127,8 @@ export class PreferencePicker<T extends string> extends Component<
         border: 1px solid var(--line-strong);
         border-radius: 16px;
         background: var(--bg);
-        box-shadow: 0 12px 40px rgba(0, 0, 0, 0.27);
+        box-shadow: 0 12px 40px
+          rgba(var(--shadow-rgb), calc(0.27 * var(--shadow-a)));
       }
 
       .header-picker-label {
@@ -155,7 +151,8 @@ export class PreferencePicker<T extends string> extends Component<
         border: 0;
         border-radius: 999px;
         padding: 9px 4px;
-        color: var(--ink-faint);
+        /* --ink-dim, not faint: the track is --bg-well, the darkest ground */
+        color: var(--ink-dim);
         background: transparent;
         font-size: 12px;
         cursor: pointer;
@@ -166,7 +163,24 @@ export class PreferencePicker<T extends string> extends Component<
         background: var(--line-strong);
       }
 
-      @media (max-width: 600px) {
+      /* A NARROW BAR HAS NO ROOM BESIDE THE PILL. Hung from the pill, the
+         menu runs off the bar's left edge, and on a phone off the screen, so
+         here it hangs from the bar instead (the site frame's bar is the
+         `site-bar` container, and the positioned box the menu falls back
+         to), spanning it between the bar's gutters. A container query,
+         because in a host stack the bar is narrower than the window. */
+      @container site-bar (max-width: 600px) {
+        .header-picker {
+          position: static;
+        }
+
+        .header-picker-menu {
+          left: var(--bar-gutter, 16px);
+          right: var(--bar-gutter, 16px);
+          top: calc(100% + 6px);
+          width: auto;
+        }
+
         .header-picker-pill {
           width: 94px;
           padding-inline: 9px;

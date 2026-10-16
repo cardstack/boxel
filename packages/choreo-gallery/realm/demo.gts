@@ -237,7 +237,7 @@ class Embedded extends Component<typeof GalleryDemo> {
         font-size: 10px;
         letter-spacing: 0.16em;
         text-transform: uppercase;
-        color: var(--ember-hot);
+        color: var(--eyebrow);
       }
 
       .tile-title {
@@ -272,6 +272,13 @@ class Embedded extends Component<typeof GalleryDemo> {
 const STAGE_ROOM = { height: 300, width: 240 };
 
 /**
+ * The shortest tiles that hold the demo's group over a name of two lines, and
+ * over a name of one: the host's strips and badges are 105, 65 and 40px tall.
+ */
+const TWO_LINE_ROOM = 76;
+const GROUP_ROOM = 58;
+
+/**
  * The demo as a tile: the live stage over what it is, with its guide. It is
  * the gallery's grid, and the host opens the demo card on a click anywhere on
  * it that the stage does not keep for itself.
@@ -284,6 +291,8 @@ const STAGE_ROOM = { height: 300, width: 240 };
  */
 class Fitted extends Component<typeof GalleryDemo> {
   @tracked roomy = false;
+  /** how much of the name and group a tile too short for a stage can show */
+  @tracked fit: 'is-short' | 'is-tiny' | undefined;
 
   get demo() {
     return this.args.model as GalleryDemo;
@@ -296,9 +305,25 @@ class Fitted extends Component<typeof GalleryDemo> {
   measure = modifier((element: HTMLElement) => {
     let observer = new ResizeObserver(([entry]) => {
       let { height, width } = entry!.contentRect;
+      // No box at all is not a small box: the host hides a covered stack
+      // item's content with `display: none`. The stage stays mounted, resting
+      // (see `restWhenOff`), and carries on from where it was when the card
+      // shows again, rather than starting over.
+      if (height === 0 && width === 0) {
+        return;
+      }
       let roomy = height >= STAGE_ROOM.height && width >= STAGE_ROOM.width;
       if (roomy !== this.roomy) {
         this.roomy = roomy;
+      }
+      let fit: Fitted['fit'] =
+        height < GROUP_ROOM
+          ? 'is-tiny'
+          : height < TWO_LINE_ROOM
+            ? 'is-short'
+            : undefined;
+      if (fit !== this.fit) {
+        this.fit = fit;
       }
     });
     observer.observe(element);
@@ -319,7 +344,10 @@ class Fitted extends Component<typeof GalleryDemo> {
   }
 
   <template>
-    <ChoreoRoot class='tile {{if this.roomy "is-roomy"}}' {{this.measure}}>
+    <ChoreoRoot
+      class='tile {{if this.roomy "is-roomy"}} {{this.fit}}'
+      {{this.measure}}
+    >
       {{#if this.roomy}}
         <div class='tile-stage' {{restWhenOff}} {{ownControlClicks}}>
           <DemoStage @demo={{this.demo}} @face='tile' @open={{this.open}} />
@@ -407,7 +435,7 @@ class Fitted extends Component<typeof GalleryDemo> {
         font-size: 9px;
         letter-spacing: 0.16em;
         text-transform: uppercase;
-        color: var(--ember-hot);
+        color: var(--eyebrow);
       }
 
       .tile.is-roomy .tile-group {
@@ -422,10 +450,9 @@ class Fitted extends Component<typeof GalleryDemo> {
         font-family: var(--font-mono);
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        color: var(--ember);
-        border: 1px solid var(--ember);
+        color: var(--ember-ink);
+        border: 1px solid color-mix(in srgb, var(--ember-ink) 55%, transparent);
         border-radius: 3px;
-        opacity: 0.7;
         vertical-align: middle;
       }
 
@@ -437,17 +464,37 @@ class Fitted extends Component<typeof GalleryDemo> {
         font-size: 1rem;
         letter-spacing: -0.03em;
         line-height: 1.1;
+        /* a long name gets two lines and an ellipsis, not a cut through a
+           letter wherever the tile happens to end; and its lines are never
+           squeezed, so a tile shorter than them clips whole lines */
+        flex-shrink: 0;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 2;
+        line-clamp: 2;
         overflow: hidden;
-        text-overflow: ellipsis;
+        overflow-wrap: break-word;
       }
 
       .tile.is-roomy .tile-title {
         font-size: 1.2rem;
       }
 
+      /* a strip or a badge: the name on one line, and in the shortest of
+         them without its group, rather than either cut through */
+      .tile.is-short .tile-title,
+      .tile.is-tiny .tile-title {
+        -webkit-line-clamp: 1;
+        line-clamp: 1;
+      }
+
+      .tile.is-tiny .tile-group {
+        display: none;
+      }
+
       @media (hover: hover) {
         .tile:hover .tile-title {
-          color: var(--ember-hot);
+          color: var(--ember-ink);
         }
       }
 
@@ -458,7 +505,7 @@ class Fitted extends Component<typeof GalleryDemo> {
       }
 
       .tile:has(.tile-title:focus-visible) {
-        outline: 2px solid var(--ember-hot);
+        outline: 2px solid var(--ring);
         outline-offset: -2px;
       }
 

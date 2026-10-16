@@ -25,6 +25,11 @@ import {
 } from '../utils/operator-token.ts';
 import { knownRealmURL, type RealmRoutingDeps } from '../lib/realm-routing.ts';
 import {
+  isKeyRoutePath,
+  keepsMethodAndPathOnly,
+  withCredentialHeadersMasked,
+} from '../lib/request-telemetry.ts';
+import {
   AuthenticationError,
   AuthenticationErrorMessages,
   SupportedMimeType,
@@ -202,12 +207,36 @@ export function healthCheck(ctxt: Koa.Context, next: Koa.Next) {
 // the mitigation there.)
 function loggableRequestURL(ctxt: Koa.Context): string {
   let url = fullRequestURL(ctxt);
+  // A key route takes nothing in its query string, so whatever a client put
+  // there (a misplaced ticket or value) is left out.
+  if (url.search && isKeyRoutePath(url.pathname)) {
+    return `${url.origin}${url.pathname}`;
+  }
   if (!url.searchParams.has('token')) {
     return url.href;
   }
   let masked = new URL(url.href);
   masked.searchParams.set('token', 'REDACTED');
   return masked.href;
+}
+
+// The request's headers as the debug line prints them. The line goes to Loki,
+// and Sentry's console integration keeps it as a breadcrumb on any event raised
+// during the request, so it carries no more than that event may:
+// - On the secure origin, the proxy routes, the system-key routes and the key
+//   routes, where an event keeps only the method and path, the line lists the
+//   header names alone.
+// - Elsewhere, a credential header (the session token, cookies, a signature)
+//   keeps its name with its value masked, and every other header is printed as
+//   sent, so the line still shows what the caller sent for diagnosis.
+function loggableRequestHeaders(
+  ctxt: Koa.Context,
+): Record<string, string | string[] | undefined> | string[] {
+  let headers = ctxt.req.headers;
+  if (keepsMethodAndPathOnly({ url: fullRequestURL(ctxt).href, headers })) {
+    return Object.keys(headers);
+  }
+  return withCredentialHeadersMasked(headers);
 }
 
 export function httpLogging(ctxt: Koa.Context, next: Koa.Next) {
@@ -244,7 +273,7 @@ export function httpLogging(ctxt: Koa.Context, next: Koa.Next) {
         ctxt,
       )}: ${ctxt.status}${jobTag}${corrTag} dur=${Date.now() - startedAt}ms`,
     );
-    logger.debug(JSON.stringify(ctxt.req.headers));
+    logger.debug(JSON.stringify(loggableRequestHeaders(ctxt)));
   });
   return next();
 }
@@ -662,11 +691,14 @@ export async function sendResponseForForbiddenRequest(
 }
 
 // Admits only an operator token for `scope`, signed with the realm secret
-// seed (see utils/operator-token.ts).
+// seed for this server's origin (see utils/operator-token.ts). The verified
+// claims are left on `ctxt.state.operatorToken` for the handler.
 export function operatorAuthorization(
   secretSeed: string,
   scope: OperatorScope,
+  serverURL: string | URL,
 ): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
+  let audience = new URL(serverURL).origin;
   return async function (ctxt: Koa.Context, next: Koa.Next) {
     let authorization = ctxt.req.headers['authorization'];
     if (!authorization) {
@@ -677,7 +709,12 @@ export function operatorAuthorization(
       return;
     }
     try {
-      verifyOperatorToken(authorization, secretSeed, scope);
+      ctxt.state.operatorToken = verifyOperatorToken(
+        authorization,
+        secretSeed,
+        scope,
+        audience,
+      );
     } catch (e) {
       if (e instanceof AuthenticationError) {
         await sendResponseForUnauthorizedRequest(ctxt, e.message);

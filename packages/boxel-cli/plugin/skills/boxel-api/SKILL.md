@@ -142,7 +142,7 @@ CodeRef fields (e.g. `ref` on a Spec card) are matched against the full `{ modul
 ```json
 {
   "filter": {
-    "on": { "module": "https://cardstack.com/base/spec", "name": "Spec" },
+    "on": { "module": "@cardstack/base/spec", "name": "Spec" },
     "eq": {
       "ref": {
         "module": "http://localhost:4201/my-realm/sticky-note",
@@ -156,7 +156,7 @@ CodeRef fields (e.g. `ref` on a Spec card) are matched against the full `{ modul
 ### Common mistakes
 
 - **Field names without `on`.** Fields like `title`, `status`, etc. are type-specific. The exceptions are `cardTitle` and `cardDescription` — those exist on the base `CardDef`.
-- **Relative or bare module URLs.** Always use full absolute module URLs in CodeRefs.
+- **Relative or bare module identifiers.** Always use absolute module identifiers in CodeRefs: a URL for workspace realms, `@cardstack/<realm>/…` for well-known realms.
 - **Slash separators in dotted paths.** Use `author.firstName`, not `author/firstName`.
 - **Searching relationships that aren't rendered in an embedded/fitted template.** The query engine indexes a linked field only if it appears in an embedded format. Otherwise the filter silently misses.
 

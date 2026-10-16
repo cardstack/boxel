@@ -26,5 +26,6 @@ import './chat-completion-request-test.ts';
 import './lenient-json-test.ts';
 import './stop-test.ts';
 import './compaction-test.ts';
+import './tool-call-ids-test.ts';
 
 QUnit.start();

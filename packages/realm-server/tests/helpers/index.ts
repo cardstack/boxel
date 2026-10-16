@@ -71,6 +71,11 @@ import {
   type RealmRegistryRow,
 } from '../../lib/realm-registry-reconciler.ts';
 import { realmDiskPath } from '../../lib/realm-disk-path.ts';
+import {
+  installSecretsKeyring,
+  LocalKeyProvider,
+  resetSecretsAtRest,
+} from '../../lib/secrets-at-rest/index.ts';
 import { findRealm } from '../../lib/realm-routing.ts';
 import { upsertPublishedRealmInRegistry } from '../../lib/realm-registry-writes.ts';
 
@@ -1256,6 +1261,18 @@ type BeforeAfterCallback = (
 
 type TestDatabaseTemplateProvider = string | (() => string | undefined);
 
+// Installs the local development keyring for each test, as realm-server
+// startup installs its keyring, for tests whose requests seal or open a
+// stored secret.
+export function setupSecretsKeyring(hooks: NestedHooks) {
+  hooks.beforeEach(async function () {
+    installSecretsKeyring(await new LocalKeyProvider().loadDataKeys());
+  });
+  hooks.afterEach(function () {
+    resetSecretsAtRest();
+  });
+}
+
 export function setupDB(
   hooks: NestedHooks,
   args: {
@@ -2192,8 +2209,10 @@ export function mtimes(
         traverseDir(fullPath);
       } else if (entry.isFile()) {
         const stats = statSync(fullPath);
+        // Floored from `mtimeMs`, as the realm adapter reports it. `Stats.mtime`
+        // is rounded to the millisecond and can land a second later.
         mtimes[paths.fileURL(fullPath.substring(path.length)).href] = unixTime(
-          stats.mtime.getTime(),
+          stats.mtimeMs,
         );
       }
     }
@@ -3391,15 +3410,17 @@ export async function startSimpleRealmServer({
   publisher,
   runner,
   domainsForPublishedRealms,
+  secureOriginURL,
 }: {
   dbAdapter: PgAdapter;
   publisher: QueuePublisher;
   runner: QueueRunner;
-  // Changes how the server answers, not what it indexes, so every caller
+  // These change how the server answers, not what it indexes, so every caller
   // shares the one template `setupSimpleRealmServerTemplate` builds.
   domainsForPublishedRealms?: Parameters<
     typeof runTestRealmServer
   >[0]['domainsForPublishedRealms'];
+  secureOriginURL?: URL;
 }): Promise<Server> {
   let realmsRootPath = join(dirSync().name, 'realm_server_simple');
   let testRealmDir = join(realmsRootPath, 'test');
@@ -3415,6 +3436,7 @@ export async function startSimpleRealmServer({
     runner,
     matrixURL,
     domainsForPublishedRealms,
+    secureOriginURL,
   });
   return testRealmHttpServer;
 }

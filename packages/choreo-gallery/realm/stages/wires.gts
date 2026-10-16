@@ -1,4 +1,4 @@
-import { Choreo, type Rect } from '@cardstack/choreo';
+import { Choreo, type ChoreoRun, type Rect } from '@cardstack/choreo';
 import { array, fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
@@ -7,6 +7,7 @@ import { modifier } from 'ember-modifier';
 import { motion, spring } from 'glimmer-motion';
 
 import { GalleryDemo } from '../demo';
+import { observeStage } from '../lib/onstage';
 import { tuneSeconds, tuneSpring } from '../lib/tuning';
 import WiresNotes from '../notes/wires';
 
@@ -247,59 +248,83 @@ const draftNo = (v: number) => String(v + 1);
 export class Wires extends Component {
   @tracked version = 0;
 
-  rest = modifier((el: SVGSVGElement, [version]: [number]) => {
-    void version;
-    const root = el.closest('.wires');
-    const layer = root?.querySelector('[data-choreo-tethers]');
-    let follow = 0;
-    const pin = () => {
-      if (!root) {
-        return;
+  rest = modifier(
+    (el: SVGSVGElement, [version, c]: [number, { run: ChoreoRun | null }]) => {
+      void version;
+      const root = el.closest('.wires');
+      const layer = root?.querySelector('[data-choreo-tethers]');
+      let follow = 0;
+      const pin = () => {
+        if (!root) {
+          return;
+        }
+        const hot = root.getAttribute('data-hot');
+        if (hot && root.querySelector(`[data-thread="${hot}"]`)) {
+          return;
+        }
+        const first = root.querySelector('.wires-note') as HTMLElement | null;
+        root.setAttribute('data-hot', first?.dataset.thread ?? 'gauge');
+      };
+      const draw = () => {
+        paintRest(el);
+        pin();
+      };
+      // The tethers stand for as long as the board does, and a standing run
+      // ticks, redrawing them, every frame; the rest wires follow it. Both run
+      // only while someone can see them: scrolled away or covered, the run is
+      // paused and the board holds still, and both carry on when it comes back.
+      // A run starts by laying its tethers into the layer, so one that starts
+      // off stage is paused as it lays them.
+      let onStage = false;
+      const followDraw = () => {
+        draw();
+        follow =
+          onStage && root?.querySelector('[data-choreo-tether]')
+            ? requestAnimationFrame(followDraw)
+            : 0;
+      };
+      const startFollow = () => {
+        if (!onStage) {
+          c.run?.pause();
+        } else if (!follow) {
+          follow = requestAnimationFrame(followDraw);
+        }
+      };
+      const stage = observeStage(root ?? el, (visible) => {
+        onStage = visible;
+        if (visible) {
+          c.run?.play();
+          startFollow();
+        } else {
+          c.run?.pause();
+          cancelAnimationFrame(follow);
+          follow = 0;
+        }
+      });
+      const id = requestAnimationFrame(() => requestAnimationFrame(draw));
+      const ro =
+        root && typeof ResizeObserver !== 'undefined'
+          ? new ResizeObserver(() => requestAnimationFrame(draw))
+          : null;
+      const mo =
+        layer && typeof MutationObserver !== 'undefined'
+          ? new MutationObserver(startFollow)
+          : null;
+      if (root) {
+        ro?.observe(root);
       }
-      const hot = root.getAttribute('data-hot');
-      if (hot && root.querySelector(`[data-thread="${hot}"]`)) {
-        return;
+      if (layer) {
+        mo?.observe(layer, { childList: true });
       }
-      const first = root.querySelector('.wires-note') as HTMLElement | null;
-      root.setAttribute('data-hot', first?.dataset.thread ?? 'gauge');
-    };
-    const draw = () => {
-      paintRest(el);
-      pin();
-    };
-    const followDraw = () => {
-      draw();
-      follow = root?.querySelector('[data-choreo-tether]')
-        ? requestAnimationFrame(followDraw)
-        : 0;
-    };
-    const startFollow = () => {
-      if (!follow) {
-        follow = requestAnimationFrame(followDraw);
-      }
-    };
-    const id = requestAnimationFrame(() => requestAnimationFrame(draw));
-    const ro =
-      root && typeof ResizeObserver !== 'undefined'
-        ? new ResizeObserver(() => requestAnimationFrame(draw))
-        : null;
-    const mo =
-      layer && typeof MutationObserver !== 'undefined'
-        ? new MutationObserver(startFollow)
-        : null;
-    if (root) {
-      ro?.observe(root);
-    }
-    if (layer) {
-      mo?.observe(layer, { childList: true });
-    }
-    return () => {
-      cancelAnimationFrame(id);
-      cancelAnimationFrame(follow);
-      ro?.disconnect();
-      mo?.disconnect();
-    };
-  });
+      return () => {
+        stage.disconnect();
+        cancelAnimationFrame(id);
+        cancelAnimationFrame(follow);
+        ro?.disconnect();
+        mo?.disconnect();
+      };
+    },
+  );
 
   /**
    * Pair a mark with its comment — an attribute on the region, not a tracked
@@ -350,7 +375,7 @@ export class Wires extends Component {
         <svg
           class='wires-rest'
           aria-hidden='true'
-          {{this.rest this.version}}
+          {{this.rest this.version c}}
         ></svg>
 
         <div class='wires-board'>
@@ -683,7 +708,6 @@ export class Wires extends Component {
         box-decoration-break: clone;
         -webkit-box-decoration-break: clone;
         cursor: pointer;
-        outline: none;
       }
 
       .wires[data-hot='gauge'] .wires-mark[data-thread='gauge'],
@@ -713,7 +737,6 @@ export class Wires extends Component {
         border: 0;
         background: transparent;
         cursor: pointer;
-        outline: none;
       }
 
       .wires-hue {

@@ -795,6 +795,10 @@ export interface RenderTimeoutDiagnostics extends BuildModelDiagnostics {
   // couldn't run a trivial expression), which is the signature of a
   // CPU-bound stall as opposed to a waiting one.
   mainThreadResponsive?: boolean;
+  // Set when attaching a CDP session to the tab timed out. The attach is
+  // answered by the browser process rather than the tab's renderer, so this
+  // means Chrome as a whole had stopped answering, not just this tab.
+  cdpSessionAttachTimedOut?: boolean;
   // Fraction of wall-clock the renderer's main thread spent running JS
   // (CDP `Performance` ScriptDuration delta / wall delta) over a short
   // sampling window at timeout. ~1.0 means the thread is pegged

@@ -41,7 +41,6 @@ import { DelegatedUserRealmSessionManager } from './lib/user-delegated-realm-ser
 import {
   abandonedBotToolCalls,
   cancelBotToolCalls,
-  classifyToolCalls,
   fulfillBotToolCalls,
   offeredBotTools,
   startBotToolTurns,
@@ -54,6 +53,7 @@ import { INTERRUPTED_TOOL_CALL_REASON } from './lib/bot-tools/results.ts';
 import {
   ApprovalClaims,
   releasedToolCalls,
+  unreleasedApproval,
   type ReleasedToolCall,
 } from './lib/bot-tools/approval.ts';
 import { RoomTurns, type RoomTurn } from './lib/room-turns.ts';
@@ -64,6 +64,7 @@ import {
 import { isApprovalResult } from '@cardstack/runtime-common/ai';
 import type { Tool } from '@cardstack/base/matrix-event';
 import { Responder } from './lib/responder.ts';
+import { collectUsedToolCallIds } from './lib/tool-call-ids.ts';
 import { buildChatCompletionRequest } from './lib/chat-completion-request.ts';
 import {
   shouldSetRoomTitle,
@@ -588,14 +589,12 @@ Common issues are:
           // earlier run of the same call is in flight doesn't run it again.
           // The runs happen after the room lock is released; each result
           // starts the continuation as any bot tool result does.
-          pendingReleasedCalls = approvalClaims.claim(
+          let releasedCalls = releasedToolCalls(
             eventList,
-            releasedToolCalls(
-              eventList,
-              aiBotUserId,
-              new Set(botTools.map((tool) => tool.name)),
-            ),
+            aiBotUserId,
+            new Set(botTools.map((tool) => tool.name)),
           );
+          pendingReleasedCalls = approvalClaims.claim(eventList, releasedCalls);
           pendingReleasedAgentId = agentId;
           if (pendingReleasedCalls.length > 0) {
             botToolTurns = await startTurns();
@@ -603,6 +602,33 @@ Common issues are:
           // An approval is not a turn of its own (getShouldRespond ignores
           // it), so its handler stops here.
           if (isApprovalResult({ content: event.getContent() })) {
+            let unreleased = unreleasedApproval(
+              eventList,
+              triggerCommandRequestId,
+              releasedCalls,
+              pendingReleasedCalls,
+            );
+            if (unreleased === 'missing') {
+              log.warn(
+                `[${eventId}] approval of ${triggerCommandRequestId} matches no held call in the history of ${room.roomId}`,
+              );
+              // A constant message, so every occurrence groups as one issue.
+              Sentry.captureMessage(
+                'approval matches no held call in the history',
+                {
+                  level: 'warning',
+                  extra: {
+                    roomId: room.roomId,
+                    eventId,
+                    commandRequestId: triggerCommandRequestId,
+                  },
+                },
+              );
+            } else if (unreleased) {
+              log.debug(
+                `[${eventId}] approval of ${triggerCommandRequestId} released no call to run in ${room.roomId}: ${unreleased}`,
+              );
+            }
             return;
           }
           // Route to-device streaming previews (see AI_BOT_STREAMING_MODE
@@ -646,6 +672,7 @@ Common issues are:
             client,
             room.roomId,
             agentId,
+            collectUsedToolCallIds(eventList),
             streamPreviewTarget,
           );
 
@@ -940,9 +967,9 @@ Common issues are:
               // fulfills its commands, we fulfill ours, and getShouldRespond
               // waits for all of them before generating again.
               let message = completion.choices?.[0]?.message;
-              let { botToolCalls } = message
-                ? classifyToolCalls(message)
-                : { botToolCalls: [] };
+              let botToolCalls = message
+                ? responder.postedBotToolCalls(message)
+                : [];
               // Only the bot tools this room was offered are run, and a call
               // held for the user's approval waits for it.
               botToolCalls = botToolCalls.filter(

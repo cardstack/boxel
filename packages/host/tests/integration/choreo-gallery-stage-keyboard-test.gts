@@ -1,0 +1,133 @@
+/**
+ * The stages' keyboard paths: every focusable part of a stage shows the
+ * site's focus ring, and what a pointer does on a stage's open surface a
+ * key can do too.
+ */
+import { click, focus, triggerKeyEvent, waitUntil } from '@ember/test-helpers';
+
+import { animationsSettled } from 'glimmer-motion/test-support';
+import { module, test } from 'qunit';
+
+import { setupChoreoGalleryTest } from '../helpers/choreo-gallery-stage';
+
+/** the focus ring the browser draws on `el` once it has keyboard focus */
+async function ringOn(el: HTMLElement) {
+  await focus(el);
+  let style = getComputedStyle(el);
+  return {
+    focusVisible: el.matches(':focus-visible'),
+    outline: style.outlineStyle,
+    color: style.outlineColor,
+  };
+}
+
+/** the theme's focus color, `--ring`, as it resolves where `el` sits */
+function themeRing(el: HTMLElement) {
+  let probe = document.createElement('i');
+  probe.style.color = 'var(--ring)';
+  el.parentElement!.append(probe);
+  let color = getComputedStyle(probe).color;
+  probe.remove();
+  return color;
+}
+
+/** the keydown that reaches the document, if a stage lets it through */
+async function keyAtDocument(el: HTMLElement, key: string) {
+  let seen: KeyboardEvent | undefined;
+  let listen = (event: KeyboardEvent) => (seen = event);
+  document.addEventListener('keydown', listen);
+  try {
+    await triggerKeyEvent(el, 'keydown', key);
+  } finally {
+    document.removeEventListener('keydown', listen);
+  }
+  return seen;
+}
+
+module('Integration | Choreo gallery | stage keyboard', function (hooks) {
+  let gallery = setupChoreoGalleryTest(hooks);
+
+  test('a camera print shows the focus ring', async function (assert) {
+    await gallery.renderStage(await gallery.stage('camera', 'Camera'));
+    let print = document.querySelector<HTMLElement>('[data-test-cam-print]')!;
+    let ring = await ringOn(print);
+    assert.true(ring.focusVisible, 'the print has keyboard focus');
+    assert.notStrictEqual(ring.outline, 'none', 'the print draws a ring');
+    assert.strictEqual(
+      ring.color,
+      themeRing(print),
+      "the ring is drawn in the theme's --ring",
+    );
+  });
+
+  test('Escape backs out of a camera dive and returns focus to the print', async function (assert) {
+    await gallery.renderStage(await gallery.stage('camera', 'Camera'));
+    let print = document.querySelector<HTMLElement>('[data-test-cam-print]')!;
+    assert.strictEqual(print.getAttribute('aria-pressed'), 'false');
+
+    await focus(print);
+    await click(print);
+    await waitUntil(() => document.querySelector('[data-test-cam-love]'));
+    assert.strictEqual(
+      print.getAttribute('aria-pressed'),
+      'true',
+      'the open print reads as pressed',
+    );
+
+    // focus in the dock, which closes with the dive
+    let love = document.querySelector<HTMLElement>('[data-test-cam-love]')!;
+    await focus(love);
+    let reached = await keyAtDocument(love, 'Escape');
+    await animationsSettled();
+    assert.strictEqual(reached, undefined, 'the stage kept the key');
+    assert.dom('[data-test-cam-love]').doesNotExist('the dive closed');
+    assert.strictEqual(print.getAttribute('aria-pressed'), 'false');
+    assert.strictEqual(
+      document.activeElement,
+      print,
+      'focus is back on the print that was open',
+    );
+  });
+
+  test('a pointer dive leaves focus on the print, so Escape backs out of it', async function (assert) {
+    await gallery.renderStage(await gallery.stage('camera', 'Camera'));
+    let print = document.querySelector<HTMLElement>('[data-test-cam-print]')!;
+    // a bare click, as a pointer lands it: nothing focuses the print first
+    print.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 1 }));
+    await waitUntil(() => document.querySelector('[data-test-cam-love]'));
+    assert.strictEqual(
+      document.activeElement,
+      print,
+      'the open print has focus',
+    );
+
+    assert.false(
+      print.matches(':focus-visible'),
+      'a pointer dive draws no focus ring',
+    );
+
+    let reached = await keyAtDocument(print, 'Escape');
+    await animationsSettled();
+    assert.strictEqual(reached, undefined, 'the stage kept the key');
+    assert.dom('[data-test-cam-love]').doesNotExist('the dive closed');
+  });
+
+  test('Escape with no dive open is left for the host', async function (assert) {
+    await gallery.renderStage(await gallery.stage('camera', 'Camera'));
+    let print = document.querySelector<HTMLElement>('[data-test-cam-print]')!;
+    await focus(print);
+    let reached = await keyAtDocument(print, 'Escape');
+    assert.ok(reached, 'the key reaches the host');
+    assert.false(reached!.defaultPrevented, 'the stage left it alone');
+  });
+
+  test('a wires mark and comment show the focus ring', async function (assert) {
+    await gallery.renderStage(await gallery.stage('wires', 'Wires'));
+    for (let selector of ['[data-test-wires-mark]', '[data-test-wires-note]']) {
+      let el = document.querySelector<HTMLElement>(selector)!;
+      let ring = await ringOn(el);
+      assert.true(ring.focusVisible, `${selector} has keyboard focus`);
+      assert.notStrictEqual(ring.outline, 'none', `${selector} draws a ring`);
+    }
+  });
+});

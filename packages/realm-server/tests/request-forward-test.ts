@@ -2057,7 +2057,7 @@ module(basename(import.meta.filename), function () {
           );
         });
 
-        test('a key edited by hand reaches the vendor before the backfill seals it again', async function (assert) {
+        test('a key edited by hand reaches the vendor', async function (assert) {
           await dbAdapter.execute(
             `UPDATE proxy_endpoints SET api_key = 'stub-vendor-key-edited' WHERE url = $1`,
             { bind: [`${vendor.url}/`] },
@@ -2990,6 +2990,63 @@ module(basename(import.meta.filename), function () {
             new URL(recorded!.url!).search,
             '',
             'the URL has no query string',
+          );
+          for (let [name, value] of Object.entries(planted)) {
+            assert.false(
+              sent.includes(value),
+              `no envelope carries the ${name}`,
+            );
+          }
+        });
+
+        test("a forward's transaction keeps its route, method and status and none of its query strings", async function (assert) {
+          sentry = startSentryCapture({
+            tracing: true,
+            incomingRequests: true,
+          });
+          let planted = markers();
+          let response = await failingForward(planted);
+          let sent = await sentry.flushed();
+          let transactions = await sentry.flushedTransactions();
+
+          assert.strictEqual(response.status, 500, 'the forward failed');
+          let transaction = transactions.find(
+            (t) => t.transaction === 'POST /_request-forward',
+          );
+          assert.ok(transaction, 'the forward was recorded as a transaction');
+          let contexts = transaction!.contexts as {
+            trace: { data: Record<string, unknown> };
+            response?: { status_code?: number };
+          };
+          let data = contexts.trace.data;
+          assert.strictEqual(data['http.method'], 'POST', 'the method is kept');
+          assert.strictEqual(
+            data['http.target'],
+            '/_request-forward',
+            'the target keeps its path and no query string',
+          );
+          assert.strictEqual(
+            new URL(data['http.url'] as string).pathname,
+            '/_request-forward',
+            'the URL keeps its path',
+          );
+          assert.strictEqual(
+            new URL(data['http.url'] as string).search,
+            '',
+            'the URL has no query string',
+          );
+          assert.false('http.query' in data, 'the query string is dropped');
+          assert.strictEqual(
+            contexts.response?.status_code,
+            500,
+            'the status is kept',
+          );
+          assert.strictEqual(typeof transaction!.start_timestamp, 'number');
+          assert.strictEqual(typeof transaction!.timestamp, 'number');
+          let spanURLs = JSON.stringify(transaction!.spans ?? []);
+          assert.false(
+            spanURLs.includes(vendor.alternateUrl),
+            'the guarded call to the vendor records no span',
           );
           for (let [name, value] of Object.entries(planted)) {
             assert.false(

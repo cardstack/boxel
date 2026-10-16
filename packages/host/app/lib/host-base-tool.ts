@@ -45,6 +45,15 @@ export default abstract class HostBaseTool<
     return false;
   }
 
+  // Time this call may take beyond the tool service's execute timeout, for a
+  // tool where some inputs do slow work, such as generating images. It gets
+  // the call's input attributes as the model sent them.
+  static extraExecuteTimeMsFor(
+    _attributes: Record<string, unknown> | undefined,
+  ): number {
+    return 0;
+  }
+
   // The files this tool's result attaches for the model, such as files it
   // saved or images it captured. The tool service asks only tools the host
   // itself provides, so a command loaded from a realm cannot attach files

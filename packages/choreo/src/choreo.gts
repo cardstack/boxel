@@ -411,6 +411,11 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       ) {
         return `<Choreo${this.args.id ? ` ${this.args.id}` : ''}> run in flight`;
       }
+      // the clock can end before a text delivery has given its sprite's
+      // text back; until it has, stand-in spans are still in the DOM
+      if (this.run?.delivering) {
+        return `<Choreo${this.args.id ? ` ${this.args.id}` : ''}> delivery in flight`;
+      }
       return false;
     });
     registerDestructor(this, () => {

@@ -336,7 +336,7 @@ In environment mode, this is at `http://worker.environment-name.localhost/_index
 Boxel supports server-side rendering of cards via a lightweight prerender service and an optional manager that coordinates multiple services.
 
 - Prerender server: Handles POST `/prerender-card` (cards) and `/prerender-module` (modules) requests that include user/session permissions and a target URL. It launches a headless browser and maintains a small pool of per-realm pages (LRU-evicted) to speed up subsequent renders. Each page keeps a logged-in session for its realm and reuses the page for repeated renders of that realm.
-- Pooling: Each prerender server maintains a dynamic page pool sized between `PRERENDER_PAGE_POOL_MIN` and `PRERENDER_PAGE_POOL_MAX` (both default 4 in dev). When the pool is full, the least-recently-used realm is evicted (its browser context is closed). When a page becomes unusable (timeout or explicit unusable signal), the realm is evicted proactively. A page that has already served a render is probed for main-thread liveness before being handed back out — if its JS thread can't answer a trivial `evaluate` within `PRERENDER_TAB_HEALTH_PROBE_MS`, that page is retired (and with it the realm, when it was the realm's only page) and the caller is given a live page instead of stalling until the render timeout. When the pool has no page to swap in, it keeps the one it has and lets the render timeout handle it, rather than leaving the caller with no page at all.
+- Pooling: Each prerender server maintains a dynamic page pool sized between `PRERENDER_PAGE_POOL_MIN` and `PRERENDER_PAGE_POOL_MAX` (both default 4 in dev). When the pool is full, the least-recently-used realm is evicted (its browser context is closed). When a page becomes unusable (timeout or explicit unusable signal), the realm is evicted proactively. A page that has already served a render is probed for main-thread liveness before being handed back out — if its JS thread can't answer a trivial `evaluate` within `PRERENDER_TAB_HEALTH_PROBE_MS`, that page is retired (and with it the realm, when it was the realm's only page) and the caller is given a live page instead of stalling until the render timeout. When the pool has no page to swap in, it keeps the one it has and lets the render timeout handle it, rather than leaving the caller with no page at all. A render timeout hands its page back on a Node timer: the hang diagnostics it gathers first are capped by `RENDER_TIMEOUT_DIAGNOSTICS_BUDGET_MS`, however long Chrome takes to answer. When timeouts point at the browser rather than one page — CDP session attaches timing out, or pages of several realms going unresponsive within a few minutes — the prerender server kills and restarts its Chrome, at most once every fifteen minutes.
 - Prerender manager: When multiple prerender servers are running, a central manager receives `/prerender-card` and `/prerender-module` requests and routes them to a suitable server. The manager tracks which servers are registered and which realms they actively handle. It supports realm affinity, multiplexing the same realm across multiple servers to handle high prerender throughput, capacity-aware selection, and health-based eviction of unreachable servers.
 
 #### Pre-rendering start scripts
@@ -368,6 +368,7 @@ Prerender server:
 - PRERENDER_PAGE_POOL_MAX (optional): Burst ceiling for the dynamic page pool. The pool expands up to this size under saturation. Default 4 in dev. Setting MIN === MAX disables expansion/contraction (fixed-size pool).
 - PRERENDER_AFFINITY_TAB_MAX (optional): Max number of tabs a single realm can use within a prerender server. Defaults to 5, clamped to the effective pool max (`PRERENDER_PAGE_POOL_MAX` when set, otherwise the fixed `maxPages` pool size).
 - PRERENDER_TAB_HEALTH_PROBE_MS (optional): Budget for the main-thread liveness probe that runs before a page that has already rendered is handed back out. A healthy page answers in about a millisecond, so this is only spent in full on a page that can't run script at all. Must be an integer ≥ 0, and is clamped to the render timeout. Default 3000; `0` disables the probe and hands warm pages straight back out.
+- RENDER_TIMEOUT_DIAGNOSTICS_BUDGET_MS (optional): Cap on the hang diagnostics a timed-out render gathers before returning its error, during which it still holds its page. Values below 1000 are raised to 1000. Default 20000; below about 17000 a hard CPU peg loses its debugger-pause capture.
 - BOXEL_SHOW_PRERENDER (optional): If set to 'true', opens a visible browser (useful for debugging locally). Headless otherwise.
 
 Prerender manager:
@@ -583,62 +584,35 @@ You should be able to subscribe successfully after you perform the steps above.
 
 ## External API Proxy Setup
 
-The realm server provides a proxy endpoint that allows applications to make requests to external APIs through the realm server. This is useful for features like AI model calls, external service integrations, and other API interactions. To use any host features that depend on the proxy endpoint, you need to configure your api key inside the `proxy_endpoints` db.
+The realm server provides a proxy endpoint that allows applications to make requests to external APIs through the realm server. This is useful for features like AI model calls, external service integrations, and other API interactions. To use any host features that depend on the proxy endpoint, the realm server needs a **system key** (a row in `proxy_endpoints`) for each destination.
 
-#### Setup api key in DB locally
+#### Add a system key
 
-```sql
-INSERT INTO proxy_endpoints (
-  id, url, api_key, credit_strategy, supports_streaming,
-  auth_method, auth_parameter_name, created_at, updated_at
-) VALUES (
-  gen_random_uuid(),
-  'https://openrouter.ai/api/v1/chat/completions',
-  '<your-openrouter-api-key>',
-  'openrouter',
-  true,
-  'header',
-  'Authorization',
-  NOW(), NOW()
-);
+System keys are managed with `boxel realm-server keys`, authorized with the realm secret seed. The command signs a short-lived operator token locally, so the seed never leaves your machine, and the value is typed at a masked prompt rather than passed as an argument. Locally the seed is `shhh! it's a secret`:
+
+```sh
+export BOXEL_REALM_SECRET_SEED="shhh! it's a secret"
+boxel realm-server keys add --realm-server https://localhost:4201 \
+  --destination https://openrouter.ai/api/v1/chat/completions \
+  --credit-strategy openrouter --streaming \
+  --note "local OpenRouter key for <your name>"
 ```
 
-The realm server seals the key into the row's encrypted columns the next time it starts. To seal it straight away, run `pnpm seal-proxy-endpoint-keys` from `packages/realm-server`. If you later change a row's `api_key` or `url` by hand, start the realm server again or run that command, so the sealed key matches the edit.
+It prompts for the key value (each character shows as `*`, and only the last few are shown after Enter). Without a terminal, pipe the value in with `--stdin` or point at a file with `--key-file <path>`. The server seals the value at rest and records the change and the note, never the value, in the key's history, along with the caller's address and when the operator token was signed. A name in the note is recorded as typed, not verified. `--realm-server` must be `https:` except on this machine, and its origin must be the one the realm server knows itself by, since the token is signed for that origin alone.
+
+`boxel realm-server keys list | show | replace | delete` list the keys, show one with its history, replace a key's value, and delete a key. No command ever prints a value.
 
 Typically, it is needed for our openrouter setup which is used widely throughout our codebase. But, additionally you can add in your own proxy.
 
-#### Configuration Options
+#### Options for `keys add`
 
-- **url**: The base URL of the external API endpoint
-- **apiKey**: The API key to use for authentication (will be automatically added to requests)
-- **creditStrategy**: The credit strategy to use for this endpoint
-  - `"openrouter"`: Uses OpenRouter credit system (for paid AI APIs)
-  - `"no-credit"`: No credit system (for free APIs or APIs with their own billing)
-- **supportsStreaming**: Whether this endpoint supports streaming responses
-
-#### Examples
-
-**OpenRouter (AI API with credit system):**
-
-```json
-{
-  "url": "https://openrouter.ai/api/v1/chat/completions",
-  "apiKey": "your-openrouter-api-key",
-  "creditStrategy": "openrouter",
-  "supportsStreaming": true
-}
-```
-
-**Free API (no credit system):**
-
-```json
-{
-  "url": "https://api.example.com",
-  "apiKey": "your-example-api-key",
-  "creditStrategy": "no-credit",
-  "supportsStreaming": false
-}
-```
+- **`--destination <url>`**: The URL the key is sent to. Requests to that origin, under that path, get the key. A destination that overlaps an existing one (same origin, one path under the other) is refused.
+- **`--credit-strategy <strategy>`**: How calls are charged
+  - `openrouter`: Uses OpenRouter credit system (for paid AI APIs)
+  - `none`: No credit system (for free APIs or APIs with their own billing)
+- **`--auth <method>`**: `header` (the default) sends the key as a Bearer token in the `Authorization` header; `url-parameter` sends it as a query parameter
+- **`--param-name <name>`**: The header or query parameter that carries the key (default `Authorization` for `header`, `key` for `url-parameter`). A header always carries it as `Bearer <key>`, whatever its name
+- **`--streaming`**: The destination supports streaming responses
 
 #### Security Notes
 

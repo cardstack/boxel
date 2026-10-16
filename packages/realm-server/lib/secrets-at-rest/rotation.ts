@@ -56,6 +56,41 @@ export const SEALED_COLUMNS: SealedColumn[] = [
       destination: String(row.url),
     }),
   },
+  // The secrets that verify webhooks Boxel receives, bound to their row and
+  // the user who registered them, with no destination
+  // (`lib/incoming-webhook-secrets.ts` seals them the same way).
+  {
+    field: 'incoming_webhooks.signing_secret',
+    table: 'incoming_webhooks',
+    idColumn: 'id',
+    keyIdColumn: 'signing_secret_key_id',
+    nonceColumn: 'signing_secret_nonce',
+    ciphertextColumn: 'signing_secret_ciphertext',
+    tagColumn: 'signing_secret_tag',
+    bindingColumns: ['username'],
+    binding: (row) => ({
+      field: 'incoming_webhooks.signing_secret',
+      owner: String(row.username),
+      id: String(row.id),
+    }),
+  },
+  // Keys that belong to people, bound to their row and their owner
+  // (`lib/user-keys.ts` seals them the same way).
+  {
+    field: 'user_keys.value',
+    table: 'user_keys',
+    idColumn: 'id',
+    keyIdColumn: 'value_key_id',
+    nonceColumn: 'value_nonce',
+    ciphertextColumn: 'value_ciphertext',
+    tagColumn: 'value_tag',
+    bindingColumns: ['owner'],
+    binding: (row) => ({
+      field: 'user_keys.value',
+      owner: String(row.owner),
+      id: String(row.id),
+    }),
+  },
 ];
 
 const IDENTIFIER = /^[a-z_][a-z0-9_]*$/;

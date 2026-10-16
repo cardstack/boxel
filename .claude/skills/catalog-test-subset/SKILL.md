@@ -49,7 +49,7 @@ Don't copy a catalog definition into this repo, whether as a base module, a test
 ## Authoring the definition in boxel-catalog
 
 - Follow the catalog's conventions:
-  - base imports use the `https://cardstack.com/base/<module>` form;
+  - base imports use the `@cardstack/base/<module>` form. Some catalog files, including the policy definitions in `realm-policy/` and `fields/policy-predicate/`, still import from the `https://cardstack.com/base/<module>` alias; don't copy it into new or edited code;
   - sibling catalog definitions are imported with `@cardstack/catalog/<path>`;
   - fields live at `fields/<name>/<name>.gts`.
 - **Only import what a subset-only stack can serve.** Every import must be one of:

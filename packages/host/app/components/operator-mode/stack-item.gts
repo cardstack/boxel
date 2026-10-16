@@ -71,6 +71,7 @@ import {
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 
 import consumeContext from '../../helpers/consume-context';
+import keepScrollWhileBuried from '../../modifiers/keep-scroll-while-buried';
 import ElementTracker, {
   type RenderedCardForOverlayActions,
 } from '../../resources/element-tracker';
@@ -1110,7 +1111,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
               />
             {{/if}}
           {{/let}}
-          <div class='stack-item-content' data-test-stack-item-content>
+          <div
+            class='stack-item-content'
+            {{keepScrollWhileBuried buried=this.isBuried}}
+            data-test-stack-item-content
+          >
             <CardRenderer
               class='stack-item-preview'
               @card={{this.card}}

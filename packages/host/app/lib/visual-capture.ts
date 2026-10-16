@@ -1,4 +1,4 @@
-import { rri, urlNamesFile } from '@cardstack/runtime-common';
+import { ensureTrailingSlash, urlNamesFile } from '@cardstack/runtime-common';
 import { MAX_TOOL_RESULT_MEDIA_FILE_BYTES } from '@cardstack/runtime-common/ai';
 import {
   CAPTURE_SOURCE_URL_PREFIX,
@@ -96,6 +96,35 @@ function notInWorkspace(reference: string): VisualCaptureError {
   );
 }
 
+// The workspace that holds `reference`, as the URL the capture endpoint is
+// given for it, and `reference` as a URL under that workspace. A workspace can
+// be known by any of its identifier forms (a `@scope/name/` prefix, a virtual
+// URL, the URL it is served from), so both sides are compared in their prefix
+// form. A workspace can sit under another workspace's URL, so the deepest one
+// that matches holds the reference.
+export function workspaceOf(
+  reference: string,
+  { network, realm }: Pick<Services, 'network' | 'realm'>,
+): { realmURL: string; url: string } | undefined {
+  let vn = network.virtualNetwork;
+  let target = vn.unresolveURL(reference);
+  let best: { identifier: string; root: string } | undefined;
+  for (let identifier of realm.realms.keys()) {
+    let root = ensureTrailingSlash(
+      vn.unresolveURL(ensureTrailingSlash(identifier)),
+    );
+    let inside = target.startsWith(root) || `${target}/` === root;
+    if (inside && (!best || root.length > best.root.length)) {
+      best = { identifier: ensureTrailingSlash(identifier), root };
+    }
+  }
+  if (!best) {
+    return undefined;
+  }
+  let realmURL = vn.toURL(best.identifier).href;
+  return { realmURL, url: realmURL + target.slice(best.root.length) };
+}
+
 export async function resolveViewTarget(
   reference: string,
   {
@@ -126,11 +155,11 @@ export async function resolveViewTarget(
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     throw notInWorkspace(trimmed);
   }
-  let href = url.href;
-  let realmURL = realm.realmOf(rri(href));
-  if (!realmURL) {
-    throw notInWorkspace(href);
+  let workspace = workspaceOf(url.href, { network, realm });
+  if (!workspace) {
+    throw notInWorkspace(url.href);
   }
+  let { realmURL, url: href } = workspace;
   if (!realm.canRead(realmURL)) {
     throw new VisualCaptureError(
       `Cannot capture ${href}: the user has no read access to its workspace ${realmURL}.`,

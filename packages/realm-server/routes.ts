@@ -20,6 +20,13 @@ import {
   handleDataKeyReseal,
   handleDataKeyStatus,
 } from './handlers/handle-data-keys.ts';
+import {
+  handleAddSystemKey,
+  handleDeleteSystemKey,
+  handleListSystemKeys,
+  handleReplaceSystemKey,
+  handleShowSystemKey,
+} from './handlers/handle-system-keys.ts';
 import handleFetchCatalogRealmsRequest from './handlers/handle-fetch-catalog-realms.ts';
 import handleFetchPublicRealmsRequest from './handlers/handle-fetch-public-realms.ts';
 import handleFetchUserRequest from './handlers/handle-fetch-user.ts';
@@ -83,6 +90,7 @@ import {
   handleCreateIncomingWebhookRequest,
   handleListIncomingWebhooksRequest,
   handleDeleteIncomingWebhookRequest,
+  handleRotateIncomingWebhookSecretRequest,
 } from './handlers/handle-incoming-webhook.ts';
 import {
   handleCreateWebhookCommandRequest,
@@ -95,9 +103,19 @@ import handleCapture from './handlers/handle-capture.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
 import {
+  KEY_WRITE_TICKETS_PATH,
   OPENROUTER_PASSTHROUGH_PATH,
   REQUEST_FORWARD_PATH,
+  USER_KEYS_PATH,
 } from './lib/request-telemetry.ts';
+import {
+  handleAddUserKey,
+  handleDeleteUserKey,
+  handleListUserKeys,
+  handleMintKeyWriteTicket,
+  handleReplaceUserKey,
+  handleShowUserKey,
+} from './handlers/handle-user-keys.ts';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -157,6 +175,9 @@ export type CreateRoutesArgs = {
   liveSearchCache?: LiveSearchCache;
   // Decides how much of each result's link graph a live search carries.
   linkShapePolicy?: LinkShapePolicy;
+  // The secure origin's shell URL, when this server serves one. Key write
+  // tickets are minted for requests from its origin and for the CLI.
+  secureOriginURL?: URL;
 };
 
 export function createRoutes(args: CreateRoutesArgs) {
@@ -236,6 +257,36 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_user',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleCreateUserRequest(args),
+  );
+  router.post(
+    KEY_WRITE_TICKETS_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleMintKeyWriteTicket(args),
+  );
+  router.get(
+    USER_KEYS_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleListUserKeys(args),
+  );
+  router.post(
+    USER_KEYS_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleAddUserKey(args),
+  );
+  router.get(
+    `${USER_KEYS_PATH}/:keyId`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleShowUserKey(args),
+  );
+  router.patch(
+    `${USER_KEYS_PATH}/:keyId`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleReplaceUserKey(args),
+  );
+  router.delete(
+    `${USER_KEYS_PATH}/:keyId`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleDeleteUserKey(args),
   );
   router.post(
     REQUEST_FORWARD_PATH,
@@ -377,13 +428,47 @@ export function createRoutes(args: CreateRoutesArgs) {
   // signed with the realm secret seed reaches these.
   router.get(
     '/_data-keys',
-    operatorAuthorization(args.realmSecretSeed, 'data-keys'),
+    operatorAuthorization(args.realmSecretSeed, 'data-keys', args.serverURL),
     handleDataKeyStatus(args),
   );
   router.post(
     '/_data-keys/reseal',
-    operatorAuthorization(args.realmSecretSeed, 'data-keys'),
+    operatorAuthorization(args.realmSecretSeed, 'data-keys', args.serverURL),
     handleDataKeyReseal(args),
+  );
+
+  // System keys: the platform's own vendor keys that `_request-forward`
+  // attaches. Only an operator token for `system-keys` reaches these, and
+  // none of them answers with a value.
+  let systemKeysAuthorization = operatorAuthorization(
+    args.realmSecretSeed,
+    'system-keys',
+    args.serverURL,
+  );
+  router.get(
+    '/_system-keys',
+    systemKeysAuthorization,
+    handleListSystemKeys(args),
+  );
+  router.post(
+    '/_system-keys',
+    systemKeysAuthorization,
+    handleAddSystemKey(args),
+  );
+  router.get(
+    '/_system-keys/:id',
+    systemKeysAuthorization,
+    handleShowSystemKey(args),
+  );
+  router.patch(
+    '/_system-keys/:id',
+    systemKeysAuthorization,
+    handleReplaceSystemKey(args),
+  );
+  router.delete(
+    '/_system-keys/:id',
+    systemKeysAuthorization,
+    handleDeleteSystemKey(args),
   );
 
   // Grafana operator-action endpoints. All POST-only with
@@ -501,6 +586,11 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_incoming-webhooks',
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleDeleteIncomingWebhookRequest(args),
+  );
+  router.post(
+    '/_incoming-webhooks/rotate-signing-secret',
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleRotateIncomingWebhookSecretRequest(args),
   );
   router.post(
     '/_webhook-commands',

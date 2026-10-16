@@ -9,7 +9,9 @@ import {
 // the run's tool result as an image; the script gets back only what it needs
 // to carry on.
 
-// How many captures one run may attach with `realm.capture`.
+// How many captures one run may attach with `realm.capture`. Each image goes
+// into the model's context, so a loop must not attach many; a script that
+// needs more views takes them in another run.
 const MAX_CAPTURES = 3;
 // A capture must finish this long before the run's own time limit, so the
 // script still has time to use what it saw and return.
@@ -49,20 +51,21 @@ export class RealmCaptures {
     this.inFlight.abort();
   }
 
-  // `url` is the realm URL to capture, already resolved inside the run's
-  // realm; `path` is how the script named it. Calls must not overlap: the
+  // `url` is what to capture: a URL resolved inside the run's realm, or a
+  // card id or URL in any workspace the user can read, which the capture
+  // checks; `path` is how the result names it. Calls must not overlap: the
   // limit is checked before the capture and counted after it, so the caller
   // runs them one at a time (the realm session queues every call).
   async take(url: string, path: string, rawOptions: unknown) {
     if (this.taken.length >= MAX_CAPTURES) {
       throw new Error(
-        `realm.capture may run at most ${MAX_CAPTURES} times in one run; use the view-visually tool for more`,
+        `realm.capture may run at most ${MAX_CAPTURES} times in one run; capture the rest in another run`,
       );
     }
     let doneBy = this.runEndsAt - CAPTURE_MARGIN_MS;
     if (doneBy - Date.now() < MIN_CAPTURE_BUDGET_MS) {
       throw new Error(
-        `Not enough time left in this run to capture ${url}; use the view-visually tool instead`,
+        `Not enough time left in this run to capture ${url}; capture it in another run, before slower work`,
       );
     }
     let viewed = await this.captureURL(

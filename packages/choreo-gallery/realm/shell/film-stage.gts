@@ -306,7 +306,8 @@ export class FilmStage extends Component<Signature> {
         height: var(--film-h);
         transform: translate(-50%, -50%);
         border-radius: 14px;
-        box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+        box-shadow: 0 18px 48px
+          rgba(var(--shadow-rgb), calc(0.35 * var(--shadow-a)));
       }
 
       /* the still fills the frame the way the film does, cropped to the
@@ -382,6 +383,13 @@ export class FilmStage extends Component<Signature> {
         letter-spacing: 0.12em;
         text-transform: uppercase;
         cursor: pointer;
+      }
+
+      /* the frame behind the button can be any color, so the ring is drawn
+         inside the button, on its own dark ground, in its own light ink */
+      .film-theater-btn:focus-visible {
+        outline: 2px solid var(--film-btn-ink, #f2e9d2);
+        outline-offset: -4px;
       }
 
       .film-theater-btn:hover {

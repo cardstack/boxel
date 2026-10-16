@@ -312,8 +312,13 @@ export class GalleryGrid extends Component<Signature> {
       </div>
     </LayoutGroup>
     <style scoped>
+      /* the hero is a container, so the headline can size against the
+         hero's own width rather than the window's: in a host stack the
+         two differ */
       .hero {
+        container-type: inline-size;
         display: grid;
+        grid-template-columns: minmax(0, 1fr);
         gap: 28px;
         padding-bottom: 56px;
         border-bottom: 1px solid var(--line);
@@ -331,11 +336,7 @@ export class GalleryGrid extends Component<Signature> {
         font-size: 11px;
         letter-spacing: 0.18em;
         text-transform: uppercase;
-        color: var(--copper-ink);
-      }
-
-      .choreo-site[data-theme='light'] .kicker {
-        color: var(--ember);
+        color: var(--eyebrow);
       }
 
       .kicker::before {
@@ -365,7 +366,11 @@ export class GalleryGrid extends Component<Signature> {
         max-width: 14ch;
         font-family: var(--font-display);
         font-weight: 800;
-        font-size: clamp(3.4rem, 9vw, 7.2rem);
+        /* 'Choreographed.' is one word, about 5.5em wide in the condensed
+           face, and can't wrap: 17.5cqi keeps it inside the hero however
+           narrow the hero is, and only binds where the window-sized type
+           would not fit */
+        font-size: min(clamp(3.4rem, 9vw, 7.2rem), 17.5cqi);
         letter-spacing: -0.055em;
         line-height: 0.95;
       }
@@ -410,8 +415,8 @@ export class GalleryGrid extends Component<Signature> {
 
       @media (hover: hover) {
         .lede a:hover {
-          color: var(--ember-hot);
-          text-decoration-color: var(--ember-hot);
+          color: var(--ember-ink);
+          text-decoration-color: var(--ember-ink);
         }
       }
 
@@ -452,7 +457,9 @@ export class GalleryGrid extends Component<Signature> {
         border-color: var(--line-strong);
         background: var(--bg-spot);
         box-shadow: inset 0 0 0 1px rgba(255, 59, 31, 0.35);
-        color: var(--ember-hot);
+        /* full ink: the raised ground and the ember ring say selected, and
+           --ember-ink falls under 4.5:1 on --bg-spot in the dark palette */
+        color: var(--ink);
       }
 
       /* the tell waits until the row is under the pointer, then says what
@@ -514,7 +521,7 @@ export class GalleryGrid extends Component<Signature> {
       .filter-tell-mark {
         font-size: 11px;
         letter-spacing: 0;
-        color: var(--ember-hot);
+        color: var(--ember-ink);
       }
 
       .filter-code {
@@ -531,7 +538,7 @@ export class GalleryGrid extends Component<Signature> {
         font-size: 10px;
         letter-spacing: 0.14em;
         text-transform: uppercase;
-        color: var(--copper-ink);
+        color: var(--eyebrow);
       }
 
       .filter-code pre {
@@ -586,7 +593,7 @@ export class GalleryGrid extends Component<Signature> {
         }
 
         h1 {
-          font-size: clamp(2.6rem, 14vw, 4.4rem);
+          font-size: min(clamp(2.6rem, 14vw, 4.4rem), 17.5cqi);
         }
 
         .chip {

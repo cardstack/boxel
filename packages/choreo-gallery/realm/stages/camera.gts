@@ -197,6 +197,20 @@ export class Camera extends Component {
       }
     }
     this.focus = opening ? id : null;
+    // The open print holds focus, so Escape reaches this stage's handler
+    // after a pointer dive as well as a keyboard one. preventScroll leaves
+    // the page where it is, which is what quellFocus keeps the mousedown's
+    // own focus from doing, and focusVisible: false keeps a pointer dive
+    // ringless. A print already focused from the keyboard keeps its ring.
+    if (opening) {
+      // `focusVisible` is a standard FocusOptions member the DOM lib
+      // doesn't type yet
+      const options: FocusOptions & { focusVisible?: boolean } = {
+        preventScroll: true,
+        focusVisible: false,
+      };
+      (event.currentTarget as HTMLElement).focus(options);
+    }
   };
 
   /** a print half past the crop is still a focusable button, and focusing
@@ -209,6 +223,26 @@ export class Camera extends Component {
   clear = () => {
     this.focus = null;
   };
+
+  /** Escape backs out of a dive, as a click on the table does. Focus goes to
+   * the print that was open, since the dock that may have held it closes.
+   * With nothing open, Escape is the host's. */
+  escape = modifier((el: HTMLElement) => {
+    const key = (event: KeyboardEvent) => {
+      const open = this.focus;
+      if (event.key !== 'Escape' || event.defaultPrevented || !open) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      this.focus = null;
+      el.querySelector<HTMLElement>(`[data-shot="${open}"]`)?.focus({
+        preventScroll: true,
+      });
+    };
+    el.addEventListener('keydown', key);
+    return () => el.removeEventListener('keydown', key);
+  });
 
   /** the segmented control's own click; it ends the grade, so it never
    * toggles the frame under it too. A second click on the already-active
@@ -307,7 +341,7 @@ export class Camera extends Component {
 
   <template>
     <div class='ex'>
-      <div class='cam'>
+      <div class='cam' {{this.escape}}>
         {{! the zoom readout — pinned over the corner, OUTSIDE the region,
             so it never rides the camera; it reads c.camera back instead }}
         <span class='cam-hud-dock'>
@@ -324,9 +358,11 @@ export class Camera extends Component {
                 type='button'
                 class={{this.frameClass shot}}
                 data-shot={{shot.id}}
+                aria-pressed={{if (this.isFocus shot.id) 'true' 'false'}}
                 {{motion id=shot.id role='frame'}}
                 {{on 'click' (fn this.loupe shot.id)}}
                 {{on 'mousedown' this.quellFocus}}
+                data-test-cam-print={{shot.id}}
               >
                 <span class='cam-wash' style={{washOf shot.wash}}></span>
                 <span
@@ -421,6 +457,7 @@ export class Camera extends Component {
                 aria-label='Love this one'
                 aria-pressed={{if this.dockLoved 'true' 'false'}}
                 {{on 'click' (fn this.setVerdict this.focusedShot 'loved')}}
+                data-test-cam-love
               >
                 <svg viewBox='0 0 24 24' aria-hidden='true'>
                   <path
@@ -591,7 +628,9 @@ export class Camera extends Component {
       }
 
       /* the print itself: radius and shadow of a cover/shot. No selection ring —
-         the cursor and the dive already say which tile is in play. */
+         the cursor and the dive already say which tile is in play. A keyboard
+         still gets the site's focus ring; a pointer dive focuses its print
+         without one (see loupe). */
       .cam-frame {
         position: relative;
         display: block;
@@ -604,10 +643,6 @@ export class Camera extends Component {
         font: inherit;
         cursor: zoom-in;
         overflow: hidden;
-      }
-
-      .cam-frame:focus {
-        outline: none;
       }
 
       .cam-frame.is-open {
