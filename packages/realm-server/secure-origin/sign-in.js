@@ -197,7 +197,14 @@ function renderSignedIn(root, config) {
     },
     'Sign out',
   );
-  root.replaceChildren(page('You’re signed in', error, button));
+  root.replaceChildren(
+    page(
+      'You’re signed in',
+      h('p', { class: 'secure-subtitle' }, 'You can close this window.'),
+      error,
+      button,
+    ),
+  );
 }
 
 // The sign-in form, laid out like the app's: Google first when this server
