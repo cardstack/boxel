@@ -670,7 +670,9 @@ module(basename(import.meta.filename), function () {
       const DELEGATOR = 'delegator_for_incoming_webhooks_test';
       const DELEGATED_MEMBER =
         'readonly_delegated_member_for_incoming_webhooks_test';
-      const RECIPIENT = 'recipient_for_incoming_webhooks_test';
+      // Sorts ahead of the member that grants to it, so down() reaches its
+      // grant before the member holds the grant option again.
+      const RECIPIENT = 'a_recipient_for_incoming_webhooks_test';
       const DROPPED_MEMBER =
         'readonly_dropped_member_for_incoming_webhooks_test';
 
@@ -950,6 +952,42 @@ module(basename(import.meta.filename), function () {
           await tableGrants(),
           before,
           'down restores the member and the grant it passed on',
+        );
+      });
+
+      test('restores a grant passed on by a member that also inherits the grant option from the role', async function (assert) {
+        // Named to sort after the read-only role and the recipient, so down()
+        // reaches the recipient's grant once the role holds the grant option
+        // again but before the member does.
+        const MEMBER = 'zz_inheriting_grantor_for_incoming_webhooks_test';
+        const RECIPIENT_OF_MEMBER = 'x_recipient_for_incoming_webhooks_test';
+        await createRole(MEMBER);
+        await createRole(RECIPIENT_OF_MEMBER);
+        await dbAdapter.execute(`GRANT readonly_role TO ${MEMBER}`);
+        await dbAdapter.execute(
+          `REVOKE readonly_role FROM ${RECIPIENT_OF_MEMBER}`,
+        );
+        await dbAdapter.execute(
+          `GRANT SELECT ON TABLE incoming_webhooks TO readonly_role WITH GRANT OPTION`,
+        );
+        await dbAdapter.execute(
+          `GRANT SELECT ON TABLE incoming_webhooks TO ${MEMBER} WITH GRANT OPTION`,
+        );
+        await dbAdapter.withTransaction(async (query: any) => {
+          await query([`SET LOCAL ROLE ${MEMBER}`]);
+          await query([
+            `GRANT SELECT ON TABLE incoming_webhooks TO ${RECIPIENT_OF_MEMBER}`,
+          ]);
+        });
+        let before = await tableGrants();
+
+        await runMigration('up');
+        await runMigration('down');
+
+        assert.deepEqual(
+          await tableGrants(),
+          before,
+          "the recipient's grant comes back from the member, not the role",
         );
       });
 

@@ -30,10 +30,10 @@
 // `readonly_role_revoked_select_grants`. That table is created only where the
 // read-only role exists, and a second `up` keeps the first record. `down`
 // grants back exactly the recorded grants, each acting as the role that made
-// it once that role holds the grant option again, so every role ends up with
-// the privileges it had before `up`. A database with no record for this table
-// gets SELECT back on the read-only role alone. The proxy endpoints sealing
-// migration keeps its record the same way, in the same table.
+// it once that role itself holds the grant option again, so every role ends up
+// with the privileges it had before `up`. A database with no record for this
+// table gets SELECT back on the read-only role alone. The proxy endpoints
+// sealing migration keeps its record the same way, in the same table.
 
 exports.up = (pgm) => {
   pgm.sql(`
@@ -209,20 +209,26 @@ exports.down = (pgm) => {
               ) THEN
                 CONTINUE;
               END IF;
-              IF NOT (
-                CASE WHEN revoked->>'column' IS NULL
-                  THEN has_table_privilege(
-                    revoked->>'grantor',
-                    'incoming_webhooks',
-                    'SELECT WITH GRANT OPTION'
-                  )
-                  ELSE has_column_privilege(
-                    revoked->>'grantor',
-                    'incoming_webhooks',
-                    revoked->>'column',
-                    'SELECT WITH GRANT OPTION'
-                  )
-                END
+              -- The grantor's own entry, not an option it inherits through
+              -- another role: granting on an inherited option records that
+              -- other role as the grantor.
+              IF NOT EXISTS (
+                SELECT 1
+                FROM pg_class tbl
+                CROSS JOIN LATERAL aclexplode(tbl.relacl) acl
+                WHERE tbl.oid = 'incoming_webhooks'::regclass
+                  AND acl.grantee = (revoked->>'grantor')::regrole
+                  AND acl.privilege_type = 'SELECT'
+                  AND acl.is_grantable
+                UNION ALL
+                SELECT 1
+                FROM pg_attribute col
+                CROSS JOIN LATERAL aclexplode(col.attacl) acl
+                WHERE col.attrelid = 'incoming_webhooks'::regclass
+                  AND col.attname = revoked->>'column'
+                  AND acl.grantee = (revoked->>'grantor')::regrole
+                  AND acl.privilege_type = 'SELECT'
+                  AND acl.is_grantable
               ) THEN
                 waiting := waiting || jsonb_build_array(revoked);
                 CONTINUE;
