@@ -650,6 +650,36 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       assert.strictEqual(rows.length, 0, 'webhook command is deleted');
     });
 
+    test('deleting a webhook command that does not exist succeeds', async function (assert) {
+      let matrixUserId = '@user:localhost';
+      await insertUser(
+        context.dbAdapter,
+        matrixUserId,
+        'cus_123',
+        'user@example.com',
+      );
+
+      let response = await context.request
+        .delete('/_webhook-commands')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set(
+          'Authorization',
+          `Bearer ${createRealmServerJWT(
+            { user: matrixUserId, sessionRoom: 'session-room-test' },
+            realmSecretSeed,
+          )}`,
+        )
+        .send({
+          data: {
+            type: 'webhook-command',
+            id: uuidv4(),
+          },
+        });
+
+      assert.strictEqual(response.status, 204, 'HTTP 204 status');
+    });
+
     test('rejects deleting another user webhook command', async function (assert) {
       let matrixUserId = '@user:localhost';
       let otherMatrixUserId = '@other-user:localhost';

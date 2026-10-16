@@ -327,9 +327,12 @@ export function handleDeleteWebhookCommandRequest({
       return;
     }
 
+    // Deleting a webhook command that does not exist succeeds, so a retried
+    // delete answers the same as the first, as deleting an incoming webhook
+    // does.
     let commandUsername = commandRows[0]?.username;
     if (!commandUsername) {
-      await sendResponseForNotFound(ctxt, 'webhook command is not found');
+      await setContextResponse(ctxt, new Response(null, { status: 204 }));
       return;
     }
     if (commandUsername !== requestingUserId) {
