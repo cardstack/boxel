@@ -428,10 +428,15 @@ function lowerUrlTemplate(
     fail(code, 'url', message);
   };
   // Parsed with each segment stood in for by a plain one, so the URL's own
-  // structure is judged as the request will have it. The trailing `-` keeps
-  // one stand-in from being the start of another's text.
+  // structure is judged as the request will have it. Each stand-in carries a
+  // random part, so a URL's own text doesn't hold it (and one that does is
+  // refused below), and the trailing `-` keeps one stand-in from being the
+  // start of another's text.
   let parameters = [...url.matchAll(PATH_PARAMETER)];
-  let standInFor = (index: number) => `boxel-path-parameter-${index}-`;
+  let nonce = Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) =>
+    b.toString(16).padStart(2, '0'),
+  ).join('');
+  let standInFor = (index: number) => `boxel-path-parameter-${nonce}-${index}-`;
   let standIn = url;
   for (let [index, match] of parameters.entries()) {
     standIn = standIn.replace(match[0], standInFor(index));
@@ -460,6 +465,14 @@ function lowerUrlTemplate(
       `\`url\` names its host with a wildcard — a request goes to one host, written out in full`,
     );
   }
+  // A trailing dot names the same host as none, so one place would have two
+  // destinations.
+  if (parsed.hostname.endsWith('.')) {
+    refuse(
+      'invalid-request',
+      `\`url\` names its host with a trailing dot — write the host without it`,
+    );
+  }
   let segments = parsed.pathname.split('/');
   let firstParameterSegment: number | undefined;
   for (let [index, match] of parameters.entries()) {
@@ -473,7 +486,9 @@ function lowerUrlTemplate(
       continue;
     }
     let segment = segments.indexOf(standInText);
-    if (segment === -1) {
+    // Each stand-in is put back where it stands, so it has to stand in exactly
+    // one place in what the parser made of the URL.
+    if (segment === -1 || parsed.href.split(standInText).length !== 2) {
       refuse(
         'unencoded-path-parameter',
         `\`${match[0]}\` in \`url\` is not a whole path segment — a value fills one segment entirely, so it is encoded as one; the host, the query string and part of a segment are written as they are sent`,
@@ -509,8 +524,9 @@ function lowerUrlTemplate(
 // as the URL parser serializes them, and a destination's path ends with `/`, so
 // a match always ends at a `/`: `https://api.example.com/` does not cover
 // `https://api.example.com.evil.net/`, and `https://api.example.com/v1/` does
-// not cover `https://api.example.com/v1beta`. Approval and the send-time check
-// both ask this, so what was approved and what is sent are judged alike.
+// not cover `https://api.example.com/v1beta`. This is the one rule for that
+// question: the send-time check asks it of every request, and an approval of a
+// key for a destination is judged by it too.
 export function destinationCovers(destination: string, url: string): boolean {
   let parsedDestination: URL;
   let parsedURL: URL;

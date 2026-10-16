@@ -77,15 +77,15 @@ All in `lowerCallApi`. Each records an issue, so the entry is stored
 known, one body, no body on GET); everything below is lowering's, so it holds
 for a stored entry whatever produced it.
 
-| Code                       | Raised for                                                                                                                                                                                                                         |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `slot-placed-twice`        | the same slot name, same key, in two places                                                                                                                                                                                        |
-| `slot-name-reused`         | one name used for a `userKey` slot and an `apiKey` slot                                                                                                                                                                            |
-| `slot-out-of-place`        | a slot in the URL as written, a header or query _name_, or a GraphQL document                                                                                                                                                      |
-| `unencoded-path-parameter` | a `{name}` that isn't a whole path segment (in the host, part of a segment, `{+name}`), a `{name}` that `path` doesn't fill, or a typed reference spliced into URL or path text (`[object Object]`)                                |
-| `string-built-graphql`     | a document that is a marker or program, or has a reference spliced into it                                                                                                                                                         |
-| `invalid-slot`             | a malformed slot or an unknown transform                                                                                                                                                                                           |
-| `invalid-request`          | not an absolute http(s) URL, userinfo in the URL, a `*` in the host (written or as `%2A`), a `path` key no segment takes, an `X-Boxel-*` or non-token header name, an object or list where text is sent, two bodies, a body on GET |
+| Code                       | Raised for                                                                                                                                                                                                                                                     |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `slot-placed-twice`        | the same slot name, same key, in two places                                                                                                                                                                                                                    |
+| `slot-name-reused`         | one name used for a `userKey` slot and an `apiKey` slot                                                                                                                                                                                                        |
+| `slot-out-of-place`        | a slot in the URL as written, a header or query _name_, or a GraphQL document                                                                                                                                                                                  |
+| `unencoded-path-parameter` | a `{name}` that isn't a whole path segment (in the host, part of a segment, `{+name}`), a `{name}` that `path` doesn't fill, or a typed reference spliced into URL or path text (`[object Object]`)                                                            |
+| `string-built-graphql`     | a document that is a marker or program, or has a reference spliced into it                                                                                                                                                                                     |
+| `invalid-slot`             | a malformed slot or an unknown transform                                                                                                                                                                                                                       |
+| `invalid-request`          | not an absolute http(s) URL, userinfo in the URL, a `*` in the host (written or as `%2A`), a trailing dot on the host, a `path` key no segment takes, an `X-Boxel-*` or non-token header name, an object or list where text is sent, two bodies, a body on GET |
 
 The lowered entry keeps every value as a marker and every slot as the text the
 author wrote, plus `slots: CallApiSlot[]` — `{name, key, transform?,
@@ -110,11 +110,18 @@ stood in for by a plain one and stores two things on `OperationCallApi`:
   never resolved against the origin, because a path opening with `//` would
   resolve as another host.
 
-The definition cache holds both, and a key's approval names the destination
-as lowered.
+Each stand-in carries a random part, and each must appear exactly once in the
+parsed URL or the URL is refused `unencoded-path-parameter`, so a URL whose own text
+holds stand-in-like text can't move a `{name}` into another segment or the
+host. A host with a trailing dot is refused too, since it names the same host
+as one without.
+
+The definition cache holds both. The destination is the unit a key is
+approved for; nothing reads it for that until a binding fills a slot.
 
 **`destinationCovers(destination, url)`** is the one rule for whether a request
-goes where a destination says, shared by approval and the send-time check. Both
+goes where a destination says: the send-time check asks it of every request,
+and an approval of a key for a destination is judged by it too. Both
 sides are compared as parsed `href`s, and a destination whose path doesn't end
 in `/` (or that carries userinfo, a query or a fragment) covers nothing, so a
 match always ends at a `/`: `https://api.openai.com/` doesn't cover

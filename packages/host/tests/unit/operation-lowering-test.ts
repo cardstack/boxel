@@ -2442,6 +2442,38 @@ module('Unit | operation lowering', function (hooks) {
     }
   });
 
+  test("a URL's own text that reads like lowering's stand-in for a segment stays where it is written", async function (assert) {
+    for (let literal of [
+      'boxel-path-parameter-0-',
+      '%62oxel-path-parameter-0-',
+    ]) {
+      let result = await lowerRequest({
+        url: `https://api.example.com/${literal}/{id}`,
+        path: { id: '7' },
+      });
+      assert.deepEqual(codes(result), [], literal);
+      assert.strictEqual(
+        result.operations.fetch.callApi?.url,
+        `https://api.example.com/${literal}/{id}`,
+        literal,
+      );
+      assert.strictEqual(
+        result.operations.fetch.callApi?.destination,
+        `https://api.example.com/${literal}/`,
+        literal,
+      );
+    }
+  });
+
+  test('a host with a trailing dot is refused', async function (assert) {
+    let result = await lowerRequest({
+      url: 'https://api.example.com./v1/{id}',
+      path: { id: '7' },
+    });
+    assert.deepEqual(codes(result), ['invalid-request']);
+    assert.strictEqual(result.operations.fetch.callApi, undefined);
+  });
+
   test('an http URL lowers, for the outbound guard to judge when it is sent', async function (assert) {
     let result = await lowerRequest({ url: 'http://api.example.com/items' });
     assert.deepEqual(codes(result), []);
