@@ -27,6 +27,8 @@ import {
   setupTestDatabaseTemplate,
 } from './helpers/index.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
+import { revokeUserSessions } from '@cardstack/runtime-common/db-queries/user-queries';
+import type { PgAdapter } from '@cardstack/postgres';
 
 const SERVER_ORIGIN = 'http://127.0.0.1:4445';
 const REALM_URL = `${SERVER_ORIGIN}/test/`;
@@ -39,6 +41,7 @@ module(basename(import.meta.filename), function () {
     let testRealmHttpServer: Server;
     let testRealm: any;
     let request: SuperTest<Test>;
+    let dbAdapter: PgAdapter;
     let virtualNetwork = createVirtualNetwork();
     let diagnosticLog = logger(DIAGNOSTIC_SESSION_LOG_CHANNEL);
     let logged: string[];
@@ -83,7 +86,8 @@ module(basename(import.meta.filename), function () {
 
     setupDB(hooks, {
       templateDatabase,
-      beforeEach: async (dbAdapter, publisher, runner) => {
+      beforeEach: async (_dbAdapter, publisher, runner) => {
+        dbAdapter = _dbAdapter;
         await startRealmServer(dbAdapter, publisher, runner);
         logged = [];
         sinon.stub(diagnosticLog, 'info').callsFake((...args: unknown[]) => {
@@ -141,7 +145,7 @@ module(basename(import.meta.filename), function () {
           ...claims,
         },
         diagnosticSessionSecret(realmSecretSeed),
-        { expiresIn },
+        'exp' in claims ? {} : { expiresIn },
       );
     }
 
@@ -384,6 +388,128 @@ module(basename(import.meta.filename), function () {
         { expiresIn: DIAGNOSTIC_SESSION_LIFETIME_SEC },
       );
       assert.strictEqual((await readCard(forged)).status, 401);
+    });
+
+    function federatedInfo(session: string, realms: string[]) {
+      return request
+        .post('/_federated-info')
+        .set('Accept', SupportedMimeType.JSONAPI)
+        .set('Content-Type', 'application/json')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Authorization', `Bearer ${session}`)
+        .send({ realms });
+    }
+
+    function writeSource(session: string, assumeUser?: string) {
+      let pending = request
+        .post('/test/written.gts')
+        .set('Accept', 'application/vnd.card+source')
+        .set('Authorization', `Bearer ${session}`);
+      if (assumeUser) {
+        pending = pending.set('X-Boxel-Assume-User', assumeUser);
+      }
+      return pending.send('export const written = true;');
+    }
+
+    test('a federated request naming a realm the session was not issued for is refused', async function (assert) {
+      // Registered but never mounted: the federated endpoints check that a
+      // realm is known without mounting it.
+      let other = `${SERVER_ORIGIN}/other/`;
+      await dbAdapter.execute(
+        `INSERT INTO realm_registry (url, kind, disk_id, owner_username, pinned)
+         VALUES ($1, 'bootstrap', '/persistent/other', 'system', false)`,
+        { bind: [other] },
+      );
+      let session = await mintedSession();
+      let response = await federatedInfo(session, [REALM_URL, other]);
+      assert.strictEqual(response.status, 401);
+    });
+
+    test("revoking the owner's sessions refuses a diagnostic session minted before it", async function (assert) {
+      let session = await mintedSession();
+      assert.strictEqual((await readCard(session)).status, 200);
+      await revokeUserSessions(dbAdapter, OWNER);
+      assert.strictEqual(
+        (await readCard(session)).status,
+        401,
+        'the realm refuses it',
+      );
+      assert.strictEqual(
+        (await federatedInfo(session, [REALM_URL])).status,
+        401,
+        'the federated endpoints refuse it',
+      );
+    });
+
+    test('capture URLs signed with the session are not bound to the owner', async function (assert) {
+      let session = await mintedSession();
+      let url = `${REALM_URL}_capture/person-1`;
+      let response = await request
+        .post('/test/_sign-capture-urls')
+        .set('X-HTTP-Method-Override', 'QUERY')
+        .set('Accept', 'application/json')
+        .set('Content-Type', 'application/json')
+        .set('Authorization', `Bearer ${session}`)
+        .send(JSON.stringify({ urls: [url] }));
+      assert.strictEqual(response.status, 200);
+      assert.deepEqual(
+        response.body.signed[0],
+        { url, signedUrl: url, expiresAt: null },
+        'the URL comes back unsigned, as for a caller who is no one',
+      );
+    });
+
+    module('on a realm anyone may read and write', function (hooks) {
+      hooks.beforeEach(async function () {
+        await dbAdapter.execute(
+          `INSERT INTO realm_user_permissions (realm_url, username, read, write, realm_owner) VALUES ($1, '*', true, true, false)`,
+          { bind: [REALM_URL] },
+        );
+      });
+
+      test('the session reads, and the use is logged', async function (assert) {
+        let response = await mint();
+        let session = JSON.parse(response.body.session)[REALM_URL];
+        assert.strictEqual((await readCard(session)).status, 200);
+        assert.true(
+          logged.some((line) =>
+            line.includes(
+              `diagnostic session ${response.body.id} presented on GET`,
+            ),
+          ),
+          'the read is logged',
+        );
+      });
+
+      test('a write presented with a diagnostic session is refused, even one that has expired or names a user to assume', async function (assert) {
+        let session = await mintedSession();
+        assert.strictEqual(
+          (await writeSource(session)).status,
+          403,
+          'a write with a live session is refused',
+        );
+        assert.strictEqual(
+          (await writeSource(session, OWNER)).status,
+          403,
+          'a write naming a user to assume is refused',
+        );
+        let now = Math.floor(Date.now() / 1000);
+        let expired = diagnosticSession({ iat: now - 1000, exp: now - 100 });
+        assert.strictEqual(
+          (await writeSource(expired)).status,
+          403,
+          'a write with an expired session is refused',
+        );
+        let anonymous = await request
+          .post('/test/written.gts')
+          .set('Accept', 'application/vnd.card+source')
+          .send('export const written = true;');
+        assert.notStrictEqual(
+          anonymous.status,
+          403,
+          'the realm still takes an anonymous write',
+        );
+      });
     });
   });
 });

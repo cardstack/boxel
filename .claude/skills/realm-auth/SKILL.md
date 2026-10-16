@@ -95,9 +95,15 @@ path). In order:
    must have been issued for this realm (`acceptedDiagnosticClaim`, which also
    bounds `exp - iat` to the family's lifetime), the request must need `read`
    only (anything else is an `AuthorizationError`, which no policy turns into
-   an admission), and the owner it reads as must still have read. A diagnostic
-   session presented on a write to a world-writable realm is refused rather
-   than answered anonymously.
+   an admission), and the owner it reads as must still have read. On the
+   public path, a write presented with a token whose claim says it is a
+   diagnostic session is refused before the token is verified and before any
+   `X-Boxel-Assume-User` indirection, so it holds for an expired session too
+   rather than falling through to an anonymous write; a read there takes the
+   owner's identity only once the session passes the claim and revocation
+   checks. A diagnostic session sets `RequestContext.diagnosticSession`, and
+   `#captureReader` draws such a caller as no one, so a capture or a signed
+   capture URL never carries the owner's identity past the session.
 4. **Exact permission match**: `JSON.stringify(token.permissions?.sort()) !==
 JSON.stringify(userPermissions.sort())` → `PermissionMismatch`.
 

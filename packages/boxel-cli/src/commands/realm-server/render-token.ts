@@ -1,5 +1,5 @@
 import type { Command } from 'commander';
-import { closeSync, fchmodSync, openSync, writeSync } from 'fs';
+import { closeSync, constants, fchmodSync, openSync, writeSync } from 'fs';
 import { cliLog } from '../../lib/cli-log.ts';
 import { FG_GREEN, RESET } from '../../lib/colors.ts';
 import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
@@ -113,10 +113,21 @@ export async function mintRenderToken(
   };
 }
 
-// Writes the file with mode 0600 from its creation, so the session is never
-// readable by anyone else, even for a moment.
+// Writes the file readable by this user alone. The default path is in a
+// shared /tmp under a predictable name, so the open refuses a symlink there
+// (`O_NOFOLLOW`) rather than write the session wherever it points, and a file
+// someone else created there fails the `fchmodSync`, which only the owner may
+// do. A file this creates is 0600 from the start; one it reuses is narrowed
+// to 0600 before anything is written.
 export function writeRenderFile(path: string, render: DiagnosticRender): void {
-  let fd = openSync(path, 'w', 0o600);
+  let fd = openSync(
+    path,
+    constants.O_WRONLY |
+      constants.O_CREAT |
+      constants.O_TRUNC |
+      constants.O_NOFOLLOW,
+    0o600,
+  );
   try {
     fchmodSync(fd, 0o600);
     writeSync(fd, `${JSON.stringify(render, null, 2)}\n`);

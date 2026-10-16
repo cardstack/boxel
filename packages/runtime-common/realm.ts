@@ -2482,6 +2482,13 @@ export type RequestContext = {
   // other than the one the request was sent to, and has to know the caller
   // there as someone that realm would itself accept.
   principal?: string;
+  // Set when the request's session is a diagnostic session
+  // (`TokenClaims.diagnostic`). Its `authenticatedUser` is the realm owner it
+  // reads as, which the session is good for only within its own requests,
+  // its realms and its fifteen minutes. So anything that would carry that
+  // identity past the request — a capture drawn as its reader, a signed
+  // capture URL — treats the caller as no one.
+  diagnosticSession?: true;
   // Set when the request's token is a realm-authority session
   // (`TokenClaims.realmAuthority`): a realm rendering its own cards, whose
   // `authenticatedUser` is the identity it reads as rather than someone a
@@ -7586,9 +7593,14 @@ export class Realm {
   // to end, a capture-URL token (minted only for a reader this vouched for —
   // see `signCaptureURLs`), or a token a public realm's read path took
   // without checking it, once it passes those checks here. A delegated session
-  // reads this realm as the user it acts for. Anyone else is
+  // reads this realm as the user it acts for. A diagnostic session is drawn
+  // as no one: a capture outlives its request, and a capture-URL token its
+  // session (see `RequestContext.diagnosticSession`). Anyone else is
   // `ANONYMOUS_RENDER`, drawn with no session at all.
   async #captureReader(requestContext: RequestContext): Promise<string> {
+    if (requestContext.diagnosticSession) {
+      return ANONYMOUS_RENDER;
+    }
     let session = requestContext.unvouchedSession;
     if (session) {
       let vouched =
@@ -11223,6 +11235,22 @@ export class Realm {
       // the assumed-user tag the same client's writes carry, since writes
       // always take the main path.
       let publicAuthHeader = request.headers.get('Authorization');
+      // A diagnostic session is read-only even where the realm lets anyone
+      // write, so a write presented with one is refused rather than answered
+      // as an anonymous one. The token's own claim decides it, before
+      // verification and before any assume-user indirection, so the refusal
+      // holds for a session that has expired too.
+      if (
+        publicAuthHeader &&
+        presentsAsDiagnosticSession(publicAuthHeader.replace('Bearer ', '')) &&
+        requiredPermission !== 'read' &&
+        !answersWithoutCredentials
+      ) {
+        warnRefusal(
+          `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), a diagnostic session attempted ${requiredPermission}; diagnostic sessions are read-only`,
+        );
+        throw new AuthorizationError('Diagnostic sessions are read-only');
+      }
       if (!publicAuthHeader) {
         requestContext.anonymous = true;
       } else if (!request.headers.get('X-Boxel-Assume-User')) {
@@ -11236,21 +11264,14 @@ export class Realm {
         } catch (e) {
           // fall through with no identity
         }
-        // A diagnostic session is read-only even where the realm lets anyone
-        // write, so a write it is presented for is refused rather than
-        // answered as an anonymous one.
         if (publicToken?.diagnostic) {
-          if (requiredPermission === 'read' || answersWithoutCredentials) {
-            this.#admitDiagnosticSession(request, requestContext, publicToken, {
-              warnRefusal,
-              recordOnly: true,
-            });
-            return;
-          }
-          warnRefusal(
-            `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), diagnostic session ${publicToken.diagnostic.id} attempted ${requiredPermission}; diagnostic sessions are read-only`,
+          await this.#admitDiagnosticSession(
+            request,
+            requestContext,
+            publicToken,
+            { warnRefusal, recordOnly: true },
           );
-          throw new AuthorizationError('Diagnostic sessions are read-only');
+          return;
         }
         if (publicToken) {
           requestContext.authenticatedUser = publicToken.user;
@@ -11321,7 +11342,7 @@ export class Realm {
             AuthenticationErrorMessages.PermissionMismatch,
           );
         }
-        this.#admitDiagnosticSession(request, requestContext, token, {
+        await this.#admitDiagnosticSession(request, requestContext, token, {
           warnRefusal,
         });
         return;
@@ -11453,9 +11474,11 @@ export class Realm {
   // mint it came from. A session not issued for this realm, or outside its
   // lifetime, is refused. `recordOnly` is for a request the realm answers
   // without credentials, which the session identifies but does not authorize;
-  // there a session that is not valid here leaves the caller unidentified
-  // rather than failing a request the realm would answer anyway.
-  #admitDiagnosticSession(
+  // there a session that is not valid here, or whose owner's sessions have
+  // been revoked since it was minted, leaves the caller unidentified rather
+  // than failing a request the realm would answer anyway. The main path has
+  // checked revocation before it gets here.
+  async #admitDiagnosticSession(
     request: Request,
     requestContext: RequestContext,
     token: TokenClaims & { iat: number; exp: number },
@@ -11463,9 +11486,13 @@ export class Realm {
       warnRefusal,
       recordOnly = false,
     }: { warnRefusal: (message: string) => void; recordOnly?: boolean },
-  ): void {
+  ): Promise<void> {
     let claim = acceptedDiagnosticClaim(token, [this.url]);
-    if (!claim && recordOnly) {
+    if (
+      recordOnly &&
+      (!claim ||
+        (await isSessionRevoked(this.#dbAdapter, token.user, token.iat)))
+    ) {
       return;
     }
     if (!claim) {
@@ -11475,6 +11502,7 @@ export class Realm {
       throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
     }
     requestContext.authenticatedUser = token.user;
+    requestContext.diagnosticSession = true;
     if (token.realmAuthority) {
       requestContext.realmAuthority = true;
     }

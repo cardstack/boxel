@@ -2644,7 +2644,8 @@ If step 4 returns `null` (no `[data-prerender]` element) and the body shows a JS
 
 Each session reads as the realm owner with realm authority, exactly as the indexer's render does, so searches find what the realm ACL grants the owner and policy doesn't scope them. Beyond that it is narrow (`packages/runtime-common/diagnostic-session.ts`; the `realm-auth` skill has the verification detail):
 
-- **Read-only.** A realm refuses any request needing write or realm-owner (403), including on a world-writable realm.
+- **Read-only.** A realm refuses any request needing write or realm-owner (403), including on a world-writable realm, where a write presented with an expired diagnostic session is refused too.
+- **Captures are drawn as no one.** A `_capture/` request with the session is served what an anonymous reader would be, and `_sign-capture-urls` hands its URLs back unsigned, so nothing outlives the session carrying the owner's identity.
 - **Only its realms.** A realm accepts it only if the realm is in the mint's `realms`. The federated read endpoints (`_federated-search`, `_federated-info`, `_federated-types`, `_federated-index-counts`) accept it only for a request naming realms all within that set.
 - **Nowhere else.** It is signed under its own key, so every other realm-server route (`_user`, `_user-keys`, `_request-forward`, `_realm-auth`, the operator endpoints, …) refuses it on its signature.
 - **Fifteen minutes**, with the lifetime checked by every verifier against its own clock.
@@ -2661,7 +2662,7 @@ diagnostic session <id> read POST /_federated-search for realms <realms> as <own
 
 To answer "was this card rendered for diagnosis, and by whom?", search CloudWatch for `diagnostic session` on the realm server's log group and join on the id. The operator token carries no identity, so the note is the account of who asked, recorded as given; the client address and the token's signing time are what the server observed itself.
 
-**Public realms (`'*': ['read']`) don't need a session.** Published realms always have this. Rendering a published card works without one, though a covering session is harmless: the realm logs its use and otherwise answers as it would anonymously.
+**Public realms (`'*': ['read']`) don't need a session.** Published realms always have this. Rendering a published card works without one. A covering session is still accepted there and logged, and the read is made as the owner it names, as on any other realm.
 
 #### When this is the right path
 

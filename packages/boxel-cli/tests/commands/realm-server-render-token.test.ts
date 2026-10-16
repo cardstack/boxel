@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, readFileSync, statSync } from 'fs';
+import {
+  mkdtempSync,
+  readFileSync,
+  statSync,
+  symlinkSync,
+  writeFileSync,
+} from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import jwt from 'jsonwebtoken';
@@ -136,5 +142,17 @@ describe('boxel realm-server render-token', () => {
     writeRenderFile(path, render);
     expect(statSync(path).mode & 0o777).toBe(0o600);
     expect(JSON.parse(readFileSync(path, 'utf8'))).toEqual(render);
+  });
+
+  it('refuses to write through a symlink planted at the path', () => {
+    let dir = mkdtempSync(join(tmpdir(), 'render-token-'));
+    let target = join(dir, 'planted.json');
+    writeFileSync(target, 'untouched');
+    let path = join(dir, 'out.json');
+    symlinkSync(target, path);
+    expect(() =>
+      writeRenderFile(path, { ...minted(), renderURL: 'https://h.test/r' }),
+    ).toThrow(/ELOOP/);
+    expect(readFileSync(target, 'utf8')).toBe('untouched');
   });
 });
