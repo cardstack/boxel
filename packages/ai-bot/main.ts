@@ -40,7 +40,6 @@ import { DelegatedUserRealmSessionManager } from './lib/user-delegated-realm-ser
 import {
   abandonedBotToolCalls,
   cancelBotToolCalls,
-  classifyToolCalls,
   fulfillBotToolCalls,
   offeredBotTools,
   startBotToolTurns,
@@ -64,6 +63,7 @@ import {
 import { isApprovalResult } from '@cardstack/runtime-common/ai';
 import type { Tool } from '@cardstack/base/matrix-event';
 import { Responder } from './lib/responder.ts';
+import { collectUsedToolCallIds } from './lib/tool-call-ids.ts';
 import { buildChatCompletionRequest } from './lib/chat-completion-request.ts';
 import {
   shouldSetRoomTitle,
@@ -671,6 +671,7 @@ Common issues are:
             client,
             room.roomId,
             agentId,
+            collectUsedToolCallIds(eventList),
             streamPreviewTarget,
           );
 
@@ -965,9 +966,9 @@ Common issues are:
               // fulfills its commands, we fulfill ours, and getShouldRespond
               // waits for all of them before generating again.
               let message = completion.choices?.[0]?.message;
-              let { botToolCalls } = message
-                ? classifyToolCalls(message)
-                : { botToolCalls: [] };
+              let botToolCalls = message
+                ? responder.postedBotToolCalls(message)
+                : [];
               // Only the bot tools this room was offered are run, and a call
               // held for the user's approval waits for it.
               botToolCalls = botToolCalls.filter(

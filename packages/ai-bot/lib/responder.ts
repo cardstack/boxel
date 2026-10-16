@@ -13,6 +13,7 @@ import type { ISendEventResponse } from 'matrix-js-sdk/lib/matrix.js';
 import type { ChatCompletionMessageFunctionToolCall } from 'openai/resources/chat/completions';
 import type { FunctionToolCall } from '@cardstack/runtime-common/helpers/ai';
 import type OpenAI from 'openai';
+import type { ChatCompletion } from 'openai/resources';
 import { parseLenientJson } from './lenient-json.ts';
 import type { ChatCompletionSnapshot } from 'openai/lib/ChatCompletionStream';
 import type { MatrixEvent as DiscreteMatrixEvent } from 'matrix-js-sdk';
@@ -20,7 +21,7 @@ import MatrixResponsePublisher, {
   toCommandRequest,
 } from './matrix/response-publisher.ts';
 import ResponseState from './response-state.ts';
-import type { BotToolTurn } from './bot-tools/index.ts';
+import { classifyToolCalls, type BotToolTurn } from './bot-tools/index.ts';
 import type { MatrixClient } from 'matrix-js-sdk';
 
 let log = logger('ai-bot');
@@ -72,12 +73,16 @@ export class Responder {
   private completionTokens: number | undefined;
   private telemetryLogged = false;
 
+  // usedToolCallIds: every tool-call id the room has used, so this turn's calls
+  // are posted with ids unique in the room (see tool-call-ids.ts).
   constructor(
     client: MatrixClient,
     roomId: string,
     agentId: string,
+    usedToolCallIds: Iterable<string>,
     streamPreviewTarget?: { userId: string; deviceId: string },
   ) {
+    this.responseState = new ResponseState(usedToolCallIds);
     this.client = client;
     this.streamPreviewTarget = streamPreviewTarget;
     this.matrixResponsePublisher = new MatrixResponsePublisher(
@@ -92,7 +97,7 @@ export class Responder {
     ISendEventResponse | void | { errorMessage: string }
   >[] = [];
 
-  responseState = new ResponseState();
+  responseState: ResponseState;
 
   // This turn's state for each offered bot tool, used to label calls and
   // hold those that wait for the user's approval.
@@ -355,6 +360,15 @@ export class Responder {
     }
 
     return await Promise.all(this.messagePromises);
+  }
+
+  // The finished reply's bot-tool calls, under the ids they were posted with,
+  // so their results name the posted requests rather than the provider's ids.
+  postedBotToolCalls(message: ChatCompletion.Choice['message']) {
+    return classifyToolCalls({
+      ...message,
+      tool_calls: this.responseState.withPostedIds(message.tool_calls),
+    }).botToolCalls;
   }
 
   deserializeToolCall(
