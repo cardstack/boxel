@@ -5,6 +5,7 @@ import {
   field,
   contains,
   containsMany,
+  linksToMany,
   Box,
   CardDef,
   Component,
@@ -14,6 +15,7 @@ import {
   type Field,
 } from '@cardstack/base/card-api';
 import { getContainsManyComponent } from '@cardstack/base/contains-many-component';
+import { getLinksToManyComponent } from '@cardstack/base/links-to-many-component';
 import NumberField from '@cardstack/base/number';
 import StringField from '@cardstack/base/string';
 import { getService } from '@universal-ember/test-support';
@@ -32,7 +34,7 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 let loader: Loader;
 
-module('Integration | contains-many component', function (hooks) {
+module('Integration | plural field components', function (hooks) {
   setupRenderingTest(hooks);
 
   hooks.beforeEach(function (this: RenderingTestContext) {
@@ -68,13 +70,11 @@ module('Integration | contains-many component', function (hooks) {
     }) as unknown as BoxComponent[];
 
     await renderComponent(
-      class extends Component<typeof Person> {
-        <template>
-          {{#each nicknames as |Nickname|}}
-            <span data-test-nickname><Nickname @format='atom' /></span>
-          {{/each}}
-        </template>
-      },
+      <template>
+        {{#each nicknames as |Nickname|}}
+          <span data-test-nickname><Nickname @format='atom' /></span>
+        {{/each}}
+      </template>,
     );
 
     assert
@@ -99,6 +99,40 @@ module('Integration | contains-many component', function (hooks) {
       cardTypeForCalls,
       4,
       're-iterating after a change builds one component per row',
+    );
+  });
+
+  test('iterating a linksToMany field builds each row component once', async function (assert) {
+    class Pet extends CardDef {
+      @field name = contains(StringField);
+    }
+    class Person extends CardDef {
+      @field pets = linksToMany(Pet);
+    }
+    let person = new Person({
+      pets: [
+        new Pet({ name: 'Mango' }),
+        new Pet({ name: 'Van Gogh' }),
+        new Pet({ name: 'Ringo' }),
+      ],
+    });
+    let model = Box.create(person) as Box<CardDef>;
+    let cardTypeForCalls = 0;
+    let pets = getLinksToManyComponent({
+      model,
+      arrayField: model.field('pets' as never) as Box<CardDef[]>,
+      field: getField(Person, 'pets') as Field<typeof CardDef>,
+      cardTypeFor(field: Field<typeof BaseDef>) {
+        cardTypeForCalls++;
+        return field.card;
+      },
+    }) as unknown as BoxComponent[];
+
+    assert.strictEqual([...pets].length, 3, 'every row is iterated');
+    assert.strictEqual(
+      cardTypeForCalls,
+      3,
+      'one iteration builds one component per row',
     );
   });
 
