@@ -408,8 +408,8 @@ function examplesLoadFor(name: string): Loaded<ExampleSpec[]> {
 
 // Closed vocabularies for the Spec's classification fields: the edit form
 // offers these as dropdowns. Each list covers every value the catalog's
-// Specs store, so existing instances read unchanged, plus values the card
-// handles that no Spec uses yet (host, planned, designed, deprecated).
+// Specs store, so existing instances read unchanged, plus the taxonomy's
+// values (host, planned, designed, deprecated; docs/catalog-taxonomy.md).
 const CATEGORY_OPTIONS = [
   'Actions',
   'Agentic',

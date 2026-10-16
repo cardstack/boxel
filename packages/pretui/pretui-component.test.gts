@@ -95,6 +95,9 @@ module('Pretui | PretUISpec', function (hooks) {
     });
     await render(<template><Isolated @model={{model}} /></template>);
     assert.dom('[data-test-pretui-version]').containsText('1.2.0');
+    assert
+      .dom('[data-test-pretui-status]')
+      .hasAttribute('data-tone', 'success');
   });
 
   test('a component not yet in use shows no version', async function (assert) {

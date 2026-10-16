@@ -89,8 +89,6 @@ Important boundaries:
 
 ### CopyFit naming
 
-The component previously called `FittedCard` is named **CopyFit**.
-
 `fitted` is a Boxel rendering format. CopyFit is the layout mechanism used to
 make copy and optional media adapt across the fitted format's available
 quantums. Naming the component after the mechanism keeps the format and the
@@ -200,19 +198,3 @@ provenance. Adoption filters remain independent of taxonomy.
 This preserves the periodic-table presentation while making discovery follow
 product intent: an author can ask for “layout,” then see which results are
 elements, compounds, surfaces, or blocks.
-
-## Migration
-
-1. Add category, tier, tags, ownership, implementation status, adoption
-   status, and introduction metadata while retaining the existing fields.
-2. Establish Layout and split the current Structure catch-all across Layout,
-   Navigation, Containers, Data Display, Feedback, Media, and Overlays.
-3. Split broad Controls entries across Actions, Inputs, Forms, Feedback, and
-   Authoring Tools.
-4. Populate explicit tiers; remove category-to-tier inference and exceptional
-   overrides.
-5. Update the catalog rail to filter by category and keep grouping by tier as
-   an independent option.
-6. Rename FittedCard to CopyFit.
-7. Remove the legacy territory, overloaded stage, persistent isNew, and
-   liveInUse fields; “in use” is `adoptionStatus: in-use`.
