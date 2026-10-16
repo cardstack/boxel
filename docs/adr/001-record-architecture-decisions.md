@@ -4,6 +4,7 @@ date: 2026-10-15
 scope:
   - docs/adr/**
   - .claude/skills/adr/**
+  - scripts/adr-for.mts
 ---
 
 # 001. Record architecture decisions as short, normative ADRs
@@ -32,8 +33,8 @@ one PR SHOULD stay in that PR's description.
 
 An ADR MUST be a file at `docs/adr/<number>-<slug>.md`. The number MUST have
 three digits and MUST be the next unused number after the highest assigned
-one. ADR numbers MUST NOT change or be reused. The slug is the title in kebab
-case.
+one. ADR numbers MUST NOT change or be reused. The slug is a short kebab-case
+form of the title.
 
 The frontmatter MUST contain:
 
