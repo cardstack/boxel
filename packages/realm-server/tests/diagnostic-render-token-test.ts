@@ -426,7 +426,11 @@ module(basename(import.meta.filename), function () {
     });
 
     test("revoking the owner's sessions refuses a diagnostic session minted before it", async function (assert) {
-      let session = await mintedSession();
+      // Revocation records the current epoch second and refuses sessions
+      // issued before it, so the session is dated a minute back.
+      let session = diagnosticSession({
+        iat: Math.floor(Date.now() / 1000) - 60,
+      });
       assert.strictEqual((await readCard(session)).status, 200);
       await revokeUserSessions(dbAdapter, OWNER);
       assert.strictEqual(
