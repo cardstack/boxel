@@ -8,7 +8,7 @@ const require = createRequire(import.meta.url);
 const CHECK_MIGRATION = join(
   dirname(require.resolve('@cardstack/postgres/package.json')),
   'migrations',
-  '1792192933698_check-readonly-role-cant-read-withheld-tables.js',
+  '1792193305492_check-readonly-role-cant-read-withheld-tables.js',
 );
 
 const WITHHELD_TABLES = [
