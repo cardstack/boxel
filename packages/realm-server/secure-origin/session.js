@@ -5,12 +5,14 @@
 // same-origin policy keeps it on the secure origin, and minting a key write
 // ticket requires it.
 //
-// Signing in is a check the realm server drives (see the realm server's
-// `lib/secure-session.ts`): the window starts a sign-in for a username, the
-// user confirms it is them, with their password or their single sign-on
-// provider, and the window completes the sign-in for a session.
+// The window signs in with a password, which the realm server checks with the
+// Matrix server, or with Google, which sends its authorization code back to
+// this origin alone (see the realm server's `lib/secure-session.ts`).
 
 const STORAGE_KEY = 'boxel-secure-session';
+// A Google sign-in in progress: what the window sent Google, kept for the
+// callback to check what comes back against.
+const GOOGLE_SIGN_IN_KEY = 'boxel-secure-google-sign-in';
 const JSON_API = 'application/vnd.api+json';
 // A session this close to its end is treated as already ended, so a request
 // made with it doesn't fail partway through.
@@ -69,32 +71,127 @@ async function request(url, { method = 'POST', body, token } = {}) {
   return json;
 }
 
-// Starts a sign-in. `client` is 'window' for this window's own session, 'cli'
-// for a session handed to the CLI.
-export async function startSignIn(config, { username, client }) {
-  let json = await request(
-    new URL('_secure-session/sign-in', config.realmServerURL),
-    {
-      body: {
-        data: { type: 'secure-sign-in', attributes: { username, client } },
-      },
-    },
-  );
-  return json.data.attributes;
-}
-
-// Completes a sign-in, with the password, or after single sign-on with none.
-// A sign-in waiting on single sign-on fails with code 'pending'.
-export async function completeSignIn(config, { signIn, password }) {
+// Signs in with a password. `client` is 'window' for this window's own
+// session, 'cli' for a session handed to the CLI.
+export async function signInWithPassword(
+  config,
+  { username, password, client },
+) {
   let json = await request(new URL('_secure-session', config.realmServerURL), {
     body: {
       data: {
         type: 'secure-session',
-        attributes: { signIn, ...(password ? { password } : {}) },
+        attributes: { username, password, client },
       },
     },
   });
   return json.data.attributes;
+}
+
+// Where to send the user to sign in with Google, or undefined when this realm
+// server has no Google client.
+export async function googleSignInConfig(config) {
+  try {
+    let json = await request(
+      new URL('_secure-session/google', config.realmServerURL),
+      { method: 'GET' },
+    );
+    return json.data.attributes;
+  } catch {
+    return undefined;
+  }
+}
+
+function randomToken() {
+  let bytes = crypto.getRandomValues(new Uint8Array(32));
+  return base64url(bytes);
+}
+
+function base64url(bytes) {
+  return btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
+
+// Sends this window to Google. The state, nonce and PKCE verifier stay in this
+// origin's session storage; `resume` is whatever the callback needs to carry
+// on with (which client, and the CLI's listener).
+export async function beginGoogleSignIn(google, resume) {
+  let state = randomToken();
+  let nonce = randomToken();
+  let codeVerifier = randomToken();
+  let challenge = base64url(
+    new Uint8Array(
+      await crypto.subtle.digest(
+        'SHA-256',
+        new TextEncoder().encode(codeVerifier),
+      ),
+    ),
+  );
+  sessionStorage.setItem(
+    GOOGLE_SIGN_IN_KEY,
+    JSON.stringify({ state, nonce, codeVerifier, resume }),
+  );
+  let url = new URL(google.authorizationEndpoint);
+  url.searchParams.set('response_type', 'code');
+  url.searchParams.set('client_id', google.clientId);
+  url.searchParams.set('redirect_uri', google.redirectURI);
+  url.searchParams.set('scope', 'openid email profile');
+  url.searchParams.set('state', state);
+  url.searchParams.set('nonce', nonce);
+  url.searchParams.set('code_challenge', challenge);
+  url.searchParams.set('code_challenge_method', 'S256');
+  window.location.assign(url.href);
+}
+
+// Finishes a Google sign-in on the callback page: checks that Google answered
+// the sign-in this window started, and exchanges the code for a session.
+// Returns the session and the `resume` the sign-in began with.
+export async function finishGoogleSignIn(config) {
+  let params = new URL(window.location.href).searchParams;
+  let pending;
+  try {
+    pending = JSON.parse(sessionStorage.getItem(GOOGLE_SIGN_IN_KEY) ?? 'null');
+  } catch {
+    pending = null;
+  }
+  sessionStorage.removeItem(GOOGLE_SIGN_IN_KEY);
+  // The code is spent below either way; it shouldn't linger in the address
+  // bar or history.
+  history.replaceState(null, '', window.location.pathname);
+  if (!pending || params.get('state') !== pending.state) {
+    throw new SecureSessionError(
+      400,
+      'unexpected-callback',
+      'This sign-in wasn’t started here. Start again.',
+    );
+  }
+  let code = params.get('code');
+  if (!code) {
+    throw new SecureSessionError(
+      401,
+      'google-cancelled',
+      'Google sign-in didn’t finish. Start again.',
+    );
+  }
+  let json = await request(
+    new URL('_secure-session/google', config.realmServerURL),
+    {
+      body: {
+        data: {
+          type: 'google-sign-in',
+          attributes: {
+            code,
+            codeVerifier: pending.codeVerifier,
+            nonce: pending.nonce,
+            client: pending.resume?.client ?? 'window',
+          },
+        },
+      },
+    },
+  );
+  return { session: json.data.attributes, resume: pending.resume };
 }
 
 // The window's session, while it lasts.

@@ -4,8 +4,12 @@
 // write ticket requires. The claim is only honoured while its row exists and
 // hasn't expired, so signing out deletes the row.
 //
-// `uia_session` is the Matrix user-interactive auth session the user completed
-// to sign in. It is unique, so one completed check signs in once.
+// `sign_in_proof` records what signed the user in: the Matrix user-interactive
+// auth session their password completed (`uia:…`), or the SHA-256 of the
+// authorization code Google sent to the secure origin (`google:…`). It is
+// unique, so one proof signs in once. Signing out expires a row rather than
+// deleting it, and rows are swept only well after they expire, so a proof
+// can't sign in again after its session ends.
 //
 // The table is withheld from the read-only role used by dashboards and
 // read-only database access, and from every role that is a member of it, in
@@ -22,10 +26,10 @@ exports.up = (pgm) => {
       user_id varchar NOT NULL,
       -- 'window' for the secure window's own session, 'cli' for the CLI's.
       client varchar NOT NULL,
-      uia_session varchar NOT NULL,
+      sign_in_proof varchar NOT NULL,
       created_at timestamptz NOT NULL DEFAULT NOW(),
       expires_at timestamptz NOT NULL,
-      CONSTRAINT secure_sessions_uia_session_key UNIQUE (uia_session),
+      CONSTRAINT secure_sessions_sign_in_proof_key UNIQUE (sign_in_proof),
       CONSTRAINT secure_sessions_client_check CHECK (client IN ('window', 'cli'))
     )
   `);

@@ -14,9 +14,9 @@ export async function secureSessionAuth(
 ): Promise<string> {
   let id = randomUUID();
   await dbAdapter.execute(
-    `INSERT INTO secure_sessions (id, user_id, client, uia_session, expires_at)
+    `INSERT INTO secure_sessions (id, user_id, client, sign_in_proof, expires_at)
        VALUES ($1, $2, $3, $4, NOW() + interval '1 hour')`,
-    { bind: [id, user, client, `test-uia-${id}`] },
+    { bind: [id, user, client, `test:${id}`] },
   );
   return `Bearer ${createSecureSessionJWT(
     { user, sessionRoom: 'test-session', secureSession: id },

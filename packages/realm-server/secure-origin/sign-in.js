@@ -1,23 +1,30 @@
 /* eslint-env browser */
 // Signing in on the secure window: the window's own session (`sign-in`), or a
-// session handed to the CLI waiting on a loopback port (`cli-sign-in`).
+// session handed to the CLI waiting on a loopback port (`cli-sign-in`), with a
+// password or with Google. Google returns to this origin's callback
+// (`googleCallbackMode`), which finishes whichever of the two began.
 //
-// Everything here is typed into, and sent from, this window. Nothing comes
-// from, or goes to, the app page.
+// Everything here is typed into, and sent from, this window. Nothing goes to
+// the app page.
 
 import {
-  completeSignIn,
+  beginGoogleSignIn,
+  finishGoogleSignIn,
+  googleSignInConfig,
   readConfig,
+  signInWithPassword,
   signOut,
-  startSignIn,
   storedSession,
   storeSession,
 } from './session.js';
 
-// How often the window asks whether single sign-on has been confirmed.
-const SSO_POLL_MS = 2000;
-
 const LOOPBACK_CALLBACK_PATH = '/callback';
+const GOOGLE_CALLBACK_SUFFIX = /\/google-callback$/;
+
+// The window's own sign-in, from the callback Google returns to.
+function signInURL() {
+  return `${window.location.pathname.replace(GOOGLE_CALLBACK_SUFFIX, '/')}?mode=sign-in`;
+}
 
 // Builds an element. Text is only ever set as text, never as markup.
 function h(tag, attributes = {}, ...children) {
@@ -94,11 +101,51 @@ export function cliSignInMode(root) {
   }
   renderSignIn(root, config, {
     client: 'cli',
+    cli: callback,
     username: params.get('user') ?? '',
     onSignedIn(signedIn) {
       handToCli(root, callback, signedIn);
     },
   });
+}
+
+// Where Google sends the window back to.
+export async function googleCallbackMode(root) {
+  let config = readConfig();
+  root.replaceChildren(page('Signing you in…', h('p', {}, 'One moment.')));
+  let result;
+  try {
+    result = await finishGoogleSignIn(config);
+  } catch (e) {
+    let error = errorLine();
+    showError(error, e.message);
+    root.replaceChildren(
+      page(
+        'That didn’t work',
+        error,
+        h(
+          'a',
+          {
+            class: 'secure-button secondary',
+            href: signInURL(),
+            'data-test-secure-start-again': true,
+          },
+          'Start again',
+        ),
+      ),
+    );
+    return;
+  }
+  let { session, resume } = result;
+  if (resume?.client === 'cli' && resume.cli) {
+    handToCli(root, resume.cli, session);
+    return;
+  }
+  storeSession(session);
+  // Back to the window's own address, so a reload shows the signed-in window
+  // rather than this callback.
+  history.replaceState(null, '', signInURL());
+  renderSignedIn(root, config, session);
 }
 
 function page(title, ...content) {
@@ -167,25 +214,38 @@ function renderSignedIn(root, config, session) {
   );
 }
 
-// Asks for the account, then for the user to confirm it is them.
-function renderSignIn(root, config, { client, username = '', onSignedIn }) {
+// The sign-in form, laid out like the app's: Google first when this server
+// offers it, then an email address or username and a password.
+function renderSignIn(
+  root,
+  config,
+  { client, cli, username = '', onSignedIn },
+) {
   let error = errorLine();
-  let input = h('input', {
+  let googleSlot = h('div', { class: 'secure-google', hidden: true });
+  let usernameInput = h('input', {
     type: 'text',
     name: 'username',
     autocomplete: 'username',
     required: true,
     'data-test-secure-username': true,
   });
-  input.value = username;
+  usernameInput.value = username;
+  let passwordInput = h('input', {
+    type: 'password',
+    name: 'password',
+    autocomplete: 'current-password',
+    required: true,
+    'data-test-secure-password': true,
+  });
   let submit = h(
     'button',
     {
       type: 'submit',
       class: 'secure-button',
-      'data-test-secure-continue': true,
+      'data-test-secure-password-submit': true,
     },
-    'Continue',
+    'Sign in',
   );
   let form = h(
     'form',
@@ -193,31 +253,28 @@ function renderSignIn(root, config, { client, username = '', onSignedIn }) {
       novalidate: true,
       async onsubmit(event) {
         event.preventDefault();
-        if (!input.value.trim()) {
-          showError(error, 'Enter your email address or username.');
+        if (!usernameInput.value.trim() || !passwordInput.value) {
+          showError(
+            error,
+            'Enter your email address or username and password.',
+          );
           return;
         }
         submit.disabled = true;
         showError(error, undefined);
         try {
-          let started = await startSignIn(config, {
-            username: input.value,
-            client,
-          });
-          renderConfirm(root, config, {
-            client,
-            started,
-            onSignedIn,
-            onRestart: () =>
-              renderSignIn(root, config, {
-                client,
-                username: input.value,
-                onSignedIn,
-              }),
-          });
+          onSignedIn(
+            await signInWithPassword(config, {
+              username: usernameInput.value,
+              password: passwordInput.value,
+              client,
+            }),
+          );
         } catch (e) {
           showError(error, e.message);
           submit.disabled = false;
+        } finally {
+          passwordInput.value = '';
         }
       },
     },
@@ -225,7 +282,13 @@ function renderSignIn(root, config, { client, username = '', onSignedIn }) {
       'label',
       { class: 'secure-field' },
       h('span', {}, 'Email address or username'),
-      input,
+      usernameInput,
+    ),
+    h(
+      'label',
+      { class: 'secure-field' },
+      h('span', {}, 'Password'),
+      passwordInput,
     ),
     error,
     submit,
@@ -242,186 +305,45 @@ function renderSignIn(root, config, { client, username = '', onSignedIn }) {
           ? 'Confirm it’s you to let the Boxel CLI on this computer manage your keys.'
           : 'Confirm it’s you to manage your keys here, where cards in the app can’t reach.',
       ),
+      googleSlot,
       form,
     ),
   );
-  input.focus();
-}
-
-function renderConfirm(
-  root,
-  config,
-  { client, started, onSignedIn, onRestart },
-) {
-  let error = errorLine();
-  let parts = [];
-  let finished = false;
-  let succeed = (session) => {
-    finished = true;
-    onSignedIn(session);
-  };
-
-  if (started.stages.includes('password')) {
-    let password = h('input', {
-      type: 'password',
-      name: 'password',
-      autocomplete: 'current-password',
-      required: true,
-      'data-test-secure-password': true,
-    });
-    // Gives a password manager the account the password belongs to.
-    let username = h('input', {
-      type: 'text',
-      name: 'username',
-      autocomplete: 'username',
-      hidden: true,
-      tabindex: '-1',
-    });
-    username.value = started.user;
-    let submit = h(
-      'button',
-      {
-        type: 'submit',
-        class: 'secure-button',
-        'data-test-secure-password-submit': true,
-      },
-      'Sign in',
-    );
-    parts.push(
-      h(
-        'form',
-        {
-          novalidate: true,
-          async onsubmit(event) {
-            event.preventDefault();
-            if (!password.value) {
-              showError(error, 'Enter your password.');
-              return;
-            }
-            submit.disabled = true;
-            showError(error, undefined);
-            try {
-              succeed(
-                await completeSignIn(config, {
-                  signIn: started.signIn,
-                  password: password.value,
-                }),
-              );
-            } catch (e) {
-              showError(error, e.message);
-              submit.disabled = false;
-              if (e.code === 'expired' || e.code === 'used') {
-                onRestart();
-              }
-            } finally {
-              password.value = '';
-            }
-          },
-        },
-        username,
-        h(
-          'label',
-          { class: 'secure-field' },
-          h('span', {}, 'Password'),
-          password,
-        ),
-        submit,
-      ),
-    );
-    queueMicrotask(() => password.focus());
+  if (username) {
+    passwordInput.focus();
+  } else {
+    usernameInput.focus();
   }
 
-  if (started.stages.includes('sso') && started.ssoURL) {
-    let waiting = h(
-      'p',
-      {
-        class: 'secure-note',
-        'data-test-secure-sso-waiting': true,
-        hidden: true,
-      },
-      'Confirm it’s you in the window that opened. This page continues on its own once you have.',
-    );
-    let polling = false;
-    let poll = async () => {
-      if (polling) {
-        return;
-      }
-      polling = true;
-      try {
-        while (!finished && Date.now() < Date.parse(started.expiresAt)) {
-          try {
-            succeed(await completeSignIn(config, { signIn: started.signIn }));
-            return;
-          } catch (e) {
-            if (e.code !== 'pending') {
-              showError(error, e.message);
-              return;
-            }
-          }
-          await new Promise((resolve) => setTimeout(resolve, SSO_POLL_MS));
-        }
-        if (!finished) {
-          showError(error, 'This sign-in has expired. Start again.');
-        }
-      } finally {
-        polling = false;
-      }
-    };
-    let ssoButton = h(
+  googleSignInConfig(config).then((google) => {
+    if (!google) {
+      return;
+    }
+    let button = h(
       'button',
       {
         type: 'button',
         class: 'secure-button google',
-        'data-test-secure-sso': true,
-        onclick() {
+        'data-test-secure-google': true,
+        async onclick() {
+          button.disabled = true;
           showError(error, undefined);
-          // A separate window, so this one stays put and continues by itself
-          // once the confirmation is done. It has no handle back to this one.
-          window.open(
-            started.ssoURL,
-            'boxel-secure-sso',
-            'popup,width=520,height=720',
-          );
-          waiting.hidden = false;
-          ssoButton.textContent = 'Open the confirmation again';
-          poll();
+          try {
+            await beginGoogleSignIn(google, { client, cli });
+          } catch (e) {
+            showError(error, e.message);
+            button.disabled = false;
+          }
         },
       },
       'Continue with Google',
     );
-    if (parts.length > 0) {
-      parts.push(h('p', { class: 'secure-divider' }, 'or'));
-    }
-    parts.push(ssoButton, waiting);
-  }
-
-  root.replaceChildren(
-    page(
-      'Confirm it’s you',
-      h(
-        'p',
-        {},
-        'Signing in as ',
-        h('strong', { 'data-test-secure-user': true }, started.user),
-        client === 'cli' ? ' for the Boxel CLI.' : '.',
-      ),
-      ...parts,
-      error,
-      h(
-        'button',
-        {
-          type: 'button',
-          class: 'secure-link',
-          'data-test-secure-restart': true,
-          onclick() {
-            finished = true;
-            onRestart();
-          },
-        },
-        'Use a different account',
-      ),
-    ),
-  );
+    googleSlot.replaceChildren(
+      button,
+      h('p', { class: 'secure-divider' }, 'or'),
+    );
+    googleSlot.hidden = false;
+  });
 }
 
 // Hands a session to the CLI by posting it to the CLI's loopback listener, as

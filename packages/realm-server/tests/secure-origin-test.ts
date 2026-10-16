@@ -378,6 +378,24 @@ module(basename(import.meta.filename), function () {
       }
     });
 
+    test('serves the page shell where Google returns to', async function (assert) {
+      let response = await request
+        .get('/secure/google-callback')
+        .set('Host', secureHost)
+        .set('Accept', 'text/html');
+      assert.strictEqual(response.status, 200);
+      assertSecureOriginHeaders(
+        assert,
+        response,
+        'google-callback',
+        SHELL_PAGE_HEADERS,
+      );
+      assert.ok(
+        response.text.includes('<script type="module" src="/secure/shell.js">'),
+        'it is the shell, whose script finishes the sign-in',
+      );
+    });
+
     test("serves the sign-in mode's scripts with the locked-down headers", async function (assert) {
       for (let name of ['session.js', 'sign-in.js']) {
         let response = await request

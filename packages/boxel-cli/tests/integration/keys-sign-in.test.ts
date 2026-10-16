@@ -42,25 +42,17 @@ async function actAsSecureWindow(link: string): Promise<boolean> {
     'Content-Type': 'application/vnd.api+json',
     Origin: secureOriginURL.origin,
   };
-  let started = await fetch(`${realmServerUrl}_secure-session/sign-in`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      data: {
-        type: 'secure-sign-in',
-        attributes: { username: TEST_USERNAME, client: 'cli' },
-      },
-    }),
-  });
-  expect(started.status).toBe(201);
-  let { signIn } = ((await started.json()) as any).data.attributes;
   let completed = await fetch(`${realmServerUrl}_secure-session`, {
     method: 'POST',
     headers,
     body: JSON.stringify({
       data: {
         type: 'secure-session',
-        attributes: { signIn, password: TEST_PASSWORD },
+        attributes: {
+          username: TEST_USERNAME,
+          password: TEST_PASSWORD,
+          client: 'cli',
+        },
       },
     }),
   });

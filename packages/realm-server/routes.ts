@@ -110,11 +110,13 @@ import {
   USER_KEYS_PATH,
 } from './lib/request-telemetry.ts';
 import {
-  handleCompleteSecureSignIn,
   handleEndSecureSession,
+  handleGoogleSignIn,
+  handleGoogleSignInStart,
+  handlePasswordSignIn,
   handleSecureOriginInfo,
-  handleStartSecureSignIn,
 } from './handlers/handle-secure-session.ts';
+import type { GoogleSignInConfig } from './lib/google-sign-in.ts';
 import {
   handleAddUserKey,
   handleDeleteUserKey,
@@ -186,6 +188,9 @@ export type CreateRoutesArgs = {
   // the secure origin is answered only for requests from its origin, and key
   // write tickets are minted for requests from its origin and for the CLI.
   secureOriginURL?: URL;
+  // The Google client the secure window signs in with. Unset, the secure
+  // window offers only a password.
+  googleSignIn?: GoogleSignInConfig;
 };
 
 export function createRoutes(args: CreateRoutesArgs) {
@@ -267,8 +272,9 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleCreateUserRequest(args),
   );
   router.get('/_secure-origin', handleSecureOriginInfo(args));
-  router.post(`${SECURE_SESSION_PATH}/sign-in`, handleStartSecureSignIn(args));
-  router.post(SECURE_SESSION_PATH, handleCompleteSecureSignIn(args));
+  router.post(SECURE_SESSION_PATH, handlePasswordSignIn(args));
+  router.get(`${SECURE_SESSION_PATH}/google`, handleGoogleSignInStart(args));
+  router.post(`${SECURE_SESSION_PATH}/google`, handleGoogleSignIn(args));
   router.delete(
     SECURE_SESSION_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),

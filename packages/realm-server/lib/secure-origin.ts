@@ -25,6 +25,10 @@ const MATRIX_URL_PLACEHOLDER = /%MATRIX_URL%/g;
 const APP_ORIGINS_PLACEHOLDER = /%APP_ORIGINS%/g;
 const REALM_SERVER_URL_PLACEHOLDER = /%REALM_SERVER_URL%/g;
 
+// Where Google sends the secure window back to after a sign-in, beneath the
+// shell. It serves the shell itself.
+export const GOOGLE_CALLBACK_PATH = 'google-callback';
+
 // Where the sign-in page hands a session to the CLI: a listener on this
 // machine's loopback address, on whatever port the CLI chose.
 const CLI_LOOPBACK_FORM_ACTION = 'http://127.0.0.1:*';
@@ -211,6 +215,7 @@ export function createSecureOrigin(
   };
   routes.set(shellBase, shell);
   routes.set(`${shellBase}/`, shell);
+  routes.set(`${shellBase}/${GOOGLE_CALLBACK_PATH}`, shell);
   for (let [name, { file, contentType }] of Object.entries(SHELL_ASSETS)) {
     routes.set(`${shellBase}/${name}`, {
       body: readFileSync(join(SHELL_DIR, file)),

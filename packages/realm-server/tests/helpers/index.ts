@@ -1639,6 +1639,7 @@ export async function runTestRealmServer({
   readIndexDrainBudgetMs,
   linkShapePolicy,
   secureOriginURL,
+  googleSignIn,
   cardDocumentCache,
   published,
 }: {
@@ -1671,6 +1672,7 @@ export async function runTestRealmServer({
   linkShapePolicy?: LinkShapePolicy;
   // Gives the server a secure origin (see `lib/secure-origin.ts`).
   secureOriginURL?: URL;
+  googleSignIn?: ConstructorParameters<typeof RealmServer>[0]['googleSignIn'];
   // Inject a cache configured for the test; omit for the production default.
   cardDocumentCache?: CardDocumentCache;
   // Builds the realm as a published one (see `createRealm`).
@@ -1762,6 +1764,7 @@ export async function runTestRealmServer({
     prerenderer,
     ...(linkShapePolicy ? { linkShapePolicy } : {}),
     ...(secureOriginURL ? { secureOriginURL } : {}),
+    ...(googleSignIn ? { googleSignIn } : {}),
   });
   let testRealmHttpServer = await awaitListening(
     testRealmServer.listen(parseInt(realmURL.port)),
@@ -1812,6 +1815,7 @@ export async function runTestRealmServerWithRealms({
   mediaCacheAdapter,
   clientAddress,
   secureOriginURL,
+  googleSignIn,
 }: {
   realmsRootPath: string;
   realms: {
@@ -1848,6 +1852,7 @@ export async function runTestRealmServerWithRealms({
   clientAddress?: ConstructorParameters<typeof RealmServer>[0]['clientAddress'];
   // Where the server's secure origin is, for a test that signs in on it.
   secureOriginURL?: URL;
+  googleSignIn?: ConstructorParameters<typeof RealmServer>[0]['googleSignIn'];
 }) {
   stripTlsEnvVars();
   ensureDirSync(realmsRootPath);
@@ -1955,6 +1960,7 @@ export async function runTestRealmServerWithRealms({
     mediaCacheAdapter,
     ...(clientAddress ? { clientAddress } : {}),
     ...(secureOriginURL ? { secureOriginURL } : {}),
+    ...(googleSignIn ? { googleSignIn } : {}),
   });
   let testRealmHttpServer = await awaitListening(
     testRealmServer.listen(parseInt(serverURL.port)),
@@ -3415,6 +3421,7 @@ export async function startSimpleRealmServer({
   runner,
   domainsForPublishedRealms,
   secureOriginURL,
+  googleSignIn,
 }: {
   dbAdapter: PgAdapter;
   publisher: QueuePublisher;
@@ -3425,6 +3432,7 @@ export async function startSimpleRealmServer({
     typeof runTestRealmServer
   >[0]['domainsForPublishedRealms'];
   secureOriginURL?: URL;
+  googleSignIn?: Parameters<typeof runTestRealmServer>[0]['googleSignIn'];
 }): Promise<Server> {
   let realmsRootPath = join(dirSync().name, 'realm_server_simple');
   let testRealmDir = join(realmsRootPath, 'test');
@@ -3441,6 +3449,7 @@ export async function startSimpleRealmServer({
     matrixURL,
     domainsForPublishedRealms,
     secureOriginURL,
+    googleSignIn,
   });
   return testRealmHttpServer;
 }

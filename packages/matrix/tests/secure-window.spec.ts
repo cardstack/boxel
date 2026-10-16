@@ -12,10 +12,10 @@ import {
   updateSynapseUser,
 } from '../helpers/index.ts';
 
-// The secure window signs the user in on its own, on the secure origin: a
-// session card code in the app page can't reach, which is what minting a key
-// write ticket requires. These drive the window in a real browser against
-// real Synapse and the mock Google identity provider.
+// The secure window signs in on its own, on the secure origin: a session card
+// code in the app page can't reach, which is what minting a key write ticket
+// requires. These drive the window in a real browser against real Synapse and
+// the mock Google identity provider.
 
 const STORAGE_KEY = 'boxel-secure-session';
 
@@ -38,6 +38,22 @@ async function openSecureWindow(page: Page, query: string): Promise<Page> {
   let secure = await page.context().newPage();
   await secure.goto(`${secureOriginURL}?${query}`);
   return secure;
+}
+
+// Signs in on the mock identity provider's form, as the given Google account.
+async function signInAtGoogle(
+  page: Page,
+  identity: { sub: string; email: string; name: string },
+) {
+  await page.locator('input[name="username"]').fill(identity.sub);
+  await page.locator('textarea[name="claims"]').fill(
+    JSON.stringify({
+      email: identity.email,
+      email_verified: true,
+      name: identity.name,
+    }),
+  );
+  await page.locator('input[type="submit"]').click();
 }
 
 test.describe('the secure window signs in on its own', () => {
@@ -63,23 +79,18 @@ test.describe('the secure window signs in on its own', () => {
     }, `${secureOriginURL}?mode=sign-in`);
     let secure = await opened;
     await expect(secure.locator('[data-test-secure-username]')).toBeVisible();
-    await snapshot(testInfo, secure, 'secure-window-1-account');
+    await expect(secure.locator('[data-test-secure-google]')).toBeVisible();
+    await snapshot(testInfo, secure, 'secure-window-1-sign-in');
 
     await secure.locator('[data-test-secure-username]').fill(username);
-    await secure.locator('[data-test-secure-continue]').click();
-    await expect(secure.locator('[data-test-secure-password]')).toBeVisible();
-    await expect(secure.locator('[data-test-secure-user]')).toHaveText(
-      credentials.userId,
-    );
-    await snapshot(testInfo, secure, 'secure-window-2-password');
-
     await secure
       .locator('[data-test-secure-password]')
       .fill('not-the-password');
     await secure.locator('[data-test-secure-password-submit]').click();
     await expect(secure.locator('[data-test-secure-error]')).toContainText(
-      'not right',
+      'don’t match',
     );
+    await snapshot(testInfo, secure, 'secure-window-2-wrong-password');
 
     await secure.locator('[data-test-secure-password]').fill(password);
     await secure.locator('[data-test-secure-password-submit]').click();
@@ -152,7 +163,9 @@ test.describe('the secure window signs in on its own', () => {
     expect(afterSignOut).toBe(403);
   });
 
-  test('signs in by confirming with Google', async ({ page }, testInfo) => {
+  test('signs in with Google, returning to the secure window', async ({
+    page,
+  }, testInfo) => {
     let { username, credentials } = await createSubscribedUser('secure-google');
     let email = `${username}@example.com`;
     await updateSynapseUser(credentials.userId, { emailAddresses: [email] });
@@ -163,60 +176,44 @@ test.describe('the secure window signs in on its own', () => {
       name: 'Secure Google User',
     };
 
-    // Signed in to the app through Google first, as a Google user is.
+    // Signed in to the app through Google first, as a Google user is, which
+    // links the Google account to theirs.
     await page.goto(appURL);
     await page.locator('[data-test-google-login-btn]').click();
-    await page.locator('input[name="username"]').fill(identity.sub);
-    await page.locator('textarea[name="claims"]').fill(
-      JSON.stringify({
-        email: identity.email,
-        email_verified: true,
-        name: identity.name,
-      }),
-    );
-    await page.locator('input[type="submit"]').click();
+    await signInAtGoogle(page, identity);
     await expectAppSignedIn(page);
 
     let secure = await openSecureWindow(page, 'mode=sign-in');
-    await secure.locator('[data-test-secure-username]').fill(email);
-    await secure.locator('[data-test-secure-continue]').click();
-    await expect(secure.locator('[data-test-secure-sso]')).toBeVisible();
-    await snapshot(testInfo, secure, 'secure-window-4-google-option');
+    await secure.locator('[data-test-secure-google]').click();
+    await signInAtGoogle(secure, identity);
 
-    let confirmation = secure.context().waitForEvent('page');
-    await secure.locator('[data-test-secure-sso]').click();
-    let sso = await confirmation;
-    await expect(sso.locator('[data-test-sso-confirm-action]')).toBeVisible();
-    await snapshot(testInfo, sso, 'secure-window-5-confirm-with-google');
-    await sso.locator('[data-test-sso-confirm-continue]').click();
-
-    // The mock identity provider asks again unless it remembers this browser.
-    let idpForm = sso.locator('input[name="username"]');
-    if (
-      await idpForm
-        .waitFor({ state: 'visible', timeout: 5000 })
-        .then(() => true)
-        .catch(() => false)
-    ) {
-      await idpForm.fill(identity.sub);
-      await sso.locator('textarea[name="claims"]').fill(
-        JSON.stringify({
-          email: identity.email,
-          email_verified: true,
-          name: identity.name,
-        }),
-      );
-      await sso.locator('input[type="submit"]').click();
-    }
-
-    // The window continues on its own once Synapse has the confirmation.
+    // Google returns to the secure window, which finishes on its own.
     await expect(secure.locator('[data-test-secure-sign-out]')).toBeVisible({
       timeout: 30000,
     });
     await expect(secure.locator('[data-test-secure-user]')).toHaveText(
       credentials.userId,
     );
-    await snapshot(testInfo, secure, 'secure-window-6-google-signed-in');
+    expect(new URL(secure.url()).search, 'no code is left in the address').toBe(
+      '?mode=sign-in',
+    );
+    await snapshot(testInfo, secure, 'secure-window-4-google-signed-in');
+  });
+
+  test('refuses a Google account not linked to Boxel', async ({ page }) => {
+    let secure = await openSecureWindow(page, 'mode=sign-in');
+    await secure.locator('[data-test-secure-google]').click();
+    await signInAtGoogle(secure, {
+      sub: `unlinked-${randomBytes(6).toString('hex')}`,
+      email: `unlinked-${randomBytes(6).toString('hex')}@example.com`,
+      name: 'Unlinked Google User',
+    });
+    await expect(secure.locator('[data-test-secure-error]')).toContainText(
+      'isn’t linked to Boxel',
+    );
+    await expect(
+      secure.locator('[data-test-secure-start-again]'),
+    ).toBeVisible();
   });
 
   test('hands a session to the CLI listening on this machine', async ({
@@ -257,8 +254,7 @@ test.describe('the secure window signs in on its own', () => {
     await expect(secure.locator('[data-test-secure-username]')).toHaveValue(
       username,
     );
-    await snapshot(testInfo, secure, 'secure-window-7-cli');
-    await secure.locator('[data-test-secure-continue]').click();
+    await snapshot(testInfo, secure, 'secure-window-5-cli');
     await secure.locator('[data-test-secure-password]').fill(password);
     await secure.locator('[data-test-secure-password-submit]').click();
 
@@ -273,8 +269,13 @@ test.describe('the secure window signs in on its own', () => {
       ).toString(),
     );
     expect(typeof claims.secureSession).toBe('string');
+
+    // The window has left for the listener; the secure origin's storage,
+    // read from a page of its own, holds no session.
+    await secure.waitForURL(`http://127.0.0.1:${port}/callback`);
+    let check = await openSecureWindow(page, 'mode=none');
     expect(
-      await secure.evaluate((key) => localStorage.getItem(key), STORAGE_KEY),
+      await check.evaluate((key) => localStorage.getItem(key), STORAGE_KEY),
       "the CLI's session is not kept in the window",
     ).toBeNull();
   });

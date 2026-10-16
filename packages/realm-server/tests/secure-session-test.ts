@@ -2,11 +2,13 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename, join } from 'path';
 import { readdirSync, readFileSync, statSync } from 'fs';
-import { randomBytes, randomUUID } from 'crypto';
+import { createHash, randomBytes, randomUUID } from 'crypto';
+import { createServer, type Server as HttpServer } from 'http';
+import type { AddressInfo } from 'net';
 import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
-import jsonwebtoken from 'jsonwebtoken';
 import type { PgAdapter } from '@cardstack/postgres';
+import { getOrCreateUser, upsertSessionRoom } from '@cardstack/runtime-common';
 import {
   setupDB,
   setupSimpleRealmServerTemplate,
@@ -17,7 +19,6 @@ import {
   matrixURL,
   realmSecretSeed,
 } from './helpers/index.ts';
-import { getOrCreateUser, upsertSessionRoom } from '@cardstack/runtime-common';
 import { logLinesDuring, withLogDefinition } from './helpers/log-capture.ts';
 import { secureSessionAuth } from './helpers/secure-session.ts';
 import {
@@ -40,9 +41,22 @@ const APP_ORIGIN = 'https://app.secure-session.test';
 const ADD_TICKET = {
   data: { type: 'key-write-ticket', attributes: { action: 'add' } },
 };
+const GOOGLE_CLIENT_ID = 'secure-session-test-client';
+const GOOGLE_CLIENT_SECRET = 'secure-session-test-secret';
 
-// A Matrix account with a password, which is how these tests confirm it is
-// the user.
+async function adminRequest(path: string, init: RequestInit = {}) {
+  let adminToken = await getMatrixAdminToken(ADMIN);
+  return await fetch(new URL(path, matrixURL), {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${adminToken}`,
+      'Content-Type': 'application/json',
+    },
+  });
+}
+
+// A Matrix account with a password. With `boxelAccount`, it has also signed in
+// to Boxel, which is what records its session room.
 async function registerPasswordUser(
   dbAdapter: PgAdapter,
   { boxelAccount = true }: { boxelAccount?: boolean } = {},
@@ -57,7 +71,6 @@ async function registerPasswordUser(
     registrationSecret: matrixRegistrationSecret,
   });
   if (boxelAccount) {
-    // What the user's first sign-in to Boxel records.
     await getOrCreateUser(dbAdapter, userId);
     await upsertSessionRoom(
       dbAdapter,
@@ -68,33 +81,140 @@ async function registerPasswordUser(
   return { username, password, userId };
 }
 
-async function addEmail(userId: string, address: string) {
-  let adminToken = await getMatrixAdminToken(ADMIN);
-  let response = await fetch(
-    new URL(`_synapse/admin/v2/users/${encodeURIComponent(userId)}`, matrixURL),
-    {
-      method: 'PUT',
-      headers: {
-        Authorization: `Bearer ${adminToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        threepids: [{ medium: 'email', address }],
-      }),
-    },
+async function updateAccount(userId: string, body: Record<string, unknown>) {
+  let response = await adminRequest(
+    `_synapse/admin/v2/users/${encodeURIComponent(userId)}`,
+    { method: 'PUT', body: JSON.stringify(body) },
   );
   if (!response.ok) {
-    throw new Error(`could not add an email: ${response.status}`);
+    throw new Error(`could not update the account: ${response.status}`);
   }
 }
 
+// Links a Google identity to the account, as Boxel's OIDC mapping provider
+// does when the user first signs in with Google.
+async function linkGoogle(userId: string, sub: string) {
+  await updateAccount(userId, {
+    external_ids: [{ auth_provider: 'oidc-google', external_id: sub }],
+  });
+}
+
 async function threepids(userId: string) {
-  let adminToken = await getMatrixAdminToken(ADMIN);
-  let response = await fetch(
-    new URL(`_synapse/admin/v2/users/${encodeURIComponent(userId)}`, matrixURL),
-    { headers: { Authorization: `Bearer ${adminToken}` } },
+  let response = await adminRequest(
+    `_synapse/admin/v2/users/${encodeURIComponent(userId)}`,
   );
   return ((await response.json()) as { threepids: unknown[] }).threepids;
+}
+
+function base64url(value: Buffer | string) {
+  return Buffer.from(value).toString('base64url');
+}
+
+interface IssuedCode {
+  sub: string;
+  nonce: string;
+  challenge: string;
+  claims?: Record<string, unknown>;
+  reusable?: boolean;
+}
+
+// Stands in for Google: OpenID discovery, and a token endpoint that redeems
+// the codes a test issues. Each code is issued for a subject, a nonce and a
+// PKCE challenge, as Google's authorization endpoint would, and is redeemed
+// once unless the test asks otherwise.
+class FakeGoogle {
+  server: HttpServer;
+  issuer = '';
+  exchanges: URLSearchParams[] = [];
+  private codes = new Map<string, IssuedCode>();
+
+  constructor() {
+    this.server = createServer((req, res) => {
+      let body = '';
+      req.on('data', (chunk) => (body += chunk));
+      req.on('end', () => {
+        let { status, json } = this.answer(req.url ?? '/', body);
+        res.writeHead(status, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(json));
+      });
+    });
+  }
+
+  async start() {
+    await new Promise<void>((resolve) =>
+      this.server.listen(0, '127.0.0.1', resolve),
+    );
+    let { port } = this.server.address() as AddressInfo;
+    this.issuer = `http://127.0.0.1:${port}`;
+  }
+
+  async stop() {
+    await new Promise<void>((resolve) => this.server.close(() => resolve()));
+  }
+
+  issue(
+    sub: string,
+    {
+      claims,
+      reusable,
+    }: { claims?: Record<string, unknown>; reusable?: boolean } = {},
+  ) {
+    let code = randomBytes(16).toString('hex');
+    let nonce = randomBytes(16).toString('hex');
+    let codeVerifier = randomBytes(32).toString('base64url');
+    let challenge = createHash('sha256')
+      .update(codeVerifier)
+      .digest('base64url');
+    this.codes.set(code, { sub, nonce, challenge, claims, reusable });
+    return { code, nonce, codeVerifier };
+  }
+
+  private answer(url: string, body: string): { status: number; json: unknown } {
+    if (url === '/.well-known/openid-configuration') {
+      return {
+        status: 200,
+        json: {
+          issuer: this.issuer,
+          authorization_endpoint: `${this.issuer}/authorize`,
+          token_endpoint: `${this.issuer}/token`,
+        },
+      };
+    }
+    if (url !== '/token') {
+      return { status: 404, json: {} };
+    }
+    let params = new URLSearchParams(body);
+    this.exchanges.push(params);
+    let code = params.get('code') ?? '';
+    let issued = this.codes.get(code);
+    let verifier = params.get('code_verifier') ?? '';
+    if (
+      !issued ||
+      params.get('client_id') !== GOOGLE_CLIENT_ID ||
+      params.get('client_secret') !== GOOGLE_CLIENT_SECRET ||
+      createHash('sha256').update(verifier).digest('base64url') !==
+        issued.challenge
+    ) {
+      return { status: 400, json: { error: 'invalid_grant' } };
+    }
+    if (!issued.reusable) {
+      this.codes.delete(code);
+    }
+    let claims = {
+      iss: this.issuer,
+      aud: GOOGLE_CLIENT_ID,
+      sub: issued.sub,
+      nonce: issued.nonce,
+      exp: Math.floor(Date.now() / 1000) + 300,
+      ...issued.claims,
+    };
+    return {
+      status: 200,
+      json: {
+        id_token: `${base64url('{"alg":"none"}')}.${base64url(JSON.stringify(claims))}.`,
+      },
+    };
+  }
 }
 
 // Every source file of the realm server outside its tests and dependencies.
@@ -119,10 +239,17 @@ module(basename(import.meta.filename), function () {
     let testRealmServer: Server;
     let request: SuperTest<Test>;
     let dbAdapter: PgAdapter;
+    let google = new FakeGoogle();
     let secureOriginURL = new URL('https://secure.secure-session.test/secure');
     let secureOrigin = secureOriginURL.origin;
 
-    hooks.before(ensureMatrixAdminUser);
+    hooks.before(async function () {
+      await ensureMatrixAdminUser();
+      await google.start();
+    });
+    hooks.after(async function () {
+      await google.stop();
+    });
 
     let templateDatabase = setupSimpleRealmServerTemplate(hooks);
 
@@ -136,6 +263,11 @@ module(basename(import.meta.filename), function () {
           publisher,
           runner,
           secureOriginURL,
+          googleSignIn: {
+            clientId: GOOGLE_CLIENT_ID,
+            clientSecret: GOOGLE_CLIENT_SECRET,
+            issuer: google.issuer,
+          },
         });
         request = supertest(testRealmServer);
       },
@@ -145,54 +277,44 @@ module(basename(import.meta.filename), function () {
       },
     });
 
-    function startRequest(
-      username: string,
-      origin: string | null = secureOrigin,
-    ) {
-      let req = request
-        .post('/_secure-session/sign-in')
-        .set('Content-Type', 'application/vnd.api+json');
-      if (origin !== null) {
-        req = req.set('Origin', origin);
-      }
-      return req.send({
-        data: {
-          type: 'secure-sign-in',
-          attributes: { username, client: 'window' },
-        },
-      });
-    }
-
-    function completeRequest(
+    function post(
+      path: string,
+      type: string,
       attributes: Record<string, unknown>,
       origin: string | null = secureOrigin,
     ) {
       let req = request
-        .post('/_secure-session')
+        .post(path)
         .set('Content-Type', 'application/vnd.api+json');
       if (origin !== null) {
         req = req.set('Origin', origin);
       }
-      return req.send({ data: { type: 'secure-session', attributes } });
+      return req.send({ data: { type, attributes } });
     }
 
-    async function signIn(username: string, password: string) {
-      let started = await startRequest(username);
-      if (started.status !== 201) {
-        throw new Error(`start: ${started.status} ${started.text}`);
-      }
-      let completed = await completeRequest({
-        signIn: started.body.data.attributes.signIn,
-        password,
-      });
-      if (completed.status !== 201) {
-        throw new Error(`complete: ${completed.status} ${completed.text}`);
-      }
-      return completed.body.data.attributes as {
-        token: string;
-        user: string;
-        expiresAt: string;
-      };
+    function passwordSignIn(
+      username: string,
+      password: string,
+      origin: string | null = secureOrigin,
+    ) {
+      return post(
+        '/_secure-session',
+        'secure-session',
+        { username, password, client: 'window' },
+        origin,
+      );
+    }
+
+    function googleSignIn(
+      attributes: Record<string, unknown>,
+      origin: string | null = secureOrigin,
+    ) {
+      return post(
+        '/_secure-session/google',
+        'google-sign-in',
+        { client: 'window', ...attributes },
+        origin,
+      );
     }
 
     function mint(authorization: string, origin?: string) {
@@ -206,26 +328,13 @@ module(basename(import.meta.filename), function () {
       return req.send(ADD_TICKET);
     }
 
-    test('signing in with the password gives a session that mints key write tickets', async function (assert) {
+    test('signing in with a password gives a session that mints key write tickets', async function (assert) {
       let { username, password, userId } =
         await registerPasswordUser(dbAdapter);
 
-      let started = await startRequest(username);
-      assert.strictEqual(started.status, 201, started.text);
-      let { signIn: signInToken, user, stages } = started.body.data.attributes;
-      assert.strictEqual(user, userId, 'the sign-in is for the account');
-      assert.deepEqual(stages, ['password'], 'the password confirms it');
-
-      let wrong = await completeRequest({
-        signIn: signInToken,
-        password: 'not-it',
-      });
-      assert.strictEqual(wrong.status, 401, 'a wrong password is refused');
-      assert.strictEqual(wrong.body.errors[0].code, 'invalid-password');
-
-      let completed = await completeRequest({ signIn: signInToken, password });
-      assert.strictEqual(completed.status, 201, completed.text);
-      let session = completed.body.data.attributes;
+      let response = await passwordSignIn(username, password);
+      assert.strictEqual(response.status, 201, response.text);
+      let session = response.body.data.attributes;
       assert.strictEqual(session.user, userId);
       assert.true(Date.parse(session.expiresAt) > Date.now());
       let claims = retrieveTokenClaim(session.token, realmSecretSeed);
@@ -263,101 +372,176 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(
         await threepids(userId),
         [],
-        'confirming it is the user changed nothing on the account',
+        'checking the password changed nothing on the account',
       );
     });
 
-    test('someone who has never signed in to Boxel is refused before confirming anything', async function (assert) {
-      let { username } = await registerPasswordUser(dbAdapter, {
-        boxelAccount: false,
-      });
-      let started = await startRequest(username);
-      assert.strictEqual(started.status, 403);
-      assert.strictEqual(started.body.errors[0].code, 'no-boxel-account');
-    });
-
-    test('a sign-in can be started by email address', async function (assert) {
+    test('a password sign-in can name the account by email address', async function (assert) {
       let { password, userId } = await registerPasswordUser(dbAdapter);
       let email = `${randomBytes(6).toString('hex')}@secure-session.test`;
-      await addEmail(userId, email);
-      let session = await signIn(email.toUpperCase(), password);
-      assert.strictEqual(session.user, userId);
-    });
-
-    test('a sign-in signs in once', async function (assert) {
-      let { username, password } = await registerPasswordUser(dbAdapter);
-      let started = await startRequest(username);
-      let signInToken = started.body.data.attributes.signIn;
-      let first = await completeRequest({ signIn: signInToken, password });
-      assert.strictEqual(first.status, 201);
-      let again = await completeRequest({ signIn: signInToken, password });
-      assert.strictEqual(again.status, 409, 'completing it again is refused');
-      assert.strictEqual(again.body.errors[0].code, 'used');
-    });
-
-    test('a sign-in waiting on single sign-on answers pending until the user confirms', async function (assert) {
-      let { username } = await registerPasswordUser(dbAdapter);
-      let started = await startRequest(username);
-      let pending = await completeRequest({
-        signIn: started.body.data.attributes.signIn,
+      await updateAccount(userId, {
+        threepids: [{ medium: 'email', address: email }],
       });
-      assert.strictEqual(pending.status, 409);
-      assert.strictEqual(pending.body.errors[0].code, 'pending');
+      let response = await passwordSignIn(email.toUpperCase(), password);
+      assert.strictEqual(response.status, 201, response.text);
+      assert.strictEqual(response.body.data.attributes.user, userId);
+    });
+
+    test('a failed password sign-in says nothing about the account', async function (assert) {
+      let { username, password } = await registerPasswordUser(dbAdapter);
+      let outsider = await registerPasswordUser(dbAdapter, {
+        boxelAccount: false,
+      });
+      let wrongPassword = await passwordSignIn(username, `${password}-wrong`);
+      let noSuchUser = await passwordSignIn(
+        `nobody-${randomBytes(6).toString('hex')}`,
+        password,
+      );
+      let noSuchEmail = await passwordSignIn(
+        `${randomBytes(6).toString('hex')}@nowhere.test`,
+        password,
+      );
+      let notInBoxel = await passwordSignIn(
+        outsider.username,
+        outsider.password,
+      );
+      for (let refusal of [noSuchUser, noSuchEmail, notInBoxel]) {
+        assert.strictEqual(refusal.status, 401);
+        assert.deepEqual(
+          refusal.body,
+          wrongPassword.body,
+          'it is the same answer as a wrong password',
+        );
+      }
+      assert.strictEqual(wrongPassword.status, 401);
+      assert.strictEqual(
+        wrongPassword.body.errors[0].code,
+        'invalid-credentials',
+      );
     });
 
     test('signing in is answered only for the secure origin', async function (assert) {
-      let { username, password } = await registerPasswordUser(dbAdapter);
+      let { username, password, userId } =
+        await registerPasswordUser(dbAdapter);
+      let sub = `google-${randomUUID()}`;
+      await linkGoogle(userId, sub);
       for (let origin of [APP_ORIGIN, 'null', null]) {
-        let started = await startRequest(username, origin);
+        let viaPassword = await passwordSignIn(username, password, origin);
         assert.strictEqual(
-          started.status,
+          viaPassword.status,
           403,
-          `starting is refused (Origin: ${origin ?? 'none'})`,
+          `a password sign-in is refused (Origin: ${origin ?? 'none'})`,
         );
-      }
-      let started = await startRequest(username);
-      for (let origin of [APP_ORIGIN, 'null', null]) {
-        let completed = await completeRequest(
-          { signIn: started.body.data.attributes.signIn, password },
-          origin,
-        );
+        let viaGoogle = await googleSignIn(google.issue(sub), origin);
         assert.strictEqual(
-          completed.status,
+          viaGoogle.status,
           403,
-          `completing is refused (Origin: ${origin ?? 'none'})`,
+          `a Google sign-in is refused (Origin: ${origin ?? 'none'})`,
         );
       }
     });
 
-    test('a sign-in token is not a session, and a session is not a sign-in', async function (assert) {
-      let { username, password } = await registerPasswordUser(dbAdapter);
-      let started = await startRequest(username);
-      let signInToken = started.body.data.attributes.signIn;
-      let asSession = await request
-        .get('/_user-keys')
-        .set('Authorization', `Bearer ${signInToken}`);
-      assert.strictEqual(asSession.status, 401, 'a sign-in is not a session');
+    test('the secure window learns where to send the user for Google', async function (assert) {
+      let response = await request.get('/_secure-session/google');
+      assert.strictEqual(response.status, 200);
+      assert.deepEqual(response.body.data.attributes, {
+        authorizationEndpoint: `${google.issuer}/authorize`,
+        clientId: GOOGLE_CLIENT_ID,
+        redirectURI: `${secureOriginURL.href}/google-callback`,
+      });
+    });
 
-      let session = await signIn(username, password);
-      let asSignIn = await completeRequest({ signIn: session.token, password });
-      assert.strictEqual(asSignIn.status, 400, 'a session is not a sign-in');
+    test('signing in with Google gives a session for the linked account', async function (assert) {
+      let { userId } = await registerPasswordUser(dbAdapter);
+      let sub = `google-${randomUUID()}`;
+      await linkGoogle(userId, sub);
 
-      let forged = jsonwebtoken.sign(
-        {
-          purpose: 'secure-sign-in',
-          user: session.user,
-          uiaSession: 'made-up',
-          clientSecret: 'x',
-          sid: 'y',
-          client: 'window',
-        },
-        realmSecretSeed,
-      );
-      let forgedResponse = await completeRequest({ signIn: forged, password });
+      let response = await googleSignIn(google.issue(sub));
+      assert.strictEqual(response.status, 201, response.text);
+      let session = response.body.data.attributes;
+      assert.strictEqual(session.user, userId);
       assert.strictEqual(
-        forgedResponse.status,
-        400,
-        'a sign-in signed with the session key is not recognized',
+        (await mint(`Bearer ${session.token}`)).status,
+        201,
+        'the session mints a ticket',
+      );
+      assert.strictEqual(
+        google.exchanges.at(-1)!.get('redirect_uri'),
+        `${secureOriginURL.href}/google-callback`,
+        "the code is redeemed for the secure origin's callback",
+      );
+    });
+
+    test("a Google sign-in is refused when Google's answer doesn't fit it", async function (assert) {
+      let { userId } = await registerPasswordUser(dbAdapter);
+      let sub = `google-${randomUUID()}`;
+      await linkGoogle(userId, sub);
+
+      let unlinked = await googleSignIn(google.issue(`google-${randomUUID()}`));
+      assert.strictEqual(unlinked.status, 403, 'an unlinked Google account');
+      assert.strictEqual(unlinked.body.errors[0].code, 'not-linked');
+
+      let wrongNonce = await googleSignIn({
+        ...google.issue(sub),
+        nonce: 'another-sign-in',
+      });
+      assert.strictEqual(wrongNonce.status, 401, 'another sign-in’s nonce');
+
+      let wrongVerifier = await googleSignIn({
+        ...google.issue(sub),
+        codeVerifier: randomBytes(32).toString('base64url'),
+      });
+      assert.strictEqual(wrongVerifier.status, 401, 'the wrong PKCE verifier');
+
+      let otherClient = await googleSignIn(
+        google.issue(sub, { claims: { aud: 'another-client' } }),
+      );
+      assert.strictEqual(otherClient.status, 401, 'another client’s token');
+      let otherIssuer = await googleSignIn(
+        google.issue(sub, { claims: { iss: 'https://evil.test' } }),
+      );
+      assert.strictEqual(otherIssuer.status, 401, 'another issuer’s token');
+      let expired = await googleSignIn(
+        google.issue(sub, {
+          claims: { exp: Math.floor(Date.now() / 1000) - 10 },
+        }),
+      );
+      assert.strictEqual(expired.status, 401, 'an expired token');
+    });
+
+    test('a deactivated account is refused with Google', async function (assert) {
+      let { userId } = await registerPasswordUser(dbAdapter);
+      let sub = `google-${randomUUID()}`;
+      await linkGoogle(userId, sub);
+      await updateAccount(userId, { deactivated: true });
+      let response = await googleSignIn(google.issue(sub));
+      assert.strictEqual(response.status, 403);
+      assert.strictEqual(response.body.errors[0].code, 'deactivated');
+    });
+
+    test('a Google sign-in signs in once, even after its session ends', async function (assert) {
+      let { userId } = await registerPasswordUser(dbAdapter);
+      let sub = `google-${randomUUID()}`;
+      await linkGoogle(userId, sub);
+      // A provider that would redeem the same code twice, so only the server's
+      // own record of what signed in stops the second use.
+      let issued = google.issue(sub, { reusable: true });
+
+      let first = await googleSignIn(issued);
+      assert.strictEqual(first.status, 201);
+      let again = await googleSignIn(issued);
+      assert.strictEqual(again.status, 409, 'the same code again is refused');
+      assert.strictEqual(again.body.errors[0].code, 'used');
+
+      let ended = await request
+        .delete('/_secure-session')
+        .set('Authorization', `Bearer ${first.body.data.attributes.token}`);
+      assert.strictEqual(ended.status, 204);
+      let afterSignOut = await googleSignIn(issued);
+      assert.strictEqual(
+        afterSignOut.status,
+        409,
+        'and after signing out it still is',
       );
     });
 
@@ -434,13 +618,15 @@ module(basename(import.meta.filename), function () {
     });
 
     test('signing out ends the session', async function (assert) {
-      let { username, password } = await registerPasswordUser(dbAdapter);
-      let session = await signIn(username, password);
+      let { username, password, userId } =
+        await registerPasswordUser(dbAdapter);
+      let session = (await passwordSignIn(username, password)).body.data
+        .attributes;
       let auth = `Bearer ${session.token}`;
       assert.strictEqual((await mint(auth)).status, 201);
 
       let appSession = `Bearer ${createRealmServerJWT(
-        { user: session.user, sessionRoom: 'test-session' },
+        { user: userId, sessionRoom: 'test-session' },
         realmSecretSeed,
       )}`;
       let wrongSession = await request
@@ -510,25 +696,28 @@ module(basename(import.meta.filename), function () {
     });
 
     test('nothing a sign-in sends reaches the request log or telemetry', async function (assert) {
-      let { username, password } = await registerPasswordUser(dbAdapter);
+      let { username, password, userId } =
+        await registerPasswordUser(dbAdapter);
+      let sub = `google-${randomUUID()}`;
+      await linkGoogle(userId, sub);
+      let issued = google.issue(sub);
       let lines = await withLogDefinition('realm:requests', 'info', () =>
         logLinesDuring(['realm:requests', 'realm:secure-session'], async () => {
-          let started = await startRequest(username);
-          await completeRequest({
-            signIn: started.body.data.attributes.signIn,
-            password: `${password}-wrong`,
-          });
-          await completeRequest({
-            signIn: started.body.data.attributes.signIn,
-            password,
-          });
+          await passwordSignIn(username, `${password}-wrong`);
+          await passwordSignIn(username, password);
+          await googleSignIn(issued);
         }),
       );
       assert.true(lines.length > 0, 'the requests are logged');
       for (let line of lines) {
         assert.false(line.message.includes(password), 'no line carries it');
+        assert.false(line.message.includes(issued.code), 'nor the code');
+        assert.false(
+          line.message.includes(issued.codeVerifier),
+          'nor the verifier',
+        );
       }
-      for (let path of ['/_secure-session', '/_secure-session/sign-in']) {
+      for (let path of ['/_secure-session', '/_secure-session/google']) {
         assert.true(
           keepsMethodAndPathOnly({ url: `http://127.0.0.1:4444${path}` }),
           `${path} keeps only method and path`,

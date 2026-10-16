@@ -7,25 +7,26 @@ import {
 import type { CreateRoutesArgs } from '../routes.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import {
-  completeSignIn,
   endSecureSession,
+  googleSignInStart,
   SecureSessionError,
-  startSignIn,
+  signInWithGoogle,
+  signInWithPassword,
   type SecureSessionClient,
   type SecureSessionDeps,
 } from '../lib/secure-session.ts';
 
-// Signing in on the secure origin (see `lib/secure-session.ts`). Starting and
-// completing a sign-in are answered only for the secure origin's own pages:
-// a browser always sends `Origin` on a POST and page script can't change it,
-// so card code in the app page can't drive a sign-in through the user's
-// browser. A request body here carries a password or a session, so nothing
-// here logs a body, and the request log and telemetry keep only the method and
+// Signing in on the secure origin (see `lib/secure-session.ts`). A sign-in is
+// answered only for the secure origin's own pages: a browser always sends
+// `Origin` on a POST and page script can't change it, so card code in the app
+// page can't drive a sign-in through the user's browser. A request body here
+// carries a password, an authorization code or a session, so nothing here
+// logs a body, and the request log and telemetry keep only the method and
 // path of these routes.
 
 const log = logger('realm:secure-session');
 
-// Far larger than a username, a password and a sign-in token need.
+// Far larger than a username, a password or an authorization code needs.
 const MAX_BODY_LENGTH = 8 * 1024;
 
 type Handler = (ctxt: Koa.Context, next: Koa.Next) => Promise<void>;
@@ -39,6 +40,8 @@ function deps(args: CreateRoutesArgs): SecureSessionDeps {
     realmSecretSeed: args.realmSecretSeed,
     matrixAdminUsername: args.matrixAdminUsername,
     matrixAdminPassword: args.matrixAdminPassword,
+    secureOriginURL: args.secureOriginURL,
+    googleSignIn: args.googleSignIn,
   };
 }
 
@@ -102,6 +105,26 @@ async function readAttributes(
   return attributes;
 }
 
+function clientOf(attributes: Record<string, unknown>): SecureSessionClient {
+  let { client } = attributes;
+  if (!CLIENTS.has(client as SecureSessionClient)) {
+    throw new SecureSessionError(
+      400,
+      'bad-request',
+      `client is 'window' or 'cli'`,
+    );
+  }
+  return client as SecureSessionClient;
+}
+
+function textOf(attributes: Record<string, unknown>, name: string): string {
+  let value = attributes[name];
+  if (typeof value !== 'string' || !value) {
+    throw new SecureSessionError(400, 'bad-request', `${name} is required`);
+  }
+  return value;
+}
+
 // Answers a `SecureSessionError` with its status, message and code, and
 // anything else with a bare 500. Only an error's name and message are logged,
 // never the request.
@@ -133,51 +156,60 @@ function secureSessionHandler(
   };
 }
 
-// POST /_secure-session/sign-in: starts a sign-in for a username, email
-// address or Matrix id, and answers with the stages that can complete it.
-export function handleStartSecureSignIn(args: CreateRoutesArgs): Handler {
+async function sendSession(ctxt: Koa.Context, session: unknown) {
+  await sendJSON(ctxt, 201, {
+    data: { type: 'secure-session', attributes: session },
+  });
+}
+
+// POST /_secure-session: signs in with a username, email address or Matrix id
+// and the account's password.
+export function handlePasswordSignIn(args: CreateRoutesArgs): Handler {
   return secureSessionHandler(async (ctxt) => {
     requireSecureOrigin(ctxt, args.secureOriginURL);
-    let attributes = await readAttributes(ctxt, 'secure-sign-in');
-    let { username, client } = attributes;
-    if (typeof username !== 'string') {
-      throw new SecureSessionError(
-        400,
-        'bad-request',
-        'a username is required',
-      );
-    }
-    if (!CLIENTS.has(client as SecureSessionClient)) {
-      throw new SecureSessionError(
-        400,
-        'bad-request',
-        `client is 'window' or 'cli'`,
-      );
-    }
-    let started = await startSignIn(deps(args), {
-      username,
-      client: client as SecureSessionClient,
-    });
-    await sendJSON(ctxt, 201, {
-      data: { type: 'secure-sign-in', attributes: started },
+    let attributes = await readAttributes(ctxt, 'secure-session');
+    let { username, password } = attributes;
+    await sendSession(
+      ctxt,
+      await signInWithPassword(deps(args), {
+        username: typeof username === 'string' ? username : '',
+        password: typeof password === 'string' ? password : '',
+        client: clientOf(attributes),
+      }),
+    );
+  });
+}
+
+// GET /_secure-session/google: where the secure window sends the user to sign
+// in with Google, and as which client. 503 when this server has no Google
+// client.
+export function handleGoogleSignInStart(args: CreateRoutesArgs): Handler {
+  return secureSessionHandler(async (ctxt) => {
+    await sendJSON(ctxt, 200, {
+      data: {
+        type: 'google-sign-in',
+        attributes: await googleSignInStart(deps(args)),
+      },
     });
   });
 }
 
-// POST /_secure-session: completes a sign-in, with the password for the
-// password stage or, after single sign-on, without one. Answers with the
-// session, or 409 while single sign-on is still to be confirmed.
-export function handleCompleteSecureSignIn(args: CreateRoutesArgs): Handler {
+// POST /_secure-session/google: signs in with the authorization code Google
+// sent to the secure origin's callback, with the PKCE verifier and nonce the
+// window started the sign-in with.
+export function handleGoogleSignIn(args: CreateRoutesArgs): Handler {
   return secureSessionHandler(async (ctxt) => {
     requireSecureOrigin(ctxt, args.secureOriginURL);
-    let attributes = await readAttributes(ctxt, 'secure-session');
-    let session = await completeSignIn(deps(args), {
-      signIn: attributes.signIn,
-      password: attributes.password,
-    });
-    await sendJSON(ctxt, 201, {
-      data: { type: 'secure-session', attributes: session },
-    });
+    let attributes = await readAttributes(ctxt, 'google-sign-in');
+    await sendSession(
+      ctxt,
+      await signInWithGoogle(deps(args), {
+        code: textOf(attributes, 'code'),
+        codeVerifier: textOf(attributes, 'codeVerifier'),
+        nonce: textOf(attributes, 'nonce'),
+        client: clientOf(attributes),
+      }),
+    );
   });
 }
 

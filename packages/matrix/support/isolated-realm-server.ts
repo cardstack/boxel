@@ -7,6 +7,7 @@ const { ensureDirSync, copySync, readFileSync } = fsExtra;
 import { Pool } from 'pg';
 import { createServer as createNetServer, type AddressInfo } from 'net';
 import type { SynapseInstance } from './synapse/index.ts';
+import { MOCK_OAUTH2_HOST_PORT } from '../docker/mock-oauth2.ts';
 
 setGracefulCleanup();
 
@@ -668,6 +669,12 @@ export async function startServer({
       // drives Synapse's admin API with it.
       MATRIX_ADMIN_USERNAME: 'admin',
       MATRIX_ADMIN_PASSWORD: 'adminpass',
+      // The secure window signs in with Google through the same mock
+      // provider Synapse uses, reached on its host port, which the realm
+      // server and the browser can both reach.
+      GOOGLE_OAUTH_CLIENT_ID: 'boxel-secure-window-test',
+      GOOGLE_OAUTH_CLIENT_SECRET: 'boxel-secure-window-test-secret',
+      GOOGLE_OAUTH_ISSUER: `http://localhost:${MOCK_OAUTH2_HOST_PORT}/default`,
     },
   });
   realmServer.unref();
