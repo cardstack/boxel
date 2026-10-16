@@ -556,6 +556,7 @@ module(basename(import.meta.filename), function () {
       const DELEGATOR = 'delegator_for_proxy_endpoints_test';
       const DELEGATED_MEMBER =
         'readonly_delegated_member_for_proxy_endpoints_test';
+      const RECIPIENT = 'recipient_for_proxy_endpoints_test';
       const DROPPED_MEMBER = 'readonly_dropped_member_for_proxy_endpoints_test';
 
       async function createRole(name: string) {
@@ -577,6 +578,13 @@ module(basename(import.meta.filename), function () {
         for (let statement of statements) {
           await dbAdapter.execute(statement);
         }
+      }
+
+      async function selectAs(role: string, sql: string) {
+        return await dbAdapter.withTransaction(async (query: any) => {
+          await query([`SET LOCAL ROLE ${role}`]);
+          return await query([sql]);
+        });
       }
 
       // Every grant on the table and on its columns, with who made it.
@@ -750,7 +758,7 @@ module(basename(import.meta.filename), function () {
         assert.deepEqual(await tableGrants(), before);
       });
 
-      test("leaves a member's grant from another role as it was", async function (assert) {
+      test('revokes a grant another role made to a member, and down restores it', async function (assert) {
         await createRole(DELEGATOR);
         await createRole(DELEGATED_MEMBER);
         await dbAdapter.execute(`GRANT readonly_role TO ${DELEGATED_MEMBER}`);
@@ -766,13 +774,79 @@ module(basename(import.meta.filename), function () {
         let before = await tableGrants();
 
         await runMigration('up');
-        await runMigration('down');
+        await assert.rejects(
+          selectAs(DELEGATED_MEMBER, 'SELECT api_key FROM proxy_endpoints'),
+          /permission denied for table proxy_endpoints/,
+          'the member is denied',
+        );
+        assert.deepEqual(
+          (await tableGrants())
+            .filter(
+              ({ grantee }: { grantee: string }) =>
+                grantee === DELEGATOR || grantee === DELEGATED_MEMBER,
+            )
+            .map(({ grantee }: { grantee: string }) => grantee),
+          [DELEGATOR],
+          'the grantor outside the role keeps its own grant',
+        );
 
+        await runMigration('down');
         assert.deepEqual(
           await tableGrants(),
           before,
-          'down adds no second grant from the owner',
+          'down restores the grant from the role that made it',
         );
+      });
+
+      test('revokes a member grant that was passed on, and down restores both', async function (assert) {
+        await createRole(RECIPIENT);
+        await dbAdapter.execute(`REVOKE readonly_role FROM ${RECIPIENT}`);
+        // The member's grant carries the grant option, and it passes SELECT
+        // on to a role outside the read-only role.
+        await dbAdapter.withTransaction(async (query: any) => {
+          await query([`SET LOCAL ROLE ${DIRECT_MEMBER}`]);
+          await query([
+            `GRANT SELECT ON TABLE proxy_endpoints TO ${RECIPIENT}`,
+          ]);
+        });
+        let before = await tableGrants();
+
+        await runMigration('up');
+        await assert.rejects(
+          selectAs(DIRECT_MEMBER, 'SELECT api_key FROM proxy_endpoints'),
+          /permission denied for table proxy_endpoints/,
+          'the member is denied',
+        );
+        assert.notOk(
+          (await tableGrants()).some(
+            ({ grantee }: { grantee: string }) => grantee === RECIPIENT,
+          ),
+          'the grant passed on from the member goes with it',
+        );
+
+        await runMigration('down');
+        assert.deepEqual(
+          await tableGrants(),
+          before,
+          'down restores the member and the grant it passed on',
+        );
+      });
+
+      test('restores a record that names no grantors as grants from the owner', async function (assert) {
+        let before = await tableGrants();
+
+        await runMigration('up');
+        await dbAdapter.execute(
+          `UPDATE readonly_role_revoked_select_grants
+             SET grants = (
+               SELECT jsonb_agg(revoked - 'grantor')
+               FROM jsonb_array_elements(grants) revoked
+             )
+           WHERE table_name = 'proxy_endpoints'`,
+        );
+        await runMigration('down');
+
+        assert.deepEqual(await tableGrants(), before);
       });
 
       test('skips a recorded role that was dropped before down', async function (assert) {

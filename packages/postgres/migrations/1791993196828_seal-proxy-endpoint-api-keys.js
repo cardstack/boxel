@@ -11,13 +11,24 @@
 // production), so the revoke is skipped wherever it doesn't. Every statement
 // is idempotent, so running `up` again changes nothing.
 //
-// Before revoking, `up` records the SELECT grants the revoke removes: each
-// one the table's owner gave those roles on the table or on one of its
-// columns, and whether the role could grant it on, as this table's row in
+// A role holding SELECT with the grant option can pass SELECT on, and a
+// REVOKE removes only the grants its grantor made. So `up` revokes each SELECT
+// grant those roles hold on the table or its columns acting as the role that
+// made it, with CASCADE, which also removes every grant passed on from it.
+// Acting as another role needs the migrating role to be a superuser or able
+// to SET ROLE to it; where it isn't, `up` stops and names the grant rather
+// than leave the table readable.
+//
+// Before revoking, `up` takes every SELECT grant on the table and its
+// columns, and records the ones the revokes removed, including those CASCADE
+// took from roles outside the read-only role: who made each grant (none for
+// the table's owner), to whom, on which column (none for the whole table) and
+// whether it carried the grant option, as this table's row in
 // `readonly_role_revoked_select_grants`. That table is created only where the
 // read-only role exists, and a second `up` keeps the first record. `down`
-// grants back exactly the recorded grants, so every role ends up with the
-// privileges it had before `up`. A database with no record for this table
+// grants back exactly the recorded grants, each acting as the role that made
+// it once that role holds the grant option again, so every role ends up with
+// the privileges it had before `up`. A database with no record for this table
 // gets SELECT back on the read-only role alone. The incoming webhooks sealing
 // migration keeps its record the same way, in the same table.
 
@@ -32,74 +43,107 @@ exports.up = (pgm) => {
   pgm.sql(`
     DO $$
     DECLARE
-      member_name name;
+      migrating_role name := current_user;
+      -- Every SELECT grant on the table and on its columns, as a JSON array.
+      -- A grant the table's owner made has no grantor, and one to PUBLIC has
+      -- no grantee.
+      snapshot text := $snapshot$
+        SELECT COALESCE(
+          jsonb_agg(
+            jsonb_build_object(
+              'grantor', CASE WHEN select_grant.grantor <> select_grant.relowner
+                THEN grantor_role.rolname END,
+              'grantee', grantee_role.rolname,
+              'column', select_grant.column_name,
+              'grantable', select_grant.is_grantable
+            )
+            ORDER BY grantee_role.rolname NULLS FIRST,
+              select_grant.column_name NULLS FIRST,
+              grantor_role.rolname
+          ),
+          '[]'::jsonb
+        )
+        FROM (
+          SELECT NULL::name AS column_name, tbl.relowner, acl.*
+          FROM pg_class tbl
+          CROSS JOIN LATERAL aclexplode(tbl.relacl) acl
+          WHERE tbl.oid = 'proxy_endpoints'::regclass
+          UNION ALL
+          SELECT col.attname, tbl.relowner, acl.*
+          FROM pg_class tbl
+          JOIN pg_attribute col ON col.attrelid = tbl.oid
+          CROSS JOIN LATERAL aclexplode(col.attacl) acl
+          WHERE tbl.oid = 'proxy_endpoints'::regclass
+            AND col.attnum > 0
+            AND NOT col.attisdropped
+        ) select_grant
+        JOIN pg_roles grantor_role ON grantor_role.oid = select_grant.grantor
+        LEFT JOIN pg_roles grantee_role ON grantee_role.oid = select_grant.grantee
+        WHERE select_grant.privilege_type = 'SELECT'
+      $snapshot$;
+      before_revoke jsonb;
+      remaining jsonb;
+      withheld jsonb;
     BEGIN
       IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'readonly_role') THEN
         CREATE TABLE IF NOT EXISTS readonly_role_revoked_select_grants (
           table_name text PRIMARY KEY,
           grants jsonb NOT NULL
         );
-        INSERT INTO readonly_role_revoked_select_grants (table_name, grants)
-          SELECT
-            'proxy_endpoints',
-            COALESCE(
-              jsonb_agg(
-                jsonb_build_object(
-                  'grantee', grantee,
-                  'column', column_name,
-                  'grantable', grantable
-                )
-                ORDER BY grantee, column_name NULLS FIRST
-              ),
-              '[]'::jsonb
-            )
-          FROM (
-            SELECT grantee_role.rolname AS grantee,
-              owned_grant.column_name,
-              bool_or(owned_grant.is_grantable) AS grantable
-            FROM (
-              SELECT NULL::name AS column_name, acl.*
-              FROM pg_class tbl
-              CROSS JOIN LATERAL aclexplode(tbl.relacl) acl
-              WHERE tbl.oid = 'proxy_endpoints'::regclass
-                AND acl.grantor = tbl.relowner
-              UNION ALL
-              SELECT col.attname, acl.*
-              FROM pg_class tbl
-              JOIN pg_attribute col ON col.attrelid = tbl.oid
-              CROSS JOIN LATERAL aclexplode(col.attacl) acl
-              WHERE tbl.oid = 'proxy_endpoints'::regclass
-                AND col.attnum > 0
-                AND NOT col.attisdropped
-                AND acl.grantor = tbl.relowner
-            ) owned_grant
-            JOIN pg_roles grantee_role ON grantee_role.oid = owned_grant.grantee
-            WHERE owned_grant.privilege_type = 'SELECT'
-              AND (
-                grantee_role.rolname = 'readonly_role'
-                OR grantee_role.oid IN (
-                  SELECT membership.member
-                  FROM pg_auth_members membership
-                  JOIN pg_roles grp ON grp.oid = membership.roleid
-                  WHERE grp.rolname = 'readonly_role'
-                )
-              )
-            GROUP BY grantee_role.rolname, owned_grant.column_name
-          ) revoked_grants
-          ON CONFLICT (table_name) DO NOTHING;
-        REVOKE SELECT ON TABLE proxy_endpoints FROM readonly_role;
-        FOR member_name IN
-          SELECT member.rolname
-          FROM pg_auth_members membership
-          JOIN pg_roles grp ON grp.oid = membership.roleid
-          JOIN pg_roles member ON member.oid = membership.member
-          WHERE grp.rolname = 'readonly_role'
+        EXECUTE snapshot INTO before_revoke;
+        remaining := before_revoke;
         LOOP
+          withheld := NULL;
+          SELECT held INTO withheld
+            FROM jsonb_array_elements(remaining) held
+            WHERE held->>'grantee' = 'readonly_role'
+              OR held->>'grantee' IN (
+                SELECT member.rolname
+                FROM pg_auth_members membership
+                JOIN pg_roles grp ON grp.oid = membership.roleid
+                JOIN pg_roles member ON member.oid = membership.member
+                WHERE grp.rolname = 'readonly_role'
+              )
+            LIMIT 1;
+          EXIT WHEN withheld IS NULL;
+          IF withheld->>'grantor' IS NOT NULL THEN
+            BEGIN
+              EXECUTE format('SET ROLE %I', withheld->>'grantor');
+            EXCEPTION WHEN insufficient_privilege THEN
+              RAISE EXCEPTION
+                'cannot revoke the SELECT on proxy_endpoints that % granted to %',
+                withheld->>'grantor', withheld->>'grantee'
+                USING HINT = format(
+                  'Run the migration as a superuser or as a role that can SET ROLE %I.',
+                  withheld->>'grantor'
+                );
+            END;
+          END IF;
           EXECUTE format(
-            'REVOKE SELECT ON TABLE proxy_endpoints FROM %I',
-            member_name
+            'REVOKE SELECT ON TABLE proxy_endpoints FROM %I CASCADE',
+            withheld->>'grantee'
           );
+          EXECUTE format('SET ROLE %I', migrating_role);
+          EXECUTE snapshot INTO remaining;
+          IF EXISTS (
+            SELECT 1 FROM jsonb_array_elements(remaining) held
+            WHERE held->'grantor' = withheld->'grantor'
+              AND held->'grantee' = withheld->'grantee'
+          ) THEN
+            RAISE EXCEPTION 'the SELECT on proxy_endpoints that % granted to % survived its REVOKE',
+              COALESCE(withheld->>'grantor', 'the owner'), withheld->>'grantee';
+          END IF;
         END LOOP;
+        INSERT INTO readonly_role_revoked_select_grants (table_name, grants)
+          SELECT 'proxy_endpoints',
+            COALESCE(jsonb_agg(revoked ORDER BY position), '[]'::jsonb)
+          FROM jsonb_array_elements(before_revoke)
+            WITH ORDINALITY AS before_grant(revoked, position)
+          WHERE NOT EXISTS (
+            SELECT 1 FROM jsonb_array_elements(remaining) held
+            WHERE held = revoked
+          )
+          ON CONFLICT (table_name) DO NOTHING;
       END IF;
     END
     $$
@@ -110,8 +154,12 @@ exports.down = (pgm) => {
   pgm.sql(`
     DO $$
     DECLARE
+      migrating_role name := current_user;
       recorded jsonb;
+      pending jsonb;
+      waiting jsonb;
       revoked jsonb;
+      restored boolean;
     BEGIN
       IF to_regclass('readonly_role_revoked_select_grants') IS NOT NULL THEN
         DELETE FROM readonly_role_revoked_select_grants
@@ -123,34 +171,68 @@ exports.down = (pgm) => {
           GRANT SELECT ON TABLE proxy_endpoints TO readonly_role;
         END IF;
       ELSE
-        FOR revoked IN SELECT jsonb_array_elements(recorded)
+        -- A grant another role made is restored acting as that role, which
+        -- needs that role to hold the grant option again, possibly from a
+        -- recorded grant still waiting. So each pass restores every grant
+        -- whose grantor can make it, until a pass restores nothing.
+        pending := recorded;
         LOOP
-          IF NOT EXISTS (
-            SELECT 1 FROM pg_roles WHERE rolname = revoked->>'grantee'
-          ) THEN
-            CONTINUE;
-          END IF;
-          IF revoked->>'column' IS NULL THEN
+          waiting := '[]'::jsonb;
+          restored := false;
+          FOR revoked IN SELECT jsonb_array_elements(pending)
+          LOOP
+            IF revoked->>'grantee' IS NOT NULL AND NOT EXISTS (
+              SELECT 1 FROM pg_roles WHERE rolname = revoked->>'grantee'
+            ) THEN
+              CONTINUE;
+            END IF;
+            IF revoked->>'column' IS NOT NULL AND NOT EXISTS (
+              SELECT 1 FROM pg_attribute
+              WHERE attrelid = 'proxy_endpoints'::regclass
+                AND attname = revoked->>'column'
+                AND NOT attisdropped
+            ) THEN
+              CONTINUE;
+            END IF;
+            IF revoked->>'grantor' IS NOT NULL THEN
+              IF NOT EXISTS (
+                SELECT 1 FROM pg_roles WHERE rolname = revoked->>'grantor'
+              ) THEN
+                CONTINUE;
+              END IF;
+              IF NOT (
+                CASE WHEN revoked->>'column' IS NULL
+                  THEN has_table_privilege(
+                    revoked->>'grantor',
+                    'proxy_endpoints',
+                    'SELECT WITH GRANT OPTION'
+                  )
+                  ELSE has_column_privilege(
+                    revoked->>'grantor',
+                    'proxy_endpoints',
+                    revoked->>'column',
+                    'SELECT WITH GRANT OPTION'
+                  )
+                END
+              ) THEN
+                waiting := waiting || jsonb_build_array(revoked);
+                CONTINUE;
+              END IF;
+              EXECUTE format('SET ROLE %I', revoked->>'grantor');
+            END IF;
             EXECUTE format(
-              'GRANT SELECT ON TABLE proxy_endpoints TO %I%s',
-              revoked->>'grantee',
+              'GRANT SELECT%s ON TABLE proxy_endpoints TO %s%s',
+              CASE WHEN revoked->>'column' IS NOT NULL
+                THEN format(' (%I)', revoked->>'column') ELSE '' END,
+              COALESCE(quote_ident(revoked->>'grantee'), 'PUBLIC'),
               CASE WHEN (revoked->>'grantable')::boolean
                 THEN ' WITH GRANT OPTION' ELSE '' END
             );
-          ELSIF EXISTS (
-            SELECT 1 FROM pg_attribute
-            WHERE attrelid = 'proxy_endpoints'::regclass
-              AND attname = revoked->>'column'
-              AND NOT attisdropped
-          ) THEN
-            EXECUTE format(
-              'GRANT SELECT (%I) ON TABLE proxy_endpoints TO %I%s',
-              revoked->>'column',
-              revoked->>'grantee',
-              CASE WHEN (revoked->>'grantable')::boolean
-                THEN ' WITH GRANT OPTION' ELSE '' END
-            );
-          END IF;
+            EXECUTE format('SET ROLE %I', migrating_role);
+            restored := true;
+          END LOOP;
+          EXIT WHEN NOT restored OR waiting = '[]'::jsonb;
+          pending := waiting;
         END LOOP;
       END IF;
       IF to_regclass('readonly_role_revoked_select_grants') IS NOT NULL THEN
