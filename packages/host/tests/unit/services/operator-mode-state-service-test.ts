@@ -1,3 +1,6 @@
+import { settled } from '@ember/test-helpers';
+import { createCache, getValue } from '@glimmer/tracking/primitives/cache';
+
 import { getService } from '@universal-ember/test-support';
 import { setupTest } from 'ember-qunit';
 import window from 'ember-window-mock';
@@ -6,6 +9,7 @@ import { module, test } from 'qunit';
 
 import { Deferred } from '@cardstack/runtime-common';
 
+import { Submodes } from '@cardstack/host/components/submode-switcher';
 import { StackItem } from '@cardstack/host/lib/stack-item';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import { AiAssistantOpen } from '@cardstack/host/utils/local-storage-keys';
@@ -169,7 +173,7 @@ module('Unit | Service | operator-mode-state-service', function (hooks) {
     });
 
     service.addItemToStack(item);
-    service.setStackItemExpanded(item.instanceId, true);
+    service.setStackItemExpanded(item, true);
 
     let rawState = JSON.parse(service.serialize());
     assert.deepEqual(
@@ -186,8 +190,103 @@ module('Unit | Service | operator-mode-state-service', function (hooks) {
 
     let restoredItem = service.state.stacks[0][0];
     assert.true(
-      service.isStackItemExpanded(restoredItem.instanceId),
+      service.isStackItemExpanded(restoredItem),
       'expanded state is restored onto the rebuilt stack item',
     );
+  });
+
+  module('on a phone-width viewport', function (hooks) {
+    let first: StackItem;
+    let second: StackItem;
+
+    hooks.beforeEach(function () {
+      service.isMobileViewport = true;
+      first = new StackItem({
+        id: 'https://example.com/cards/1',
+        format: 'isolated',
+        stackIndex: 0,
+      });
+      second = new StackItem({
+        id: 'https://example.com/cards/2',
+        format: 'isolated',
+        stackIndex: 0,
+      });
+      service.addItemToStack(first);
+      service.addItemToStack(second);
+    });
+
+    test('cards in the first stack are always expanded', function (assert) {
+      let neighbor = new StackItem({
+        id: 'https://example.com/cards/3',
+        format: 'isolated',
+        stackIndex: 1,
+      });
+      service.addItemToStack(neighbor);
+
+      assert.true(service.isStackItemExpanded(first));
+      assert.true(service.isStackItemExpanded(second));
+      assert.false(
+        service.isStackItemExpanded(neighbor),
+        'the hidden second stack is not expanded',
+      );
+      assert.true(service.hasAnyStackItemExpanded);
+
+      service.isMobileViewport = false;
+      assert.false(
+        service.isStackItemExpanded(second),
+        'a wider viewport restores the normal width',
+      );
+      assert.false(service.hasAnyStackItemExpanded);
+    });
+
+    test('a card expanded in the hidden second stack stays collapsed', function (assert) {
+      let neighbor = new StackItem({
+        id: 'https://example.com/cards/3',
+        format: 'isolated',
+        stackIndex: 1,
+      });
+      service.addItemToStack(neighbor);
+      service.setStackItemExpanded(neighbor, true);
+
+      assert.false(service.isStackItemExpanded(neighbor));
+      assert.true(service.isStackItemExpanded(second));
+    });
+
+    test('cards are not expanded outside interact mode', async function (assert) {
+      // Let the setup's persist run in interact mode first; in code mode it
+      // loads the open file, which unit tests can't do.
+      await settled();
+      service.restore({
+        stacks: [[{ id: 'https://example.com/cards/1', format: 'isolated' }]],
+        submode: Submodes.Code,
+      });
+      let [item] = service.state.stacks[0];
+
+      assert.false(service.isStackItemExpanded(item));
+      assert.false(service.hasAnyStackItemExpanded);
+    });
+
+    test('closing the first stack expands the stack that takes its place', function (assert) {
+      let neighbor = new StackItem({
+        id: 'https://example.com/cards/3',
+        format: 'isolated',
+        stackIndex: 1,
+      });
+      service.addItemToStack(neighbor);
+      let expanded = createCache(() => service.isStackItemExpanded(neighbor));
+      assert.false(getValue(expanded));
+
+      service.trimItemsFromStack(first);
+
+      assert.true(
+        getValue(expanded),
+        'the cached value is invalidated when the stacks shift',
+      );
+    });
+
+    test('the phone layout is not serialized as an expanded item', function (assert) {
+      let rawState = JSON.parse(service.serialize());
+      assert.strictEqual(rawState.expandedStackItem, undefined);
+    });
   });
 });
