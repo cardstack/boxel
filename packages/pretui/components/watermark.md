@@ -14,7 +14,7 @@ For decorative texture with no text, use the kit's texture primitives. For an im
 Element: HTMLDivElement
 ```
 
-**Text is an SVG mask; the ink is a theme colour.** The text is drawn once into an SVG tile of `@gap` pixels, rotated by `@rotate`, and used as a repeating `mask-image` over a layer painted with `--pretui-watermark-ink`. The colour is never baked into a data URI, so a dark season gets a light mark with no extra work. The text is XML-escaped and capped at 80 characters, counted by code point so an emoji is never cut in half.
+**Text is an SVG mask; the ink is a theme color.** The text is drawn once into an SVG tile of `@gap` pixels, rotated by `@rotate`, and used as a repeating `mask-image` over a layer painted with `--pretui-watermark-ink`. The color is never baked into a data URI, so dark mode gets a light mark with no extra work. The text is XML-escaped and capped at 80 characters, counted by code point so an emoji is never cut in half.
 
 **`@image` tiles an image instead**, as `background-image`, at `@gap` pixels.
 
@@ -41,7 +41,7 @@ No APG pattern.
 
 ## Theming
 
-`--pretui-watermark-ink` (the text mark's colour, default `--foreground`). Opacity, spacing, rotation and size are args, not tokens, because they belong to the document, not the season.
+`--pretui-watermark-ink` (the text mark's color, default `--foreground`). Opacity, spacing, rotation and size are args, not tokens, because they belong to the document, not the theme.
 
 In print, the layer keeps its colour with `print-color-adjust: exact`, so a DRAFT mark survives printing.
 

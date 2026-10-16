@@ -59,7 +59,7 @@ Surface: `--popover` and `--popover-foreground` (the toast reads as "floating ab
 
 The tone stripe and the life bar share one hue per severity through `--pretui-toast-tone`: `--pretui-info`, `--success`, `--warning`, `--destructive`, and `--muted-foreground` for neutral. The stripe is the only place a tone paints, so a neutral toast is genuinely neutral.
 
-The host's own knobs: `--pretui-z-toast` (stacking, default 100), `--pretui-toaster-width` (380px, capped to the viewport less 24px), and `--pretui-toast-life`, which the component sets per toast to its own duration — a season does not set it. Entrance motion is `--pretui-dur-enter` / `--pretui-ease-enter`.
+The host's own knobs: `--pretui-z-toast` (stacking, default 100), `--pretui-toaster-width` (380px, capped to the viewport less 24px), and `--pretui-toast-life`, which the component sets per toast to its own duration — a theme does not set it. Entrance motion is `--pretui-dur-enter` / `--pretui-ease-enter`.
 
 Fixed: the 3px stripe, the 2px life bar at 0.55 opacity, the 20px dismiss control (28px on coarse pointers), and the 12px entrance offset.
 
@@ -67,17 +67,17 @@ The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides 
 
 ## React ecosystem
 
-| Sonner / Mantine / Ant / MUI | Pretui |
-| --- | --- |
+| Sonner / Mantine / Ant / MUI          | Pretui                                                                                 |
+| ------------------------------------- | -------------------------------------------------------------------------------------- |
 | `<Toaster position='bottom-right' />` | `<Toaster @store={{this.toasts}} @position='bottom-right' />` — mapped to `bottom-end` |
-| `toast('Saved')` | `this.toasts.show({ title: 'Saved' })` |
-| `toast.success(…)` / `.error(…)` | `show({ …, tone: 'success' })` / `tone: 'danger'` |
-| `toast.promise(p, {…})` | `show` returns an id; `show({ id, … })` again replaces in place |
-| `duration: 4000` | `duration: 4` — seconds |
-| `visibleToasts` / `limit` | `@limit` — the rest queue unstarted |
-| `closeButton` | on by default; `dismissible: false` per toast |
-| `pauseWhenPageIsHidden` | `@pauseWhenHidden` (default true) |
-| `hotkey` (Base UI, F6) | `@hotkey` (default true, F6) |
-| `anchorOrigin` (MUI) | `@placement` |
+| `toast('Saved')`                      | `this.toasts.show({ title: 'Saved' })`                                                 |
+| `toast.success(…)` / `.error(…)`      | `show({ …, tone: 'success' })` / `tone: 'danger'`                                      |
+| `toast.promise(p, {…})`               | `show` returns an id; `show({ id, … })` again replaces in place                        |
+| `duration: 4000`                      | `duration: 4` — seconds                                                                |
+| `visibleToasts` / `limit`             | `@limit` — the rest queue unstarted                                                    |
+| `closeButton`                         | on by default; `dismissible: false` per toast                                          |
+| `pauseWhenPageIsHidden`               | `@pauseWhenHidden` (default true)                                                      |
+| `hotkey` (Base UI, F6)                | `@hotkey` (default true, F6)                                                           |
+| `anchorOrigin` (MUI)                  | `@placement`                                                                           |
 
 **Toast** is the presentation-only card and is not what this host renders; the host draws its own item so the clock, roles and controls are one implementation. **Sonner** and **Snackbar** are the shadcn and MUI names for this component.

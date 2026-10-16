@@ -2,7 +2,7 @@
 
 A thumbnail gallery whose tiles open into a full-screen viewer with pinch-zoom, pan and keyboard navigation.
 
-It owns the zoom engine, which is why **Gallery** does not: running two lightboxes over one set is how focus restoration breaks. Wire Gallery's `@onOpen` here, or use this on its own when the grid *is* the presentation.
+It owns the zoom engine, which is why **Gallery** does not: running two lightboxes over one set is how focus restoration breaks. Wire Gallery's `@onOpen` here, or use this on its own when the grid _is_ the presentation.
 
 ## The contract
 
@@ -34,7 +34,7 @@ It owns the zoom engine, which is why **Gallery** does not: running two lightbox
 Three integration decisions are worth knowing, because each is a trap:
 
 - **The gallery is anchors, not buttons.** PhotoSwipe binds to `<a href>` children, and that choice pays twice: the markup degrades to "open the file" with no JavaScript at all, and the tile is reachable, focusable, middle-clickable and copy-link-able for free. A grid of `<div onclick>` — which is what most lightbox demos ship — has none of that.
-- **The stylesheet is refcounted, not module-installed.** PhotoSwipe appends its root to `document.body`, outside every component subtree, so scoped CSS cannot reach it and a side-effect `.css` import breaks realm indexing. The CSS travels as a string and is installed into `document.head` by the *first* Lightbox and removed by the *last*. A module-level "install once" flag would leak a stylesheet across test modules — exactly the cross-file coupling that makes one test's failure depend on another's.
+- **The stylesheet is refcounted, not module-installed.** PhotoSwipe appends its root to `document.body`, outside every component subtree, so scoped CSS cannot reach it and a side-effect `.css` import breaks realm indexing. The CSS travels as a string and is installed into `document.head` by the _first_ Lightbox and removed by the _last_. A module-level "install once" flag would leak a stylesheet across test modules — exactly the cross-file coupling that makes one test's failure depend on another's.
 - **The engine lives in a modifier and only in a modifier**, constructed in the modifier body and destroyed in its destructor, so nothing builds it in a getter where the indexer could evaluate it outside a browser.
 
 Where it is thinner: images only — no video slides, which PhotoSwipe itself supports — no thumbnail rail inside the open viewer, no share or download affordance, and no deep-linking to a particular slide.
@@ -52,6 +52,6 @@ Where it is thinner: images only — no video slides, which PhotoSwipe itself su
 
 `--pretui-lb-columns`, `--pretui-lb-min` and `--pretui-lb-gap` (the grid, from `@columns`, `@minTile` and `@gap`), `--pretui-lb-ratio` (per tile), `--pretui-on-neutral` for ink over a thumbnail, `--pretui-shadow-hairline`.
 
-The open viewer is styled by PhotoSwipe's own stylesheet, which the season does not reach — the deliberate consequence of the refcounted install. So a season retunes the grid, and the full-screen view stays the library's neutral dark. That is the trade for not having a stylesheet leak across the realm.
+The open viewer is styled by PhotoSwipe's own stylesheet, which the theme does not reach — the deliberate consequence of the refcounted install. So a theme retunes the grid, and the full-screen view stays the library's neutral dark. That is the trade for not having a stylesheet leak across the realm.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

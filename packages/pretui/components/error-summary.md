@@ -55,6 +55,6 @@ Gaps:
 
 `--destructive`, `--warning`, `--pretui-info` and their on-colours for the severity tiers; `--card` or `--inset` for the shell, `--border` and `--pretui-shadow-hairline` for its edge, `--foreground` and `--muted-foreground` for heading and body ink, plus **Token**'s tokens when rule provenance is shown.
 
-Severity is carried by a glyph and a hue, as in **Alert**, so a field message, a summary row and a banner about the same thing read as one system. A theme that retunes those hues must retune them in all three places or the correspondence breaks — and because severity is conveyed by glyph _and_ hue, it survives WCAG 1.4.1 even if a season's hues collapse.
+Severity is carried by a glyph and a hue, as in **Alert**, so a field message, a summary row and a banner about the same thing read as one system. A theme that retunes those hues must retune them in all three places or the correspondence breaks — and because severity is conveyed by glyph _and_ hue, it survives WCAG 1.4.1 even if a theme's hues collapse.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

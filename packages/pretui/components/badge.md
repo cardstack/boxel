@@ -46,7 +46,7 @@ No APG pattern. What matters is the name.
 
 `--pretui-mark-hue` (set from the tone: `--destructive` by default, or `--primary`, `--pretui-info`, `--success`, `--warning`, `--pretui-attention`, `--muted-foreground`), `--pretui-badge-ink` (the number, default `--card`), `--pretui-badge-ring` (the separating ring, default `--card`), `--foreground` (ink on warning and attention hues), `--font-sans` and `--text-ui-xs`.
 
-The ring mixes against `--card`, so the mark reads as cut out of the control in any season. The 1.125rem height, the 0.5rem dot and the half-out corner offset are fixed.
+The ring mixes against `--card`, so the mark reads as cut out of the control in any theme. The 1.125rem height, the 0.5rem dot and the half-out corner offset are fixed.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

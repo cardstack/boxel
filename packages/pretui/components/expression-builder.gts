@@ -1111,7 +1111,7 @@ export class ExpressionBuilder extends Component<ExpressionBuilderSignature> {
            The message itself is --foreground at full contrast rather than
            tinted, which is also the contrast fix: 11.5px --destructive text on
            --card was this file's thinnest AA margin, in both modes and every
-           season. Tinting a whole sentence never made it more legible. */
+           theme. Tinting a whole sentence never made it more legible. */
         .xb-msg,
         .xb-issue {
           display: grid;
@@ -1135,14 +1135,14 @@ export class ExpressionBuilder extends Component<ExpressionBuilderSignature> {
           white-space: nowrap;
           color: var(--muted-foreground);
         }
-        /* The hue is ANCHORED IN INK, never used raw. --warning as text is
-           about 2:1 on --card in SS26 — the whole-message tint this replaces
+        /* The hue is ANCHORED IN INK, never used raw. --warning as text can
+           fall to about 2:1 on --card — the whole-message tint this replaces
            failed AA outright, and a bold 11px mark would fail it too. Mixing
            toward --foreground rather than toward a fixed dark is what makes it
            mode-correct for free (Law 2's crossover argument): --foreground is
            near-black on a light card and near-white on a dark one, so the same
            declaration lands on a dark amber in light mode and a light amber in
-           dark mode, in every season, with no dark branch. */
+           dark mode, under any theme, with no dark branch. */
         .xb-note-mark[data-tone='error'] {
           color: color-mix(
             in oklch,

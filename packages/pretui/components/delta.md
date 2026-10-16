@@ -22,7 +22,7 @@ There is no component for this in Radix, Web Awesome, shadcn or React Spectrum �
 Where making it a component pays off:
 
 - **The sign→colour mapping is decided once.** Green-up/red-down is a convention, not a law — it is inverted in several East Asian markets, and it means the opposite for a cost metric than for a revenue metric. Having one component means changing that convention is one edit, and having it _not_ be a component means the ternary is copy-pasted into forty call sites with three different green tokens.
-- **`data-sign` is reflected**, so a season or a call site can restyle by sign without touching the logic.
+- **`data-sign` is reflected**, so a call site can restyle by sign without touching the logic.
 - **Tabular figures by default**, so a column of deltas aligns on the decimal point. This is the detail hand-rolled deltas always miss.
 
 Where it is thinner than it should be:
@@ -48,6 +48,6 @@ Gaps, and the first is the real one:
 
 `--success-ink` (up), `--destructive` (down), `--muted-foreground` (flat), `--font-mono`, `--text-ui-sm`. The 500 weight and tabular figures are fixed.
 
-Three tokens and nothing else — which makes this the cheapest component in the kit to season, and also means a season that wants a different sign convention (or a colour-blind-safe blue/orange pair instead of green/red) can get it entirely by repointing `--success` and `--destructive` _for this component's context_, without touching the code. That is worth knowing: the sign→token mapping is fixed, but the token→colour mapping is not.
+Three tokens and nothing else — which makes this the cheapest component in the kit to theme, and also means a theme that wants a different sign convention (or a color-blind-safe blue/orange pair instead of green/red) can get it entirely by repointing `--success` and `--destructive` _for this component's context_, without touching the code. That is worth knowing: the sign→token mapping is fixed, but the token→color mapping is not.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

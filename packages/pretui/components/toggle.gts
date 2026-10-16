@@ -89,7 +89,7 @@ export interface ToggleSignature {
  * all, so every consumer re-derives "what does pressed look like" and almost
  * every one of them reaches for a tint — colour-only signalling. Here pressed
  * is an appearance recipe swap over the tone channel, so it reads
- * in greyscale AND re-tints with a season it has never seen. Radix has no
+ * in grayscale AND re-tints with a theme it has never seen. Radix has no
  * pending state; `@busy` here is React Aria's *pending* semantics (`aria-busy`
  * + retained focus) rather than a disable. And Radix's `data-state` is the
  * only thing it exposes to CSS; this reflects the whole resolved treatment as
@@ -183,7 +183,7 @@ export class Toggle extends Component<ToggleSignature> {
       @layer PretComponent, PretComposite;
       @layer PretComposite {
         /* Everything visual arrives through Button's own token channel and its
-           appearance recipes, so this file paints nothing a season cannot
+           appearance recipes, so this file paints nothing a theme cannot
            retune. What is left is the press feedback and the pending ring. */
         .pretui-toggle {
           flex: none;

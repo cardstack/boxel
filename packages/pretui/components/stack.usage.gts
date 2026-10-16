@@ -119,7 +119,7 @@ export class StackUsage extends Component {
         />
         <Args.String
           @name='gap'
-          @description='Gap on the kit size scale, so a season recompile re-rhythms every Stack at once. sm, md, lg and default resolve to s, m, l and m.'
+          @description='Gap on the kit size scale, so a theme change re-rhythms every Stack at once. sm, md, lg and default resolve to s, m, l and m.'
           @options={{this.gapOptions}}
           @value={{this.gap}}
           @onInput={{this.setGap}}

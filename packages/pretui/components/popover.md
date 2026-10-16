@@ -24,7 +24,7 @@ Panel width is set by three component-owned custom properties — `--pretui-popo
 Where Pretui differs:
 
 - **The backdrop element instead of outside-click detection** (above) — smaller, leak-free, and correct inside the theme island.
-- **No portal.** Everything else here portals to `document.body`; Pretui renders in place so season tokens and scoped styles apply. The cost is that a Popover inside `overflow: hidden` relies on `Popup`'s `position: fixed` to escape clipping, which works, but the panel still sits in the anchor's stacking context.
+- **No portal.** Everything else here portals to `document.body`; Pretui renders in place so theme tokens and scoped styles apply. The cost is that a Popover inside `overflow: hidden` relies on `Popup`'s `position: fixed` to escape clipping, which works, but the panel still sits in the anchor's stacking context.
 - **`close` yielded to content** rather than a separate `Popover.Close` component. One fewer export, and it composes with any control.
 - **`--pretui-popover-*` sizing knobs.** Radix leaves width to the consumer's CSS and exposes `--radix-popover-trigger-width` as a read; Pretui inverts it into three writable knobs with sane defaults.
 
@@ -46,7 +46,7 @@ Gaps, plainly:
 
 ## Theming
 
-`--popover`, `--popover-foreground` (falling back to `--foreground`), `--pretui-shadow-overlay`, `--space-4`, plus the three `--pretui-popover-*` sizing knobs. Radius is hard-coded at 10px rather than reading `--radius-surface` — a genuine inconsistency with Dialog and Panel that a season cannot currently override. Entry motion is `@starting-style` (opacity + 4px rise, 180ms) with a `prefers-reduced-motion` opt-out.
+`--popover`, `--popover-foreground` (falling back to `--foreground`), `--pretui-shadow-overlay`, `--space-4`, plus the three `--pretui-popover-*` sizing knobs. Radius is hard-coded at 10px rather than reading `--radius-surface` — a genuine inconsistency with Dialog and Panel that a theme cannot currently override. Entry motion is `@starting-style` (opacity + 4px rise, 180ms) with a `prefers-reduced-motion` opt-out.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

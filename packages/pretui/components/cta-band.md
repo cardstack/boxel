@@ -29,7 +29,7 @@ The closing call-to-action band: an eyebrow, a headline, a lead and the controls
 
 The closing CTA section on every marketing page.
 
-Where Pretui is better: the heading level as an argument, and tone and appearance resolving through the kit's recipe system so the band matches the season rather than being a hand-picked colour block.
+Where Pretui is better: the heading level as an argument, and tone and appearance resolving through the kit's recipe system so the band matches the theme rather than being a hand-picked color block.
 
 Where it is thinner: no background media, no split arrangement, and no dismissal — this is a section, not a banner.
 
@@ -37,7 +37,7 @@ Where it is thinner: no background media, no split arrangement, and no dismissal
 
 - **The headline is a real heading at `@headingLevel`**, so the band participates in the document outline.
 - **`@eyebrow` is context, not a heading**, and does not compete in the outline.
-- **The band's tone is a token pair**, so the ink on it comes from the same recipe — which is what stops a strongly-coloured CTA from failing contrast when a season changes its primary.
+- **The band's tone is a token pair**, so the ink on it comes from the same recipe — which is what stops a strongly-colored CTA from failing contrast when a theme changes its primary.
 - **`@align='center'` centres the text**, which is harder to read at length — keep the lead short, and use `start` inside prose.
 - **The actions are whatever the caller puts there**, and their names are the caller's responsibility.
 
@@ -45,6 +45,6 @@ Where it is thinner: no background media, no split arrangement, and no dismissal
 
 `@tone` and `@appearance` resolve through the kit's shared recipe system; alignment and heading level are structural.
 
-Because the band is a recipe rather than a colour, a season that expresses `accent` through a border rather than a fill gets a bordered CTA automatically — which is the behaviour a hardcoded background would prevent.
+Because the band is a recipe rather than a color, a theme that expresses `accent` through a border rather than a fill gets a bordered CTA automatically — which is the behavior a hardcoded background would prevent.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

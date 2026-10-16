@@ -228,7 +228,7 @@ class AssetWellUsage extends Component {
         <Css.Basic
           @name='pretui-well-aspect'
           @type='ratio'
-          @description='Reserved preview ratio. Set through @ratio; exposed so a season can floor it.'
+          @description='Reserved preview ratio. Set through @ratio; exposed so a theme can floor it.'
         />
         <Css.Basic
           @name='pretui-well-glyph-size'

@@ -26,7 +26,7 @@ Pretui's version is the smallest possible implementation of the shape, and the `
 Where it is behind, plainly:
 
 - **No indeterminate mode.** Spectrum's and Web Awesome's rings both spin when the duration is unknown; this one cannot.
-- **No `--track-width` equivalent.** Ring thickness is fixed at 15% of the diameter by the `::after` margin, so a season cannot make it thinner or thicker.
+- **No `--track-width` equivalent.** Ring thickness is fixed at 15% of the diameter by the `::after` margin, so a theme cannot make it thinner or thicker.
 - **No label.** Web Awesome renders text in the centre; here the hole is painted over, so centre content is impossible without changing the component.
 - **The opaque hole** (above) — the SVG implementations do not have this problem.
 
@@ -50,6 +50,6 @@ Practical guidance: treat this as decorative unless you pass `aria-label`, and p
 
 `--primary` (the arc), `--inset` (the track), `--card` (the hole). That is the whole set — and note the hole's dependence on `--card` described above.
 
-The 15% ring thickness and the circular shape are fixed; `@size` is the only dimension knob and it is an arg rather than a token, so a season cannot set a default size. A season must keep `--primary` and `--inset` separable in luminance, since at 28px the arc is a few pixels wide and hue alone will not carry it.
+The 15% ring thickness and the circular shape are fixed; `@size` is the only dimension knob and it is an arg rather than a token, so a theme cannot set a default size. A theme must keep `--primary` and `--inset` separable in luminance, since at 28px the arc is a few pixels wide and hue alone will not carry it.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

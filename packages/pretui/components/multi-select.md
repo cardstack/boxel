@@ -19,7 +19,7 @@ Hybrid controlled/uncontrolled, the kit-wide idiom.
 
 ## Prior art
 
-**boxel-ui's `BoxelMultiSelect` rides the ember-power-select wormhole**, which is on this kit's wart list — the portal escapes the theme island, so season tokens cannot reach the dropdown. So this is a **fresh build on the kit's own `Popup` primitive** rather than a wrap, mirroring **Select**'s structure exactly: the same trigger dress, the same focus ring while open, the same listbox with the traveling highlight, the same viewport-covering backdrop button instead of a `document` click listener.
+**boxel-ui's `BoxelMultiSelect` rides the ember-power-select wormhole**, which is on this kit's wart list — the portal escapes the theme island, so theme tokens cannot reach the dropdown. So this is a **fresh build on the kit's own `Popup` primitive** rather than a wrap, mirroring **Select**'s structure exactly: the same trigger dress, the same focus ring while open, the same listbox with the traveling highlight, the same viewport-covering backdrop button instead of a `document` click listener.
 
 Against the field: **Web Awesome `wa-select multiple`** shows chips with `max-options-visible` (default 3) and a `getTag(option, index)` render hook. **React Spectrum** has no multi-select picker. **Radix** has none; the ecosystem uses Popover + Command, which is what shadcn's multi-select recipes are.
 
@@ -46,7 +46,7 @@ Gaps:
 
 Trigger: `--field`, `--input`, `--primary` (the open/focus ring), `--ink-3` (placeholder), `--control-h`, `--radius`, `--text-ui-md`, `--track-ui`. Chips: **FilterChips**' capsule dress. Listbox: `--popover`, `--hover`, `--foreground`, `--pretui-shadow-overlay`, and the 28px row height the index-positioned highlight depends on.
 
-**That 28px is load-bearing**: the traveling highlight is positioned by index × row height rather than measured, so a season that changes option row height without changing the highlight's step will desynchronise them. It is the one metric here that cannot safely be retuned in CSS alone.
+**That 28px is load-bearing**: the traveling highlight is positioned by index × row height rather than measured, so a theme that changes option row height without changing the highlight's step will desynchronize them. It is the one metric here that cannot safely be retuned in CSS alone.
 
 The styles sit in `@layer PretComposite`, above Popup's `PretComponent` layer, so what this component sets on Popup wins by layer order. A caller's unlayered CSS overrides both without a more specific selector.
 

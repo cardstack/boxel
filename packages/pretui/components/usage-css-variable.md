@@ -24,7 +24,7 @@ Note there is no required/optional pair here, unlike every other row in the fami
 
 **Storybook has no equivalent.** Its controls are props; CSS custom properties are documented, if at all, in an MDX page a human wrote and nobody keeps current. **Web Awesome's** docs list CSS custom properties and CSS parts in a static table per component — good documentation, not live. **Radix** documents its `--radix-*` output properties in prose.
 
-So the live-token knob is genuinely uncommon, and it is the right shape for a design system: **the surface that documents a component also lets you re-theme it in place.** Combined with **ThemeFrame**, a reader can switch season _and_ poke an individual token, which is a much faster way to understand a component's theming surface than reading a table.
+So the live-token knob is genuinely uncommon, and it is the right shape for a design system: **the surface that documents a component also lets you re-theme it in place.** Combined with **ThemeFrame**, a reader can switch theme _and_ poke an individual token, which is a much faster way to understand a component's theming surface than reading a table.
 
 Where it is thin: the value is free text, so there is no colour picker for a colour token, no length control for a dimension, and no validation — typing `blue!` silently produces an invalid declaration that CSS drops. **ColorPicker** and **Slider** are both in the kit and neither is wired.
 

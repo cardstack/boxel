@@ -128,7 +128,7 @@ const ChipTagRail: TemplateOnlyComponent = <template>
 
 const ChipDotless: TemplateOnlyComponent = <template>
   <Row>
-    <Chip @label='SS26' @dot={{false}} />
+    <Chip @label='Draft' @dot={{false}} />
     <Chip @label={{chiTea}} @dot={{false}} />
   </Row>
 </template>;

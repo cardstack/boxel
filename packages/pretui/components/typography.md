@@ -4,7 +4,7 @@ The **prose atoms** React agents type: `Title`, `Text`, `Paragraph`, `Code`, `Bl
 
 They are available as a namespace, `<Typography.Title>`, the way Ant and Mantine agents write them, and each is also exported on its own.
 
-Reach for a neighbour in these cases:
+Reach for a neighbor in these cases:
 
 - **Prose** styles a whole block of rendered markdown.
 - **Token** is for machine values such as ids, hashes and paths (Law 3), not Code.
@@ -26,9 +26,9 @@ Typography   { Title, Text, Paragraph, Code, Blockquote, Link }
 
 **Title's level is structure; its size is look.** `@level` picks the tag and belongs to the document outline. `@size` decouples the appearance when a design wants an `h3` to look like a subheading. Level 1 defaults to display size, 2 and 3 to heading, and 4 to 6 to subheading.
 
-**Text's flags are real tags.** `@strong` renders `<strong>`, `@italic` `<em>`, `@mark` `<mark>` and `@strike` `<s>`, so the meaning reaches assistive technology and copy-paste, not just the colour. `@strong` and `@italic` combine with each other and with either `@mark` or `@strike`. When both of those are set, `@mark` wins. `@tone` and `@size` style the outer span, and unknown values fall back to the default.
+**Text's flags are real tags.** `@strong` renders `<strong>`, `@italic` `<em>`, `@mark` `<mark>` and `@strike` `<s>`, so the meaning reaches assistive technology and copy-paste, not just the color. `@strong` and `@italic` combine with each other and with either `@mark` or `@strike`. When both of those are set, `@mark` wins. `@tone` and `@size` style the outer span. An unknown tone falls back to `default` and an unknown size to `md`; with no `@size`, Text inherits the surrounding size.
 
-**Paragraph** keeps a readable measure (`--pretui-paragraph-measure`, default 68ch) and `text-wrap: pretty`.
+**Paragraph** keeps a readable measure (`--pretui-paragraph-measure`, default `68ch`) and `text-wrap: pretty`.
 
 **Blockquote is a `<figure>`** with the quote in a `<blockquote cite>` and `@attribution` as the `<figcaption>`, so the attribution belongs to the quote rather than being loose text after it.
 
@@ -55,9 +55,11 @@ No single APG pattern. These are the tags the patterns are made of.
 
 ## Theming
 
-`--font-serif` (Title, Blockquote), `--font-sans` (subheading), `--font-mono` (Code), `--text-display`, `--text-heading`, `--text-body`, `--text-ui-xs` / `--text-ui-sm` / `--text-ui-md` / `--text-ui-lg`, `--weight-heading`, `--weight-strong`, `--track-heading`, `--leading-heading`, `--leading-body`, `--foreground`, `--muted-foreground`, `--success`, `--warning`, `--destructive` (tone inks mixed toward `--foreground`), `--pretui-text-mark` (the highlight, default `--warning`), `--pretui-paragraph-measure`, `--pretui-quote-rule` (default `--border`), `--pretui-link-ink` (default `--primary`), `--ring`, `--card` and `--radius-control` (Code's ground), and `--space-2` / `--space-4`.
+**From the theme contract:** `--font-serif` (Title at display and heading size, and Blockquote's quote), `--font-sans` (Title at subheading size), `--font-mono` (Code), `--foreground`, `--muted-foreground`, `--success`, `--warning`, `--destructive` (tone inks mixed toward `--foreground`), `--card` (Code's ground), `--ring`, and `--border` and `--primary` as the defaults of the quote rule and the link ink. Text, Paragraph, Link and Blockquote's attribution set no font family, so they inherit the surrounding text's: the body role inside a card, `--font-sans` by default.
 
-A season restyles all prose through the font, size and weight tokens it already defines for the kit.
+**Not in the contract:** `--text-display`, `--text-heading`, `--text-body`, `--text-ui-xs` / `--text-ui-sm` / `--text-ui-md` / `--text-ui-lg`, `--weight-heading`, `--weight-strong`, `--track-heading`, `--leading-heading`, `--leading-body`, `--radius-control` (Code's corner) and `--space-2` / `--space-4` (Blockquote's indent and the gap above the attribution). These are Pret's own tokens and nothing sets them, so they render at their fallbacks, and a theme's typography roles (`--boxel-heading-*`, `--boxel-body-*` and the rest) don't reach whatever reads them: Title's size, weight, leading and tracking; Paragraph's and Blockquote's size and leading; the attribution's size; and Text's `@size` steps and `@strong` weight. Title and Blockquote's quote also pick `--font-serif` themselves instead of their roles' families (`--boxel-heading-font-family` and `--boxel-body-font-family`, both `--font-sans` by default), so a theme's fonts for those roles don't reach them either.
+
+**The component's own properties:** `--pretui-text-mark` (the highlight, default `--warning`), `--pretui-paragraph-measure` (default `68ch`), `--pretui-quote-rule` (default `--border`) and `--pretui-link-ink` (default `--primary`).
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 
