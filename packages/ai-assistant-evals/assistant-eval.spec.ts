@@ -158,23 +158,22 @@ async function loginViaLocalStorage(page: Page, username: string) {
   return credentials;
 }
 
-// An endpoint the realm server has not seen before. The name has a 60
-// character budget, so the cut falls on the label and never on the tail: the
-// model, the time and the session suffix are what make the name unique, and a
-// cut that reached them left every run of one evaluation on one day asking for
-// the name the first run already took.
-const ENDPOINT_MAX = 60;
-
-function workspaceEndpoint(label: string, modelSlug: string, stamp: string) {
+// An endpoint the realm server has not seen before, kept short: the model
+// copies the workspace URL into tool calls, and a weaker model mangles a long
+// one (GPT-6 Luna dropped whole runs of a URL that repeated "eval"). The
+// workspace's display name carries the evaluation; the endpoint is only the
+// model, the time and the session suffix, which is what makes it unique.
+function workspaceEndpoint(modelSlug: string, now: Date) {
   let session = (SESSION_ID ?? '').split('-').pop() ?? '';
   let suffix = slugify(session) || Math.random().toString(36).slice(2, 6);
-  let tail = `${modelSlug}-${slugify(stamp)}-${suffix}`.slice(0, ENDPOINT_MAX);
-  let room = ENDPOINT_MAX - tail.length - 1;
-  if (room <= 0) {
-    return tail;
-  }
-  let head = slugify(label).slice(0, room).replace(/-+$/, '');
-  return head ? `${head}-${tail}` : tail;
+  let pad = (n: number) => String(n).padStart(2, '0');
+  let time = `${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(
+    now.getHours(),
+  )}${pad(now.getMinutes())}`;
+  // A long model id is cut so the endpoint stays well inside the realm
+  // server's limit; the time and suffix keep it unique.
+  let model = modelSlug.slice(0, 40).replace(/-+$/, '');
+  return `${model}-${time}-${suffix}`;
 }
 
 async function createWorkspace(
@@ -909,7 +908,7 @@ async function runModel(
     result.realmUrl = await createWorkspace(
       page,
       `${label} ${requestedModel} ${stamp}`,
-      workspaceEndpoint(label, slug, stamp),
+      workspaceEndpoint(slug, now),
     );
     if (evaluation) {
       setStep('copy the initial cards and files into the workspace');
