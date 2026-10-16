@@ -1,4 +1,4 @@
-import type { SerializedError } from './error.ts';
+import type { RenderErrorSummary } from './error.ts';
 import type { QueryResultsMeta } from './index-query-engine.ts';
 import type { CardTypeSummary, RealmMetaValue } from './index-structure.ts';
 import {
@@ -40,7 +40,7 @@ export interface DocumentClosureMeta {
 // shows the card's prerendered output (a search result, a published page)
 // gets that output's error treatment from the prerendered channel directly.
 export interface DocumentRenderMeta {
-  renderError?: SerializedError;
+  renderError?: RenderErrorSummary;
 }
 
 export interface SingleCardDocument<Identity extends Unsaved = Saved> {

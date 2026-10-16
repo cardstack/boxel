@@ -66,7 +66,13 @@ const renderError: SerializedError = {
   title: 'Render timeout',
   message: 'the prerender manager aborted the render after 120000 ms',
   additionalErrors: null,
+  // What the prerender pipeline keeps on a failed render for its own use: the
+  // retry lane's marker and run length, the failing render's dependencies and
+  // its timing diagnostics. None of it is the card reader's business.
   visitRequestFailure: true,
+  consecutiveVisitFailures: 1,
+  deps: ['http://example.test/some-dependency'],
+  diagnostics: { renderStage: 'awaiting-render' },
 };
 
 module(basename(import.meta.filename), function () {
@@ -127,10 +133,14 @@ module(basename(import.meta.filename), function () {
         'Mango',
         'the card data the index visit read is served',
       );
-      assert.strictEqual(
-        response.body.meta?.renderError?.message,
-        renderError.message,
-        'the render error is reported on the document meta',
+      assert.deepEqual(
+        response.body.meta?.renderError,
+        {
+          status: renderError.status,
+          title: renderError.title,
+          message: renderError.message,
+        },
+        'the render error is reported on the document meta, without the pipeline bookkeeping',
       );
       assert.strictEqual(
         response.body.data.meta.renderError,
@@ -209,6 +219,33 @@ module(basename(import.meta.filename), function () {
         recovered.get('etag'),
         healthyEtag,
         'the recovered card carries the healthy validator again',
+      );
+    });
+
+    test('a retry that fails the same way keeps its validator', async function (assert) {
+      await failRender('mango');
+      let first = await request
+        .get(path('mango'))
+        .set('Accept', SupportedMimeType.CardJson);
+      let etag = first.get('etag');
+      assert.ok(etag, 'the response carries a validator');
+
+      // A retry of a failing render rewrites the row's bookkeeping, not the
+      // failure it reports.
+      await dbAdapter.execute(
+        `UPDATE prerendered_html
+         SET error_doc = jsonb_set(error_doc, '{consecutiveVisitFailures}', '2')
+         WHERE url = $1 AND type = 'instance'`,
+        { bind: [`${realmHref}mango.json`] },
+      );
+      let retried = await request
+        .get(path('mango'))
+        .set('Accept', SupportedMimeType.CardJson)
+        .set('If-None-Match', etag!);
+      assert.strictEqual(
+        retried.status,
+        304,
+        'the validator still describes the response',
       );
     });
 

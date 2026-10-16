@@ -43,7 +43,11 @@ import type {
 } from './realm-identifiers.ts';
 import { rri } from './realm-identifiers.ts';
 import type { Filter, Query } from './query.ts';
-import { CardError, type SerializedError } from './error.ts';
+import {
+  CardError,
+  type RenderErrorSummary,
+  type SerializedError,
+} from './error.ts';
 import {
   isCodeRef,
   isResolvedCodeRef,
@@ -296,7 +300,7 @@ export interface SearchResultDoc {
   // document's `meta.renderError`. Like `captures`, it lands on the render
   // channel without moving `indexedAt`, so the response's validator carries
   // it.
-  renderError: SerializedError | null;
+  renderError: RenderErrorSummary | null;
   // Whether assembling this document applied any query-backed field — a
   // field whose targets are found by running a query now rather than by
   // following a stored link. Such a document is not a function of this

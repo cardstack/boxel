@@ -209,6 +209,7 @@ import {
   formattedError,
   stringifyErrorForLog,
   unsupportedMediaType,
+  type RenderErrorSummary,
   type SerializedError,
 } from './error.ts';
 import { formatRFC7231 } from 'date-fns';
@@ -1828,8 +1829,8 @@ function renderChannelEtagFingerprint({
   captures,
   renderError,
 }: {
-  captures?: CaptureManifest | null;
-  renderError?: SerializedError | null;
+  captures: CaptureManifest | null | undefined;
+  renderError: RenderErrorSummary | null | undefined;
 }): string | undefined {
   let capturesFingerprint = capturesEtagFingerprint(captures);
   if (!renderError) {
@@ -12830,7 +12831,10 @@ export class Realm {
       // server setting, or on whether the caller's last read was a write
       // echo, rather than on anything the caller did.
       let realmInfoHash = this.getCachedRealmInfoHash();
-      let renderChannel = renderChannelEtagFingerprint(entry!);
+      let renderChannel = renderChannelEtagFingerprint({
+        captures: entry!.captures,
+        renderError: entry!.renderError,
+      });
       let issued = new Set(
         CARD_JSON_SHAPES.flatMap((shape) =>
           [false, true].map((unboundedAssembly) =>
@@ -13231,11 +13235,15 @@ export class Realm {
         meta: { lastModified, ...(version != null ? { version } : {}) },
       },
     });
-    // The PATCH echo carries the joined `meta.captures` like a GET does —
-    // the store replaces an instance's meta wholesale from a save response, so
-    // an echo without it would wipe the key client-side until the next GET.
-    // The two representations part company on the link graph only, which is
-    // what the `write-echo` validator variant below records.
+    // The PATCH echo carries the joined `meta.captures` and `meta.renderError`
+    // like a GET does — the store replaces an instance's meta wholesale from a
+    // save response, so an echo without them would wipe the keys client-side
+    // until the next GET. The two representations part company on the link
+    // graph only, which is what the `write-echo` validator variant below
+    // records.
+    if (entry.renderError) {
+      doc.meta = { ...doc.meta, renderError: entry.renderError };
+    }
     if (entry.captures) {
       doc.data.meta = {
         ...doc.data.meta,
@@ -14234,7 +14242,10 @@ export class Realm {
           peekEtag = buildCardJsonEtag(
             instanceEntry.indexedAt,
             realmInfoHash,
-            renderChannelEtagFingerprint(instanceEntry),
+            renderChannelEtagFingerprint({
+              captures: instanceEntry.captures,
+              renderError: instanceEntry.renderError,
+            }),
             cardJsonShapeFor(
               effectiveLinkStrategy(plan.links, resolveLinksOnly),
             ),

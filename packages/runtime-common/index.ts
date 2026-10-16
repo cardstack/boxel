@@ -1733,6 +1733,8 @@ export {
   isCardError,
   formattedError,
   type SerializedError,
+  type RenderErrorSummary,
+  renderErrorSummary,
   type CardErrorJSONAPI,
   type CardErrorsJSONAPI,
   isCardErrorJSONAPI,

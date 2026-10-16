@@ -59,7 +59,11 @@ import {
   isCardTypeFilter,
   isReferenceFilterField,
 } from './query.ts';
-import type { SerializedError } from './error.ts';
+import {
+  renderErrorSummary,
+  type RenderErrorSummary,
+  type SerializedError,
+} from './error.ts';
 import type { CaptureManifest } from './capture-spec.ts';
 import type { DBAdapter } from './db.ts';
 import {
@@ -296,7 +300,7 @@ export interface IndexedInstance {
   // reports this alongside it, and a consumer serving the prerendered output
   // treats the card as errored. Null when the render channel holds no current
   // error.
-  renderError: SerializedError | null;
+  renderError: RenderErrorSummary | null;
 }
 
 // An instance's row as its index visit left it, and nothing from its render.
@@ -848,7 +852,9 @@ export class IndexQueryEngine {
       ...baseResult,
       type: 'instance',
       instance,
-      renderError: maybeResult.render_error_doc ?? null,
+      renderError: maybeResult.render_error_doc
+        ? renderErrorSummary(maybeResult.render_error_doc)
+        : null,
       lastModified:
         instanceEntry.last_modified != null
           ? parseInt(instanceEntry.last_modified)

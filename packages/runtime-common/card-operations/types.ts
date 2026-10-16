@@ -2,7 +2,7 @@ import type { Readable } from 'stream';
 import type { CodeRef } from '../code-ref.ts';
 import type { JsonValue } from '../json-validation.ts';
 import type { CaptureManifest } from '../capture-spec.ts';
-import type { SerializedError } from '../error.ts';
+import type { RenderErrorSummary } from '../error.ts';
 import type {
   SingleCardDocument,
   SingleFileMetaDocument,
@@ -866,7 +866,7 @@ export interface OperationRowHeaders {
   // The card's current render error, served as the document's
   // `meta.renderError`. It lands on the render channel without moving
   // `indexedAt`, so the validator has to carry it, as it carries `captures`.
-  renderError: SerializedError | null;
+  renderError: RenderErrorSummary | null;
   // The target's index-row dependencies. Carried because a validator is only
   // safe when none of them live in another realm: cross-realm invalidation
   // does not cascade `indexed_at`, so a stable local one does not mean the
