@@ -43,13 +43,6 @@ function h(tag, attributes = {}, ...children) {
   return element;
 }
 
-function formatTime(iso) {
-  return new Date(iso).toLocaleTimeString([], {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-}
-
 // The CLI waiting for a session: the loopback port it listens on and the
 // state value it expects back. Anything else is refused, so this page can only
 // ever hand a session to a listener on this machine.
@@ -74,13 +67,13 @@ export function signInMode(root) {
   let config = readConfig();
   let session = storedSession();
   if (session) {
-    renderSignedIn(root, config, session);
+    renderSignedIn(root, config);
   } else {
     renderSignIn(root, config, {
       client: 'window',
       onSignedIn(signedIn) {
         storeSession(signedIn);
-        renderSignedIn(root, config, signedIn);
+        renderSignedIn(root, config);
       },
     });
   }
@@ -145,7 +138,7 @@ export async function googleCallbackMode(root) {
   // Back to the window's own address, so a reload shows the signed-in window
   // rather than this callback.
   history.replaceState(null, '', signInURL());
-  renderSignedIn(root, config, session);
+  renderSignedIn(root, config);
 }
 
 function page(title, ...content) {
@@ -182,7 +175,7 @@ function showError(element, message) {
   element.hidden = !message;
 }
 
-function renderSignedIn(root, config, session) {
+function renderSignedIn(root, config) {
   let error = errorLine();
   let button = h(
     'button',
@@ -204,20 +197,7 @@ function renderSignedIn(root, config, session) {
     },
     'Sign out',
   );
-  root.replaceChildren(
-    page(
-      'You’re signed in',
-      h(
-        'p',
-        {},
-        'Signed in as ',
-        h('strong', { 'data-test-secure-user': true }, session.user),
-        ` until ${formatTime(session.expiresAt)}.`,
-      ),
-      error,
-      button,
-    ),
-  );
+  root.replaceChildren(page('You’re signed in', error, button));
 }
 
 // The sign-in form, laid out like the app's: Google first when this server

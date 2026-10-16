@@ -52,9 +52,9 @@ import { GOOGLE_CALLBACK_PATH } from './secure-origin.ts';
 
 const log = logger('realm:secure-session');
 
-// How long a secure session lasts. Key changes are occasional, so a session is
-// meant to cover a sitting, not to stay signed in.
-export const SECURE_SESSION_TTL_SECONDS = 8 * 60 * 60;
+// How long a secure session lasts: a week, as long as the CLI's extended
+// session.
+export const SECURE_SESSION_TTL_SECONDS = 7 * 24 * 60 * 60;
 // How long a row outlives its session, so the proof it records can't sign in
 // again while the Matrix server would still accept it: a completed UIA session
 // stays usable for a while after completion.

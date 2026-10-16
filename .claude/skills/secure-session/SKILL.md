@@ -39,7 +39,7 @@ three.
 | `client`        | `window` (the secure window's own session) or `cli` (`boxel keys`)                                   |
 | `sign_in_proof` | What signed in: `uia:<UIA session>` for a password, `google:<sha256 of the code>` for Google; unique |
 | `created_at`    | `timestamptz`                                                                                        |
-| `expires_at`    | Eight hours after sign-in (`SECURE_SESSION_TTL_SECONDS`); signing out sets it to now                 |
+| `expires_at`    | Seven days after sign-in (`SECURE_SESSION_TTL_SECONDS`); signing out sets it to now                  |
 
 Excluded from the SQLite schema dump and withheld from `readonly_role`.
 Signing out expires a row rather than deleting it, and rows are swept two

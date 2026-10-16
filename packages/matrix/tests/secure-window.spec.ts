@@ -95,9 +95,15 @@ test.describe('the secure window signs in on its own', () => {
     await secure.locator('[data-test-secure-password]').fill(password);
     await secure.locator('[data-test-secure-password-submit]').click();
     await expect(secure.locator('[data-test-secure-sign-out]')).toBeVisible();
-    await expect(secure.locator('[data-test-secure-user]')).toHaveText(
-      credentials.userId,
-    );
+    expect(
+      JSON.parse(
+        (await secure.evaluate(
+          (key) => localStorage.getItem(key),
+          STORAGE_KEY,
+        ))!,
+      ).user,
+      'the window is signed in as the account',
+    ).toBe(credentials.userId);
     await snapshot(testInfo, secure, 'secure-window-3-signed-in');
 
     let stored = await secure.evaluate(
@@ -191,9 +197,15 @@ test.describe('the secure window signs in on its own', () => {
     await expect(secure.locator('[data-test-secure-sign-out]')).toBeVisible({
       timeout: 30000,
     });
-    await expect(secure.locator('[data-test-secure-user]')).toHaveText(
-      credentials.userId,
-    );
+    expect(
+      JSON.parse(
+        (await secure.evaluate(
+          (key) => localStorage.getItem(key),
+          STORAGE_KEY,
+        ))!,
+      ).user,
+      'the window is signed in as the account',
+    ).toBe(credentials.userId);
     expect(new URL(secure.url()).search, 'no code is left in the address').toBe(
       '?mode=sign-in',
     );
