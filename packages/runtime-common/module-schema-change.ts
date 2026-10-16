@@ -278,8 +278,11 @@ function isNamed(
 // a change rather than slipping past it. Compute functions are left out
 // wherever they stand, since what a field computes is no part of its schema.
 //
-// A function declaration nothing counted refers to is left out, exported or
-// not: its body moves no schema in this module until something here calls it.
+// Every export counts, a function included: another module can build a field
+// or a class out of anything this one exports, so its body is part of the
+// schema however the function is spelled. So does every name a default export
+// is built from. A function this module neither exports nor builds its schema
+// with is left out: its body moves no schema until something calls it.
 function readBindings(ast: t.File, classes: ClassSchema[]): string[] {
   let imports = importsOf(ast);
   let declarations = new Map<string, string>();
@@ -320,17 +323,39 @@ function readBindings(ast: t.File, classes: ClassSchema[]): string[] {
           }
         }
       }
-    } else if (
-      statement.type === 'ExportDefaultDeclaration' &&
-      statement.declaration.type === 'Identifier'
-    ) {
-      exported.add(statement.declaration.name);
+    } else if (statement.type === 'ExportDefaultDeclaration') {
+      let declaration = statement.declaration;
+      if (declaration.type === 'Identifier') {
+        exported.add(declaration.name);
+      } else if (
+        (declaration.type === 'FunctionDeclaration' ||
+          declaration.type === 'ClassDeclaration') &&
+        declaration.id
+      ) {
+        exported.add(declaration.id.name);
+      }
     }
   }
 
+  // What a default export that is not a declared name is built from: an
+  // expression, or a function with no name of its own. A class with no name
+  // of its own is read with every other class.
+  let defaultExport = ast.program.body.flatMap((statement) =>
+    statement.type === 'ExportDefaultDeclaration' &&
+    statement.declaration.type !== 'Identifier' &&
+    statement.declaration.type !== 'ClassDeclaration' &&
+    !(
+      statement.declaration.type === 'FunctionDeclaration' &&
+      statement.declaration.id
+    )
+      ? [print(withoutComputeFunctions(statement.declaration))]
+      : [],
+  );
+
   let counted = new Set<string>();
   let pending = [
-    ...[...exported].filter((name) => kinds.get(name) !== 'function'),
+    ...exported,
+    ...namesIn(defaultExport),
     ...classes.flatMap((c) => namesIn([c.super ?? '', ...c.members])),
   ];
   while (pending.length > 0) {
@@ -345,14 +370,10 @@ function readBindings(ast: t.File, classes: ClassSchema[]): string[] {
     (name) => `${name}:${declarations.get(name)}`,
   );
 
-  // An export of a function is left out with the function: neither names a
-  // type until something calls it.
   let origin = (local: string) =>
     imports.get(local) ?? `local:${kinds.get(local) ?? 'unknown'}:${local}`;
   let exportBinding = (name: string, from: string) => {
-    if (!from.startsWith('local:function')) {
-      bindings.push(`export ${name}=${from}`);
-    }
+    bindings.push(`export ${name}=${from}`);
   };
   for (let statement of ast.program.body) {
     if (statement.type === 'ExportAllDeclaration') {
@@ -382,10 +403,12 @@ function readBindings(ast: t.File, classes: ClassSchema[]): string[] {
         'default',
         declaration.type === 'Identifier'
           ? origin(declaration.name)
-          : declaration.type === 'FunctionDeclaration'
-            ? 'local:function'
+          : (declaration.type === 'FunctionDeclaration' ||
+                declaration.type === 'ClassDeclaration') &&
+              declaration.id
+            ? origin(declaration.id.name)
             : declaration.type === 'ClassDeclaration'
-              ? `local:class:${declaration.id?.name ?? 'default'}`
+              ? 'local:class:default'
               : print(withoutComputeFunctions(declaration)),
       );
     }

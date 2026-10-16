@@ -197,13 +197,24 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a module that declares no card or field has no schema to change', async function (assert) {
+    test('an exported function is part of the schema, since another module can build a field with it', async function (assert) {
       let helper = `export function greet(name: string) { return 'Hello ' + name; }`;
+      assert.true(await changed(helper, edit(helper, "'Hello '", "'Hi '")));
+    });
+
+    test('a function only a method calls is no part of the schema', async function (assert) {
+      let card = (body: string) => `
+        import { CardDef, field, contains } from '@cardstack/base/card-api';
+        import StringField from '@cardstack/base/string';
+        function format(value: string) { ${body} }
+        export class P extends CardDef {
+          @field a = contains(StringField);
+          get formatted() { return format(this.a); }
+        }
+      `;
       assert.false(
-        await changed(helper, edit(helper, "'Hello '", "'Hi '")),
-        'helper edited',
+        await changed(card('return value;'), card('return value.trim();')),
       );
-      assert.false(await changed(undefined, helper), 'helper created');
     });
 
     test('a source that does not parse after the write proves no schema change', async function (assert) {
@@ -355,6 +366,27 @@ module(basename(import.meta.filename), function () {
           `${head}const LABEL = 'b';\nexport class P extends CardDef { @field a = contains(StringField); get label() { return LABEL; } }`,
         ),
         'while a constant only a method reads is no part of the schema',
+      );
+      assert.true(
+        await changed(
+          `${head}export function statusField() { return enumField(StringField, { options: [1] }); }`,
+          `${head}export function statusField() { return enumField(NumberField, { options: [1] }); }`,
+        ),
+        'an exported function another module builds a field with',
+      );
+      assert.true(
+        await changed(
+          `${head}const Base = StringField;\nexport default enumField(Base, { options: [1] });`,
+          `${head}const Base = NumberField;\nexport default enumField(Base, { options: [1] });`,
+        ),
+        'a name a default export is built from',
+      );
+      assert.false(
+        await changed(
+          `${head}export default class extends CardDef { @field a = contains(StringField); get x() { return 1; } }`,
+          `${head}export default class extends CardDef { @field a = contains(StringField); get x() { return 2; } }`,
+        ),
+        "while a default-exported class's method body is no part of the schema",
       );
     });
 
