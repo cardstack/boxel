@@ -12,6 +12,7 @@ or backfill one.
 
 ## Index
 
-| ADR                                         | Title                                                  | Status   |
-| ------------------------------------------- | ------------------------------------------------------ | -------- |
-| [001](001-record-architecture-decisions.md) | Record architecture decisions as short, normative ADRs | proposed |
+| ADR                                                                  | Title                                                                                     | Status   |
+| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | -------- |
+| [001](001-record-architecture-decisions.md)                          | Record architecture decisions as short, normative ADRs                                    | proposed |
+| [002](002-keep-identifiers-canonical-resolve-at-network-boundary.md) | Keep identifiers as canonical RRIs, and resolve them to URLs only at the network boundary | proposed |
