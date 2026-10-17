@@ -1,16 +1,12 @@
 import camelCase from 'camelcase';
 
 import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
-import { rri } from '../realm-identifiers.ts';
+import type { RealmResourceIdentifier } from '../realm-identifiers.ts';
 import { trimExecutableExtension } from '../index.ts';
-import type { RealmPaths } from '../paths.ts';
 
-export function getCardDirectoryName(
-  adoptsFrom: CodeRef | undefined,
-  paths: RealmPaths,
-): string {
+export function getCardDirectoryName(adoptsFrom: CodeRef | undefined): string {
   return (
-    directoryNameFromResolvedRef(resolveToResolvedCodeRef(adoptsFrom), paths) ??
+    directoryNameFromResolvedRef(resolveToResolvedCodeRef(adoptsFrom)) ??
     'cards'
   );
 }
@@ -29,7 +25,6 @@ function resolveToResolvedCodeRef(
 
 function directoryNameFromResolvedRef(
   ref: ResolvedCodeRef | undefined,
-  paths: RealmPaths,
 ): string | undefined {
   if (!ref) {
     return undefined;
@@ -37,44 +32,33 @@ function directoryNameFromResolvedRef(
   if (ref.name && ref.name !== 'default') {
     return ref.name;
   }
-  return directoryNameFromModule(ref.module, paths);
+  return directoryNameFromModule(ref.module);
 }
 
 function directoryNameFromModule(
-  moduleIdentifier: string,
-  paths: RealmPaths,
+  moduleIdentifier: RealmResourceIdentifier,
 ): string | undefined {
-  let segment: string | undefined;
-  try {
-    segment = lastMeaningfulSegment(
-      // A prefix form throws here and is handled by the catch below, which
-      // resolves it against the realm and takes the same final segment.
-      // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
-      new URL(trimExecutableExtension(rri(moduleIdentifier))).pathname,
-    );
-  } catch {
-    try {
-      segment = lastMeaningfulSegment(
-        // The prefix-form path. Resolving `@scope/name/rest` against the realm
-        // gives a URL whose last meaningful segment is still `rest`, which is
-        // all this function reads.
-        // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
-        new URL(trimExecutableExtension(rri(moduleIdentifier)), paths.url)
-          .pathname,
-      );
-    } catch {
-      segment = undefined;
-    }
-  }
-  if (!segment) {
-    segment = lastMeaningfulSegment(moduleIdentifier);
-  }
-  return directoryNameFromSegment(segment);
+  // Every identifier form (URL, `@scope/name/…` prefix, relative) ends with
+  // the module's path, so the last meaningful path segment is read straight
+  // from the string once the query and fragment are gone.
+  let withoutSuffix = moduleIdentifier.split(/[?#]/)[0];
+  return directoryNameFromSegment(
+    lastMeaningfulSegment(trimExecutableExtension(withoutSuffix)),
+  );
 }
 
 function lastMeaningfulSegment(pathname: string): string | undefined {
   let normalized = pathname.replace(/\\/g, '/').replace(/\/+$/, '');
-  let segments = normalized.split('/').filter(Boolean);
+  // A relative module's `.` and `..` name no directory of their own: `..`
+  // removes the segment before it.
+  let segments: string[] = [];
+  for (let segment of normalized.split('/')) {
+    if (segment === '..') {
+      segments.pop();
+    } else if (segment && segment !== '.') {
+      segments.push(segment);
+    }
+  }
   if (!segments.length) {
     return undefined;
   }

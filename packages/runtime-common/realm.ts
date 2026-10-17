@@ -9822,8 +9822,8 @@ export class Realm {
     let dependencyKeys = extractModuleDependencyKeys(
       transpiled,
       fileRef.path,
-      this.url,
       this.paths,
+      this.#virtualNetwork,
     );
     this.#recordCompile(canonicalPath, source.length, compileStart);
 

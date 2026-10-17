@@ -12,6 +12,7 @@ import {
 } from './index.ts';
 import { rri } from './realm-identifiers.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
+import { canonicalURL } from './index-runner/dependency-url.ts';
 import {
   getCreatedTime,
   ensureFileCreatedAt,
@@ -4883,14 +4884,9 @@ export class Batch {
   }
 
   private normalizeDependency(dep: string, entryURL: URL): string {
-    try {
-      let resolved = new URL(dep, entryURL);
-      resolved.search = '';
-      resolved.hash = '';
-      return trimExecutableExtension(rri(resolved.href));
-    } catch (_err) {
-      return dep;
-    }
+    return trimExecutableExtension(
+      canonicalURL(dep, entryURL.href, this.virtualNetwork),
+    );
   }
 
   // Rewrite inline scoped-CSS deps (the `glimmer-scoped-css` form that
