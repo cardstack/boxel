@@ -159,7 +159,7 @@
     "@glimmer/component": "^2.0.0",
     "ember-modifier": "^4.3.0",
     "ember-source": ">=5.4.0",
-    "motion-dom": "^13.4.5",
-    "motion-utils": "^13.3.0"
+    "motion-dom": "^13.5.0",
+    "motion-utils": "^13.5.0"
   }
 }
