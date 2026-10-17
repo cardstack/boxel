@@ -48,6 +48,12 @@ while true; do
     break
   fi
   stage=$(grep -i '^x-boxel-not-ready:' <<<"$headers" | cut -d: -f2- | tr -d '\r ' || true)
+  # The realm stays index-failed until it is indexed again, so waiting won't
+  # help.
+  if [ "$stage" = "index-failed" ]; then
+    echo "::error title=Choreo gallery not republished::$source_realm failed to index, so $published_realm still serves its previous copy. Run this script again once the realm has been reindexed."
+    exit 1
+  fi
   if [ "$(date +%s)" -ge "$deadline" ]; then
     echo "::error title=Choreo gallery not republished::$source_realm was still not ready after $index_wait_minutes minutes (HTTP ${status:-none}${stage:+, not ready: $stage}), so $published_realm still serves its previous copy. Run this script again once the realm is ready."
     exit 1
