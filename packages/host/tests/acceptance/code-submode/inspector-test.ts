@@ -7,6 +7,7 @@ import {
   waitUntil,
   currentURL,
   visit,
+  triggerKeyEvent,
 } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
@@ -2700,7 +2701,38 @@ export class ExportedCard extends ExportedCardParent {
     );
     assert
       .dom('[data-test-card-url-bar-input]')
-      .hasValue(cardApiURL, 'URL bar shows the served URL');
+      .hasValue(baseRRI('card-api.gts'), 'URL bar shows the prefix form');
+  });
+
+  test('the URL bar takes a base module by its prefix form, not its URL', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: `${testRealmURL}person.gts`,
+    });
+    await waitFor('[data-test-card-url-bar-input]');
+
+    await fillIn(
+      '[data-test-card-url-bar-input]',
+      getService('network').virtualNetwork.toURLHref(baseRRI('card-api.gts')),
+    );
+    assert
+      .dom('[data-test-card-url-bar-error]')
+      .containsText(`Use ${baseRRI('card-api.gts')}`);
+
+    await fillIn('[data-test-card-url-bar-input]', baseRRI('card-api.gts'));
+    assert.dom('[data-test-card-url-bar-error]').doesNotExist();
+    await triggerKeyEvent(
+      '[data-test-card-url-bar-input]',
+      'keypress',
+      'Enter',
+    );
+    await waitFor('[data-boxel-selector-item-text="CardDef"]');
+
+    assert.strictEqual(
+      getService('operator-mode-state-service').state.codePath,
+      baseRRI('card-api.gts'),
+    );
   });
 
   test('find instances starts clean, ignoring a previously persisted search', async function (assert) {
