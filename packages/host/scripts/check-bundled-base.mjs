@@ -1,13 +1,23 @@
-// Enforces the two rules `BUNDLED_BASE_MODULES` rests on. Both describe what
-// the loader is asked for, which nothing else in the build can see: the bundler
-// resolves a bundled module's imports inside its chunk, so the loader is never
-// asked for them and never learns they exist.
+// Enforces the two rules `BUNDLED_BASE_MODULES` rests on. Nothing else in the
+// build can see either, and neither fails loudly when broken.
 //
-// Neither rule fails loudly when broken. A closure break leaves two copies of a
-// class, which disagree only where something compares them. An attribution
-// break leaves a class the loader does not name, and a code ref for it then
-// names the field it is held as instead of the module that declares it — which
-// still resolves, so only a caller that reads the ref as data is wrong.
+// The set is closed under imports. The bundler resolves a bundled module's
+// imports inside its chunk and the loader is never asked for them, so a module
+// reachable from a bundled one but missing from the table is compiled into
+// that chunk AND served by the realm, leaving two copies of each class it
+// declares, which disagree only where something compares them.
+//
+// A bundled module uses nothing only the loader provides. The loader's
+// transform rewrites a served module's bare `fetch(...)` and `import(...)` to
+// go through the loader, and gives it its realm URL as `import.meta.url`. A
+// bundled copy gets none of that: its `fetch` skips the virtual network, its
+// `import()` belongs to the bundler, and its `import.meta.url` is the chunk's
+// URL under the host's assets. Reach the loader with `loaderForModule`, and
+// build code refs from `baseRealmRRI`.
+//
+// Attribution needs no rule: a bundled module publishes the classes it
+// declares as it is evaluated, and the loader reads that before its own
+// record, so a class is named by its declarer whatever the serving order.
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,18 +26,6 @@ const hostDir = join(dirname(fileURLToPath(import.meta.url)), '..');
 const baseDir = join(hostDir, '..', 'base');
 const tablePath = join(hostDir, 'app', 'lib', 'bundled-base.ts');
 const SKIP_DIRS = new Set(['node_modules', 'scripts', 'types', 'tests']);
-
-// Base modules a card author imports by identifier. The loader is asked for
-// these, so the classes they declare are named however they are reached.
-//
-// This is a claim about the public surface, not something the repo can prove: a
-// card in any realm may import any base module, and nothing here sees those
-// realms. Widen it deliberately — an entry added to quiet this check asserts
-// that card code names the module, and is wrong if it does not.
-//
-// It holds only for a loader some card has already made import the module, so
-// it is the weakest of the exemptions and the last one to reach for.
-const NAMED_BY_CARD_CODE = new Set(['card-api', 'skill']);
 
 // Read source with comments blanked, so prose that looks like a specifier is
 // not taken for one. A comment is not a regular language — `/*` appears inside
@@ -141,12 +139,7 @@ function readTable() {
     ...body.matchAll(/^ {2}(?:'([^']+)'|([A-Za-z_$][\w$-]*)): \(\) =>/gm),
   ].map((m) => m[1] ?? m[2]);
 
-  let exceptionsBlock = src.slice(src.indexOf('FETCHED_RE_EXPORTS'));
-  exceptionsBlock = exceptionsBlock.slice(0, exceptionsBlock.indexOf(']'));
-  let exceptions = new Set(
-    [...exceptionsBlock.matchAll(/'([^']+)'/g)].map((m) => m[1]),
-  );
-  return { table: new Set(names), exceptions };
+  return new Set(names);
 }
 
 // `import { A, B as C } from './x'` and `import D from './x'`, mapping each
@@ -156,25 +149,51 @@ const IMPORT_STATEMENT =
   /(?:^|\n)\s*import\s+(?!type\s)([^;'"]*?)\s*from\s*['"]([^'"]+)['"]/g;
 const RUNTIME_IMPORT =
   /(?:^|\n)\s*(?:import|export)\s+(?!type\s)(?:[^;'"]*?\sfrom\s*)?['"]([^'"]+)['"]/g;
-// A class held as a link. `linksTo(() => Foo)` defers the reference; both
-// spellings name the same class.
-//
-// Only links. A contained value is built from the field that holds it, so the
-// field itself names the class, and the value deserializes, renders and round
-// trips whatever the loader knows. A link's type is read as data instead: it is
-// the filter a chooser searches by, so a ref that names the holding field
-// rather than the declaring module asks for the wrong type.
-const FIELD_USE =
-  /\b(?:linksTo|linksToMany)\s*\(\s*(?:\(\)\s*=>\s*)?([A-Za-z_$][\w$]*)/g;
 
-// `identifyCard(Foo)` asks for a class's code ref by name, which is the same
-// question a link's type asks and has the same answer: the module the loader
-// was asked for. A bundled module calling it on a class another bundled module
-// declares gets undefined, since the import between them never reaches the
-// loader. Reading a class's own identity — `identifyCard(this.card)`,
-// `identifyCard(model.constructor)` — asks about a value, not an import, so
-// only a bare imported name counts here.
-const IDENTIFY_USE = /\bidentifyCard\s*\(\s*([A-Za-z_$][\w$]*)\s*[,)]/g;
+// Constructs the loader's transform rewrites only in modules it serves. A
+// preceding `.` or identifier character means a method or another name
+// (`loader.fetch(`, `prefetch(`), which the transform leaves alone too.
+const LOADER_ONLY = {
+  'bare fetch': /(^|[^.\w$])fetch\s*\(/,
+  'dynamic import': /(^|[^.\w$])import\s*\(/,
+  'import.meta.url': /import\.meta[^;\n]{0,24}\.url\b/,
+};
+
+// Uses of a loader-only construct a bundled module keeps, each with the
+// reason it is safe. Keyed by module, then construct, so a new use of a
+// different construct in the same module is still reported.
+const LOADER_ONLY_ALLOWED = {
+  'file-formats/model3d-preview': {
+    'dynamic import':
+      'imports three.js from absolute esm.sh URLs, which the loader has no ' +
+      'mapping for, so the native import resolves them the same way',
+    'bare fetch':
+      "fetches the file's own content URL; moving it to the loader's fetch " +
+      'is pending',
+  },
+  'file-formats/file-resources': {
+    'bare fetch':
+      "fetches a file's content URL; moving it to the loader's fetch is " +
+      'pending',
+  },
+  'file-formats/html-preview': {
+    'bare fetch':
+      "fetches the file's source URL; moving it to the loader's fetch is " +
+      'pending',
+  },
+  'file-formats/model3d-captures': {
+    'bare fetch':
+      "fetches the model's URL; moving it to the loader's fetch is pending",
+  },
+  'file-formats/pdf-captures': {
+    'bare fetch':
+      "fetches the PDF's URL; moving it to the loader's fetch is pending",
+  },
+  'file-formats/pdf-viewer': {
+    'bare fetch':
+      "fetches the PDF's URL; moving it to the loader's fetch is pending",
+  },
+};
 
 // Which base module each imported name comes from, keyed by the local name and
 // carrying the name the declaring module exports it under — `import { X as Y }`
@@ -216,9 +235,9 @@ function importOrigins(code, file) {
 }
 
 function main() {
-  let { table, exceptions } = readTable();
+  let table = readTable();
   let closureViolations = [];
-  let identityHazards = [];
+  let loaderOnlyViolations = [];
 
   for (let name of table) {
     let file = fileFor(name);
@@ -230,41 +249,34 @@ function main() {
 
     for (let match of code.matchAll(RUNTIME_IMPORT)) {
       let target = baseTargetOf(match[1], file);
-      if (!target || table.has(target) || exceptions.has(target)) {
+      if (!target || table.has(target)) {
         continue;
       }
       closureViolations.push(`${name} imports ${target}`);
     }
 
-    let origin = importOrigins(code, file);
-
-    let uses = [
-      ...[...code.matchAll(FIELD_USE)].map((m) => ({ referenced: m[1] })),
-      ...[...code.matchAll(IDENTIFY_USE)].map((m) => ({ referenced: m[1] })),
-    ];
-    for (let use of uses) {
-      let declaredIn = origin.get(use.referenced)?.module;
-      if (
-        !declaredIn ||
-        declaredIn === name ||
-        !table.has(declaredIn) ||
-        NAMED_BY_CARD_CODE.has(declaredIn)
-      ) {
+    let lines = code.split('\n');
+    for (let [construct, pattern] of Object.entries(LOADER_ONLY)) {
+      if (LOADER_ONLY_ALLOWED[name]?.[construct]) {
         continue;
       }
-      identityHazards.push(
-        `${name} names ${use.referenced} from ${declaredIn}`,
-      );
+      lines.forEach((line, index) => {
+        if (pattern.test(line)) {
+          loaderOnlyViolations.push(
+            `${name}:${index + 1} uses ${construct}: ${line.trim()}`,
+          );
+        }
+      });
     }
   }
 
   let closure = [...new Set(closureViolations)].sort();
-  let identity = [...new Set(identityHazards)].sort();
+  let loaderOnly = loaderOnlyViolations.sort();
 
-  if (closure.length === 0 && identity.length === 0) {
+  if (closure.length === 0 && loaderOnly.length === 0) {
     console.log(
-      `ok: ${table.size} bundled base modules are closed under imports, ` +
-        `and name no class the loader is never asked for`,
+      `ok: ${table.size} bundled base modules are closed under imports ` +
+        `and use nothing only the loader provides`,
     );
     return;
   }
@@ -275,29 +287,23 @@ function main() {
         `The bundler compiles it into the chunk anyway, and the realm still serves ` +
         `it, so card code importing it by identifier gets a second copy whose ` +
         `classes do not match.\n` +
-        `Add it to the table, or — if its whole content is a re-export — to ` +
-        `FETCHED_RE_EXPORTS.\n`,
+        `Add it to the table.\n`,
     );
     for (let line of closure) {
       console.error(`  ${line}`);
     }
   }
 
-  if (identity.length > 0) {
+  if (loaderOnly.length > 0) {
     console.error(
-      `\n${identity.length} bundled module(s) name a class another bundled ` +
-        `module declares.\n` +
-        `A class is named only when the loader is asked for the module ` +
-        `declaring it, and one bundled module asking for another is resolved ` +
-        `inside the chunk unless the module publishes what it declares. A ` +
-        `link's type and an identifyCard call both read that name as data, ` +
-        `and a chooser filters on it.\n` +
-        `Leave the holder out of the table — a fetched holder imports the ` +
-        `declarer through the loader, which is what names it — or, if card ` +
-        `code names the declarer by identifier, add it to NAMED_BY_CARD_CODE ` +
-        `in this script.\n`,
+      `\n${loaderOnly.length} use(s) of a construct only the loader provides, in a bundled module.\n` +
+        `The loader's transform rewrites these only in modules it serves, so the ` +
+        `bundled copy fetches past the virtual network, imports through the ` +
+        `bundler, or reads the chunk's URL as its own.\n` +
+        `Use loaderForModule(import.meta).fetch / .import, build code refs from ` +
+        `baseRealmRRI, or list the use in LOADER_ONLY_ALLOWED with its reason.\n`,
     );
-    for (let line of identity) {
+    for (let line of loaderOnly) {
       console.error(`  ${line}`);
     }
   }
