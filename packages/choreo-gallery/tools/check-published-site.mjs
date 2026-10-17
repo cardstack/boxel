@@ -120,7 +120,12 @@ function knownIssue(response) {
     } catch {
       // Not the host's head query.
     }
-    if (realms.some((realm) => realm !== site)) {
+    // The head query names one realm: the card's folder under the site.
+    if (
+      realms.length === 1 &&
+      realms[0].startsWith(site) &&
+      realms[0] !== site
+    ) {
       return `the host queries a page's head HTML under the card's folder as its realm (${realms.join(', ')}), which the realm server doesn't know`;
     }
   }
