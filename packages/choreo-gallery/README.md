@@ -167,7 +167,7 @@ goes.
 ### Republishing
 
 Every production release republishes the site. Once the release is live,
-Manual Deploy [boxel] runs
+Manual Deploy [boxel] starts a run of
 [`republish-choreo-gallery.yml`](../../.github/workflows/republish-choreo-gallery.yml),
 which signs in as `choreo_gallery_writer` and runs
 [`scripts/republish.sh`](scripts/republish.sh). It reads the writer's password
@@ -182,9 +182,10 @@ the AWS role the deploy uses. The script:
 A release republishes even when the gallery didn't change. The copy's cards
 import glimmer-motion and Choreo from the host the release deploys, so a copy
 left as it was runs its cards against libraries newer than the realm it was
-taken from. A republish that fails leaves the previous copy serving and turns
-only its own job red, since nothing else in the deploy waits on it. The script
-never unpublishes the site.
+taken from. The republish runs apart from the deploy, so the deploy neither
+waits for it nor fails with it, and the next deploy doesn't queue behind it. A
+republish that fails leaves the previous copy serving and turns only its own
+run red. The script never unpublishes the site.
 
 To republish without a deploy, run "Republish the Choreo gallery" from the
 repository's Actions tab. Or sign in as the writer and run the script yourself

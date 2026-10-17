@@ -4,7 +4,7 @@ name: Republish the Choreo gallery
 # (https://app.boxel.ai/choreo-gallery/), taken when it was last published. A
 # production deploy updates the realm but not that copy, and the copy's cards
 # run against the glimmer-motion and Choreo the newly deployed host serves.
-# Manual Deploy [boxel] calls this after every production release so the copy
+# Manual Deploy [boxel] starts this after every production release so the copy
 # keeps up with both. Run it by hand to republish without a deploy, or to
 # republish staging's copy (choreo.staging.boxel.build), which no deploy
 # republishes.
@@ -22,11 +22,6 @@ on:
         options:
           - production
           - staging
-        default: production
-  workflow_call:
-    inputs:
-      environment:
-        type: string
         default: production
 
 permissions:
