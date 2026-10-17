@@ -11,6 +11,7 @@ import { Resource } from 'ember-modify-based-class-resource';
 import {
   type Filter,
   type ResolvedCodeRef,
+  baseCardRef,
   codeRefFromInternalKey,
   internalKeyFor,
   isResolvedCodeRef,
@@ -353,8 +354,8 @@ export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
       // First launch with initialSelectedTypes (e.g., from "Find Instances").
       for (const ref of initialTypes) {
         if (
-          ref.name === 'CardDef' &&
-          ref.module === 'https://cardstack.com/base/card-api'
+          ref.name === baseCardRef.name &&
+          ref.module === baseCardRef.module
         ) {
           continue; // ignore CardDef from initialSelectedTypes since it's not a type that can be selected
         }

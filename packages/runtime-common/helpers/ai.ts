@@ -138,9 +138,7 @@ export async function basicMappings(loader: Loader) {
     '@cardstack/base/code-ref',
   );
   let query: typeof import('@cardstack/base/commands/search-card-result') =
-    await loader.import(
-      'https://cardstack.com/base/commands/search-card-result',
-    );
+    await loader.import('@cardstack/base/commands/search-card-result');
 
   const { default: StringField } = string;
   const { default: NumberField } = number;

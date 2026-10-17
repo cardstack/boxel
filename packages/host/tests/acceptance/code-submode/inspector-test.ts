@@ -19,6 +19,7 @@ import stringify from 'safe-stable-stringify';
 
 import {
   baseRealmRRI,
+  baseRRI,
   Deferred,
   type Realm,
   type ResolvedCodeRef,
@@ -2653,6 +2654,32 @@ export class ExportedCard extends ExportedCardParent {
     assert
       .dom(`[data-test-search-result="${testRealmURL}Pet/vangogh"]`)
       .exists();
+  });
+
+  test('find instances of CardDef leaves the type picker on Any', async function (assert) {
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: getService('network').virtualNetwork.toURLHref(
+        baseRRI('card-api.gts'),
+      ),
+    });
+
+    await waitFor('[data-boxel-selector-item-text="CardDef"]');
+    await click('[data-boxel-selector-item-text="CardDef"]');
+    await waitFor('[data-test-card-module-definition]');
+
+    await click('[data-test-action-button="Find instances"]');
+    await waitFor('[data-test-search-sheet-search-result]');
+
+    // CardDef is a root type the picker never offers, so the search runs
+    // across every type and the picker shows "Any" rather than an empty
+    // selection.
+    assert
+      .dom(
+        '[data-test-type-picker] [data-test-boxel-picker-selected-item="Any"]',
+      )
+      .exists('type picker shows Any');
   });
 
   test('find instances starts clean, ignoring a previously persisted search', async function (assert) {
