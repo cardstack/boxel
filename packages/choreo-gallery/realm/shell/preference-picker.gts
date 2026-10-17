@@ -2,6 +2,9 @@ import { beacon } from '@cardstack/choreo';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
+import { modifier } from 'ember-modifier';
+
+import { radioKeys } from '../lib/focus';
 
 export interface PreferenceOption<T extends string> {
   label: string;
@@ -13,7 +16,7 @@ interface Signature<T extends string> {
     /** a Choreo beacon on the pill, for anything that flies out of it */
     beacon: string;
     icon: string;
-    /** the menu's heading, and the pill's accessible name */
+    /** the menu's heading, and the start of the pill's accessible name */
     label: string;
     onChoose: (value: T) => void;
     options: PreferenceOption<T>[];
@@ -24,17 +27,59 @@ interface Signature<T extends string> {
   Element: HTMLDetailsElement;
 }
 
+/** closes the menu and puts focus back on its pill */
+function closeMenu(menu: HTMLDetailsElement) {
+  menu.removeAttribute('open');
+  menu.querySelector('summary')?.focus();
+}
+
+/**
+ * Escape in an open menu closes the menu and goes no further, so the host
+ * does not also take it as Escape for the card the menu sits in. On a closed
+ * pill it is the host's.
+ */
 function dismiss(event: Event) {
-  if (event instanceof KeyboardEvent && event.key === 'Escape') {
-    const menu = event.currentTarget as HTMLDetailsElement;
-    menu.removeAttribute('open');
-    menu.querySelector('summary')?.focus();
+  let menu = event.currentTarget as HTMLDetailsElement;
+  if (event instanceof KeyboardEvent && event.key === 'Escape' && menu.open) {
+    event.preventDefault();
+    event.stopPropagation();
+    closeMenu(menu);
   }
 }
 
 /**
- * A pill in the top bar that opens a small segmented menu — the page
- * transition's tempo and the color scheme are both one of these.
+ * An open menu closes when the viewer moves on: focus going to a control
+ * outside it, or a press anywhere outside it. Focus going nowhere in
+ * particular (a click on a button Safari does not focus) leaves it open, so
+ * a press inside the menu always lands.
+ */
+const closeOutside = modifier((menu: HTMLDetailsElement) => {
+  let focusout = (event: FocusEvent) => {
+    let next = event.relatedTarget;
+    if (next instanceof Node && !menu.contains(next)) {
+      menu.removeAttribute('open');
+    }
+  };
+  let pointerdown = (event: PointerEvent) => {
+    if (menu.open && !menu.contains(event.target as Node)) {
+      menu.removeAttribute('open');
+    }
+  };
+  menu.addEventListener('focusout', focusout);
+  document.addEventListener('pointerdown', pointerdown, { capture: true });
+  return () => {
+    menu.removeEventListener('focusout', focusout);
+    document.removeEventListener('pointerdown', pointerdown, {
+      capture: true,
+    });
+  };
+});
+
+/**
+ * A pill in the top bar that opens a small segmented menu, as the color
+ * scheme's picker does. The segments are one radio group: Tab reaches the
+ * chosen one, the arrows change the choice in place, and a click or Enter
+ * makes the choice and closes the menu.
  */
 export class PreferencePicker<T extends string> extends Component<
   Signature<T>
@@ -48,32 +93,48 @@ export class PreferencePicker<T extends string> extends Component<
 
   choose = (value: T, event: Event) => {
     this.args.onChoose(value);
-    (event.currentTarget as HTMLElement)
-      .closest('details')
-      ?.removeAttribute('open');
+    let menu = (event.currentTarget as HTMLElement).closest('details');
+    if (menu) {
+      closeMenu(menu);
+    }
+  };
+
+  pickAt = (index: number) => {
+    let option = this.args.options[index];
+    if (option) {
+      this.args.onChoose(option.value);
+    }
   };
 
   <template>
-    <details class='header-picker' ...attributes {{on 'keydown' dismiss}}>
-      <summary
-        class='header-picker-pill'
-        aria-label={{@label}}
-        title={{@label}}
-        {{beacon @beacon}}
-      >
+    <details
+      class='header-picker'
+      ...attributes
+      {{on 'keydown' dismiss}}
+      {{closeOutside}}
+    >
+      <summary class='header-picker-pill' title={{@label}} {{beacon @beacon}}>
         <span aria-hidden='true' class='header-picker-icon'>{{@icon}}</span>
+        <span class='sr-only'>{{@label}}:</span>
         <span>{{this.current}}</span><span
           aria-hidden='true'
           class='header-picker-chevron'
         >⌄</span>
       </summary>
       <div class='header-picker-menu'>
-        <span class='header-picker-label'>{{@label}}</span>
-        <div class='header-picker-segments' role='group' aria-label={{@label}}>
+        <span class='header-picker-label' aria-hidden='true'>{{@label}}</span>
+        <div
+          class='header-picker-segments'
+          role='radiogroup'
+          aria-label={{@label}}
+          {{radioKeys this.pickAt}}
+        >
           {{#each @options as |option|}}
             <button
               type='button'
-              aria-pressed={{if (this.isOn option.value) 'true' 'false'}}
+              role='radio'
+              aria-checked={{if (this.isOn option.value) 'true' 'false'}}
+              tabindex={{if (this.isOn option.value) '0' '-1'}}
               {{on 'click' (fn this.choose option.value)}}
             >{{option.label}}</button>
           {{/each}}
@@ -158,7 +219,7 @@ export class PreferencePicker<T extends string> extends Component<
         cursor: pointer;
       }
 
-      .header-picker-segments button[aria-pressed='true'] {
+      .header-picker-segments button[aria-checked='true'] {
         color: var(--ink);
         background: var(--line-strong);
       }
