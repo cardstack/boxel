@@ -1603,6 +1603,11 @@ module(basename(import.meta.filename), function () {
         '%PDF-',
         'payload is a PDF (magic bytes)',
       );
+      assert.strictEqual(
+        bytes.toString('latin1').match(/\/Title \(([^)]*)\)/)?.[1],
+        'Untitled Long',
+        "the document's title metadata is the card's title, not the host page's",
+      );
       let first = response.captures?.[0];
       assert.ok(
         (first?.pageCount ?? 0) >= 1,

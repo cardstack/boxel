@@ -112,8 +112,9 @@ function makeFileSystem() {
         };
       }
 
-      // Two pdf slots that name their saved documents: one from a function of
-      // the instance's fields, one from the card's title (the default).
+      // Two pdf slots that name their saved documents and titles: one from
+      // functions of the instance's fields, one from the card's title (the
+      // default).
       export class NamedStatement extends CardDef {
         @field name = contains(StringField);
         static isolated = class Isolated extends Component<typeof this> {
@@ -126,6 +127,7 @@ function makeFileSystem() {
             format: 'isolated',
             type: 'pdf',
             filename: (card: NamedStatement) => 'Relevé ' + card.name,
+            title: (card: NamedStatement) => 'Statement for ' + card.name,
           },
           titled: { format: 'isolated', type: 'pdf' },
         };
@@ -480,6 +482,16 @@ module(basename(import.meta.filename), function (hooks) {
     return !!bytes && magic.every((b, i) => bytes[i] === b);
   }
 
+  // The Title entry of a PDF's document info, as Chromium's print-to-pdf
+  // writer spells an ASCII title: `/Title (…)`.
+  function pdfTitle(bytes: Uint8Array | undefined) {
+    return bytes
+      ? Buffer.from(bytes)
+          .toString('latin1')
+          .match(/\/Title \(([^)]*)\)/)?.[1]
+      : undefined;
+  }
+
   test('the prerender-html pass captures declared captures, persists them, and records the manifest', async function (assert) {
     await writeAndSettle('widget.json', productDoc('Widget'));
 
@@ -667,8 +679,9 @@ module(basename(import.meta.filename), function (hooks) {
       await declaredCaptureSpecHash('statement', {
         format: 'isolated',
         type: 'pdf',
+        title: 'Untitled Statement',
       }),
-      'the manifest records the pdf capture identity',
+      'the manifest records the pdf capture identity, its title included',
     );
     assert.strictEqual(statement.contentType, 'application/pdf');
     assert.strictEqual(
@@ -701,6 +714,11 @@ module(basename(import.meta.filename), function (hooks) {
     assert.ok(
       startsWith(objectBytes(statement.objectKey), PDF_MAGIC),
       'the persisted bytes are a PDF document',
+    );
+    assert.strictEqual(
+      pdfTitle(objectBytes(statement.objectKey)),
+      'Untitled Statement',
+      "the document's title metadata is the card's title, not the host page's",
     );
 
     let statementTiming = (row!.diagnostics as any)?.captureTimingsMs
@@ -802,8 +820,19 @@ module(basename(import.meta.filename), function (hooks) {
       await declaredCaptureSpecHash('statement', {
         format: 'isolated',
         type: 'pdf',
+        title: 'Statement for Q3',
       }),
-      'the filename stays out of the capture identity',
+      'the filename stays out of the capture identity; the title is part of it',
+    );
+    assert.strictEqual(
+      pdfTitle(objectBytes(manifest!.statement.objectKey)),
+      'Statement for Q3',
+      'the title function read the instance into the document metadata',
+    );
+    assert.strictEqual(
+      pdfTitle(objectBytes(manifest!.titled.objectKey)),
+      'Acme Q3 Statement',
+      'an undeclared title defaults to the card title',
     );
 
     let response = await realm.handle(
@@ -969,7 +998,11 @@ module(basename(import.meta.filename), function (hooks) {
     let invoice = manifest!.invoice;
     assert.strictEqual(
       invoice.specHash,
-      await declaredCaptureSpecHash('invoice', { render: true, type: 'pdf' }),
+      await declaredCaptureSpecHash('invoice', {
+        render: true,
+        type: 'pdf',
+        title: 'Untitled Invoice',
+      }),
       'the manifest records the render-based pdf identity',
     );
     assert.strictEqual(invoice.contentType, 'application/pdf');
@@ -986,6 +1019,11 @@ module(basename(import.meta.filename), function (hooks) {
     assert.ok(
       startsWith(objectBytes(invoice.objectKey), PDF_MAGIC),
       'the persisted bytes are a PDF document',
+    );
+    assert.strictEqual(
+      pdfTitle(objectBytes(invoice.objectKey)),
+      'Untitled Invoice',
+      "a render-based pdf's title metadata is the card's title too",
     );
 
     let served = await realm.handle(
