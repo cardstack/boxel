@@ -1243,6 +1243,38 @@ export default class OperatorModeStackItem extends Component<Signature> {
         animation: none;
       }
 
+      /* reduced motion: a card fades in and out where it stands, and the
+         cards under it keep their places rather than sliding */
+      @keyframes stackItemFadeIn {
+        from {
+          opacity: 0;
+        }
+      }
+
+      @keyframes stackItemFadeOut {
+        to {
+          opacity: 0;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .item {
+          transition: none;
+        }
+
+        .item.opening-animation {
+          animation-name: stackItemFadeIn;
+        }
+
+        .item.closing-animation {
+          animation-name: stackItemFadeOut;
+        }
+
+        .item.move-forward-animation {
+          animation: none;
+        }
+      }
+
       .item.buried {
         --stack-item-header-height: 2.5rem;
         --realm-icon-border-radius: 4px;
