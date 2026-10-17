@@ -1491,6 +1491,50 @@ module('Unit | auth-service-worker | shipped worker', function () {
     }
   });
 
+  test('shipped fetch listener leaves tokenless media range requests to the browser', async function (assert) {
+    let sw = await loadShippedWorker([]);
+
+    let result = await sw.dispatchFetch(
+      new Request('https://site.example/media/clip.mp4', {
+        headers: { Range: 'bytes=0-1' },
+      }),
+    );
+
+    assert.strictEqual(
+      result,
+      'pass-through',
+      'no respondWith, so Safari streams the video natively',
+    );
+    assert.strictEqual(sw.fetched.length, 0, 'the SW never re-fetched it');
+  });
+
+  test('shipped fetch listener still authorizes a ranged request it holds a token for', async function (assert) {
+    let sw = await loadShippedWorker([new Response(null, { status: 206 })]);
+    sw.dispatchMessage({
+      type: 'set-realm-token',
+      realmURL: 'http://localhost:4201/user/realm/',
+      token: 'shipped-token',
+    });
+
+    let result = await sw.dispatchFetch(
+      new Request('http://localhost:4201/user/realm/media/clip.mp4', {
+        headers: { Range: 'bytes=0-1' },
+      }),
+    );
+
+    assert.strictEqual((result as Response).status, 206);
+    assert.strictEqual(
+      sw.fetched[0]?.headers.get('Authorization'),
+      'Bearer shipped-token',
+      'a private realm still gets its token',
+    );
+    assert.strictEqual(
+      sw.fetched[0]?.headers.get('Range'),
+      'bytes=0-1',
+      'and the range survives',
+    );
+  });
+
   test('shipped fetch listener leaves non-capture requests on the single-fetch path', async function (assert) {
     let sw = await loadShippedWorker([
       new Response(null, { status: 503, headers: { 'Retry-After': '1' } }),
