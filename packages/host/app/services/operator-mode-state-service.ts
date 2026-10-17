@@ -98,8 +98,8 @@ export interface OperatorModeState {
   submode: Submode;
   // The open file's identifier, with its extension: the prefix form for a
   // module in a realm with a registered prefix (`@cardstack/base/card-api.gts`),
-  // otherwise the URL. Readers that fetch or display the file use
-  // `codePathURL` on the service.
+  // otherwise the URL. A reader that fetches or displays the file converts it
+  // with `virtualNetwork.toURL`.
   codePath: RealmResourceIdentifier | null;
   hostModePrimaryCard: string | null;
   hostModeStack: string[];
@@ -930,10 +930,7 @@ export default class OperatorModeStateService extends Service {
     return undefined;
   }
 
-  // The open file's URL, for readers that fetch, display or locate the file
-  // in its realm. Identifier comparisons use `state.codePath`.
-  @cached
-  get codePathURL(): URL | null {
+  private get codePathURL(): URL | null {
     let codePath = this._state.codePath;
     return codePath ? this.network.virtualNetwork.toURL(codePath) : null;
   }

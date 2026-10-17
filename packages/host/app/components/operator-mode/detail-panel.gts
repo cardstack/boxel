@@ -189,7 +189,8 @@ export default class DetailPanel extends Component<Signature> {
   }
 
   private get codePath() {
-    return this.operatorModeStateService.codePathURL;
+    let codePath = this.operatorModeStateService.state.codePath;
+    return codePath ? this.network.virtualNetwork.toURL(codePath) : null;
   }
 
   private get showInheritancePanel() {

@@ -12,6 +12,7 @@ import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
 import type URLBarResource from '@cardstack/host/resources/url-bar';
 import { urlBarResource } from '@cardstack/host/resources/url-bar';
 
+import type NetworkService from '@cardstack/host/services/network';
 import type RealmService from '@cardstack/host/services/realm';
 
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -182,6 +183,7 @@ export default class CardURLBar extends Component<Signature> {
 
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
+  @service declare private network: NetworkService;
 
   private urlBar: URLBarResource = urlBarResource(this, () => ({
     getValue: () => (this.codePath ? decodeURI(this.codePath) : ''),
@@ -193,6 +195,7 @@ export default class CardURLBar extends Component<Signature> {
   }));
 
   private get codePath() {
-    return this.operatorModeStateService.codePathURL?.href ?? null;
+    let codePath = this.operatorModeStateService.state.codePath;
+    return codePath ? this.network.virtualNetwork.toURLHref(codePath) : null;
   }
 }

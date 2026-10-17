@@ -795,7 +795,11 @@ export default class Room extends Component<Signature> {
   });
 
   private get autoAttachedFileUrls() {
-    let codePathUrl = this.operatorModeStateService.codePathURL?.href;
+    let codePathUrl = this.operatorModeStateService.state.codePath
+      ? this.network.virtualNetwork.toURLHref(
+          this.operatorModeStateService.state.codePath,
+        )
+      : undefined;
     if (!codePathUrl) {
       return [];
     }
