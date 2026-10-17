@@ -757,6 +757,10 @@ export default class CodeSubmode extends Component<Signature> {
     return this.codeSemanticsService.codePath;
   }
 
+  private get scrollPositionKey() {
+    return this.operatorModeStateService.state.codePath ?? undefined;
+  }
+
   <template>
     {{consumeContext this.makeCardResource}}
     <SubmodeLayout
@@ -834,7 +838,7 @@ export default class CodeSubmode extends Component<Signature> {
                             this.canWriteToRealm
                             this.deleteFileInTree
                           }}
-                          @scrollPositionKey={{this.operatorModeStateService.codePathString}}
+                          @scrollPositionKey={{this.scrollPositionKey}}
                         />
                       </:browser>
                     </CodeSubmodeLeftPanelToggle>

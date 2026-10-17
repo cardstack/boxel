@@ -914,7 +914,7 @@ export default class PlaygroundPanel extends Component<Signature> {
     )?.click();
 
   private get currentFileDef(): FileDef | undefined {
-    let codePath = this.operatorModeStateService.state.codePath?.href;
+    let codePath = this.operatorModeStateService.codePathURL?.href;
     if (!codePath) {
       return undefined;
     }

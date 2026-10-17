@@ -72,7 +72,7 @@ class File extends Component<FileArgs> {
 
   get isSelected() {
     return (
-      this.operatorModeStateService.state.codePath?.href === this.fullUrl.href
+      this.operatorModeStateService.codePathURL?.href === this.fullUrl.href
     );
   }
 

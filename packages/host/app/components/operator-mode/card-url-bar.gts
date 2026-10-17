@@ -193,8 +193,6 @@ export default class CardURLBar extends Component<Signature> {
   }));
 
   private get codePath() {
-    return this.operatorModeStateService.state.codePath
-      ? this.operatorModeStateService.state.codePath.toString()
-      : null;
+    return this.operatorModeStateService.codePathURL?.href ?? null;
   }
 }

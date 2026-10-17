@@ -108,7 +108,7 @@ export default class CodeEditor extends Component<Signature> {
     // onEditorDispose we actually can no longer see the codePath that pertains
     // to the component that is being destroyed--rather we see the new codePath
     // that we are transitioning to.
-    this.codePath = this.operatorModeStateService.state.codePath;
+    this.codePath = this.operatorModeStateService.codePathURL;
 
     registerDestructor(this, () => {
       this.saveUnsavedSourceOnClose();

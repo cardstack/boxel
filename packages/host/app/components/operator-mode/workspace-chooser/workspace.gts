@@ -2081,7 +2081,7 @@ export default class Workspace extends Component<Signature> {
         this.operatorModeStateService
           .getOpenCardIds()
           .some((cardId) => realmPath.inRealm(cardId)) ||
-        this.operatorModeStateService.codePathString?.startsWith(
+        this.operatorModeStateService.state.codePath?.startsWith(
           this.args.realmIdentifier,
         );
 
@@ -2189,7 +2189,7 @@ export default class Workspace extends Component<Signature> {
         this.operatorModeStateService
           .getOpenCardIds()
           .some((cardId) => realmPath.inRealm(cardId)) ||
-        this.operatorModeStateService.codePathString?.startsWith(
+        this.operatorModeStateService.state.codePath?.startsWith(
           this.args.realmIdentifier,
         );
 

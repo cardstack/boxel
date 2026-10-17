@@ -316,10 +316,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     return {
       name: this.args.selectedDeclaration.exportName,
       module: rri(
-        `${this.operatorModeStateService.state.codePath!.href.replace(
-          /\.[^.]+$/,
-          '',
-        )}`,
+        this.operatorModeStateService.state.codePath!.replace(/\.[^.]+$/, ''),
       ),
     };
   }

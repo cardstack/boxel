@@ -80,7 +80,7 @@ export default class PlaygroundPanelService extends Service {
     fieldIndex: number | undefined,
   ) => {
     this.syncSelectionsWithStorage();
-    let url = this.operatorModeStateService.codePathString;
+    let url = this.operatorModeStateService.codePathURL?.href;
 
     this.playgroundSelections[moduleId] = {
       cardId,
@@ -135,7 +135,7 @@ export default class PlaygroundPanelService extends Service {
           moduleId,
           format,
           fieldIndex,
-          url: this.operatorModeStateService.codePathString,
+          url: this.operatorModeStateService.codePathURL?.href,
         });
         if (this.pendingCardIdSubscriptions.has(instance[localId])) {
           return;

@@ -41,7 +41,7 @@ export default class SyntaxErrorDisplay extends Component<Signature> {
   }
 
   private get fileToAttach() {
-    let codePath = this.operatorModeStateService.state.codePath?.href;
+    let codePath = this.operatorModeStateService.codePathURL?.href;
     if (!codePath) return undefined;
 
     return this.matrixService.fileAPI.createFileDef({

@@ -22,7 +22,7 @@ export default class UpdateCodePathWithSelectionTool extends HostBaseTool<
   }
 
   private get codePath() {
-    return this.operatorModeStateService.state.codePath;
+    return this.operatorModeStateService.codePathURL;
   }
 
   protected async run(
