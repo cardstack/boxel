@@ -27,6 +27,7 @@ import { hasExecutableExtension } from '@cardstack/runtime-common';
 import RestorePatchedFileModal from '@cardstack/host/components/ai-assistant/restore-file-modal';
 import type CardService from '@cardstack/host/services/card-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import { Submodes } from '../submode-switcher';
@@ -43,6 +44,7 @@ export default class AttachedFileDropdownMenu extends Component<{
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare matrixService: MatrixService;
   @service declare cardService: CardService;
+  @service declare network: NetworkService;
   @tracked isRestorePatchedFileModalOpen = false;
   @tracked fileContent: string | null = null;
   @action private openInCodeMode() {
@@ -51,8 +53,10 @@ export default class AttachedFileDropdownMenu extends Component<{
     }
     if (
       this.operatorModeStateService.state.submode === Submodes.Code &&
-      this.operatorModeStateService.codePathURL?.href ===
-        this.args.file.sourceUrl
+      this.operatorModeStateService.state.codePath &&
+      this.network.virtualNetwork.toURLHref(
+        this.operatorModeStateService.state.codePath,
+      ) === this.args.file.sourceUrl
     ) {
       return;
     }

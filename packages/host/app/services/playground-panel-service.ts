@@ -73,6 +73,13 @@ export default class PlaygroundPanelService extends Service {
     );
   }
 
+  private get codePathHref(): string | undefined {
+    let codePath = this.operatorModeStateService.state.codePath;
+    return codePath
+      ? this.network.virtualNetwork.toURLHref(codePath)
+      : undefined;
+  }
+
   persistSelections = (
     moduleId: string,
     cardId: RealmResourceIdentifier,
@@ -80,7 +87,7 @@ export default class PlaygroundPanelService extends Service {
     fieldIndex: number | undefined,
   ) => {
     this.syncSelectionsWithStorage();
-    let url = this.operatorModeStateService.codePathURL?.href;
+    let url = this.codePathHref;
 
     this.playgroundSelections[moduleId] = {
       cardId,
@@ -135,7 +142,7 @@ export default class PlaygroundPanelService extends Service {
           moduleId,
           format,
           fieldIndex,
-          url: this.operatorModeStateService.codePathURL?.href,
+          url: this.codePathHref,
         });
         if (this.pendingCardIdSubscriptions.has(instance[localId])) {
           return;

@@ -4,6 +4,7 @@ import Component from '@glimmer/component';
 import type { CardError } from '@cardstack/runtime-common';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type NetworkService from '@cardstack/host/services/network';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import ErrorDisplay from './error-display';
@@ -18,6 +19,7 @@ interface Signature {
 export default class SyntaxErrorDisplay extends Component<Signature> {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private matrixService: MatrixService;
+  @service declare private network: NetworkService;
 
   get stack() {
     let maybeCardError = this.removeSourceMappingURL(this.args.syntaxErrors);
@@ -41,7 +43,11 @@ export default class SyntaxErrorDisplay extends Component<Signature> {
   }
 
   private get fileToAttach() {
-    let codePath = this.operatorModeStateService.codePathURL?.href;
+    let codePath = this.operatorModeStateService.state.codePath
+      ? this.network.virtualNetwork.toURLHref(
+          this.operatorModeStateService.state.codePath,
+        )
+      : undefined;
     if (!codePath) return undefined;
 
     return this.matrixService.fileAPI.createFileDef({

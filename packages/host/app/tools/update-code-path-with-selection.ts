@@ -2,6 +2,7 @@ import { service } from '@ember/service';
 
 import HostBaseTool from '../lib/host-base-tool';
 
+import type NetworkService from '../services/network';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
 import type RecentFilesService from '../services/recent-files-service';
 import type * as BaseToolModule from '@cardstack/base/command';
@@ -11,6 +12,7 @@ export default class UpdateCodePathWithSelectionTool extends HostBaseTool<
 > {
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private recentFilesService: RecentFilesService;
+  @service declare private network: NetworkService;
   description =
     'Update the selected code path when the user navigates to code mode.';
   static actionVerb = 'Open';
@@ -22,7 +24,8 @@ export default class UpdateCodePathWithSelectionTool extends HostBaseTool<
   }
 
   private get codePath() {
-    return this.operatorModeStateService.codePathURL;
+    let codePath = this.operatorModeStateService.state.codePath;
+    return codePath ? this.network.virtualNetwork.toURL(codePath) : null;
   }
 
   protected async run(
