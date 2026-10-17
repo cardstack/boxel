@@ -126,6 +126,7 @@ import {
 import { isSavedInstance } from './-private';
 import { untitledCardTitle } from './untitled-card-title';
 import type { ComponentLike } from '@glint/template';
+import { dropComputedTurnMemo } from './computed-turn-memo';
 import { initSharedState } from './shared-state';
 import DefaultFittedTemplate from './default-templates/fitted';
 import DefaultEmbeddedTemplate from './default-templates/embedded';
@@ -2748,6 +2749,8 @@ export function linksToMany<CardT extends LinkableDefConstructor>(
 
 // (moved below BaseDef & FieldDef declarations)
 
+const instanceMeta = new WeakMap<BaseDef, CardResourceMeta | undefined>();
+
 // TODO: consider making this abstract
 export class BaseDef {
   // this is here because CardBase has no public instance methods, so without it
@@ -2758,7 +2761,18 @@ export class BaseDef {
   // So we need a [relativeTo] property that derives from the root document ID in order to
   // resolve relative links at the FieldDef level.
   [relativeTo]: RealmResourceIdentifier | URL | undefined = undefined;
-  [meta]: CardResourceMeta | undefined = undefined;
+  // An accessor rather than a field so that a write drops the computed turn
+  // memo: computeds read realm meta (realm URL, captures, modification times)
+  // without tracking, and meta is assigned outside `notifyCardTracking` (the
+  // store stamps the version and realm onto a held instance), so a computed
+  // read in the same turn as the write would otherwise see the old meta.
+  get [meta](): CardResourceMeta | undefined {
+    return instanceMeta.get(this);
+  }
+  set [meta](value: CardResourceMeta | undefined) {
+    instanceMeta.set(this, value);
+    dropComputedTurnMemo();
+  }
   declare ['constructor']: BaseDefConstructor;
   static baseDef: undefined;
   static data?: Record<string, any>; // TODO probably refactor this away all together
