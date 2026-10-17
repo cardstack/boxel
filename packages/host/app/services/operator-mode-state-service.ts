@@ -912,12 +912,16 @@ export default class OperatorModeStateService extends Service {
 
   get codePathRelativeToRealm() {
     if (this._state.codePath && this.realmURL) {
-      let realmPath = new RealmPaths(ri(this.realmURL));
-
-      let codePathURL = this.codePathURL!;
-      if (realmPath.inRealm(codePathURL)) {
+      // The realm URL is in the spelling the realm advertises, which can be a
+      // virtual alias of the URL the file is served from, so both sides are
+      // compared in RRI form.
+      let realmPath = new RealmPaths(
+        ri(this.network.virtualNetwork.unresolveURL(this.realmURL)),
+      );
+      let codePath = this._state.codePath;
+      if (realmPath.inRealm(codePath)) {
         try {
-          return realmPath.local(rri(codePathURL.href));
+          return realmPath.local(codePath);
         } catch (err: any) {
           if (err.status === 404) {
             return undefined;
