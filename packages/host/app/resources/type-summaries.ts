@@ -355,8 +355,7 @@ export class TypeSummariesResource extends Resource<TypeSummariesArgs> {
       for (const ref of initialTypes) {
         if (
           ref.name === baseCardRef.name &&
-          this.network.virtualNetwork.unresolveURL(ref.module) ===
-            baseCardRef.module
+          ref.module === baseCardRef.module
         ) {
           continue; // ignore CardDef from initialSelectedTypes since it's not a type that can be selected
         }
