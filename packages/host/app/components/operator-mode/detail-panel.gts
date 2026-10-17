@@ -517,6 +517,11 @@ export default class DetailPanel extends Component<Signature> {
     if (!this.args.selectedDeclaration?.exportName) {
       throw new Error(`bug: only exported cards/fields can be inherited`);
     }
+    // Operator-mode state holds the code path as the served URL (a base
+    // module is `http://…/base/card-api.gts`, not `@cardstack/base/card-api`).
+    // Code refs compare by string, so the module is unresolved to its RRI
+    // here; holding the code path as an RRI in state would make this a plain
+    // extension trim.
     return {
       name: this.args.selectedDeclaration.exportName,
       module: this.network.virtualNetwork.unresolveURL(
