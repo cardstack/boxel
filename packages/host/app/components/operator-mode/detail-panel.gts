@@ -520,8 +520,10 @@ export default class DetailPanel extends Component<Signature> {
     // Operator-mode state holds the code path as the served URL (a base
     // module is `http://…/base/card-api.gts`, not `@cardstack/base/card-api`).
     // Code refs compare by string, so the module is unresolved to its RRI
-    // here; holding the code path as an RRI in state would make this a plain
-    // extension trim.
+    // here.
+    // TODO: operator-mode state should hold the code path as an RRI, converting
+    // to a URL only for readers that need one; this then becomes a plain
+    // extension trim with no virtual network.
     return {
       name: this.args.selectedDeclaration.exportName,
       module: this.network.virtualNetwork.unresolveURL(
