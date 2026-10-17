@@ -18,14 +18,15 @@
  * - every guide renders, with a live demo for each card it embeds.
  *
  * On every page, any console error, uncaught exception, failed request, or
- * response of 400 or more from the site fails the check.
+ * response of 400 or more from the site fails the check, except the known
+ * platform issues `knownIssue` names, which it reports without failing.
  *
  * Chrome rather than Playwright's bundled Chromium, because the films' media
  * needs Chrome's codecs (BROWSER_CHANNEL picks another channel). Muted, with
  * software WebGL, since the films and the room are WebGL and headless has no
  * GPU. Exits 1 when any check fails.
  */
-/* global window */
+/* global document, window */
 /* eslint-disable n/no-process-exit */
 import { writeFileSync } from 'node:fs';
 
@@ -95,12 +96,44 @@ const browser = await chromium.launch({
 });
 
 const results = [];
-function report(name, problems) {
-  results.push({ name, ok: problems.length === 0, problems });
+function report(name, problems, known) {
+  results.push({ name, ok: problems.length === 0, problems, known });
   console.log(`${problems.length ? 'FAIL' : 'ok  '} ${name}`);
   for (let problem of problems) {
     console.log(`       ${problem}`);
   }
+  for (let issue of known) {
+    console.log(`       known: ${issue}`);
+  }
+}
+
+// Problems the platform causes on any published site, which the sweep reports
+// without failing a check. Remove one once the platform no longer causes it.
+function knownIssue(response) {
+  if (
+    response.status() === 404 &&
+    response.url() === new URL('_federated-search', site).href
+  ) {
+    let realms = [];
+    try {
+      realms = JSON.parse(response.request().postData() ?? '{}').realms ?? [];
+    } catch {
+      // Not the host's head query.
+    }
+    if (realms.some((realm) => realm !== site)) {
+      return `the host queries a page's head HTML under the card's folder as its realm (${realms.join(', ')}), which the realm server doesn't know`;
+    }
+  }
+  return undefined;
+}
+
+// The browser asks for /favicon.ico when the page's head names no icon, which
+// is the case once the host replaces the head with a card's own head HTML and
+// the card's theme names no icon.
+function knownConsoleIssue(url) {
+  return url === new URL('favicon.ico', site).href
+    ? "the page's head names no icon once the host replaces it with the card's head, so the browser asks for /favicon.ico"
+    : undefined;
 }
 
 // One context per theme. The theme is the gallery's own preference, stored in
@@ -133,10 +166,13 @@ async function themedContext(theme) {
 async function onPage(context, name, check) {
   let page = await context.newPage();
   let problems = [];
+  let known = [];
+  let knownURLs = new Set();
+  let consoleErrors = [];
   page.on('pageerror', (e) => problems.push(`exception: ${e.message}`));
   page.on('console', (m) => {
     if (m.type() === 'error') {
-      problems.push(`console error: ${m.text()}`);
+      consoleErrors.push({ text: m.text(), url: m.location()?.url });
     }
   });
   page.on('requestfailed', (r) => {
@@ -147,7 +183,14 @@ async function onPage(context, name, check) {
     }
   });
   page.on('response', (r) => {
-    if (r.status() >= 400 && r.url().startsWith(site)) {
+    if (r.status() < 400 || !r.url().startsWith(site)) {
+      return;
+    }
+    let issue = knownIssue(r);
+    if (issue) {
+      known.push(issue);
+      knownURLs.add(r.url());
+    } else {
       problems.push(`HTTP ${r.status()}: ${r.url()}`);
     }
   });
@@ -159,7 +202,32 @@ async function onPage(context, name, check) {
   } finally {
     await page.close();
   }
-  report(name, problems);
+  // A failed request also logs a console error naming its URL; a known one's
+  // is reported with its response.
+  for (let { text, url } of consoleErrors) {
+    let issue = knownConsoleIssue(url);
+    if (issue) {
+      known.push(issue);
+    } else if (!knownURLs.has(url)) {
+      problems.push(`console error: ${text}${url ? ` (${url})` : ''}`);
+    }
+  }
+  report(name, problems, [...new Set(known)]);
+}
+
+// The server sends a page's prerendered HTML between two markers, and the host
+// removes it as it starts, then renders the page itself. Wait for that, so a
+// check reads and clicks the live page rather than the inert prerendered one.
+async function goLive(page, url) {
+  await page.goto(url);
+  await page.waitForFunction(
+    () => {
+      let start = document.getElementById('boxel-isolated-start');
+      return !start || start.nextElementSibling?.id === 'boxel-isolated-end';
+    },
+    null,
+    { timeout: TIMEOUT },
+  );
 }
 
 async function expectTheme(page, theme, problems) {
@@ -185,7 +253,7 @@ for (let theme of themes) {
 
   if (!only) {
     await onPage(context, `grid (${theme})`, async (page, problems) => {
-      await page.goto(site);
+      await goLive(page, site);
       let tiles = await expectGrid(page);
       if (tiles !== allDemoCount) {
         problems.push(`${tiles} tiles for ${allDemoCount} demos`);
@@ -196,7 +264,7 @@ for (let theme of themes) {
 
   for (let slug of demos) {
     await onPage(context, `demo ${slug} (${theme})`, async (page, problems) => {
-      await page.goto(new URL(`demos/${slug}`, site).href);
+      await goLive(page, new URL(`demos/${slug}`, site).href);
       await page
         .locator(`article.demo-head[data-demo="${slug}"]`)
         .waitFor({ timeout: TIMEOUT });
@@ -225,9 +293,12 @@ for (let theme of themes) {
 // once, in the first.
 let context = await themedContext(themes[0]);
 
+// The host opens a demo over the grid and records it in the page's URL, so Back
+// closes the demo and leaves the grid it was opened from.
 await onPage(context, 'tiles open demos, Back returns', async (page) => {
-  await page.goto(site);
+  await goLive(page, site);
   await expectGrid(page);
+  let gridURL = page.url();
   for (let slug of demos) {
     await page
       .locator(`[data-gallery-tile="${slug}"] a.tile-title`)
@@ -238,16 +309,27 @@ await onPage(context, 'tiles open demos, Back returns', async (page) => {
       .catch(() => {
         throw new Error(`the ${slug} tile didn't open its demo`);
       });
+    await page
+      .waitForURL((url) => url.href !== gridURL, { timeout: TIMEOUT })
+      .catch(() => {
+        throw new Error(`opening ${slug} didn't change the page's URL`);
+      });
     await page.goBack();
-    await expectGrid(page).catch(() => {
-      throw new Error(`Back from ${slug} didn't return to the grid`);
-    });
+    await page
+      .locator('article.demo-head')
+      .waitFor({ state: 'detached', timeout: TIMEOUT })
+      .catch(() => {
+        throw new Error(`Back from ${slug} didn't close the demo`);
+      });
+    if (page.url() !== gridURL) {
+      throw new Error(`Back from ${slug} went to ${page.url()}, not the grid`);
+    }
   }
 });
 
 if (!only) {
   await onPage(context, 'widget room', async (page, problems) => {
-    await page.goto(site);
+    await goLive(page, site);
     await expectGrid(page);
     await page.locator('a[data-gallery-room]').click();
     await page.locator('section.wr-shell').waitFor({ timeout: TIMEOUT });
@@ -266,8 +348,23 @@ if (!only) {
 for (let guide of guides) {
   let embeds = (await source(guide)).match(/::card\[/g)?.length ?? 0;
   await onPage(context, `guide ${guide}`, async (page, problems) => {
-    await page.goto(new URL(guide, site).href);
-    await page.locator('h1').first().waitFor({ timeout: TIMEOUT });
+    await goLive(page, new URL(guide, site).href);
+    let rendered = await page
+      .locator('h1')
+      .first()
+      .waitFor({ timeout: TIMEOUT })
+      .then(() => true)
+      .catch(() => false);
+    if (!rendered) {
+      // Host mode shows "Loading card…" until the page's card or file loads.
+      let loading = await page.getByText('Loading card…').isVisible();
+      problems.push(
+        loading
+          ? `the host never loaded the guide: it still shows "Loading card…" after ${TIMEOUT / 1000} s`
+          : `the guide shows no heading after ${TIMEOUT / 1000} s`,
+      );
+      return;
+    }
     if (embeds > 0) {
       let live = page.locator('[data-choreo-site]');
       await live
@@ -286,8 +383,10 @@ await context.close();
 await browser.close();
 
 let failed = results.filter((r) => !r.ok);
+let withKnown = results.filter((r) => r.known.length).length;
 console.log(
-  `\n${results.length - failed.length} of ${results.length} checks passed on ${site}`,
+  `\n${results.length - failed.length} of ${results.length} checks passed on ${site}` +
+    (withKnown ? `; ${withKnown} met a known platform issue` : ''),
 );
 if (jsonPath) {
   writeFileSync(
