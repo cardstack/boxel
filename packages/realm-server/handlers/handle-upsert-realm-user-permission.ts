@@ -17,6 +17,7 @@ import {
   appendRealmServerToUserAccountData,
   appendRealmToUserAccountData,
   impersonateAsMatrixAdmin,
+  resolveAdminCreds,
   logoutMatrixAccessToken,
 } from '../synapse.ts';
 
@@ -47,40 +48,6 @@ function parseBoolFlag(
 // DB grant still stands.
 function isMatrixUserId(user: string): boolean {
   return user.startsWith('@') && user.includes(':');
-}
-
-// Resolve admin credentials for the synapse admin-impersonate flow. When
-// explicit env-derived values are present (any environment), use them.
-// When both are absent AND the matrix homeserver is on a `.localhost`
-// hostname (covers bare `localhost` and env-mode Traefik names like
-// `matrix.<slug>.localhost`), fall back to the dev `admin`/`password`
-// pair that register-matrix-users.ts seeds — keeps local dev and tests
-// friction-free without baking the default into every other deployment.
-function resolveAdminCreds(
-  matrixURL: URL,
-  username: string | undefined,
-  password: string | undefined,
-):
-  | { ok: true; username: string; password: string }
-  | { ok: false; reason: string } {
-  if (username && password) {
-    return { ok: true, username, password };
-  }
-  if (username || password) {
-    return {
-      ok: false,
-      reason: `MATRIX_ADMIN_USERNAME and MATRIX_ADMIN_PASSWORD must be set together (got only ${username ? 'USERNAME' : 'PASSWORD'})`,
-    };
-  }
-  let h = matrixURL.hostname;
-  if (h === 'localhost' || h.endsWith('.localhost')) {
-    return { ok: true, username: 'admin', password: 'password' };
-  }
-  return {
-    ok: false,
-    reason:
-      'MATRIX_ADMIN_USERNAME / MATRIX_ADMIN_PASSWORD unset and MATRIX_URL is not a local homeserver',
-  };
 }
 
 export default function handleUpsertRealmUserPermission({
