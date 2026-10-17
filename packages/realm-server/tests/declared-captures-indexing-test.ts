@@ -679,7 +679,7 @@ module(basename(import.meta.filename), function (hooks) {
       await declaredCaptureSpecHash('statement', {
         format: 'isolated',
         type: 'pdf',
-        title: 'Untitled Statement',
+        title: 'Untitled Card',
       }),
       'the manifest records the pdf capture identity, its title included',
     );
@@ -717,7 +717,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.strictEqual(
       pdfTitle(objectBytes(statement.objectKey)),
-      'Untitled Statement',
+      'Untitled Card',
       "the document's title metadata is the card's title, not the host page's",
     );
 
@@ -1001,7 +1001,7 @@ module(basename(import.meta.filename), function (hooks) {
       await declaredCaptureSpecHash('invoice', {
         render: true,
         type: 'pdf',
-        title: 'Untitled Invoice',
+        title: 'Untitled Card',
       }),
       'the manifest records the render-based pdf identity',
     );
@@ -1022,7 +1022,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
     assert.strictEqual(
       pdfTitle(objectBytes(invoice.objectKey)),
-      'Untitled Invoice',
+      'Untitled Card',
       "a render-based pdf's title metadata is the card's title too",
     );
 
