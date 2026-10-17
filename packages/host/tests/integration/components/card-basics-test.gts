@@ -66,6 +66,7 @@ import {
   PermissionsContextName,
   fields,
   cardTypeDisplayName,
+  CardURLContextName,
   rri,
   type CodeRef,
 } from '@cardstack/runtime-common';
@@ -1703,6 +1704,75 @@ module('Integration | card-basics', function (hooks) {
         .hasValue('', 'input field is correct');
       assert.deepEqual(driver.ref, undefined, 'code ref can be unset');
     });
+
+    module(
+      'CodeRef field in a realm registered under a prefix',
+      function (hooks) {
+        let mockMatrixUtils = setupMockMatrix(hooks);
+        setupLocalIndexing(hooks);
+
+        test('a relative code ref resolves against the prefix-form card id and is stored in that form', async function (assert) {
+          class Person extends CardDef {}
+          class DriverCard extends CardDef {
+            @field ref = contains(CodeRefField);
+            static edit = class Edit extends Component<typeof this> {
+              <template>
+                <div data-test-ref><@fields.ref /></div>
+              </template>
+            };
+          }
+          await setupIntegrationTestRealm({
+            mockMatrixUtils,
+            contents: {
+              'person.gts': { Person },
+              'driver.gts': { DriverCard },
+              'driver-1.json': {
+                data: {
+                  attributes: {},
+                  meta: {
+                    adoptsFrom: { module: './driver', name: 'DriverCard' },
+                  },
+                },
+              },
+            },
+          });
+          let virtualNetwork = getService('network').virtualNetwork;
+          virtualNetwork.addRealmMapping('@test/cards/', testRealmURL);
+          try {
+            let store = getService('store');
+            let driver = (await store.get(
+              `${testRealmURL}driver-1`,
+            )) as CardDef & {
+              ref?: CodeRef;
+            };
+            assert.strictEqual(
+              driver.id,
+              '@test/cards/driver-1',
+              'the card is identified in prefix form',
+            );
+
+            // Card renderers provide the card's id as the base a relative
+            // module resolves against; `renderCard` renders the field alone.
+            provideConsumeContext(CardURLContextName, driver.id);
+            await renderCard(loader, driver, 'edit');
+            await fillIn('[data-test-ref] input', './person/Person');
+            await waitFor('[data-test-hasValidated]');
+            assert
+              .dom(
+                '[data-test-ref] [data-test-boxel-input-validation-state="valid"]',
+              )
+              .exists('the relative code ref is valid');
+            assert.deepEqual(
+              driver.ref,
+              { module: rri('@test/cards/person'), name: 'Person' },
+              'the module is stored as an RRI in prefix form',
+            );
+          } finally {
+            virtualNetwork.removeRealmMapping('@test/cards/');
+          }
+        });
+      },
+    );
 
     test('render base64 image card', async function (assert) {
       class DriverCard extends CardDef {
