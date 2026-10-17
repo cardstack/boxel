@@ -686,6 +686,42 @@ module('Acceptance | host mode tests', function (hooks) {
     assert.dom('[data-test-pet-isolated="Mango"]').exists();
   });
 
+  test('a fill-height isolated template fills the top stack card instead of collapsing to its content', async function (assert) {
+    // Pet's isolated root is `height: 100%`. The top card is content-sized
+    // (height: auto) with a min-height floor, and a percentage height never
+    // resolves against min-height — so without a definite box handed down by
+    // the stack item, the root collapsed to the height of its <h2>.
+    await visit('/test');
+    await click('[data-test-boxel-filter-list-button="All Cards"]');
+    await waitFor('[data-test-cards-grid-item]');
+    await click(
+      `[data-test-cards-grid-item="${testHostModeRealmURL}Pet/mango"]`,
+    );
+    await waitFor('[data-test-pet-isolated="Mango"]');
+
+    let item = document.querySelector<HTMLElement>(
+      `[data-test-host-mode-stack-item="${testHostModeRealmURL}Pet/mango"]`,
+    )!;
+    let root = document.querySelector<HTMLElement>(
+      '[data-test-pet-isolated="Mango"]',
+    )!.parentElement!;
+    let itemStyle = getComputedStyle(item);
+    let offered =
+      item.getBoundingClientRect().height -
+      parseFloat(itemStyle.paddingTop) -
+      parseFloat(itemStyle.paddingBottom);
+    let filled = root.getBoundingClientRect().height;
+
+    assert.ok(
+      filled >= offered - 1,
+      `isolated root fills the stack item (root ${filled}px, item offers ${offered}px)`,
+    );
+    assert.ok(
+      filled > root.querySelector('h2')!.getBoundingClientRect().height,
+      'root is taller than its own content',
+    );
+  });
+
   test('viewCard tabs persist after stacking and closing cards in host mode', async function (assert) {
     let primaryCardId = `${testHostModeRealmURL}ViewCardDemo/index`;
     let firstStackCardId = `${testHostModeRealmURL}ViewCardDemo/secondary`;
