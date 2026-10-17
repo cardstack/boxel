@@ -328,8 +328,11 @@ export function handleDeleteWebhookCommandRequest({
     }
 
     let commandUsername = commandRows[0]?.username;
+    // Deleting a webhook command that does not exist succeeds, so a retried
+    // delete answers the same as the first, as deleting an incoming webhook
+    // does.
     if (!commandUsername) {
-      await sendResponseForNotFound(ctxt, 'webhook command is not found');
+      await setContextResponse(ctxt, new Response(null, { status: 204 }));
       return;
     }
     if (commandUsername !== requestingUserId) {
@@ -341,9 +344,14 @@ export function handleDeleteWebhookCommandRequest({
     }
 
     try {
+      // The owner is part of the delete itself, so it removes only a command
+      // whose webhook still belongs to the requesting user.
       await query(dbAdapter, [
-        `DELETE FROM webhook_commands WHERE id = `,
+        `DELETE FROM webhook_commands wc USING incoming_webhooks iw`,
+        ` WHERE wc.id = `,
         param(webhookCommandId),
+        ` AND iw.id = wc.incoming_webhook_id AND iw.username = `,
+        param(requestingUserId),
       ]);
     } catch (_error) {
       await sendResponseForSystemError(
