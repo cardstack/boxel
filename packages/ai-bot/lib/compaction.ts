@@ -16,10 +16,12 @@ import {
   findCompactionCut,
   getLatestCompaction,
   getPromptParts,
+  toolSourceEventIdsToCarry,
   type CompactionEventContent,
   type PromptParts,
 } from '@cardstack/runtime-common/ai';
 import { buildChatCompletionRequest } from './chat-completion-request.ts';
+import { collectUsedToolCallIds, toolCallIdsToCarry } from './tool-call-ids.ts';
 
 let log = logger('ai-bot:compaction');
 
@@ -206,12 +208,16 @@ export async function compactRoomHistory(opts: {
     await sendCompactionEvent({ status: 'failed' });
     return { compacted: false, nothingToCompact: false, reason: reason! };
   }
-  let { event_id, content } = await sendCompactionEvent({
-    status: 'done',
-    upToEventId: cut.upToEventId,
-    summary,
-    summaryVersion: COMPACTION_SUMMARY_VERSION,
-  });
+  let { event_id, content } = await sendCompactionEvent(
+    fitCompactionContent({
+      status: 'done',
+      upToEventId: cut.upToEventId,
+      summary,
+      summaryVersion: COMPACTION_SUMMARY_VERSION,
+      usedToolCallIds: toolCallIdsToCarry(collectUsedToolCallIds(eventList)),
+      toolSourceEventIds: toolSourceEventIdsToCarry(eventList, aiBotUserId),
+    }),
+  );
   return {
     compacted: true,
     eventList: [
@@ -226,6 +232,48 @@ export async function compactRoomHistory(opts: {
       } as unknown as DiscreteMatrixEvent,
     ],
   };
+}
+
+// Matrix rejects an event over 65536 bytes, its signatures and hashes
+// included, so a compaction's content stays well under that.
+export const MAX_COMPACTION_CONTENT_BYTES = 60_000;
+
+// The content with what it carries trimmed until it fits
+// `MAX_COMPACTION_CONTENT_BYTES`: a tenth at a time from whichever list is
+// larger, the oldest used tool-call ids and the latest tool sources first
+// (`getTools` keeps the first definition of each tool). A summary too large
+// by itself is left for the server to reject.
+export function fitCompactionContent(
+  content: Omit<CompactionEventContent, 'responseEventId'>,
+): Omit<CompactionEventContent, 'responseEventId'> {
+  let bytes = (value: unknown) =>
+    Buffer.byteLength(JSON.stringify(value), 'utf8');
+  let usedToolCallIds = content.usedToolCallIds ?? [];
+  let toolSourceEventIds = content.toolSourceEventIds ?? [];
+  let fitted = content;
+  while (
+    bytes(fitted) > MAX_COMPACTION_CONTENT_BYTES &&
+    (usedToolCallIds.length || toolSourceEventIds.length)
+  ) {
+    if (bytes(usedToolCallIds) >= bytes(toolSourceEventIds)) {
+      usedToolCallIds = toolCallIdsToCarry(
+        usedToolCallIds,
+        Math.floor(usedToolCallIds.length * 0.9),
+      );
+    } else {
+      toolSourceEventIds = toolSourceEventIds.slice(
+        0,
+        Math.floor(toolSourceEventIds.length * 0.9),
+      );
+    }
+    fitted = { ...content, usedToolCallIds, toolSourceEventIds };
+  }
+  if (fitted !== content) {
+    log.warn(
+      `Trimmed the compaction to ${usedToolCallIds.length} used tool-call ids and ${toolSourceEventIds.length} tool sources to fit the event size limit`,
+    );
+  }
+  return fitted;
 }
 
 // The events the accepted turn built its prompt from: everything before its

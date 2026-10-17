@@ -18,6 +18,12 @@ export interface CompactionContent {
   upToEventId: string;
   summary: string;
   summaryVersion: number;
+  // The events that contributed the room's tools, which `getRoomEvents`
+  // fetches back when they are before the cut.
+  toolSourceEventIds?: string[];
+  // The tool-call ids used in the room so far, so that ids stay unique
+  // although the history before the cut is not loaded.
+  usedToolCallIds?: string[];
 }
 
 export type CompactionStatus = 'running' | 'done' | 'failed';
@@ -90,10 +96,28 @@ export function getLatestCompaction(
         upToEventId: event.content.upToEventId,
         summary: event.content.summary,
         summaryVersion: event.content.summaryVersion ?? 1,
+        ...(Array.isArray(event.content.toolSourceEventIds)
+          ? { toolSourceEventIds: event.content.toolSourceEventIds }
+          : {}),
+        ...(Array.isArray(event.content.usedToolCallIds)
+          ? { usedToolCallIds: event.content.usedToolCallIds }
+          : {}),
       };
     }
   }
   return undefined;
+}
+
+// Whether a compaction carries what the history before its cut contributes
+// beyond the summary: the room's tools and its used tool-call ids. Only then
+// can that history be left unloaded.
+export function compactionCarriesEarlierHistory(
+  compaction: CompactionContent,
+): boolean {
+  return (
+    Array.isArray(compaction.toolSourceEventIds) &&
+    Array.isArray(compaction.usedToolCallIds)
+  );
 }
 
 // The history after a compaction's cut point. Returns the whole history when

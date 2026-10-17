@@ -53,6 +53,7 @@ import {
   getPromptParts,
   getRelevantCards,
   getTools,
+  toolSourceEventIdsToCarry,
   isMarkdownSkillFile,
   parseMarkdownSkill,
   sessionSkillFeatures,
@@ -9584,6 +9585,69 @@ module('markdown skill tools', (hooks) => {
     assert.strictEqual(tools.length, 1);
     assert.strictEqual(tools[0].function.name, 'plan-trip_ab12');
     assert.strictEqual(tools[0].function.description, 'Plans a trip');
+  });
+
+  test('a compaction carries each event that contributes a new tool, in order', async () => {
+    const userContextMessage = {
+      type: 'm.room.message',
+      event_id: 'user-1',
+      origin_server_ts: 1500,
+      sender: '@user:localhost',
+      room_id: 'room1',
+      content: {
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        body: 'hi',
+        data: {
+          context: {
+            tools: [
+              {
+                type: 'function',
+                function: { name: 'context-tool', parameters: {} },
+              },
+            ],
+          },
+        },
+      },
+    } as unknown as DiscreteMatrixEvent;
+    const forgedRead = {
+      ...readResultEvent('forged', 1800, [discoveredDef('forged-tool')]),
+      sender: '@user:localhost',
+    } as DiscreteMatrixEvent;
+
+    assert.deepEqual(
+      toolSourceEventIdsToCarry(
+        [
+          readResultEvent('read-1', 1000, [discoveredDef('plan-trip_ab12')]),
+          userContextMessage,
+          // Adds nothing new.
+          readResultEvent('read-2', 2000, [discoveredDef('plan-trip_ab12')]),
+          forgedRead,
+          readResultEvent('read-3', 3000, [
+            discoveredDef('plan-trip_ab12'),
+            discoveredDef('book-hotel_cd34'),
+          ]),
+        ],
+        '@aibot:localhost',
+      ),
+      ['read-1', 'user-1', 'read-3'],
+    );
+  });
+
+  test('a compaction carries the same tool from each skill that declares it', async () => {
+    const otherSkillUrl = 'http://test-realm/other-skill/SKILL.md';
+    assert.deepEqual(
+      toolSourceEventIdsToCarry(
+        [
+          readResultEvent('read-1', 1000, [discoveredDef('plan-trip_ab12')]),
+          readResultEvent('read-2', 2000, [
+            discoveredDef('plan-trip_ab12', { skillUrl: otherSkillUrl }),
+          ]),
+        ],
+        '@aibot:localhost',
+      ),
+      ['read-1', 'read-2'],
+      'disabling the first skill leaves the tool from the second',
+    );
   });
 
   test('a re-read of a skill cannot mutate or remove earlier definitions', async () => {

@@ -11,6 +11,8 @@ import {
   APP_BOXEL_REASONING_CONTENT_KEY,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_DEBUG_MESSAGE_EVENT_TYPE,
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  APP_BOXEL_ACTIVE_LLM,
   isToolResultEventType,
   isToolResultRelType,
 } from '../matrix-constants.ts';
@@ -20,6 +22,10 @@ import type { PromptParts } from './types.ts';
 import { encodeUri } from 'matrix-js-sdk/lib/utils.js';
 import type { SerializedFileDef } from '@cardstack/base/file-api';
 import { isTextBasedContentType } from './modality.ts';
+import {
+  compactionCarriesEarlierHistory,
+  getLatestCompaction,
+} from './compaction.ts';
 
 function getLog() {
   return logger('ai-bot');
@@ -287,46 +293,263 @@ async function fetchMatrixMediaWithFallback(
   return fallbackResponse;
 }
 
+// Synapse caps a /messages page at 1000 events.
+export const ROOM_EVENTS_PAGE_SIZE = 1000;
+// How far back the history window pages in a room with no compaction to stop
+// at (or only ones that carry nothing forward). A room this long without one
+// has not hit the model's context limit since compactions started carrying.
+export const ROOM_EVENTS_MAX_PAGES = 10;
+// Room config events: the host writes them when it creates the room and again
+// only when they change, so they can be older than any history window.
+export const ROOM_CONFIG_EVENT_TYPES = [
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  APP_BOXEL_ACTIVE_LLM,
+  'm.room.name',
+];
+const ROOM_CONFIG_MAX_PAGES = 5;
+
+interface MessagesPage {
+  chunk?: DiscreteMatrixEvent[];
+  end?: string;
+}
+
 /**
- * Retrieves the last 1000 non-replace events from a Matrix room
- * @param roomId - The ID of the Matrix room
- * @param client - Matrix client instance used to make authenticated requests
- * @param lastEventId - Optional ID of the last event to retrieve events up to - use to filter
- *                      out events that came in after the one that triggered the response
- * @returns Array of Matrix events. If lastEventId is provided, returns events up to and including that event.
- *          If lastEventId is not found or not provided, returns all available events.
+ * Pages a room's /messages backwards from its latest event, never including
+ * edits (`m.replace`).
+ * @param onPage - Called with every event fetched so far, newest first, after
+ *                 each page short of the start of the room. Returning true
+ *                 stops paging.
+ * @returns The events fetched, newest first, and whether paging reached the
+ *          start of the room.
+ */
+export async function fetchRoomEventsBackwards(
+  roomId: string,
+  client: MatrixClient,
+  opts: {
+    types?: string[];
+    limit?: number;
+    maxPages?: number;
+    onPage?: (eventsNewestFirst: DiscreteMatrixEvent[]) => boolean;
+  } = {},
+): Promise<{ events: DiscreteMatrixEvent[]; reachedStart: boolean }> {
+  const messagesPath = encodeUri('/rooms/$roomId/messages', {
+    $roomId: roomId,
+  });
+  let filter: Record<string, unknown> = {
+    'org.matrix.msc3874.not_rel_types': ['m.replace'],
+  };
+  if (opts.types) {
+    filter.types = opts.types;
+  }
+  let events: DiscreteMatrixEvent[] = [];
+  let from: string | undefined;
+  for (let page = 0; page < (opts.maxPages ?? Infinity); page++) {
+    let response: MessagesPage | undefined = await (
+      client as any
+    ).http.authedRequest(Method.Get, messagesPath, {
+      dir: 'b',
+      limit: String(opts.limit ?? ROOM_EVENTS_PAGE_SIZE),
+      filter: JSON.stringify(filter),
+      ...(from ? { from } : {}),
+    });
+    let chunk = response?.chunk ?? [];
+    events.push(...chunk);
+    // Synapse leaves out `end` only on an empty page, past the start of the
+    // room, so the room's create event (its oldest) is the sooner sign. A
+    // page can be empty and still carry `end`, when every event in it was
+    // filtered out.
+    let end = response?.end;
+    if (
+      !end ||
+      end === from ||
+      chunk[chunk.length - 1]?.type === 'm.room.create'
+    ) {
+      return { events, reachedStart: true };
+    }
+    if (opts.onPage?.(events)) {
+      return { events, reachedStart: false };
+    }
+    from = end;
+  }
+  return { events, reachedStart: false };
+}
+
+/**
+ * The room history the ai-bot works from: events up to and including
+ * `lastEventId`, oldest first, never including edits (`m.replace`).
+ *
+ * The history starts at the latest compaction's cut point (the cut event
+ * itself is kept), because the prompt never uses anything older. That
+ * needs a compaction that carries the room's tools and used tool-call ids
+ * (`compactionCarriesEarlierHistory`); with none, the history reaches back
+ * to the start of the room, or `ROOM_EVENTS_MAX_PAGES` pages. When the
+ * history does not start at the start of the room, the events older than it
+ * that the prompt still needs are put ahead of it, in time order: the room
+ * config events (`ROOM_CONFIG_EVENT_TYPES`), so the room's skills, model and
+ * title are still known, and the events the compaction lists as having
+ * contributed the room's tools (`toolSourceEventIds`).
+ *
+ * @param lastEventId - The event that triggered the response; events after
+ *                      it are left out. When it is not among the fetched
+ *                      events (a local echo the server has not indexed yet),
+ *                      every fetched event is kept.
+ * @param opts.wholeRoom - Page to the start of the room, ignoring compaction
+ *                         and the page cap.
  */
 export async function getRoomEvents(
   roomId: string,
   client: MatrixClient,
   lastEventId?: string,
-) {
-  const messagesPath = encodeUri('/rooms/$roomId/messages', {
-    $roomId: roomId,
-  });
-  let response = await (client as any).http.authedRequest(
-    Method.Get,
-    messagesPath,
-    {
-      dir: 'f',
-      limit: '1000',
-      filter: JSON.stringify({
-        'org.matrix.msc3874.not_rel_types': ['m.replace'],
-      }),
-    },
+  opts: { wholeRoom?: boolean } = {},
+): Promise<DiscreteMatrixEvent[]> {
+  let aiBotUserId = client.getUserId() ?? undefined;
+  // Splits the fetched events, oldest first, at the trigger.
+  let splitAtTrigger = (eventsNewestFirst: DiscreteMatrixEvent[]) => {
+    let chronological = [...eventsNewestFirst].reverse();
+    let triggerIndex = lastEventId
+      ? chronological.findIndex((event) => event.event_id === lastEventId)
+      : -1;
+    return triggerIndex === -1
+      ? { history: chronological, afterTrigger: [] }
+      : {
+          history: chronological.slice(0, triggerIndex + 1),
+          afterTrigger: chronological.slice(triggerIndex + 1),
+        };
+  };
+  // The latest compaction, when the history before its cut can be left out.
+  let latestCompaction = (history: DiscreteMatrixEvent[]) => {
+    let compaction = aiBotUserId
+      ? getLatestCompaction(history, aiBotUserId)
+      : undefined;
+    return compaction && compactionCarriesEarlierHistory(compaction)
+      ? compaction
+      : undefined;
+  };
+  // Where the latest compaction cuts the history, or -1.
+  let cutIndex = (history: DiscreteMatrixEvent[]) => {
+    let compaction = latestCompaction(history);
+    return compaction
+      ? history.findIndex((event) => event.event_id === compaction.upToEventId)
+      : -1;
+  };
+
+  let { events, reachedStart } = await fetchRoomEventsBackwards(
+    roomId,
+    client,
+    opts.wholeRoom
+      ? {}
+      : {
+          maxPages: ROOM_EVENTS_MAX_PAGES,
+          onPage: (eventsNewestFirst) =>
+            cutIndex(splitAtTrigger(eventsNewestFirst).history) !== -1,
+        },
   );
-  let events = (response?.chunk || []) as DiscreteMatrixEvent[];
-  if (!lastEventId) {
-    // return all events
-    return events;
+  let { history, afterTrigger } = splitAtTrigger(events);
+  if (opts.wholeRoom) {
+    return history;
   }
-  let eventIndex = events.findIndex(
-    (listEvent) => listEvent.event_id === lastEventId,
+  let cut = cutIndex(history);
+  if (cut === -1 && !reachedStart) {
+    getLog().warn(
+      `Room ${roomId}'s history stops after ${ROOM_EVENTS_MAX_PAGES} pages, short of the start of the room and of a compaction cut that carries the earlier tools and tool-call ids`,
+    );
+  }
+  if (cut <= 0 && reachedStart) {
+    return history;
+  }
+  let beforeCut = cut > 0 ? history.slice(0, cut) : [];
+  if (cut > 0) {
+    history = history.slice(cut);
+  }
+  if (history.length === 0) {
+    return history;
+  }
+
+  let excludedIds = new Set(
+    [...history, ...afterTrigger].map((event) => event.event_id),
   );
-  if (eventIndex == -1) {
-    return events;
+  let trigger = history[history.length - 1];
+  let [configEvents, toolSourceEvents] = await Promise.all([
+    reachedStart
+      ? // Paging reached the start of the room, so the config events older
+        // than the cut are already in hand.
+        beforeCut.filter((event) =>
+          ROOM_CONFIG_EVENT_TYPES.includes(event.type),
+        )
+      : fetchRoomEventsBackwards(roomId, client, {
+          types: ROOM_CONFIG_EVENT_TYPES,
+          maxPages: ROOM_CONFIG_MAX_PAGES,
+        }).then(({ events: configEvents }) =>
+          configEvents.filter(
+            (event) =>
+              !excludedIds.has(event.event_id) &&
+              // Not one that arrived after the history was fetched.
+              event.origin_server_ts <= trigger.origin_server_ts,
+          ),
+        ),
+    fetchRoomEventsById(
+      roomId,
+      client,
+      (latestCompaction(history)?.toolSourceEventIds ?? []).filter(
+        (eventId) => !excludedIds.has(eventId),
+      ),
+      // Paging may already have fetched some, before the cut.
+      events,
+    ),
+  ]);
+  // In time order, as `getTools` reads the room's tools in one
+  // chronological pass, and their order is part of the cached prompt.
+  let olderEvents = [...configEvents, ...toolSourceEvents].sort(
+    (a, b) => a.origin_server_ts - b.origin_server_ts,
+  );
+  return [...olderEvents, ...history];
+}
+
+// How many events `fetchRoomEventsById` requests at once.
+const EVENT_FETCH_CONCURRENCY = 10;
+
+// The events with these ids, in the same order. An event the server doesn't
+// have or won't show the bot is left out; any other failure throws, since
+// dropping an event that contributes tools would change the prompt's tools.
+async function fetchRoomEventsById(
+  roomId: string,
+  client: MatrixClient,
+  eventIds: string[],
+  alreadyFetched: DiscreteMatrixEvent[],
+): Promise<DiscreteMatrixEvent[]> {
+  let fetched = new Map(alreadyFetched.map((event) => [event.event_id, event]));
+  let fetchOne = async (eventId: string) => {
+    if (fetched.has(eventId)) {
+      return fetched.get(eventId);
+    }
+    try {
+      return (await (client as any).http.authedRequest(
+        Method.Get,
+        encodeUri('/rooms/$roomId/event/$eventId', {
+          $roomId: roomId,
+          $eventId: eventId,
+        }),
+      )) as DiscreteMatrixEvent;
+    } catch (error: any) {
+      if (
+        error?.errcode === 'M_NOT_FOUND' ||
+        error?.errcode === 'M_FORBIDDEN'
+      ) {
+        getLog().warn(`Could not fetch event ${eventId} in ${roomId}`, error);
+        return undefined;
+      }
+      throw error;
+    }
+  };
+  let events: (DiscreteMatrixEvent | undefined)[] = [];
+  for (let i = 0; i < eventIds.length; i += EVENT_FETCH_CONCURRENCY) {
+    events.push(
+      ...(await Promise.all(
+        eventIds.slice(i, i + EVENT_FETCH_CONCURRENCY).map(fetchOne),
+      )),
+    );
   }
-  return events.slice(0, eventIndex + 1);
+  return events.filter((event): event is DiscreteMatrixEvent => !!event);
 }
 
 export async function downloadFile(
