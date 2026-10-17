@@ -8,10 +8,13 @@ import { and, bool, not } from '@cardstack/boxel-ui/helpers';
 
 import { IconGlobe, Warning as IconWarning } from '@cardstack/boxel-ui/icons';
 
+import { rri } from '@cardstack/runtime-common';
+
 import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
 import type URLBarResource from '@cardstack/host/resources/url-bar';
 import { urlBarResource } from '@cardstack/host/resources/url-bar';
 
+import type NetworkService from '@cardstack/host/services/network';
 import type RealmService from '@cardstack/host/services/realm';
 
 import type OperatorModeStateService from '../../services/operator-mode-state-service';
@@ -182,19 +185,38 @@ export default class CardURLBar extends Component<Signature> {
 
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
+  @service declare private network: NetworkService;
 
   private urlBar: URLBarResource = urlBarResource(this, () => ({
-    getValue: () => (this.codePath ? decodeURI(this.codePath) : ''),
-    setValue: async (url: string) => {
-      await this.operatorModeStateService.updateCodePath(new URL(url));
+    getValue: () => {
+      let codePath = this.operatorModeStateService.state.codePath;
+      return codePath ? decodeURI(codePath) : '';
+    },
+    setValue: async (value: string) => {
+      await this.operatorModeStateService.updateCodePath(rri(value));
     },
     setValueError: this.args.loadFileError,
     resetValueError: this.args.resetLoadFileError,
+    validate: this.validateCodePath,
   }));
 
-  private get codePath() {
-    return this.operatorModeStateService.state.codePath
-      ? this.operatorModeStateService.state.codePath.toString()
-      : null;
-  }
+  // The bar takes a file's identifier: the prefix form for a realm with a
+  // registered prefix, otherwise its URL. A URL inside a prefix-mapped realm
+  // is refused in favour of its prefix form.
+  private validateCodePath = (value: string): string | undefined => {
+    let { virtualNetwork } = this.network;
+    let href: string;
+    try {
+      href = virtualNetwork.toURLHref(value);
+    } catch {
+      return 'Not a valid URL';
+    }
+    if (!virtualNetwork.isRegisteredPrefix(value)) {
+      let identifier = virtualNetwork.unresolveURL(href);
+      if (virtualNetwork.isRegisteredPrefix(identifier)) {
+        return `Use ${decodeURI(identifier)}`;
+      }
+    }
+    return undefined;
+  };
 }

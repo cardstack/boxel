@@ -98,14 +98,18 @@ export class ModuleSyntax {
       declarations: [],
     };
     let preprocessedSrc = gjsToPlaceholderJS(src);
+    // The schema analysis recognizes card-api by its file name, so the module
+    // is named by its RRI: the same whether it was loaded from its served URL
+    // or a virtual alias.
+    let sourceFileName = this.virtualNetwork.unresolveURL(this.url.href);
     let ast: Babel.types.Node = parse(preprocessedSrc, {
       parser: {
         parse: (source: string) => {
-          const options = getBabelOptions({ sourceFilename: this.url.href });
+          const options = getBabelOptions({ sourceFilename: sourceFileName });
           return babelParse(source, options);
         },
       },
-      sourceFileName: this.url.href,
+      sourceFileName,
     });
 
     let r = Babel.transformFromAstSync(ast, preprocessedSrc, {

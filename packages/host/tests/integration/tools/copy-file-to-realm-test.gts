@@ -135,7 +135,7 @@ module('Integration | tools | copy-file-to-realm', function (hooks) {
       'submode is switched to code',
     );
     assert.strictEqual(
-      operatorModeStateService.state?.codePath?.href,
+      operatorModeStateService.state?.codePath,
       result.newFileIdentifier,
       'code path is set to the copied file URL',
     );
