@@ -169,9 +169,10 @@ goes.
 Every production release republishes the site. Once the release is live,
 Manual Deploy [boxel] runs
 [`republish-choreo-gallery.yml`](../../.github/workflows/republish-choreo-gallery.yml),
-which signs in as `choreo_gallery_writer` (its production password is the
-repository secret `CHOREO_GALLERY_WRITER_PRODUCTION_PASSWORD`) and runs
-[`scripts/republish.sh`](scripts/republish.sh). The script:
+which signs in as `choreo_gallery_writer` and runs
+[`scripts/republish.sh`](scripts/republish.sh). It reads the writer's password
+from the SSM parameter `/<environment>/boxel/choreo_gallery_writer_pw`, through
+the AWS role the deploy uses. The script:
 
 1. waits until the realm has indexed the files the deploy changed;
 2. publishes with `boxel realm publish`, which refuses to publish if a gallery
@@ -197,6 +198,21 @@ packages/choreo-gallery/scripts/republish.sh
 The Publish dialog does the same publish: sign in to `https://app.boxel.ai/`
 as `choreo_gallery_writer`, open the gallery realm in Host mode, choose
 Publish, and select `choreo.boxel.site`.
+
+Staging's realm is published the same way to
+`https://choreo.staging.boxel.build/`, under its own override entry
+(`"https://realms-staging.stack.cards/choreo-gallery/": "choreo.staging.boxel.build"`).
+No deploy republishes it: staging deploys on every merge, and a full render
+of the gallery on each would only add to staging's queue. Republish it by hand
+when a change needs trying on a published copy, with the workflow's
+`staging` environment or the script:
+
+```sh
+boxel profile add --user @choreo_gallery_writer:stack.cards
+SOURCE_REALM_URL=https://realms-staging.stack.cards/choreo-gallery/ \
+PUBLISHED_REALM_URL=https://choreo.staging.boxel.build/ \
+  packages/choreo-gallery/scripts/republish.sh
+```
 
 A publish renders every card again when the code that renders them has
 changed since the last one, which is the case after every release. Until a

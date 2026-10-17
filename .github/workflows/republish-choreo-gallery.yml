@@ -5,7 +5,9 @@ name: Republish the Choreo gallery
 # production deploy updates the realm but not that copy, and the copy's cards
 # run against the glimmer-motion and Choreo the newly deployed host serves.
 # Manual Deploy [boxel] calls this after every production release so the copy
-# keeps up with both. Run it by hand to republish without a deploy.
+# keeps up with both. Run it by hand to republish without a deploy, or to
+# republish staging's copy (choreo.staging.boxel.build), which no deploy
+# republishes.
 #
 # It signs in as choreo_gallery_writer, which can write the realm but doesn't
 # own it, and publishes through packages/choreo-gallery/scripts/republish.sh.
@@ -13,25 +15,65 @@ name: Republish the Choreo gallery
 
 on:
   workflow_dispatch:
+    inputs:
+      environment:
+        description: The environment whose gallery to republish
+        type: choice
+        options:
+          - production
+          - staging
+        default: production
   workflow_call:
+    inputs:
+      environment:
+        type: string
+        default: production
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   republish:
-    name: Republish choreo.boxel.site
+    name: Republish the ${{ inputs.environment }} gallery
     runs-on: ubuntu-latest
     # A publish that is already running finishes on the server whether or not
     # this job waits for it, so a newer run queues behind it rather than
     # cancelling it.
     concurrency:
-      group: republish-choreo-gallery
+      group: republish-choreo-gallery-${{ inputs.environment }}
       cancel-in-progress: false
     # The script waits up to 120 minutes for the realm's index and up to 60 for
     # the published copy.
     timeout-minutes: 200
     steps:
+      - name: Set up env
+        run: |
+          case "${{ inputs.environment }}" in
+            production)
+              {
+                echo "AWS_ROLE_ARN=arn:aws:iam::120317779495:role/github"
+                echo "SSM_PREFIX=/production/boxel"
+                echo "WRITER=@choreo_gallery_writer:boxel.ai"
+                echo "SOURCE_REALM_URL=https://app.boxel.ai/choreo-gallery/"
+                echo "PUBLISHED_REALM_URL=https://choreo.boxel.site/"
+              } >> "$GITHUB_ENV"
+              ;;
+            staging)
+              {
+                echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/github"
+                echo "SSM_PREFIX=/staging/boxel"
+                echo "WRITER=@choreo_gallery_writer:stack.cards"
+                echo "SOURCE_REALM_URL=https://realms-staging.stack.cards/choreo-gallery/"
+                echo "PUBLISHED_REALM_URL=https://choreo.staging.boxel.build/"
+              } >> "$GITHUB_ENV"
+              ;;
+            *)
+              echo "unrecognized environment: ${{ inputs.environment }}"
+              exit 1
+              ;;
+          esac
+
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           sparse-checkout: packages/choreo-gallery/scripts
@@ -43,17 +85,25 @@ jobs:
       - name: Install Boxel CLI
         run: npm install -g @cardstack/boxel-cli@0.9.0-unstable.1
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
       - name: Sign in as choreo_gallery_writer
-        env:
-          # Read from the environment rather than passed with -p, so the
-          # password never appears in the process list.
-          BOXEL_PASSWORD: ${{ secrets.CHOREO_GALLERY_WRITER_PRODUCTION_PASSWORD }}
         run: |
-          if [ -z "$BOXEL_PASSWORD" ]; then
-            echo "::error title=Choreo gallery not republished::The CHOREO_GALLERY_WRITER_PRODUCTION_PASSWORD secret isn't set in cardstack/boxel. Save choreo_gallery_writer's production password (from the team password manager) under that name."
+          # The writer's password is read and used in this one step, and the
+          # CLI reads it from the environment rather than an argument, so it
+          # never reaches the job's environment or the process list.
+          if ! BOXEL_PASSWORD=$(aws ssm get-parameter \
+            --name "$SSM_PREFIX/choreo_gallery_writer_pw" --with-decryption \
+            --query Parameter.Value --output text); then
+            echo "::error title=Choreo gallery not republished::Couldn't read $SSM_PREFIX/choreo_gallery_writer_pw. It holds choreo_gallery_writer's password, and the $AWS_ROLE_ARN role needs ssm:GetParameter on it."
             exit 1
           fi
-          boxel profile add --user @choreo_gallery_writer:boxel.ai
+          echo "::add-mask::$BOXEL_PASSWORD"
+          BOXEL_PASSWORD="$BOXEL_PASSWORD" boxel profile add --user "$WRITER"
 
       - name: Republish
         run: packages/choreo-gallery/scripts/republish.sh

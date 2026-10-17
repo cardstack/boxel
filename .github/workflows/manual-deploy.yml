@@ -395,7 +395,7 @@ jobs:
   # choreo.boxel.site serves a published copy of the gallery realm, which the
   # release updates but doesn't republish. Republish it once the release is
   # live. Nothing waits on this job, so a failure here (a gallery card that
-  # no longer indexes, a missing or changed password) leaves the previous copy
+  # no longer indexes, a password the job can't read) leaves the previous copy
   # serving and turns only this run red.
   republish-choreo-gallery:
     name: Republish the Choreo gallery
@@ -404,4 +404,5 @@ jobs:
       inputs.environment == 'production'
       && needs.release.result == 'success'
     uses: ./.github/workflows/republish-choreo-gallery.yml
-    secrets: inherit
+    with:
+      environment: production

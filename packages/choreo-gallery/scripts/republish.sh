@@ -8,10 +8,11 @@
 #   packages/choreo-gallery/scripts/republish.sh
 #
 # It needs the Boxel CLI on PATH, with the active profile signed in as an
-# account that can write the realm. A writer can publish only because
-# production's PUBLISHED_REALM_DOMAIN_OVERRIDES maps the realm to
-# choreo.boxel.site; without that entry the realm server requires realm-owner
-# and refuses the publish.
+# account that can write the realm. A writer can publish only because the
+# realm server's PUBLISHED_REALM_DOMAIN_OVERRIDES maps the realm to its site's
+# domain; without that entry the realm server requires realm-owner and refuses
+# the publish. Staging's realm publishes to choreo.staging.boxel.build under
+# its own entry: set SOURCE_REALM_URL and PUBLISHED_REALM_URL to republish it.
 #
 # 1. A deploy copies the realm onto disk as the realm server starts, and the
 #    realm then indexes the files that changed. The publishability check reads
