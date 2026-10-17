@@ -39,7 +39,6 @@ import {
   isRealmIndexCard,
   type ResolvedCodeRef,
   type CardErrorJSONAPI,
-  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 
 import { getCardType } from '@cardstack/host/resources/card-type';
@@ -223,10 +222,7 @@ export default class DetailPanel extends Component<Signature> {
     return (
       this.isModule &&
       this.args.selectedDeclaration &&
-      isComponentDeclaration(
-        this.args.selectedDeclaration,
-        this.network.virtualNetwork,
-      )
+      isComponentDeclaration(this.args.selectedDeclaration)
     );
   }
 
@@ -254,10 +250,7 @@ export default class DetailPanel extends Component<Signature> {
     // so the only definition action it supports is being published as a listing.
     if (
       this.args.selectedDeclaration &&
-      isComponentDeclaration(
-        this.args.selectedDeclaration,
-        this.network.virtualNetwork,
-      )
+      isComponentDeclaration(this.args.selectedDeclaration)
     ) {
       return this.realm.canWrite(this.args.readyFile.url) &&
         this.args.selectedDeclaration.exportName
@@ -486,7 +479,7 @@ export default class DetailPanel extends Component<Signature> {
       let decl = this.args.selectedDeclaration;
       if (
         decl &&
-        isComponentDeclaration(decl, this.network.virtualNetwork) &&
+        isComponentDeclaration(decl) &&
         codeRef.name === 'default' &&
         decl.localName
       ) {
@@ -526,10 +519,12 @@ export default class DetailPanel extends Component<Signature> {
     }
     return {
       name: this.args.selectedDeclaration.exportName,
-      module: `${this.operatorModeStateService.state.codePath!.href.replace(
-        /\.[^.]+$/,
-        '',
-      )}` as RealmResourceIdentifier,
+      module: this.network.virtualNetwork.unresolveURL(
+        this.operatorModeStateService.state.codePath!.href.replace(
+          /\.[^.]+$/,
+          '',
+        ),
+      ),
     };
   }
 

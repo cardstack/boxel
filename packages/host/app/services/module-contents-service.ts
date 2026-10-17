@@ -8,7 +8,6 @@ import {
   baseRRI,
   isBaseDef,
   rri,
-  type VirtualNetwork,
 } from '@cardstack/runtime-common';
 
 import {
@@ -81,7 +80,6 @@ export function isReexportCardOrField(
 
 export function isComponentDeclaration(
   declaration: ModuleDeclaration,
-  virtualNetwork: VirtualNetwork,
 ): boolean {
   if (
     !('super' in declaration) ||
@@ -93,8 +91,7 @@ export function isComponentDeclaration(
   let { name, module } = declaration.super;
   return (
     module === '@glimmer/component' ||
-    (name === 'Component' &&
-      virtualNetwork.unresolveURL(module) === baseRRI('card-api'))
+    (name === 'Component' && module === baseRRI('card-api'))
   );
 }
 

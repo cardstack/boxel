@@ -23,12 +23,12 @@ module('Unit | isComponentDeclaration', function () {
   async function declarationFor(
     src: string,
     name: string,
-    virtualNetwork: VirtualNetwork,
+    moduleURL = `${REAL_TEST}example`,
   ): Promise<ModuleDeclaration> {
     let syntax = await ModuleSyntax.create(
       src,
-      rri(`${REAL_TEST}example`),
-      virtualNetwork,
+      rri(moduleURL),
+      configuredNetwork(),
     );
     let declaration = syntax.declarations.find((d) => d.localName === name);
     if (!declaration) {
@@ -38,46 +38,48 @@ module('Unit | isComponentDeclaration', function () {
   }
 
   test('recognises a Component imported from @cardstack/base/card-api', async function (assert) {
-    let virtualNetwork = configuredNetwork();
     let declaration = await declarationFor(
       `import { Component } from '@cardstack/base/card-api';
        export class Widget extends Component {}`,
       'Widget',
-      virtualNetwork,
     );
-    assert.true(isComponentDeclaration(declaration, virtualNetwork));
+    assert.true(isComponentDeclaration(declaration));
   });
 
   test('recognises a Component imported from the legacy base URL', async function (assert) {
-    let virtualNetwork = configuredNetwork();
     let declaration = await declarationFor(
       `import { Component } from '${ALIAS_BASE}card-api';
        export class Widget extends Component {}`,
       'Widget',
-      virtualNetwork,
     );
-    assert.true(isComponentDeclaration(declaration, virtualNetwork));
+    assert.true(isComponentDeclaration(declaration));
+  });
+
+  test('recognises a Component imported by relative path inside the base realm', async function (assert) {
+    let declaration = await declarationFor(
+      `import { Component } from './card-api';
+       export class Widget extends Component {}`,
+      'Widget',
+      `${REAL_BASE}address`,
+    );
+    assert.true(isComponentDeclaration(declaration));
   });
 
   test('recognises a Glimmer component', async function (assert) {
-    let virtualNetwork = configuredNetwork();
     let declaration = await declarationFor(
       `import GlimmerComponent from '@glimmer/component';
        export class Widget extends GlimmerComponent {}`,
       'Widget',
-      virtualNetwork,
     );
-    assert.true(isComponentDeclaration(declaration, virtualNetwork));
+    assert.true(isComponentDeclaration(declaration));
   });
 
   test('rejects a Component imported from another module', async function (assert) {
-    let virtualNetwork = configuredNetwork();
     let declaration = await declarationFor(
       `import { Component } from '@cardstack/base/field-component';
        export class Widget extends Component {}`,
       'Widget',
-      virtualNetwork,
     );
-    assert.false(isComponentDeclaration(declaration, virtualNetwork));
+    assert.false(isComponentDeclaration(declaration));
   });
 });
