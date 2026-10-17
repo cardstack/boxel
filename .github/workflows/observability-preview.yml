@@ -1,11 +1,26 @@
 name: Observability — PR preview
 
-# Spins up a per-PR preview of the dashboards a PR changes inside the staging
-# Grafana, under per-PR-prefixed UIDs (`pr<n>-*`) in a per-PR folder so the
-# preview coexists with the canonical staging copies without overwriting
-# them. On PR close the preview is torn down. A separate sweep workflow
-# (observability-preview-sweep.yml) is the safety net for closes the
-# preview-cleanup job missed.
+# Spins up a per-PR preview of the dashboards a PR changes inside BOTH the
+# staging and the production Grafana, under per-PR-prefixed UIDs (`pr<n>-*`)
+# in a per-PR folder so the preview coexists with the canonical copies
+# without overwriting them. On PR close both previews are torn down. A
+# separate sweep workflow (observability-preview-sweep.yml) is the safety net
+# for closes the preview-cleanup job missed.
+#
+# Both environments are previewed from one job so the PR gets a single
+# sticky comment linking each changed dashboard in both Grafanas, rather
+# than one comment per environment. Staging is applied first: a production
+# Grafana problem then costs the run its red status but not the staging
+# preview or the comment, which is posted from whatever succeeded.
+#
+# The two environments render the same dashboard set under the same preview
+# UIDs — only the realm-server URL substitution differs — so the comment
+# lists each dashboard once with a link per environment.
+#
+# A preview never carries the real operator secret: render-preview.sh stamps
+# an inert placeholder into `grafana_secret`, so operator buttons on a
+# preview dashboard return 401. That is what keeps this workflow runnable
+# under a role that cannot read GRAFANA_SECRET.
 #
 # Scope: dashboards + folders only. Data sources, alert rules, and the
 # home-dashboard preference are file-provisioned at Grafana startup and
@@ -37,19 +52,28 @@ concurrency:
 
 env:
   AWS_REGION: us-east-1
-  # Reuses the apply role from cardstack/infra#665 (same role
-  # observability-apply-staging.yml uses). Permissions cover every SSM path
-  # below — see that workflow's header for the up-to-date list.
-  AWS_ROLE_ARN: arn:aws:iam::680542703984:role/boxel-observability-apply
+  # The dedicated preview role, NOT boxel-observability-apply. This workflow
+  # runs on `pull_request`, so GitHub loads it — and every script it calls —
+  # from the pull request itself; whatever the assumed role can read, a
+  # contributor can read. boxel-observability-preview grants only
+  # /<env>/grafana/grafanactl_token and /<env>/boxel-grafana/realm_server_url,
+  # so the worst case equals this feature: write `pr<n>-` dashboards. The
+  # apply role additionally grants the Grafana database password and
+  # GRAFANA_SECRET (the realm-server operator bearer token) — never point
+  # this workflow at it.
+  STAGING_AWS_ROLE_ARN: arn:aws:iam::680542703984:role/boxel-observability-preview
+  PRODUCTION_AWS_ROLE_ARN: arn:aws:iam::120317779495:role/boxel-observability-preview
   PREVIEW_MARKER: "<!-- observability-preview -->"
   STAGING_GRAFANA_BASE_URL: "https://dashboard-staging.stack.cards"
+  PRODUCTION_GRAFANA_BASE_URL: "https://dashboard.boxel.ai"
 
 jobs:
   preview-apply:
-    name: Apply preview to staging
-    # Fork-PR guard: this job assumes AWS and pushes to staging Grafana, so
-    # it must not run on PRs whose code we don't trust. Same pattern as
-    # observability-diff.yml and observability-apply-staging.yml.
+    name: Apply preview
+    # Fork-PR guard: this job assumes AWS and pushes to staging and
+    # production Grafana, so it must not run on PRs whose code we don't
+    # trust. Same pattern as observability-diff.yml and
+    # observability-apply-staging.yml.
     if: >-
       github.event.action != 'closed'
       && github.event.pull_request.head.repo.full_name == github.repository
@@ -77,94 +101,97 @@ jobs:
       - name: Install grafanactl
         uses: ./.github/actions/install-grafanactl
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials (staging)
         uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
         with:
-          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          role-to-assume: ${{ env.STAGING_AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Source preview-time secrets from SSM
-        # Subset of what observability-apply-staging.yml fetches. The preview
-        # only touches dashboards + folders, so we don't need the LOKI_URL /
-        # BOXEL_DB_* / WORKER_LOG_* set — those are read by apply-datasources
-        # / apply-alerting, which apply-preview.sh never invokes.
-        run: |
-          GRAFANA_TOKEN="$(aws ssm get-parameter \
-            --name /staging/grafana/grafanactl_token \
-            --with-decryption \
-            --query 'Parameter.Value' \
-            --output text)"
-          echo "::add-mask::$GRAFANA_TOKEN"
-          echo "GRAFANA_TOKEN=$GRAFANA_TOKEN" >> "$GITHUB_ENV"
-
-          REALM_SERVER_URL="$(aws ssm get-parameter \
-            --name /staging/boxel-grafana/realm_server_url \
-            --query 'Parameter.Value' \
-            --output text)"
-          echo "REALM_SERVER_URL=$REALM_SERVER_URL" >> "$GITHUB_ENV"
-
-          GRAFANA_SECRET="$(aws ssm get-parameter \
-            --name /staging/boxel/GRAFANA_SECRET \
-            --with-decryption \
-            --query 'Parameter.Value' \
-            --output text)"
-          echo "::add-mask::$GRAFANA_SECRET"
-          echo "GRAFANA_SECRET=$GRAFANA_SECRET" >> "$GITHUB_ENV"
-
-      - name: Apply preview
-        id: apply
+      - name: Apply preview to staging
+        id: apply-staging
         working-directory: packages/observability
         env:
+          ENV_NAME: staging
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
-        run: |
-          set -eo pipefail
-          OUT_FILE="$(mktemp)"
-          ./scripts/apply-preview.sh \
-            --pr "$PR_NUMBER" \
-            --base-ref "origin/${PR_BASE_REF}" \
-            --env staging \
-            > "$OUT_FILE"
-          echo "out_file=$OUT_FILE" >> "$GITHUB_OUTPUT"
-          if [[ -s "$OUT_FILE" ]]; then
-            echo "empty=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "empty=true" >> "$GITHUB_OUTPUT"
-          fi
-          echo "::group::Preview summary"
-          cat "$OUT_FILE"
-          echo "::endgroup::"
+        run: ./scripts/ci-apply-preview.sh
 
-      - name: Cleanup stale preview (no changes left)
-        # When the current head of the PR has no dashboard changes vs base,
-        # apply-preview emits empty output and pushes nothing. But a prior
-        # push to the same PR may have already applied a preview that's
-        # still live in staging — revert/rebase scenarios. Run cleanup so
-        # the PR's staging footprint matches its current head; otherwise
-        # the daily sweep wouldn't catch this until PR close.
-        if: steps.apply.outputs.empty == 'true'
+      # Production is applied after staging, and each environment's
+      # credentials live only in the step that uses them — the AWS creds in
+      # the runner environment and the Grafana token inside the step's own
+      # shell. Nothing is written to $GITHUB_ENV, so there's no window in
+      # which one environment's token is live while the other's push runs.
+      - name: Configure AWS credentials (production)
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
+        with:
+          role-to-assume: ${{ env.PRODUCTION_AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Apply preview to production
+        id: apply-production
         working-directory: packages/observability
         env:
+          ENV_NAME: production
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: ./scripts/cleanup-preview.sh --pr "$PR_NUMBER" --env staging
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: ./scripts/ci-apply-preview.sh
 
       - name: Post sticky PR comment
+        # Runs even when an apply step failed, so a production-side outage
+        # still leaves reviewers the staging links (and a note saying which
+        # environment is missing). The job is still red — the failed step
+        # decides that, not this one.
+        #
         # Pinned to SHA (matches observability-diff.yml's reasoning):
         # pull-requests: write + AWS role = non-trivial supply-chain exposure.
+        if: ${{ !cancelled() }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         env:
-          OUT_FILE: ${{ steps.apply.outputs.out_file }}
+          STAGING_OUT_FILE: ${{ steps.apply-staging.outputs.out_file }}
+          STAGING_OUTCOME: ${{ steps.apply-staging.outcome }}
+          PRODUCTION_OUT_FILE: ${{ steps.apply-production.outputs.out_file }}
+          PRODUCTION_OUTCOME: ${{ steps.apply-production.outcome }}
         with:
           script: |
             const fs = require('fs');
             const marker = process.env.PREVIEW_MARKER;
-            const grafanaBase = process.env.STAGING_GRAFANA_BASE_URL;
             const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
 
-            const raw = fs.readFileSync(process.env.OUT_FILE, 'utf8').trim();
+            // Parse one environment's `<KIND>:<uid>:<title>` summary (the
+            // structured stdout of apply-preview.sh). A missing file means
+            // the apply step never got far enough to write one.
+            const readSummary = (outFile) => {
+              if (!outFile || !fs.existsSync(outFile)) return null;
+              const folders = [];
+              const dashboards = [];
+              for (const line of fs.readFileSync(outFile, 'utf8').trim().split('\n')) {
+                // Title may contain `:`, so only the first two fields are
+                // delimited.
+                const m = line.match(/^(FOLDER|DASHBOARD):([^:]+):(.*)$/);
+                if (!m) continue;
+                const [, kind, uid, title] = m;
+                (kind === 'FOLDER' ? folders : dashboards).push({ uid, title });
+              }
+              return { folders, dashboards };
+            };
 
-            // Find any prior preview sticky on this PR; we either update or
-            // delete it based on whether there's anything to preview now.
+            const environments = [
+              {
+                name: 'staging',
+                baseUrl: process.env.STAGING_GRAFANA_BASE_URL,
+                outcome: process.env.STAGING_OUTCOME,
+                summary: readSummary(process.env.STAGING_OUT_FILE),
+              },
+              {
+                name: 'production',
+                baseUrl: process.env.PRODUCTION_GRAFANA_BASE_URL,
+                outcome: process.env.PRODUCTION_OUTCOME,
+                summary: readSummary(process.env.PRODUCTION_OUT_FILE),
+              },
+            ];
+
+            // Find any prior preview sticky on this PR; we either update,
+            // delete, or deliberately leave it alone below.
             const comments = await github.paginate(
               github.rest.issues.listComments,
               {
@@ -178,12 +205,28 @@ jobs:
               c => c.body && c.body.startsWith(marker),
             );
 
-            if (!raw) {
-              // No dashboards changed at this HEAD. Don't post a "nothing
-              // to see" comment — if a prior push left a sticky behind,
-              // delete it so the PR's comment stream matches its current
-              // state. (Stale preview *resources* from a prior push are
-              // handled by the "Cleanup stale preview" step above.)
+            const applied = environments.filter(
+              e => e.outcome === 'success' && e.summary && e.summary.dashboards.length,
+            );
+            const missing = environments.filter(e => e.outcome !== 'success');
+
+            if (!applied.length) {
+              if (missing.length) {
+                // At least one apply failed and nothing is left to link.
+                // Leave any prior sticky in place: preview resources from
+                // an earlier push may well still be live, and the failed
+                // step already makes the run red.
+                core.info(
+                  `No preview to link and ${missing.map(e => e.name).join(', ')} did not apply — leaving any existing comment alone.`,
+                );
+                return;
+              }
+              // Every environment applied cleanly and none had dashboards:
+              // this HEAD changes no dashboards. Don't post a "nothing to
+              // see" comment — if a prior push left a sticky behind, delete
+              // it so the PR's comment stream matches its current state.
+              // (Stale preview *resources* from a prior push are deleted by
+              // ci-apply-preview.sh.)
               if (existing) {
                 await github.rest.issues.deleteComment({
                   owner: context.repo.owner,
@@ -197,36 +240,61 @@ jobs:
               return;
             }
 
-            const folders = [];
-            const dashboards = [];
-            for (const line of raw.split('\n')) {
-              // Format: `<KIND>:<uid>:<title>` (title may contain `:`).
-              const m = line.match(/^(FOLDER|DASHBOARD):([^:]+):(.*)$/);
-              if (!m) continue;
-              const [, kind, uid, title] = m;
-              (kind === 'FOLDER' ? folders : dashboards).push({ uid, title });
-            }
+            // Both environments render the same preview UIDs, so collapse
+            // them into one row per resource carrying a link per
+            // environment. Keyed by UID and built in the order the first
+            // applied environment reported, so a partial apply still lists
+            // everything that made it somewhere.
+            const collapse = (key) => {
+              const byUid = new Map();
+              for (const env of applied) {
+                for (const { uid, title } of env.summary[key]) {
+                  if (!byUid.has(uid)) byUid.set(uid, { title, envs: [] });
+                  byUid.get(uid).envs.push(env);
+                }
+              }
+              return [...byUid.entries()].map(([uid, v]) => ({ uid, ...v }));
+            };
 
-            const folderLines = folders.map(f =>
-              `- **Folder:** [${f.title}](${grafanaBase}/dashboards/f/${f.uid}/)`,
+            const links = (envs, path) =>
+              envs
+                .map(e => `[${e.name}](${e.baseUrl}${path})`)
+                .join(' · ');
+
+            const folders = collapse('folders');
+            const dashboards = collapse('dashboards');
+
+            const folderLines = folders.map(
+              f => `- **Folder:** ${f.title} — ${links(f.envs, `/dashboards/f/${f.uid}/`)}`,
             );
-            const dashboardLines = dashboards.map(d =>
-              `- [${d.title}](${grafanaBase}/d/${d.uid}/)`,
+            const dashboardLines = dashboards.map(
+              d => `- ${d.title} — ${links(d.envs, `/d/${d.uid}/`)}`,
             );
+
+            const appliedNames = applied.map(e => e.name).join(' and ');
+
+            const warning = missing.length
+              ? [
+                  '',
+                  '> [!WARNING]',
+                  `> The **${missing.map(e => e.name).join('** and **')}** preview did not apply on this run — see the run log below.`,
+                ]
+              : [];
 
             const body = [
               marker,
               '## Grafana preview',
               '',
-              `Preview deployed for **${dashboards.length} dashboard${dashboards.length === 1 ? '' : 's'}** in the staging Grafana.`,
-              'Cross-dashboard drill-throughs still point at the canonical staging dashboards.',
+              `Preview deployed for **${dashboards.length} dashboard${dashboards.length === 1 ? '' : 's'}** in ${appliedNames}.`,
+              "Cross-dashboard drill-throughs still point at each environment's canonical dashboards.",
+              ...warning,
               '',
               ...folderLines,
               '',
               '**Dashboards:**',
               ...dashboardLines,
               '',
-              'Preview is torn down automatically when this PR is closed or merged.',
+              'Previews are torn down automatically when this PR is closed or merged.',
               '',
               `_(Run: ${runUrl})_`,
             ].join('\n');
@@ -250,9 +318,10 @@ jobs:
             }
 
   preview-cleanup:
-    name: Cleanup preview from staging
+    name: Cleanup preview
     # Cleanup runs on the `closed` action (covers both merge and close-
-    # without-merge). Same fork-PR guard — cleanup hits staging.
+    # without-merge). Same fork-PR guard — cleanup hits staging and
+    # production.
     if: >-
       github.event.action == 'closed'
       && github.event.pull_request.head.repo.full_name == github.repository
@@ -264,36 +333,40 @@ jobs:
       - name: Install grafanactl
         uses: ./.github/actions/install-grafanactl
 
-      - name: Configure AWS credentials
+      - name: Configure AWS credentials (staging)
         uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
         with:
-          role-to-assume: ${{ env.AWS_ROLE_ARN }}
+          role-to-assume: ${{ env.STAGING_AWS_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Source GRAFANA_TOKEN
-        # Cleanup doesn't need any of the URL/secret substitution values —
-        # it lists live state and deletes by selector. Only the grafanactl
-        # token matters.
-        run: |
-          GRAFANA_TOKEN="$(aws ssm get-parameter \
-            --name /staging/grafana/grafanactl_token \
-            --with-decryption \
-            --query 'Parameter.Value' \
-            --output text)"
-          echo "::add-mask::$GRAFANA_TOKEN"
-          echo "GRAFANA_TOKEN=$GRAFANA_TOKEN" >> "$GITHUB_ENV"
-
-      - name: Cleanup preview
+      - name: Cleanup preview from staging
         working-directory: packages/observability
         env:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: ./scripts/cleanup-preview.sh --pr "$PR_NUMBER" --env staging
+
+      - name: Configure AWS credentials (production)
+        uses: aws-actions/configure-aws-credentials@ec61189d14ec14c8efccab744f656cffd0e33f37 # v6.1.0
+        with:
+          role-to-assume: ${{ env.PRODUCTION_AWS_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Cleanup preview from production
+        working-directory: packages/observability
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: ./scripts/cleanup-preview.sh --pr "$PR_NUMBER" --env production
 
       - name: Delete sticky PR comment
         # After cleanup, there's nothing left to point at — delete the
         # sticky entirely rather than leaving a "preview cleaned up"
         # gravestone. Matches the apply-time policy of not posting a
         # comment when there's nothing to show.
+        #
+        # Runs even if a cleanup step failed: the daily sweep
+        # (observability-preview-sweep.yml) will catch whatever survived,
+        # and a comment pointing at deleted dashboards is worse than none.
+        if: ${{ !cancelled() }}
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
