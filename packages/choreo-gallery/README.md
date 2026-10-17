@@ -236,8 +236,10 @@ it checks whatever the copy holds:
 
 It runs the grid and the demo pages in both the dark and the light theme. Any
 console error, uncaught exception, failed request, or error response from the
-site fails the check it happened in. Run it after each publish (it needs Chrome
-installed, and `pnpm install` for Playwright):
+site fails the check it happened in, except the platform problems the script
+names in `knownIssue` and `knownConsoleIssue`, which it reports as `known:`
+lines without failing. Run it after each publish (it needs Chrome installed,
+and `pnpm install` for Playwright):
 
 ```sh
 node packages/choreo-gallery/tools/check-published-site.mjs
