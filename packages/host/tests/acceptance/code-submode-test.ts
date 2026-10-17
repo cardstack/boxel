@@ -1956,13 +1956,11 @@ module('Acceptance | code submode tests', function (_hooks) {
       await click(`[data-test-card="${testRealmURL}Friend/bob"]`);
 
       await waitUntil(() =>
-        operatorModeStateService.state?.codePath?.href?.endsWith(
-          'Friend/bob.json',
-        ),
+        operatorModeStateService.state?.codePath?.endsWith('Friend/bob.json'),
       );
 
       assert.strictEqual(
-        operatorModeStateService.state?.codePath?.href,
+        operatorModeStateService.state?.codePath,
         `${testRealmURL}Friend/bob.json`,
       );
       assert.deepEqual(JSON.parse(getMonacoContent()), {
@@ -2008,13 +2006,11 @@ module('Acceptance | code submode tests', function (_hooks) {
       await click(`[data-test-card="${testRealmURL}Friend/bob"]`);
 
       await waitUntil(() =>
-        operatorModeStateService.state?.codePath?.href?.endsWith(
-          'Friend/bob.json',
-        ),
+        operatorModeStateService.state?.codePath?.endsWith('Friend/bob.json'),
       );
 
       assert.strictEqual(
-        operatorModeStateService.state?.codePath?.href,
+        operatorModeStateService.state?.codePath,
         `${testRealmURL}Friend/bob.json`,
       );
       assert.deepEqual(JSON.parse(getMonacoContent()), {
@@ -2055,13 +2051,11 @@ module('Acceptance | code submode tests', function (_hooks) {
       await click(`[data-test-card="${testRealmURL}Friend/bob"]`);
 
       await waitUntil(() =>
-        operatorModeStateService.state?.codePath?.href?.endsWith(
-          'Friend/bob.json',
-        ),
+        operatorModeStateService.state?.codePath?.endsWith('Friend/bob.json'),
       );
 
       assert.strictEqual(
-        operatorModeStateService.state?.codePath?.href,
+        operatorModeStateService.state?.codePath,
         `${testRealmURL}Friend/bob.json`,
       );
       assert.deepEqual(JSON.parse(getMonacoContent()), {
@@ -2113,13 +2107,11 @@ module('Acceptance | code submode tests', function (_hooks) {
       await click(`[data-test-card="${testRealmURL}Friend/amy"]`);
 
       await waitUntil(() =>
-        operatorModeStateService.state?.codePath?.href?.endsWith(
-          'Friend/amy.json',
-        ),
+        operatorModeStateService.state?.codePath?.endsWith('Friend/amy.json'),
       );
 
       assert.strictEqual(
-        operatorModeStateService.state?.codePath?.href,
+        operatorModeStateService.state?.codePath,
         `${testRealmURL}Friend/amy.json`,
       );
       assert.deepEqual(JSON.parse(getMonacoContent()), {

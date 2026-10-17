@@ -147,7 +147,7 @@ export default class CodeSemanticsService extends Service {
   }
 
   get codePath() {
-    return this.operatorModeStateService.state.codePath;
+    return this.operatorModeStateService.codePathURL;
   }
 
   get isModule() {

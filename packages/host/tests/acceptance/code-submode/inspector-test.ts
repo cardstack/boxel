@@ -2682,6 +2682,27 @@ export class ExportedCard extends ExportedCardParent {
       .exists('type picker shows Any');
   });
 
+  test('a base module code path given as its URL is held as its RRI', async function (assert) {
+    let cardApiURL = getService('network').virtualNetwork.toURLHref(
+      baseRRI('card-api.gts'),
+    );
+    await visitOperatorMode({
+      stacks: [[]],
+      submode: 'code',
+      codePath: cardApiURL,
+    });
+    await waitFor('[data-boxel-selector-item-text="CardDef"]');
+
+    assert.strictEqual(
+      getService('operator-mode-state-service').state.codePath,
+      baseRRI('card-api.gts'),
+      'state holds the prefix form',
+    );
+    assert
+      .dom('[data-test-card-url-bar-input]')
+      .hasValue(cardApiURL, 'URL bar shows the served URL');
+  });
+
   test('find instances starts clean, ignoring a previously persisted search', async function (assert) {
     await visitOperatorMode({
       stacks: [[]],

@@ -594,7 +594,7 @@ export default class CardSchemaEditor extends Component<Signature> {
   private goToField(field: FieldOfType) {
     if (
       `${this.args.cardType.module}.gts` ===
-      this.operatorModeStateService.codePathString
+      this.operatorModeStateService.state.codePath
     ) {
       // In the same file
       this.args.goToDefinition(
