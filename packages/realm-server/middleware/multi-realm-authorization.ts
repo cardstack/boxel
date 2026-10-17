@@ -6,7 +6,9 @@ import type {
   VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
+  acceptedDiagnosticClaim,
   archivedRealmURLs,
+  DIAGNOSTIC_SESSION_LOG_CHANNEL,
   ensureTrailingSlash,
   fetchUserPermissions,
   isSessionRevoked,
@@ -15,6 +17,7 @@ import {
   param,
   parseRealmsFromPayload,
   parseSearchRequestPayload,
+  presentsAsDiagnosticSession,
   query,
   SearchRequestError,
   separatedByCommas,
@@ -35,6 +38,7 @@ import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.t
 import { mayNameRealmPolicy } from '../lib/realm-policy-pointer.ts';
 import { resolveRealmsForFederatedRequest } from '../lib/realm-routing.ts';
 import {
+  retrieveDiagnosticSessionClaim,
   retrieveTokenClaim,
   type RealmServerTokenClaim,
 } from '../utils/jwt.ts';
@@ -81,6 +85,7 @@ export type MultiRealmAuthorizationState = {
 
 const MULTI_REALM_AUTH_STATE = 'multiRealmAuthorization';
 const log = logger('realm-server:multi-realm-authorization');
+const diagnosticLog = logger(DIAGNOSTIC_SESSION_LOG_CHANNEL);
 const SEARCH_REQUEST_PAYLOAD_STATE = 'searchRequestPayload';
 
 export function multiRealmAuthorization(
@@ -230,7 +235,11 @@ export function multiRealmAuthorization(
     } else {
       let token: RealmServerTokenClaim & { iat: number; exp: number };
       try {
-        token = retrieveTokenClaim(authorization, realmSecretSeed);
+        token = presentsAsDiagnosticSession(
+          authorization.replace('Bearer ', ''),
+        )
+          ? retrieveDiagnosticSessionClaim(authorization, realmSecretSeed)
+          : retrieveTokenClaim(authorization, realmSecretSeed);
         if (await isSessionRevoked(dbAdapter, token.user, token.iat)) {
           throw new AuthenticationError(
             AuthenticationErrorMessages.SessionRevoked,
@@ -260,6 +269,23 @@ export function multiRealmAuthorization(
           );
           return;
         }
+      }
+
+      // A diagnostic session reads the realms it was issued for, and
+      // authenticates here only for a request that names no others. Each use
+      // is logged on the diagnostic channel with the mint it came from.
+      if (token.diagnostic) {
+        let claim = acceptedDiagnosticClaim(token, realmList);
+        if (!claim) {
+          await sendResponseForUnauthorizedRequest(
+            ctxt,
+            AuthenticationErrorMessages.TokenInvalid,
+          );
+          return;
+        }
+        diagnosticLog.info(
+          `diagnostic session ${claim.id} read ${ctxt.method} ${ctxt.path} for realms ${realmList.join(', ')} as ${token.user}; minted for card ${claim.card}, operator note: ${JSON.stringify(claim.note)}`,
+        );
       }
 
       // Only the session's own claim makes a request a realm-authority

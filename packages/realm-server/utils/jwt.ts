@@ -3,9 +3,11 @@ import {
   AuthenticationErrorMessages,
 } from '@cardstack/runtime-common/router';
 import {
+  diagnosticSessionSecret,
   isSessionRevoked,
   SESSION_TOKEN_TTL,
   type DBAdapter,
+  type DiagnosticSessionClaim,
 } from '@cardstack/runtime-common';
 import jsonwebtoken from 'jsonwebtoken';
 import { isOperatorToken } from './operator-token.ts';
@@ -23,6 +25,11 @@ export interface RealmServerTokenClaim {
   // on that user's behalf.
   delegated?: boolean;
   realm?: string;
+  // Carried by a diagnostic session (`TokenClaims.diagnostic`), which is
+  // signed under its own key: only `retrieveDiagnosticSessionClaim` verifies
+  // one, so every route that reads a session with `retrieveTokenClaim` refuses
+  // it on its signature.
+  diagnostic?: DiagnosticSessionClaim;
 }
 
 export function createJWT(
@@ -58,6 +65,19 @@ export function retrieveTokenClaim(
     }
     throw e;
   }
+}
+
+// Verifies a diagnostic session, for the federated read endpoints that accept
+// one for the realms it was issued for. The caller still checks the claim
+// against the realms the request names (`acceptedDiagnosticClaim`).
+export function retrieveDiagnosticSessionClaim(
+  authorizationString: string,
+  secretSeed: string,
+): RealmServerTokenClaim & { iat: number; exp: number } {
+  return retrieveTokenClaim(
+    authorizationString,
+    diagnosticSessionSecret(secretSeed),
+  );
 }
 
 // Verifies a session that a realm-server route acts on as its user in full:
