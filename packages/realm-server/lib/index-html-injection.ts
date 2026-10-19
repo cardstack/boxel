@@ -1,24 +1,20 @@
 import type { DBAdapter } from '@cardstack/runtime-common';
 import { query } from '@cardstack/runtime-common';
-import {
-  INSTANCE_ROWS_FIRST,
-  indexURLCandidates,
-  indexCandidateExpressions,
-} from './index-url-utils.ts';
+import { indexURLCandidates, pageRowExpressions } from './index-url-utils.ts';
 
-// Prerendered markup read for a page, with the card it was read from: the
-// candidates a page URL expands to can name more than one card (`foo.json` and
-// `foo/index.json`), and whatever governs the markup is that card's.
+// Prerendered markup read for a page, with the card or file it was read from:
+// the candidates a page URL expands to can name more than one card (`foo.json`
+// and `foo/index.json`), and whatever governs the markup is that card's.
 export interface RetrievedMarkup {
   html: string | null;
   // The card or file whose row the markup came from, as the URL it is read
   // by; null when no row held any.
-  cardURL: URL | null;
+  readURL: URL | null;
 }
 
 // A card's row is keyed by its `.json` source and the card is read without
 // the extension; a file is read by its own URL, extension and all.
-function matchedCardURL(
+function matchedReadURL(
   row: { url?: string; type?: string } | undefined,
 ): URL | null {
   if (!row?.url) {
@@ -48,26 +44,25 @@ export async function retrieveHeadHTML({
 
   if (candidates.length === 0) {
     log?.debug(`No head candidates for ${cardURL.href}`);
-    return { html: null, cardURL: null };
+    return { html: null, readURL: null };
   }
 
   // The head HTML lives on prerendered_html; the boxel_index join scopes the
-  // lookup to a live instance or file row and supplies the generation for
-  // logging.
+  // lookup to a live row serving the page (see `pageRowExpressions`) and
+  // supplies the generation for logging.
   let rows = await query(dbAdapter, [
     `
       SELECT ph.head_html AS head_html, i.url AS url, i.type AS type, i.generation
       FROM boxel_index AS i
       JOIN prerendered_html AS ph
         ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type
-      WHERE i.type IN ('instance', 'file')
-       AND ph.head_html IS NOT NULL
+      WHERE ph.head_html IS NOT NULL
        AND i.is_deleted IS NOT TRUE
        AND
     `,
-    ...indexCandidateExpressions(candidates, 'i'),
+    ...pageRowExpressions(cardURL, 'i'),
     `
-      ORDER BY ${INSTANCE_ROWS_FIRST}, i.generation DESC
+      ORDER BY i.generation DESC
       LIMIT 1
     `,
   ]);
@@ -92,7 +87,7 @@ export async function retrieveHeadHTML({
   }
   return {
     html: headRow?.head_html ?? null,
-    cardURL: matchedCardURL(headRow),
+    readURL: matchedReadURL(headRow),
   };
 }
 
@@ -115,12 +110,12 @@ export async function retrieveIsolatedHTML({
 
   if (candidates.length === 0) {
     log?.debug(`No isolated candidates for ${cardURL.href}`);
-    return { html: null, cardURL: null };
+    return { html: null, readURL: null };
   }
 
   // The isolated HTML lives on prerendered_html; the boxel_index join scopes
-  // the lookup to a live instance or file row and supplies the generation for
-  // logging.
+  // the lookup to a live row serving the page (see `pageRowExpressions`) and
+  // supplies the generation for logging.
   let rows = await query(dbAdapter, [
     `
       SELECT ph.isolated_html AS isolated_html, i.url AS url, i.type AS type, i.generation
@@ -128,13 +123,12 @@ export async function retrieveIsolatedHTML({
       JOIN prerendered_html AS ph
         ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type
       WHERE ph.isolated_html IS NOT NULL
-        AND i.type IN ('instance', 'file')
         AND i.is_deleted IS NOT TRUE
         AND
       `,
-    ...indexCandidateExpressions(candidates, 'i'),
+    ...pageRowExpressions(cardURL, 'i'),
     `
-      ORDER BY ${INSTANCE_ROWS_FIRST}, i.generation DESC
+      ORDER BY i.generation DESC
       LIMIT 1
     `,
   ]);
@@ -160,7 +154,7 @@ export async function retrieveIsolatedHTML({
 
   return {
     html: isolatedRow?.isolated_html ?? null,
-    cardURL: matchedCardURL(isolatedRow),
+    readURL: matchedReadURL(isolatedRow),
   };
 }
 

@@ -380,6 +380,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           'report.pdf': '%PDF-1.4 fake-pdf-bytes',
           'spring-guide.md':
             '# Spring Guide\n\nSprings settle toward their target.\n',
+          // A JSON file that is not a card document.
+          'plain-data.json': JSON.stringify({ note: 'not a card' }),
           'person.gts': `import {
                             contains,
                             field,
@@ -821,6 +823,56 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           titleOf(response.text),
           instanceTitle,
           "the card's head HTML titles the page",
+        );
+      });
+
+      test("a card whose render left no markup does not serve its .json source file's markup", async function (assert) {
+        await dbAdapter.execute(
+          `UPDATE prerendered_html SET head_html = NULL, isolated_html = NULL, deps = NULL, last_known_good_deps = NULL
+           WHERE url = '${testRealmURL.href}isolated-test.json' AND type = 'instance'`,
+        );
+
+        let response = await request
+          .get('/test/isolated-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        assert.ok(
+          response.text.includes('<title>Boxel</title>'),
+          'the generic title is used',
+        );
+        assert.notOk(
+          response.text.includes('isolated-test.json'),
+          "the source file's markup is not injected",
+        );
+        assert.notOk(
+          response.text.includes('data-boxel-scoped-css'),
+          "the source file's scoped CSS is not injected",
+        );
+      });
+
+      test("an extensionless URL does not serve a plain .json file's markup", async function (assert) {
+        let fileRows = await dbAdapter.execute(
+          `SELECT url FROM boxel_index WHERE type = 'file' AND url = '${testRealmURL.href}plain-data.json'`,
+        );
+        assert.strictEqual(
+          fileRows.length,
+          1,
+          'the JSON file has a file row the page could match',
+        );
+
+        let response = await request
+          .get('/test/plain-data')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        assert.ok(
+          response.text.includes('<title>Boxel</title>'),
+          'the generic title is used',
+        );
+        assert.notOk(
+          response.text.includes('plain-data.json'),
+          "the JSON file's markup is not injected",
         );
       });
 

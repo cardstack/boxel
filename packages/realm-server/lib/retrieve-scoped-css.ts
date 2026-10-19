@@ -6,11 +6,7 @@ import {
   isScopedCSSRequest,
   parseScopedCSSRequest,
 } from '@cardstack/runtime-common/scoped-css';
-import {
-  INSTANCE_ROWS_FIRST,
-  indexURLCandidates,
-  indexCandidateExpressions,
-} from './index-url-utils.ts';
+import { indexURLCandidates, pageRowExpressions } from './index-url-utils.ts';
 
 export async function retrieveScopedCSS({
   cardURL,
@@ -33,8 +29,8 @@ export async function retrieveScopedCSS({
   // The scoped-CSS URLs needed to serve a card's HTML ride on the
   // prerendered_html `deps` / `last_known_good_deps` — the deps captured by
   // the render that produced the HTML being served. The boxel_index join
-  // scopes the lookup to a live instance or file row and supplies the
-  // generation.
+  // scopes the lookup to a live row serving the page (see
+  // `pageRowExpressions`) and supplies the generation.
   let scopedCSSQuery: Expression = [
     `
       SELECT ph.deps AS deps,
@@ -43,14 +39,13 @@ export async function retrieveScopedCSS({
       FROM boxel_index AS i
       JOIN prerendered_html AS ph
         ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type
-      WHERE i.type IN ('instance', 'file')
-        AND i.is_deleted IS NOT TRUE
+      WHERE i.is_deleted IS NOT TRUE
         AND (ph.deps IS NOT NULL OR ph.last_known_good_deps IS NOT NULL)
         AND
     `,
-    ...indexCandidateExpressions(candidates, 'i'),
+    ...pageRowExpressions(cardURL, 'i'),
     `
-      ORDER BY ${INSTANCE_ROWS_FIRST}, i.generation DESC
+      ORDER BY i.generation DESC
       LIMIT 1
     `,
   ];

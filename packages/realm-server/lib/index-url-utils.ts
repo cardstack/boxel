@@ -2,6 +2,7 @@ import { param } from '@cardstack/runtime-common';
 import {
   addExplicitParens,
   any,
+  every,
   type Expression,
 } from '@cardstack/runtime-common/expression';
 
@@ -23,11 +24,36 @@ export function indexURLCandidates(cardURL: URL): string[] {
   return [...new Set(candidates)];
 }
 
-// A page URL's candidates can match both a card's instance row and the `file`
-// row of its own `.json` source. A page for a card serves the card, so an
-// instance row wins; a file row is served only for a URL no card claims, such
-// as a Markdown file's.
-export const INSTANCE_ROWS_FIRST = `CASE WHEN i.type = 'instance' THEN 0 ELSE 1 END`;
+// The index rows a page's markup is read from. A card claims every candidate
+// its page URL expands to, its `.json` source included, so while any live
+// instance row matches, only instance rows serve the page; a card whose render
+// left no markup gets the generic shell, never its source file's. A `file` row
+// serves only the exact URL it is read by (a Markdown file's), and only when no
+// card claims the page, so every column the page reads comes from rows of one
+// kind.
+export function pageRowExpressions(pageURL: URL, alias: string): Expression {
+  let candidates = indexURLCandidates(pageURL);
+  let exactURL = pageURL.href.replace(/\?.*/, '');
+  let instanceRows: Expression[] = [
+    [`${alias}.type = 'instance'`],
+    indexCandidateExpressions(candidates, alias),
+  ];
+  let fileRows: Expression[] = [
+    [`${alias}.type = 'file'`],
+    [
+      `regexp_replace(${alias}.url, '^https?://', '') =`,
+      param(stripProtocol(exactURL)),
+    ],
+    [
+      `NOT EXISTS (SELECT 1 FROM boxel_index AS claim WHERE claim.type = 'instance' AND claim.is_deleted IS NOT TRUE AND`,
+      ...indexCandidateExpressions(candidates, 'claim'),
+      `)`,
+    ],
+  ];
+  return addExplicitParens(
+    any([every(instanceRows), every(fileRows)]),
+  ) as Expression;
+}
 
 export function indexCandidateExpressions(
   candidates: string[],
