@@ -74,7 +74,7 @@ const SEARCHABLE_SETTLE_MAX_PASSES = 20;
 // dependency of the meta output directly (see the deps union below) rather
 // than relying on its per-loader-cached module-load hook to fire during a
 // given render.
-const SEARCHABLE_MODULE_URL = baseRRI('searchable');
+const SEARCHABLE_MODULE = baseRRI('searchable');
 
 export default class RenderMetaRoute extends Route<Model> {
   @service declare cardService: CardService;
@@ -193,7 +193,7 @@ export default class RenderMetaRoute extends Route<Model> {
     // load-hook timing.
     let deps = [
       ...new Set([
-        SEARCHABLE_MODULE_URL,
+        SEARCHABLE_MODULE,
         ...(renderModel?.capturedDeps ?? []),
         ...snapshotRuntimeDependencies({ excludeQueryOnly: true }).deps,
         ...searchableDeps,
