@@ -10,6 +10,7 @@ import ENV from '@cardstack/host/config/environment';
 import {
   canonicalRealmIdentifier,
   realmIdentifierSegments,
+  realmOwnURLHref,
   realmURLDisplayText,
   resolvedRealmURLHref,
   serverRealmURLs,
@@ -112,6 +113,42 @@ module('Unit | realm-utils', function (hooks) {
       assert.throws(
         () => virtualNetwork.toURL('@unmapped/thing/'),
         'the underlying VirtualNetwork call is the one that throws',
+      );
+    });
+  });
+
+  // The URL a realm calls itself, which display, requests and subscriptions
+  // all name it by.
+  module('realmOwnURLHref', function () {
+    test('names base by its alias whichever spelling is given', function (assert) {
+      for (let identifier of [
+        baseRealm.url,
+        '@cardstack/base/',
+        new URL(resolvedBaseRealmURL).href,
+      ]) {
+        assert.strictEqual(
+          realmOwnURLHref(virtualNetwork, identifier),
+          baseRealm.url,
+          identifier,
+        );
+      }
+    });
+
+    test('names a prefixed realm with no alias by the URL it is served from', function (assert) {
+      virtualNetwork.addRealmMapping(
+        '@test/mapped/',
+        'https://realms.example.com/mapped/',
+      );
+      assert.strictEqual(
+        realmOwnURLHref(virtualNetwork, '@test/mapped/'),
+        'https://realms.example.com/mapped/',
+      );
+    });
+
+    test('returns an identifier no mapping covers as given', function (assert) {
+      assert.strictEqual(
+        realmOwnURLHref(virtualNetwork, '@unmapped/thing/'),
+        '@unmapped/thing/',
       );
     });
   });

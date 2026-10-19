@@ -1,7 +1,6 @@
 import {
   ensureTrailingSlash,
   isUrlLike,
-  PREFIX_REALMS,
   RealmPaths,
   ri,
   rri,
@@ -84,17 +83,41 @@ export function resolvedRealmURLHref(
 }
 
 /**
+ * The URL a realm calls itself, for any spelling of it: the real URL it is
+ * served from, mapped back through any registered URL alias, as
+ * `VirtualNetwork.realmForReference` does. For most realms that is the URL
+ * they are served from; for an aliased realm like base it is the alias
+ * (`https://cardstack.com/base/`), which is also the URL its card ids use and
+ * the realm server registers it under. An identifier no mapping covers comes
+ * back as given.
+ *
+ * @example
+ * realmOwnURLHref(vn, '@cardstack/base/')  // 'https://cardstack.com/base/'
+ * realmOwnURLHref(vn, '@unmapped/thing/')  // '@unmapped/thing/'
+ */
+export function realmOwnURLHref(
+  virtualNetwork: VirtualNetwork,
+  realmIdentifier: string,
+): string {
+  let real = virtualNetwork.keyForIdentifier(realmIdentifier);
+  try {
+    return virtualNetwork.mapURL(real, 'real-to-virtual')?.href ?? real;
+  } catch {
+    return real;
+  }
+}
+
+/**
  * The URL the realm server knows a realm by, for a realm named by a
- * registered prefix. The server registers each realm under the `--fromUrl` it
- * was started with, and that is the URL search requests, realm events and
- * session tokens all carry. For most prefixed realms it is the URL the prefix
- * resolves to. The base realm is the exception: it is registered under its
- * declared alias (`https://cardstack.com/base/`), not the URL it is served
- * from, so a prefix with an alias resolves to the alias.
+ * registered prefix: `realmOwnURLHref`, so the alias for base and the URL the
+ * prefix resolves to for every other prefixed realm. The server registers each
+ * realm under the `--fromUrl` it was started with, and that is the URL search
+ * requests, realm events and session tokens all carry.
  *
  * Anything other than a registered prefix — a URL, an unregistered prefix —
- * comes back untouched: a URL mapping does not say which of its two sides the
- * server registered, so a URL is never rewritten.
+ * comes back untouched: a host URL mapping does not say which of its two sides
+ * the server registered (the test realm's mapping runs the other way from
+ * base's), so a URL is never rewritten.
  *
  * @example
  * // with '@cardstack/catalog/' mapped to 'https://realms.example.com/catalog/'
@@ -106,15 +129,9 @@ export function serverRealmURLHref(
   virtualNetwork: VirtualNetwork,
   realmIdentifier: string,
 ): string {
-  if (!virtualNetwork.isRegisteredPrefix(realmIdentifier)) {
-    return realmIdentifier;
-  }
-  for (let { prefix, alias } of PREFIX_REALMS) {
-    if (alias && realmIdentifier.startsWith(prefix)) {
-      return `${alias}${realmIdentifier.slice(prefix.length)}`;
-    }
-  }
-  return virtualNetwork.toURL(realmIdentifier).href;
+  return virtualNetwork.isRegisteredPrefix(realmIdentifier)
+    ? realmOwnURLHref(virtualNetwork, realmIdentifier)
+    : realmIdentifier;
 }
 
 /**
@@ -162,10 +179,9 @@ export function canonicalRealmIdentifier(
  * A realm's URL as shown beside its name, so realms that share a name can be
  * told apart: host and path, without the scheme or trailing slash.
  *
- * Every spelling (registered prefix, virtual alias, real URL) is folded onto
- * the real served URL, then back through any registered URL alias, as
- * `VirtualNetwork.realmForReference` does. For an aliased realm like base,
- * that is the URL its card ids use rather than the host serving it.
+ * Every spelling (registered prefix, virtual alias, real URL) names the realm
+ * by `realmOwnURLHref`: for an aliased realm like base, that is the URL its
+ * card ids use rather than the host serving it.
  *
  * @example
  * realmURLDisplayText(vn, '@cardstack/base/')                   // 'cardstack.com/base'
@@ -176,12 +192,12 @@ export function realmURLDisplayText(
   virtualNetwork: VirtualNetwork,
   realmIdentifier: string,
 ): string {
-  let real = virtualNetwork.keyForIdentifier(realmIdentifier);
+  let own = realmOwnURLHref(virtualNetwork, realmIdentifier);
   let url: URL;
   try {
-    url = virtualNetwork.mapURL(real, 'real-to-virtual') ?? new URL(real);
+    url = new URL(own);
   } catch {
-    return real;
+    return own;
   }
   return url.host + url.pathname.replace(/\/$/, '');
 }
