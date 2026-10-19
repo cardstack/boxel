@@ -23,6 +23,15 @@ const SHELL_DIR = join(import.meta.dirname, '..', 'secure-origin');
 const SHELL_BASE_PLACEHOLDER = /%SHELL_BASE%/g;
 const MATRIX_URL_PLACEHOLDER = /%MATRIX_URL%/g;
 const APP_ORIGINS_PLACEHOLDER = /%APP_ORIGINS%/g;
+const REALM_SERVER_URL_PLACEHOLDER = /%REALM_SERVER_URL%/g;
+
+// Where Google sends the secure window back to after a sign-in, beneath the
+// shell. It serves the shell itself.
+export const GOOGLE_CALLBACK_PATH = 'google-callback';
+
+// Where the sign-in page hands a session to the CLI: a listener on this
+// machine's loopback address, on whatever port the CLI chose.
+const CLI_LOOPBACK_FORM_ACTION = 'http://127.0.0.1:*';
 
 // The typeface the app's forms are set in, served by the secure origin itself
 // so the credential fields it frames match the page around them. It comes from
@@ -40,6 +49,14 @@ const SHELL_ASSETS: Record<string, { file: string; contentType: string }> = {
     contentType: 'text/javascript; charset=utf-8',
   },
   'shell.css': { file: 'shell.css', contentType: 'text/css; charset=utf-8' },
+  'session.js': {
+    file: 'session.js',
+    contentType: 'text/javascript; charset=utf-8',
+  },
+  'sign-in.js': {
+    file: 'sign-in.js',
+    contentType: 'text/javascript; charset=utf-8',
+  },
 };
 
 // The credential fields the app frames (see `credentials.js`): the page, by
@@ -80,6 +97,9 @@ export interface SecureOriginHeaderOptions {
   // Origins a document may send requests to besides its own. Empty — the
   // default — means only its own.
   connectSrc?: string[];
+  // Where a document's forms may submit besides its own origin. Empty — the
+  // default — means only its own.
+  formAction?: string[];
 }
 
 // Headers on every response the secure origin sends, error responses
@@ -97,6 +117,7 @@ export interface SecureOriginHeaderOptions {
 export function secureOriginHeaders({
   frameAncestors = [],
   connectSrc = [],
+  formAction = [],
 }: SecureOriginHeaderOptions = {}): Record<string, string> {
   let headers: Record<string, string> = {
     'Content-Security-Policy': [
@@ -106,7 +127,7 @@ export function secureOriginHeaders({
         : []),
       `object-src 'none'`,
       `base-uri 'none'`,
-      `form-action 'self'`,
+      `form-action 'self'${formAction.map((source) => ` ${source}`).join('')}`,
       `frame-ancestors ${
         frameAncestors.length > 0 ? frameAncestors.join(' ') : `'none'`
       }`,
@@ -151,29 +172,50 @@ export interface CredentialFieldsOptions {
   appOrigins: string[];
 }
 
+export interface ShellOptions {
+  // The realm server the shell's modes sign in to and act on. It is the only
+  // server the shell talks to, so it comes from the realm server's own
+  // configuration, never from the page.
+  realmServerURL: URL;
+}
+
 // `url` is where the shell is served: its host is the secure origin and its
 // path is the shell's (`https://secure.boxel.ai/`, or
 // `https://localhost:4208/secure` in development). With `credentialFields`,
 // the origin also serves the credential fields the app frames, at
-// `credentials` beneath the shell.
+// `credentials` beneath the shell. With `shell`, the shell's modes talk to the
+// realm server it names, and the sign-in page may hand a session to the CLI's
+// loopback listener.
 export function createSecureOrigin(
   url: URL,
   credentialFields?: CredentialFieldsOptions,
+  shellOptions?: ShellOptions,
 ): SecureOrigin {
   let shellBase = url.pathname.replace(/\/+$/, '');
-  let indexHTML = readFileSync(join(SHELL_DIR, 'index.html'), 'utf8').replace(
-    SHELL_BASE_PLACEHOLDER,
-    shellBase,
-  );
+  let indexHTML = readFileSync(join(SHELL_DIR, 'index.html'), 'utf8')
+    .replace(SHELL_BASE_PLACEHOLDER, shellBase)
+    .replace(
+      REALM_SERVER_URL_PLACEHOLDER,
+      escapeAttribute(shellOptions?.realmServerURL.href ?? ''),
+    );
   // Everything the origin serves, by path, each with the headers its
   // response carries.
   let routes = new Map<string, SecureOriginRoute>();
   let shell: SecureOriginRoute = {
     body: indexHTML,
     contentType: 'text/html; charset=utf-8',
+    ...(shellOptions
+      ? {
+          headers: {
+            connectSrc: [shellOptions.realmServerURL.origin],
+            formAction: [CLI_LOOPBACK_FORM_ACTION],
+          },
+        }
+      : {}),
   };
   routes.set(shellBase, shell);
   routes.set(`${shellBase}/`, shell);
+  routes.set(`${shellBase}/${GOOGLE_CALLBACK_PATH}`, shell);
   for (let [name, { file, contentType }] of Object.entries(SHELL_ASSETS)) {
     routes.set(`${shellBase}/${name}`, {
       body: readFileSync(join(SHELL_DIR, file)),

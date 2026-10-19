@@ -1,6 +1,6 @@
 ---
 name: user-keys
-description: Operate and diagnose the keys that belong to people — the `user_keys` table, the signed-in user's write-only management API (`/_user-keys`), and the key write tickets (`/_key-write-tickets`) that adding, replacing or deleting a key must present. Covers what the table holds and how its values are sealed and bound (field, owner, id), that a key records no destination, why no API, log line, Sentry event or read-only database role can ever read a value back, who may mint a ticket (the secure origin and the CLI, never card code in the app page) and how that is decided — and what that does not protect against, ticket lifetime, single use and the one change each ticket is minted for, and every refusal the API answers with. Use when a user reports a key they can't add, replace or delete, when a key change is refused with 403, when reading or querying `user_keys` / `key_write_tickets` as an operator, when a key's value fails to open with SecretDecryptionError, or when changing `lib/user-keys.ts` or `handlers/handle-user-keys.ts`.
+description: Operate and diagnose the keys that belong to people — the `user_keys` table, the signed-in user's write-only management API (`/_user-keys`), and the key write tickets (`/_key-write-tickets`) that adding, replacing or deleting a key must present. Covers what the table holds and how its values are sealed and bound (field, owner, id), that a key records no destination, why no API, log line, Sentry event or read-only database role can ever read a value back, who may mint a ticket (a session signed in on the secure origin, from the secure window or the CLI — never the app's session) and how that is decided, ticket lifetime, single use and the one change each ticket is minted for, and every refusal the API answers with. Use when a user reports a key they can't add, replace or delete, when a key change is refused with 403, when reading or querying `user_keys` / `key_write_tickets` as an operator, when a key's value fails to open with SecretDecryptionError, or when changing `lib/user-keys.ts` or `handlers/handle-user-keys.ts`.
 ---
 
 # User keys (operators)
@@ -78,18 +78,15 @@ it) leaves the ticket usable for its own change, and of two concurrent uses of
 one ticket exactly one succeeds. Expired tickets are swept whenever a ticket
 is minted.
 
-**Who may mint one.** `POST /_key-write-tickets` mints only for a request
-with no `Origin` header (the CLI) or whose `Origin` is the secure origin's.
-Browsers always send `Origin` on a POST and page script can't change it, so a
-request card code makes from the app page — where it runs with the user's
-session — is refused with 403. Card code can't get a ticket, or change a key,
-from inside the browser.
-
-**What it does not stop.** Card code can read the user's realm-server
-session. Carried out of the browser, that session mints a ticket exactly as
-the CLI does: a client outside a browser can send any `Origin`, or none, and
-nothing the server sees tells it from the CLI. The ticket keeps key changes
-out of reach of code running in the app page; it is not a second factor.
+**Who may mint one.** `POST /_key-write-tickets` mints only for a session
+signed in on the secure origin — one carrying the `secureSession` claim,
+whose `secure_sessions` row belongs to the token's user and hasn't expired
+(see the `secure-session` skill) — and only for a request with no `Origin`
+header (the CLI) or whose `Origin` is the secure origin's. Anything else is
+refused with 403. The app's session never carries the claim, so it can't
+mint a ticket from any origin, nor can the CLI's ordinary session; the CLI
+gets a secure session with `boxel keys sign-in`. ADR 005 records why (§2) and
+the rules a change here must keep (§1.1, §1.2).
 
 ## The API
 
@@ -112,14 +109,14 @@ request log line and Sentry breadcrumbs.
 
 An attribute other than these, such as a `destination`, is refused with 400.
 
-| Status | Means                                                                                                                                                        |
-| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| 400    | Malformed body, a missing or over-long name or value, an attribute that can't be set, a ticket request with no valid action or with the wrong `keyId` for it |
-| 401    | No session, an invalid one, or a delegated one                                                                                                               |
-| 403    | No valid ticket (missing, used, expired, another user's, or minted for a different change); a ticket asked for by the app page; a realm-authority session    |
-| 404    | No such key — also what another user's key answers, including when a ticket is asked for to change it                                                        |
-| 409    | The owner already has a key of that name                                                                                                                     |
-| 413    | The body is larger than 64 KiB                                                                                                                               |
+| Status | Means                                                                                                                                                                                  |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | Malformed body, a missing or over-long name or value, an attribute that can't be set, a ticket request with no valid action or with the wrong `keyId` for it                           |
+| 401    | No session, an invalid one, or a delegated one                                                                                                                                         |
+| 403    | No valid ticket (missing, used, expired, another user's, or minted for a different change); a ticket asked for without a secure session, or by the app page; a realm-authority session |
+| 404    | No such key — also what another user's key answers, including when a ticket is asked for to change it                                                                                  |
+| 409    | The owner already has a key of that name                                                                                                                                               |
+| 413    | The body is larger than 64 KiB                                                                                                                                                         |
 
 A failure that isn't one of these is a 500 logged on `realm:user-keys` with
 the error's name and message only, never the request.

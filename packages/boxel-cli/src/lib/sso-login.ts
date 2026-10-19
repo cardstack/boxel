@@ -128,12 +128,22 @@ export interface PostedSession {
   userId: string;
 }
 
-// The two ways a browser can finish the flow: Synapse redirecting back with a
-// single-use token (the SSO branch), or the authorizing page POSTing a session
-// it already obtained (the password branch).
+// A session signed in on the secure origin, which the secure window posts
+// after the user confirms it is them (`boxel keys sign-in`).
+export interface PostedSecureSession {
+  token: string;
+  userId: string;
+  expiresAt: string;
+}
+
+// The ways a browser can finish the flow: Synapse redirecting back with a
+// single-use token (the SSO branch), the authorizing page POSTing a session it
+// already obtained (the password branch), or the secure window POSTing a
+// secure session.
 export type LoopbackResult =
   | { kind: 'loginToken'; loginToken: string }
-  | { kind: 'session'; session: PostedSession };
+  | { kind: 'session'; session: PostedSession }
+  | { kind: 'secureSession'; session: PostedSecureSession };
 
 export interface LoopbackCallback {
   // Where the browser should come back to. The authorization page rebuilds this
@@ -233,6 +243,25 @@ export async function startLoopbackCallback(opts?: {
           'This sign-in request was not recognized.',
           'callback did not carry the expected state value',
         );
+        return;
+      }
+
+      if (posted?.has('secure_session')) {
+        const token = posted.get('secure_session');
+        const userId = posted.get('user_id');
+        const expiresAt = posted.get('expires_at');
+        if (!token || !userId || !expiresAt) {
+          fail(
+            res,
+            'That sign-in did not include a complete session.',
+            'callback POST was missing secure_session, user_id, or expires_at',
+          );
+          return;
+        }
+        succeed(res, {
+          kind: 'secureSession',
+          session: { token, userId, expiresAt },
+        });
         return;
       }
 
@@ -592,6 +621,9 @@ export async function browserLogin(
     const result = await callback.waitForResult();
     if (result.kind === 'loginToken') {
       return await redeemLoginToken(matrixUrl, result.loginToken, fetchFn);
+    }
+    if (result.kind !== 'session') {
+      throw new Error('The browser returned a different kind of sign-in.');
     }
     await verifySession(matrixUrl, result.session, fetchFn);
     return { ...result.session, matrixUrl };

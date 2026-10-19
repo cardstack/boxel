@@ -407,7 +407,9 @@ Public/system realms are direct children of `/persistent`; user-owned private re
 
 ### Connecting
 
-Same SSM port-forward pattern as the RDS tunnel, just targeting the fs-explorer task on port 80 and using `localhost` as the remote host (the tunnel forwards from your local port through the SSM agent in the container to the container's localhost, which is where Caddy listens).
+Same SSM port-forward pattern as the RDS tunnel, just targeting the fs-explorer task on port 80 and using the **task's own private IP** as the remote host. Caddy listens on `:80` (all interfaces), so the task IP reaches it from the SSM agent inside the container.
+
+Do not use `localhost` (or `127.0.0.1`) as the `host` parameter. The ECS-managed SSM agent refuses to forward to loopback addresses for `AWS-StartPortForwardingSessionToRemoteHost`: the local port still binds and the session reports `Waiting for connections...`, but every request fails (curl exit `52`/`7`, HTTP code `000`), and the session output shows `Forwarding to IP address localhost is forbidden.` If you see that symptom, check the `host` parameter before suspecting the task.
 
 ```sh
 PROFILE=claude-staging                                     # or claude-prod
@@ -415,36 +417,59 @@ CLUSTER=staging                                            # or production
 SERVICE=boxel-claude-fs-readonly-staging                   # or -production
 LOCAL_PORT=58080                                           # any free local port
 
-# 1) Find the fs-explorer task and its container runtime ID. Filter by
-#    container name to be robust against any future sidecar additions —
-#    AWS doesn't guarantee containers[] order in DescribeTasks output.
+# 1) Find the fs-explorer task, its container runtime ID, and the task's
+#    private IP. Filter by container name to be robust against any future
+#    sidecar additions — AWS doesn't guarantee containers[] order in
+#    DescribeTasks output.
 TASK_ARN=$(aws --profile $PROFILE ecs list-tasks \
   --cluster $CLUSTER --service-name $SERVICE \
   --query 'taskArns[0]' --output text)
 TASK_ID=${TASK_ARN##*/}
-RUNTIME_ID=$(aws --profile $PROFILE ecs describe-tasks \
+read -r RUNTIME_ID TASK_IP < <(aws --profile $PROFILE ecs describe-tasks \
   --cluster $CLUSTER --tasks $TASK_ID \
-  --query 'tasks[0].containers[?name==`fs-explorer`].runtimeId | [0]' \
+  --query 'tasks[0].containers[?name==`fs-explorer`] | [0].[runtimeId, networkInterfaces[0].privateIpv4Address]' \
   --output text)
 
-# 2) Open the tunnel — forward localhost:58080 to localhost:80 inside
-#    the container (where Caddy listens).
-aws --profile $PROFILE ssm start-session \
-  --target "ecs:${CLUSTER}_${TASK_ID}_${RUNTIME_ID}" \
-  --document-name AWS-StartPortForwardingSessionToRemoteHost \
-  --parameters "{\"portNumber\":[\"80\"],\"localPortNumber\":[\"$LOCAL_PORT\"],\"host\":[\"localhost\"]}" &
-TUNNEL_PID=$!
-# wait for "Waiting for connections..."
+# 2) Confirm the port is free, then open the tunnel — forward
+#    localhost:$LOCAL_PORT to $TASK_IP:80, where Caddy listens. The host must
+#    be the task IP, not localhost: the SSM agent forbids forwarding to
+#    loopback addresses. The free-port guard and the two-kill teardown are
+#    the same as the RDS tunnel's, for the same reasons (see "Tearing the
+#    tunnel down actually requires two kills" and "A squatted port is a
+#    wrong-environment bug" above).
+if lsof -nP -iTCP:$LOCAL_PORT -sTCP:LISTEN >/dev/null 2>&1; then
+  echo "port $LOCAL_PORT is already bound — pick another, and find out what is holding it"
+else
+  aws --profile $PROFILE ssm start-session \
+    --target "ecs:${CLUSTER}_${TASK_ID}_${RUNTIME_ID}" \
+    --document-name AWS-StartPortForwardingSessionToRemoteHost \
+    --parameters "{\"portNumber\":[\"80\"],\"localPortNumber\":[\"$LOCAL_PORT\"],\"host\":[\"$TASK_IP\"]}" &
+  TUNNEL_PID=$!
 
-# 3) Browse. Caddy's autoindex returns HTML directory listings; serving
-#    raw bytes for files. Both `curl` and a browser work.
-curl -s http://localhost:$LOCAL_PORT/                      # public-realm root listing
-curl -s http://localhost:$LOCAL_PORT/realms/               # user-realms root
-curl -s http://localhost:$LOCAL_PORT/realms/buck/mar10/    # one user realm's contents
-curl -s http://localhost:$LOCAL_PORT/base/index.json       # specific file
+  # Wait for the forward to bind before the first request.
+  for _ in $(seq 30); do
+    lsof -nP -iTCP:$LOCAL_PORT -sTCP:LISTEN >/dev/null 2>&1 && break
+    sleep 1
+  done
 
-# 4) Tear down.
-kill $TUNNEL_PID
+  # 3) Browse. Caddy's autoindex returns HTML directory listings; serving
+  #    raw bytes for files. While the tunnel is open, a browser pointed at
+  #    http://localhost:$LOCAL_PORT/ works as well as curl. -sS keeps
+  #    curl's connection errors visible.
+  curl -sS http://localhost:$LOCAL_PORT/                      # public-realm root listing
+  curl -sS http://localhost:$LOCAL_PORT/realms/               # user-realms root
+  curl -sS http://localhost:$LOCAL_PORT/catalog/              # one realm's contents; for a user realm, take a path from the /realms/ listing
+  curl -sS http://localhost:$LOCAL_PORT/base/index.json       # specific file
+
+  # 4) Tear down. `kill $TUNNEL_PID` alone leaves the forked
+  #    session-manager-plugin holding the port.
+  kill $TUNNEL_PID
+  pkill -f "session-manager-plugin.*localPortNumber.*$LOCAL_PORT" 2>/dev/null
+  unset TUNNEL_PID
+
+  # 5) Verify the port is released.
+  lsof -nP -iTCP:$LOCAL_PORT -sTCP:LISTEN && echo "TUNNEL LEAKED — kill the pid above"
+fi
 ```
 
 ### When this is useful

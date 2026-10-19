@@ -26,6 +26,10 @@ The following are important concepts:
 - Liveness wedge threshold: set `REALM_LIVENESS_WEDGE_MS` (milliseconds) to control how long the realm-server's event loop may go without turning before `/_liveness` reports it wedged; default is 60000 (sized against measured stalls — see the doc), floor 5000. The endpoint is served only when `--livenessPort` is passed.
 - From-scratch indexing timeout: set `FROM_SCRATCH_JOB_TIMEOUT_SEC` (seconds) to control the from-scratch indexing job timeout and the queue worker cap; default is 3600.
 
+## Decisions
+
+- [Architecture Decision Records](adr/README.md): why the codebase is shaped as it is. One record per decision, with the alternatives that were rejected.
+
 ## Developer tooling
 
 - [Working with parallel Claude sessions](parallel-claude-sessions.md): how sessions on one machine reach each other for free, and the one per-machine setting that extends that to your other machines and the cloud — plus session naming, inbound-message policy, and what the reachability does and does not imply.

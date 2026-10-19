@@ -3105,9 +3105,36 @@ export default class StoreService extends Service implements StoreInterface {
         remoteIds.add(id);
       }
     }
-    await Promise.all(
-      [...remoteIds].map((id) => this.getCardInstance({ idOrDoc: id })),
-    );
+    // Every start line gets a finish line, cancelled or failed runs included,
+    // so a start line with none means a read never settled.
+    let shouldLog = remoteIds.size > 0;
+    let fields = `references=${remoteIds.size} epoch=${this.#identityEpoch}`;
+    let start = performance.now();
+    let outcome = 'cancelled';
+    let errored = '';
+    if (shouldLog) {
+      storeLogger.info(`re-establishing ${fields} outcome=started`);
+    }
+    try {
+      let results = await Promise.all(
+        [...remoteIds].map((id) => this.getCardInstance({ idOrDoc: id })),
+      );
+      // A failed read resolves to an error document rather than rejecting.
+      let count = results.filter(
+        (result) => !isCardInstance(result) && !isFileDefInstance(result),
+      ).length;
+      outcome = 'settled';
+      errored = ` errored=${count}`;
+    } catch (e) {
+      outcome = 'failed';
+      throw e;
+    } finally {
+      if (shouldLog) {
+        storeLogger.info(
+          `re-establishing ${fields} outcome=${outcome}${errored} durationMs=${Math.round(performance.now() - start)}`,
+        );
+      }
+    }
     return remoteIds.size;
   });
 
