@@ -1,6 +1,9 @@
 import Koa from 'koa';
 import cors from '@koa/cors';
-import { sharedDeckHistory } from './lib/deck-save-history.ts';
+import {
+  sharedDeckHistory,
+  sharedHostSaveCommitter,
+} from './lib/deck-save-history.ts';
 import http from 'http';
 import http2 from 'http2';
 import net from 'net';
@@ -935,9 +938,11 @@ export class RealmServer {
       virtualNetwork: this.virtualNetwork,
       deckCollaboration: deckCollaborationPolicyFromEnvironment(),
       realmSecretSeed: this.realmSecretSeed,
-      // The same deckd client the file adapters note host saves to, so a
-      // branch update commits pending saves before it seals its own Step.
+      // The deckd client and debounced host saves the file adapters feed, so
+      // a branch update commits pending host saves before its own Step.
       deckHistory: sharedDeckHistory(),
+      takePendingHostSaves: (realmDir) =>
+        sharedHostSaveCommitter().take(realmDir),
     });
     let sendEvent = createSendEvent({
       matrixClient: this.matrixClient,

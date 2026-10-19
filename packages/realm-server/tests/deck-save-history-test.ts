@@ -1,13 +1,15 @@
-import { createServer, type Server } from 'node:http';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import QUnit from 'qunit';
-import { DeckdHistory } from '@cardstack/deck-history/deckd';
+import type { HistoryBackend } from '@cardstack/deck-history/backend';
 import type { LocalPath } from '@cardstack/runtime-common/paths';
 import { NodeAdapter } from '../node-realm.ts';
-import { deckSaveRecorder } from '../lib/deck-save-history.ts';
+import {
+  HostSaveCommitter,
+  deckSaveRecorder,
+} from '../lib/deck-save-history.ts';
 
 const { module, test } = QUnit;
 
@@ -15,33 +17,6 @@ const policy = {
   enabled: true,
   realmRRIs: new Set(['@cardstack/pretui/']),
 };
-
-// A deckd that records what it is asked to commit.
-async function startDeckd(): Promise<{
-  server: Server;
-  url: string;
-  seals: Array<{ dir: string; message: string }>;
-}> {
-  let seals: Array<{ dir: string; message: string }> = [];
-  let server = createServer((req, res) => {
-    let body = '';
-    req.on('data', (chunk) => (body += chunk));
-    req.on('end', () => {
-      let json = body ? JSON.parse(body) : {};
-      res.setHeader('content-type', 'application/json');
-      if (req.url === '/seal') {
-        seals.push({ dir: json.dir, message: json.message });
-        res.end(JSON.stringify({ changeId: `step${seals.length}` }));
-      } else {
-        res.end(JSON.stringify({}));
-      }
-    });
-  });
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
-  let address = server.address();
-  let port = typeof address === 'object' && address ? address.port : 0;
-  return { server, url: `http://127.0.0.1:${port}`, seals };
-}
 
 module(basename(import.meta.filename), function (hooks) {
   let realmDir: string;
@@ -70,13 +45,14 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('every adapter mutation on a Deck realm is noted, except Deck state', async function (assert) {
     let noted: string[] = [];
-    let history = {
-      noteMutation: (_dir: string, path: string) => noted.push(path),
-    } as unknown as DeckdHistory;
+    let committer = {
+      note: (_dir: string, _rri: string, _policy: unknown, path: string) =>
+        noted.push(path),
+    } as unknown as HostSaveCommitter;
     let adapter = new NodeAdapter(
       realmDir,
       false,
-      deckSaveRecorder({ realmDir, policy, history }),
+      deckSaveRecorder({ realmDir, policy, committer }),
     );
     await adapter.write('board.gts', 'export const v = 1;\n');
     await adapter.append('log.jsonl' as LocalPath, '{"a":1}\n');
@@ -91,13 +67,14 @@ module(basename(import.meta.filename), function (hooks) {
       JSON.stringify({ name: '@someone/else' }),
     );
     let noted: string[] = [];
-    let history = {
-      noteMutation: (_dir: string, path: string) => noted.push(path),
-    } as unknown as DeckdHistory;
+    let committer = {
+      note: (_dir: string, _rri: string, _policy: unknown, path: string) =>
+        noted.push(path),
+    } as unknown as HostSaveCommitter;
     let adapter = new NodeAdapter(
       realmDir,
       false,
-      deckSaveRecorder({ realmDir, policy, history }),
+      deckSaveRecorder({ realmDir, policy, committer }),
     );
     await adapter.write('board.gts', 'one');
     await adapter.write(
@@ -108,38 +85,55 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(noted, ['package.json', 'board.gts']);
   });
 
-  test('a burst of host saves commits as one History Step once the realm is quiet', async function (assert) {
-    let deckd = await startDeckd();
-    let history = new DeckdHistory({
-      baseUrl: deckd.url,
+  test('a burst of host saves commits once the realm is quiet', async function (assert) {
+    let commits: string[] = [];
+    let committer = new HostSaveCommitter({
+      history: {} as HistoryBackend,
       debounceMs: 60,
-      watch: false,
+      commit: async ({ message }) => {
+        commits.push(message);
+      },
     });
     try {
       let adapter = new NodeAdapter(
         realmDir,
         false,
-        deckSaveRecorder({ realmDir, policy, history }),
+        deckSaveRecorder({ realmDir, policy, committer }),
       );
       await adapter.write('board.gts', 'one');
       await adapter.write('board.gts', 'two');
       await adapter.write('theme.css', 'body {}');
-      assert.strictEqual(deckd.seals.length, 0, 'nothing commits mid-burst');
+      assert.deepEqual(commits, [], 'nothing commits mid-burst');
       await sleep(200);
-      assert.deepEqual(deckd.seals, [
-        { dir: realmDir, message: 'save: board.gts, theme.css' },
-      ]);
+      assert.deepEqual(commits, ['save: board.gts, theme.css']);
       await adapter.write('board.gts', 'three');
       await sleep(200);
-      assert.strictEqual(
-        deckd.seals.length,
-        2,
-        'a save after the quiet window is its own Step',
+      assert.deepEqual(
+        commits,
+        ['save: board.gts, theme.css', 'save: board.gts'],
+        'a save after the quiet window is its own commit',
       );
-      assert.strictEqual(deckd.seals[1].message, 'save: board.gts');
     } finally {
-      history.close();
-      await new Promise<void>((resolve) => deckd.server.close(() => resolve()));
+      committer.close();
+    }
+  });
+
+  test('a burst a branch update takes is not committed again', async function (assert) {
+    let commits: string[] = [];
+    let committer = new HostSaveCommitter({
+      history: {} as HistoryBackend,
+      debounceMs: 60,
+      commit: async ({ message }) => {
+        commits.push(message);
+      },
+    });
+    try {
+      committer.note(realmDir, '@cardstack/pretui/', policy, 'board.gts');
+      assert.strictEqual(committer.take(realmDir), 'save: board.gts');
+      await sleep(150);
+      assert.deepEqual(commits, []);
+    } finally {
+      committer.close();
     }
   });
 });

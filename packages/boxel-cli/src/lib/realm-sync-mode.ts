@@ -142,6 +142,16 @@ export async function readDeckTreeFile(options: {
   return bytes;
 }
 
+// Files the realm changed since this workspace's base, reported by a
+// per-file update that wrote nothing.
+export class DeckPathConflictError extends Error {
+  readonly paths: string[];
+  constructor(paths: string[]) {
+    super(`changed on the realm since your last sync: ${paths.join(', ')}`);
+    this.paths = paths;
+  }
+}
+
 export async function publishDeckBranchUpdate(options: {
   realmURL: string;
   branchName: string;
@@ -160,6 +170,21 @@ export async function publishDeckBranchUpdate(options: {
     body: JSON.stringify(options.body),
   });
   if (!response.ok) {
+    if (response.status === 409) {
+      let conflicts: unknown;
+      try {
+        conflicts = ((await response.json()) as { conflicts?: unknown })
+          .conflicts;
+      } catch {
+        conflicts = undefined;
+      }
+      if (
+        Array.isArray(conflicts) &&
+        conflicts.every((path) => typeof path === 'string')
+      ) {
+        throw new DeckPathConflictError(conflicts);
+      }
+    }
     throw new Error(
       response.status === 409
         ? `Deck branch ${options.branchName} moved; pull or sync before publishing`

@@ -14,6 +14,11 @@ import {
   type DeckBranchSnapshot,
 } from '../../src/lib/deck-workspace-state.ts';
 import type { RealmAuthenticator } from '../../src/lib/realm-authenticator.ts';
+import {
+  applyDeckUpdate,
+  refuseDeckUpdate,
+  type FakeDeckUpdate,
+} from '../helpers/deck-branch-update.ts';
 
 function snapshot(
   content: Record<string, string>,
@@ -60,26 +65,14 @@ class Realm implements RealmAuthenticator {
     }
     if (url.pathname.endsWith('/.deck/branch') && request.method === 'POST') {
       this.posts++;
-      let update = (await request.json()) as {
-        expected: { refGeneration: number };
-        operations: Array<{
-          path: string;
-          sha256: string | null;
-          contentBase64?: string;
-        }>;
-      };
-      if (update.expected.refGeneration !== this.branch.refGeneration) {
-        return new Response('Branch moved', { status: 409 });
-      }
-      for (let operation of update.operations) {
-        if (operation.sha256 === null) delete this.content[operation.path];
-        else {
-          this.content[operation.path] = Buffer.from(
-            operation.contentBase64!,
-            'base64',
-          ).toString();
-        }
-      }
+      let update = (await request.json()) as FakeDeckUpdate;
+      let refused = refuseDeckUpdate(
+        this.content,
+        this.branch.refGeneration,
+        update,
+      );
+      if (refused) return refused;
+      applyDeckUpdate(this.content, update);
       this.branch = snapshot(this.content, this.branch.refGeneration + 1);
       return new Response(JSON.stringify(this.branch));
     }
@@ -121,6 +114,7 @@ describe('pushing an exact Deck branch', () => {
     expect(result).toEqual({
       files: ['controls/known-date.gts'],
       deleted: [],
+      conflicts: [],
     });
     expect(realm.content['controls/known-date.gts']).toBe('mina known date v2');
     expect(
@@ -128,7 +122,47 @@ describe('pushing an exact Deck branch', () => {
     ).toBe(2);
   });
 
-  it('sends no publication when the remote branch moved', async () => {
+  it('publishes onto a branch that moved elsewhere, keeping the other change', async () => {
+    let localDir = await mkdtemp(join(tmpdir(), 'boxel-deck-moved-push-'));
+    let v1 = {
+      'importmap.json': '{"imports":{}}',
+      'controls/known-date.gts': 'known date v1',
+      'theme/tokens.json': 'theme v1',
+    };
+    let realm = new Realm(snapshot(v1, 1), { ...v1 });
+    await pullDeckBranch({
+      realmURL: 'https://realm.example/pretui/',
+      branchName: 'main',
+      localDir,
+      authenticator: realm,
+    });
+    await writeFile(join(localDir, 'theme/tokens.json'), 'mina theme');
+    // A host save of a different file moved main since the pull.
+    realm.content['controls/known-date.gts'] = 'host known date v2';
+    realm.branch = snapshot(realm.content, 2);
+
+    let result = await pushDeckBranch({
+      realmURL: 'https://realm.example/pretui/',
+      localDir,
+      authenticator: realm,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.files).toEqual(['theme/tokens.json']);
+    expect(realm.content).toMatchObject({
+      'controls/known-date.gts': 'host known date v2',
+      'theme/tokens.json': 'mina theme',
+    });
+    let state = await loadDeckWorkspaceState(localDir);
+    expect(state?.files['controls/known-date.gts']).toBe(
+      hashWorkspaceBytes('known date v1'),
+    );
+    expect(state?.files['theme/tokens.json']).toBe(
+      hashWorkspaceBytes('mina theme'),
+    );
+  });
+
+  it('does not push a file the realm also changed, and says how to resolve it', async () => {
     let localDir = await mkdtemp(join(tmpdir(), 'boxel-deck-stale-push-'));
     let v1 = {
       'importmap.json': '{"imports":{}}',
@@ -151,10 +185,9 @@ describe('pushing an exact Deck branch', () => {
       authenticator: realm,
     });
 
-    expect(result.error).toMatch(/moved from generation 1 to 2/);
+    expect(result.conflicts).toEqual(['theme/tokens.json']);
+    expect(result.error).toMatch(/--prefer-local or --prefer-remote/);
     expect(realm.posts).toBe(0);
-    expect(
-      (await loadDeckWorkspaceState(localDir))?.observedRefGeneration,
-    ).toBe(1);
+    expect(realm.content['theme/tokens.json']).toBe('kim remote theme');
   });
 });

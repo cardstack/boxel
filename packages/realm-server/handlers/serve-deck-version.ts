@@ -43,6 +43,7 @@ import {
 import { openDeckRepositoryProtocol } from '../lib/deck-repository-protocol.ts';
 import {
   DeckBranchContentConflictError,
+  DeckBranchPathConflictError,
   updateDeckBranchContent,
   type DeckBranchUpdateRequest,
 } from '../lib/deck-branch-content-update.ts';
@@ -56,6 +57,9 @@ import type { ServeFromRealmDeps } from './serve-from-realm.ts';
 type DeckVersionServingDeps = ServeFromRealmDeps & {
   deckCollaboration?: DeckCollaborationPolicy;
   deckHistory: HistoryBackend;
+  // Host saves still waiting out their debounce, taken so a write commits
+  // them first. See deck-save-history.ts.
+  takePendingHostSaves?: (realmDir: string) => string | undefined;
   realmSecretSeed?: string;
   resolveRealm?: (url: URL) => Promise<Realm | undefined>;
   readVersionFile?: (
@@ -229,8 +233,15 @@ async function handleDeckBranchRequest(
         history: deps.deckHistory,
         actor: await historyActor(request, deps),
         request: update,
+        takePendingHostSaves: deps.takePendingHostSaves,
       });
     } catch (error) {
+      if (error instanceof DeckBranchPathConflictError) {
+        return new Response(JSON.stringify({ conflicts: error.paths }), {
+          status: 409,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (
         error instanceof DeckBranchContentConflictError ||
         error instanceof RefConflictError ||
@@ -423,6 +434,7 @@ async function handleDeckHistoryRequest(
       history: deps.deckHistory,
       actor: await historyActor(request, deps),
       request: body,
+      takePendingHostSaves: deps.takePendingHostSaves,
     });
     return Response.json({
       schema: 'boxel-deck-history-restore-result-v1',

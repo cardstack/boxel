@@ -137,6 +137,7 @@ export async function restoreDeckBranchHistory(options: {
   history: HistoryBackend;
   actor?: HistoryActor;
   request: DeckHistoryRestoreRequest;
+  takePendingHostSaves?: (realmDir: string) => string | undefined;
 }): Promise<{ restored: string; head: BranchHead; treeHash: string }> {
   if (options.request.schema !== DECK_HISTORY_RESTORE_SPEC) {
     throw new Error('unsupported Deck History restore schema');
@@ -194,6 +195,7 @@ export async function restoreDeckBranchHistory(options: {
     policy: options.policy,
     history: options.history,
     actor: options.actor,
+    takePendingHostSaves: options.takePendingHostSaves,
     request: {
       schema: DECK_BRANCH_UPDATE_SPEC,
       message: `restore: ${target.changeId}`,

@@ -686,10 +686,15 @@ export async function sync(
   }
 
   if (mode.mode === 'deck') {
-    if (options.preferNewest || options.preferLocal || options.preferRemote) {
+    if (options.preferNewest) {
       return emptyResult({
         error:
-          'Deck sync does not use mtime or implicit preference flags; resolve the reported content conflict explicitly',
+          'Deck sync compares content, not modification times, so --prefer-newest has no meaning; use --prefer-local or --prefer-remote',
+      });
+    }
+    if (options.preferLocal && options.preferRemote) {
+      return emptyResult({
+        error: 'Use only one of --prefer-local and --prefer-remote',
       });
     }
     try {
@@ -699,6 +704,11 @@ export async function sync(
         localDir,
         authenticator,
         dryRun: options.dryRun,
+        strategy: options.preferLocal
+          ? 'prefer-local'
+          : options.preferRemote
+            ? 'prefer-remote'
+            : undefined,
       });
       if (!result.error) {
         await reconcileSkillsMirror({

@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 
@@ -14,12 +14,16 @@ import type {
   HistoryEntry,
   RestorePlan,
 } from '@cardstack/deck-history/backend';
+import { readTree } from '@cardstack/deck/object-store';
 import QUnit from 'qunit';
 
 import {
   DECK_BRANCH_UPDATE_SPEC,
   DeckBranchContentConflictError,
+  DeckBranchPathConflictError,
+  commitHostSaves,
   updateDeckBranchContent,
+  type DeckBranchUpdateOperation,
   type DeckBranchUpdateRequest,
 } from '../lib/deck-branch-content-update.ts';
 import { openDeckRepositoryProtocol } from '../lib/deck-repository-protocol.ts';
@@ -185,23 +189,171 @@ module(basename(import.meta.filename), function (hooks) {
 
   test('host saves waiting out the debounce are committed before a branch update', async function (assert) {
     await writeFile(join(realmDir, 'notes.md'), 'from the host\n');
-    history.noteMutation(realmDir, 'notes.md');
-    await updateDeckBranchContent({
+    await push(
+      [
+        perFile(
+          'index.js',
+          'export const version = 2;\n',
+          hashBytes('export const version = 1;\n'),
+        ),
+      ],
+      () => 'save: notes.md',
+    );
+    assert.deepEqual(
+      history.entries.map((entry) => entry.message),
+      ['save: notes.md', 'sync'],
+      'the host save is its own Step, ahead of the branch update',
+    );
+    assert.strictEqual(
+      await readFile(join(realmDir, 'notes.md'), 'utf8'),
+      'from the host\n',
+      'the branch update applies on top of the host save, never over it',
+    );
+    let main = await openDeckRepositoryProtocol({
+      realmDir,
+      realmRRI,
+      policy,
+    }).readBranch('main');
+    let tree = await readTree(
+      join(realmDir, '.deck', 'store'),
+      main!.repository.members[realmRRI],
+    );
+    assert.true(
+      tree!.entries.some((entry) => entry.path === 'notes.md'),
+      'main holds the host save',
+    );
+  });
+
+  test('a debounced host commit moves main to the live files', async function (assert) {
+    await writeFile(join(realmDir, 'notes.md'), 'from the host\n');
+    await commitHostSaves({
+      realmDir,
+      realmRRI,
+      policy,
+      history,
+      message: 'save: notes.md',
+    });
+    let main = await openDeckRepositoryProtocol({
+      realmDir,
+      realmRRI,
+      policy,
+    }).readBranch('main');
+    assert.strictEqual(main!.head.generation, 2);
+    assert.strictEqual(main!.head.historyHead, 'step1');
+    let tree = await readTree(
+      join(realmDir, '.deck', 'store'),
+      main!.repository.members[realmRRI],
+    );
+    assert.true(tree!.entries.some((entry) => entry.path === 'notes.md'));
+  });
+
+  function perFile(
+    path: string,
+    content: string | null,
+    base: string | null,
+  ): DeckBranchUpdateOperation {
+    return content === null
+      ? { path, sha256: null, base }
+      : {
+          path,
+          sha256: hashBytes(content),
+          contentBase64: Buffer.from(content).toString('base64'),
+          base,
+        };
+  }
+
+  async function push(
+    operations: DeckBranchUpdateOperation[],
+    takePendingHostSaves?: () => string,
+  ) {
+    return updateDeckBranchContent({
       realmDir,
       realmRRI,
       branch: 'main',
       policy,
       history,
-      request: await request('export const version = 2;\n'),
+      takePendingHostSaves,
+      request: {
+        schema: DECK_BRANCH_UPDATE_SPEC,
+        message: 'sync',
+        // Per-file updates do not depend on the whole branch being unmoved.
+        expected: {
+          repositoryHash: '',
+          treeHash: '',
+          lockHash: '',
+          refGeneration: 0,
+        },
+        operations,
+      },
     });
-    assert.deepEqual(
-      history.entries.map((entry) => entry.message),
-      ['save: notes.md', 'save: index.js'],
-      'the host save is its own Step, ahead of the branch update',
+  }
+
+  test("per-file sync keeps another writer's change to a different file", async function (assert) {
+    let v1 = hashBytes('export const version = 1;\n');
+    await push([perFile('index.js', 'export const version = 2;\n', v1)]);
+    // A second writer, still based on the first sync, adds a different file.
+    await push([perFile('other.js', 'export const other = 1;\n', null)]);
+    assert.strictEqual(
+      await readFile(join(realmDir, 'index.js'), 'utf8'),
+      'export const version = 2;\n',
     );
     assert.strictEqual(
-      history.entries[0].files.get('notes.md')?.toString(),
+      await readFile(join(realmDir, 'other.js'), 'utf8'),
+      'export const other = 1;\n',
+    );
+  });
+
+  test('per-file sync reports only the files changed on both sides', async function (assert) {
+    let v1 = hashBytes('export const version = 1;\n');
+    await push([perFile('index.js', 'export const version = 2;\n', v1)]);
+    try {
+      await push([
+        perFile('index.js', 'export const version = 3;\n', v1),
+        perFile('other.js', 'export const other = 1;\n', null),
+      ]);
+      assert.ok(false, 'expected a conflict');
+    } catch (error) {
+      assert.true(error instanceof DeckBranchPathConflictError);
+      assert.deepEqual((error as DeckBranchPathConflictError).paths, [
+        'index.js',
+      ]);
+    }
+    assert.strictEqual(
+      await readFile(join(realmDir, 'index.js'), 'utf8'),
+      'export const version = 2;\n',
+      'nothing is written when any file conflicts',
+    );
+    assert.false(
+      await readFile(join(realmDir, 'other.js'), 'utf8').then(
+        () => true,
+        () => false,
+      ),
+    );
+  });
+
+  test('per-file sync onto a host save of a different file keeps both', async function (assert) {
+    await writeFile(join(realmDir, 'notes.md'), 'from the host\n');
+    let v1 = hashBytes('export const version = 1;\n');
+    await push([perFile('index.js', 'export const version = 2;\n', v1)]);
+    assert.strictEqual(
+      await readFile(join(realmDir, 'notes.md'), 'utf8'),
       'from the host\n',
+    );
+  });
+
+  test('a whole-branch writer that read before a host save must read again', async function (assert) {
+    let stale = await request('export const version = 2;\n');
+    await writeFile(join(realmDir, 'notes.md'), 'from the host\n');
+    await assert.rejects(
+      updateDeckBranchContent({
+        realmDir,
+        realmRRI,
+        branch: 'main',
+        policy,
+        history,
+        request: stale,
+      }),
+      DeckBranchContentConflictError,
     );
   });
 

@@ -1,120 +1,40 @@
-import { readFile } from 'node:fs/promises';
-import { join } from 'node:path';
-
-import {
-  assertObservedBranchHead,
-  hashDeckWorkspaceDirectory,
-  loadDeckWorkspaceState,
-  planContentAddressedSync,
-  saveDeckWorkspaceState,
-  workspaceStateFromBranch,
-} from './deck-workspace-state.ts';
+import { reconcileDeckBranch } from './deck-realm-sync.ts';
 import type { RealmAuthenticator } from './realm-authenticator.ts';
-import {
-  publishDeckBranchUpdate,
-  readDeckBranchSnapshot,
-} from './realm-sync-mode.ts';
 
-export const DECK_BRANCH_UPDATE_SPEC = 'boxel-deck-branch-update-v2';
+export { DECK_BRANCH_UPDATE_SPEC } from './deck-realm-sync.ts';
 
 export interface DeckPushResult {
   files: string[];
   deleted: string[];
+  conflicts?: string[];
   error?: string;
 }
 
+// The push half of sync: local changes go to the realm file by file, each
+// based on the content it was made against. A file the realm also changed is
+// not pushed; it is reported, and `realm sync` (with --prefer-local or
+// --prefer-remote) resolves it.
 export async function pushDeckBranch(options: {
   realmURL: string;
   localDir: string;
   authenticator: RealmAuthenticator;
   dryRun?: boolean;
 }): Promise<DeckPushResult> {
-  let workspace = await loadDeckWorkspaceState(options.localDir);
-  if (!workspace) {
-    return {
-      files: [],
-      deleted: [],
-      error: 'Deck push requires a workspace created by realm pull',
-    };
-  }
-  let requestedRealmURL =
-    new URL(options.realmURL).href.replace(/\/+$/, '') + '/';
-  if (workspace.realmURL !== requestedRealmURL) {
-    return {
-      files: [],
-      deleted: [],
-      error: `Workspace tracks ${workspace.realmURL}, not ${options.realmURL}`,
-    };
-  }
-  let [remote, local] = await Promise.all([
-    readDeckBranchSnapshot(
-      workspace.realmURL,
-      workspace.branchName,
-      options.authenticator,
-    ),
-    hashDeckWorkspaceDirectory(options.localDir),
-  ]);
-  try {
-    assertObservedBranchHead(workspace, remote);
-  } catch (error) {
-    return {
-      files: [],
-      deleted: [],
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
-  let plan = planContentAddressedSync({
-    base: workspace.files,
-    local,
-    remote: remote.files,
+  let result = await reconcileDeckBranch({
+    ...options,
+    branchName: 'main',
+    direction: 'push',
   });
-  let changed = plan.entries.filter(({ action }) => action === 'push');
-  let written = changed.filter(({ localHash }) => localHash);
-  let deleted = changed.filter(({ localHash }) => !localHash);
-  if (changed.length === 0 || options.dryRun) {
-    return {
-      files: written.map(({ path }) => path).sort(),
-      deleted: deleted.map(({ path }) => path).sort(),
-    };
-  }
-  let operations = await Promise.all(
-    changed.map(async ({ path, localHash }) =>
-      localHash
-        ? {
-            path,
-            sha256: localHash,
-            contentBase64: (
-              await readFile(join(options.localDir, path))
-            ).toString('base64'),
-          }
-        : { path, sha256: null },
-    ),
-  );
-  let paths = changed.map(({ path }) => path).sort();
-  let preview = paths.slice(0, 3).join(', ');
-  let extra = paths.length > 3 ? ` (+${paths.length - 3} more)` : '';
-  let next = await publishDeckBranchUpdate({
-    realmURL: workspace.realmURL,
-    branchName: workspace.branchName,
-    authenticator: options.authenticator,
-    body: {
-      schema: DECK_BRANCH_UPDATE_SPEC,
-      message: `save: ${preview}${extra}`,
-      expected: {
-        repositoryHash: workspace.baseRepositoryHash,
-        treeHash: workspace.baseTreeHash,
-        lockHash: workspace.baseLockHash,
-        refGeneration: workspace.observedRefGeneration,
-      },
-      operations,
-    },
-  });
-  await saveDeckWorkspaceState(
-    options.localDir,
-    workspaceStateFromBranch(workspace.realmURL, next),
-  );
+  let conflictError =
+    result.conflicts.length > 0
+      ? `${result.conflicts.length} file(s) changed on the realm too and were not pushed: ${result.conflicts.join(', ')}. Run 'boxel realm sync' with --prefer-local or --prefer-remote to resolve.`
+      : undefined;
   return {
-    files: written.map(({ path }) => path).sort(),
-    deleted: deleted.map(({ path }) => path).sort(),
+    files: result.pushed,
+    deleted: result.remoteDeleted,
+    conflicts: result.conflicts,
+    ...(result.error || conflictError
+      ? { error: result.error ?? conflictError }
+      : {}),
   };
 }
