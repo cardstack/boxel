@@ -119,7 +119,7 @@ module('Integration | tools | instantiate-card', function (hooks) {
     }
   });
 
-  test('refuses a prefix-form module outside the realm', async function (assert) {
+  test('refuses a prefix-form module on another origin', async function (assert) {
     let { virtualNetwork } = getService('network');
     let testRealmPrefix = '@test/instantiate-realm/';
     virtualNetwork.addRealmMapping(testRealmPrefix, testRealmURL);
@@ -135,9 +135,31 @@ module('Integration | tools | instantiate-card', function (hooks) {
 
       await assert.rejects(
         command.execute(input),
-        /moduleUrl (origin|path)/,
-        'a module that resolves outside the realm is refused',
+        /moduleUrl origin/,
+        'a module on another origin is refused',
       );
+    } finally {
+      virtualNetwork.removeRealmMapping(testRealmPrefix);
+    }
+  });
+
+  test('refuses a module in a sibling path that shares the realm path as a prefix', async function (assert) {
+    let { virtualNetwork } = getService('network');
+    let testRealmPrefix = '@test/instantiate-realm/';
+    virtualNetwork.addRealmMapping(testRealmPrefix, testRealmURL);
+    try {
+      let toolService = getService('tool-service');
+      let command = new InstantiateCardTool(toolService.toolContext);
+      let InputType = await command.getInputType();
+      // Same origin as the realm, under a path that begins with the realm's
+      // path without its trailing slash.
+      let input = new InputType({
+        moduleIdentifier: `${testRealmURL.replace(/\/$/, '')}-sibling/valid-card`,
+        cardName: 'ValidCard',
+        realmIdentifier: testRealmPrefix,
+      });
+
+      await assert.rejects(command.execute(input), /moduleUrl path/);
     } finally {
       virtualNetwork.removeRealmMapping(testRealmPrefix);
     }
