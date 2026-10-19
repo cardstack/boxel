@@ -2552,7 +2552,7 @@ The command signs an **operator token** for `diagnostic-render` with the seed on
 
 Options:
 
-- `--note <text>` (required): who is asking and why. The server logs it with the mint and with every request the session is used on. A name in it is recorded as given; nothing verifies it.
+- `--note <text>` (required, at most 300 characters): who is asking and why. The server logs it with the mint and with every request the session is used on. A name in it is recorded as given; nothing verifies it.
 - `--realm-server <url>`: the realm server that holds the card. It defaults to the card URL's origin, which is right for a card on the environment's own realm server (`https://realms-staging.stack.cards`, `https://localhost:4201`). Pass it for a card on a published realm's domain. Its origin must be the one the server knows itself by (its `--serverURL`), because the operator token is signed for that origin alone.
 - `--realm-only`: cover only the card's own realm. Without it, the mint covers every realm the realm owner may read — the same set the indexer's render carries — so private cross-realm `linksTo` and query fields resolve as they do in indexing.
 - `--format isolated|embedded|fitted|atom` (default `isolated`) and `--clear-cache` (drop the loader cache before the render) shape the render URL.
@@ -2568,7 +2568,7 @@ Options:
 
 The operator fetches the seed however they like (SSM, dev-env, prompt) and runs the command in their own shell. Claude consumes only the file below.
 
-Why: the seed signs anything — any user, any permissions, any realm, and the operator endpoints. A diagnostic session is read-only, bound to the realms it was issued for, and gone in fifteen minutes; the seed is unbounded.
+Why: the seed signs anything — any user, any permissions, any realm, and the operator endpoints. A diagnostic session is read-only, bound to the card's realm or to the realms its owner may read, and gone in fifteen minutes; the seed is unbounded.
 
 #### The file Claude reads
 
@@ -2580,6 +2580,7 @@ Why: the seed signs anything — any user, any permissions, any realm, and the o
   "card": "https://realms-staging.stack.cards/example-user/example-realm/ExampleCard/1",
   "realm": "https://realms-staging.stack.cards/example-user/example-realm/",
   "user": "@example-user:stack.cards",
+  "scope": "owner-read-set", // or "realm" with --realm-only
   "realms": [
     "https://realms-staging.stack.cards/example-user/example-realm/",
     "…"
@@ -2636,7 +2637,7 @@ All six dynamic segments must be present and correctly encoded, or the route doe
 If step 4 returns `null` (no `[data-prerender]` element) and the body shows a JSON `instance-error`, the request reached the host but failed auth — usually one of:
 
 - The session expired (`expiresAt`); re-mint.
-- The card is in a realm the mint didn't cover — `--realm-only` was given, or the realm isn't one the owner reads. It is listed in the file's `realms` or it isn't covered.
+- The card is in a realm the mint didn't cover — `--realm-only` was given, or the realm isn't one the owner reads. The file's `realms` lists what the mint covered.
 - The card URL in the render URL is missing `.json`.
 - localStorage wasn't set before navigation (set it, then reload).
 
@@ -2646,7 +2647,7 @@ Each session reads as the realm owner with realm authority, exactly as the index
 
 - **Read-only.** A realm refuses any request needing write or realm-owner (403), including on a world-writable realm, where a write presented with an expired diagnostic session is refused too.
 - **Captures are drawn as no one.** A `_capture/` request with the session is served what an anonymous reader would be, and `_sign-capture-urls` hands its URLs back unsigned, so nothing outlives the session carrying the owner's identity.
-- **Only its realms.** A realm accepts it only if the realm is in the mint's `realms`. The federated read endpoints (`_federated-search`, `_federated-info`, `_federated-types`, `_federated-index-counts`) accept it only for a request naming realms all within that set.
+- **Only its realms.** A session minted with `--realm-only` is accepted by the card's realm alone, and by the federated read endpoints (`_federated-search`, `_federated-info`, `_federated-types`, `_federated-index-counts`) only for a request naming that realm alone. A default session is accepted wherever the owner may read at the time it is used. The file's `scope` says which.
 - **Nowhere else.** It is signed under its own key, so every other realm-server route (`_user`, `_user-keys`, `_request-forward`, `_realm-auth`, the operator endpoints, …) refuses it on its signature.
 - **Fifteen minutes**, with the lifetime checked by every verifier against its own clock.
 

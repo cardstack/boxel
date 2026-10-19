@@ -271,9 +271,12 @@ export function multiRealmAuthorization(
         }
       }
 
-      // A diagnostic session reads the realms it was issued for, and
-      // authenticates here only for a request that names no others. Each use
-      // is logged on the diagnostic channel with the mint it came from.
+      // A diagnostic session scoped to its card's realm authenticates here only
+      // for a request that names that realm alone. One scoped to the owner's
+      // read set authenticates as the owner, and the realms the owner can't
+      // read are judged below as they are for any of the owner's sessions.
+      // Each use is logged on the diagnostic channel with the mint it came
+      // from.
       if (token.diagnostic) {
         let claim = acceptedDiagnosticClaim(token, realmList);
         if (!claim) {

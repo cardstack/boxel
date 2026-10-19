@@ -32,9 +32,12 @@ import type { OperatorTokenClaim } from '../utils/operator-token.ts';
 // The sessions read as the realm owner, with realm authority, in the realm
 // that holds the card and — unless the request asks for that realm alone —
 // in every realm the owner may read, which is the set the indexer's render
-// carries. Each is read-only and lives for minutes. Every session of one mint
-// shares an id, and the mint and each use of its sessions log on the
-// diagnostic channel with that id and the operator's note.
+// carries. One session is minted per realm, keyed as the render tab looks
+// them up, and each names its scope rather than listing the realms, so its
+// size does not grow with the owner's read set. Each is read-only and lives
+// for minutes. Every session of one mint shares an id, and the mint and each
+// use of its sessions log on the diagnostic channel with that id and the
+// operator's note.
 //
 // Body: `card` (the card's URL), `note` (who is asking and why), and
 // `realmOnly` (issue a session for the card's own realm alone).
@@ -42,7 +45,9 @@ import type { OperatorTokenClaim } from '../utils/operator-token.ts';
 // Answers with the `boxel-session` map the render tab reads, the host app the
 // render route is served from, and what the mint covers.
 
-export const MAX_DIAGNOSTIC_NOTE_LENGTH = 1000;
+// The note travels in every session of a mint, so it is kept short: who is
+// asking and why fits, and the session map stays small for a large read set.
+export const MAX_DIAGNOSTIC_NOTE_LENGTH = 300;
 
 const log = logger(DIAGNOSTIC_SESSION_LOG_CHANNEL);
 
@@ -143,8 +148,10 @@ export function handleDiagnosticRenderToken({
       id: randomUUID(),
       note,
       card: cardURL.href,
-      realms: issued.map(({ url }) => url),
+      scope: realmOnly ? 'realm' : 'owner-read-set',
+      realm: ensureTrailingSlash(realm.url),
     };
+    let issuedRealms = issued.map(({ url }) => url);
     let secret = diagnosticSessionSecret(realmSecretSeed);
     let realmServerURL = ensureTrailingSlash(serverURL);
     let sessions: Record<string, string> = {};
@@ -173,7 +180,7 @@ export function handleDiagnosticRenderToken({
       | OperatorTokenClaim
       | undefined;
     log.info(
-      `diagnostic session ${claim.id} minted for card ${claim.card} as ${owner}, reading ${claim.realms.join(', ')} until ${expiresAt.toISOString()}; operator note: ${JSON.stringify(note)}; from ${typeof address === 'string' && address ? address : 'an unknown address'}, operator token signed ${operatorToken ? new Date(operatorToken.iat * 1000).toISOString() : 'at an unknown time'}`,
+      `diagnostic session ${claim.id} minted for card ${claim.card} as ${owner}, scoped to ${claim.scope === 'realm' ? `its realm ${claim.realm}` : `the owner's read set (${issuedRealms.join(', ')} at the mint)`} until ${expiresAt.toISOString()}; operator note: ${JSON.stringify(note)}; from ${typeof address === 'string' && address ? address : 'an unknown address'}, operator token signed ${operatorToken ? new Date(operatorToken.iat * 1000).toISOString() : 'at an unknown time'}`,
     );
 
     await setContextResponse(
@@ -185,7 +192,8 @@ export function handleDiagnosticRenderToken({
             card: claim.card,
             realm: realm.url,
             user: owner,
-            realms: claim.realms,
+            scope: claim.scope,
+            realms: issuedRealms,
             hostURL: ensureTrailingSlash(hostURL.href),
             mintedAt: mintedAt.toISOString(),
             expiresAt: expiresAt.toISOString(),

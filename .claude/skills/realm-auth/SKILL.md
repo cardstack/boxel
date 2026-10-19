@@ -19,15 +19,15 @@ Boxel tokens are derived credentials with their own, weaker retirement story.
 
 ## The token families
 
-| Token                | Minted by                                              | Claims                                                                                | Lifetime                                                                   |
-| -------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| matrix access token  | Synapse                                                | n/a                                                                                   | no expiry by default                                                       |
-| realm-server session | `POST /_server-session`                                | `{user, sessionRoom}`                                                                 | `SESSION_TOKEN_TTL` (24h), or `EXTENDED_SESSION_TOKEN_TTL` (7d) on request |
-| per-realm session    | `POST /_realm-auth`, and the realm's own session route | `{user, realm, permissions, sessionRoom, realmServerURL}`                             | `SESSION_TOKEN_TTL`                                                        |
-| delegated            | `POST /_delegate-session`                              | same, plus `delegated: true`, `permissions: ['read']`                                 | `DELEGATED_TOKEN_TTL` (30m)                                                |
-| prerender service    | `buildCreatePrerenderAuth` (in-process)                | per-realm session shape, plus `realmAuthority: true` (see below)                      | `1d`                                                                       |
-| publish-realm        | `handle-publish-realm` (in-process)                    | per-realm session shape                                                               | `1h`                                                                       |
-| diagnostic           | `POST /_diagnostic-render-token` (operator token)      | prerender shape, plus `diagnostic: {id, note, card, realms}`, `permissions: ['read']` | `DIAGNOSTIC_SESSION_LIFETIME_SEC` (15m)                                    |
+| Token                | Minted by                                              | Claims                                                                                      | Lifetime                                                                   |
+| -------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| matrix access token  | Synapse                                                | n/a                                                                                         | no expiry by default                                                       |
+| realm-server session | `POST /_server-session`                                | `{user, sessionRoom}`                                                                       | `SESSION_TOKEN_TTL` (24h), or `EXTENDED_SESSION_TOKEN_TTL` (7d) on request |
+| per-realm session    | `POST /_realm-auth`, and the realm's own session route | `{user, realm, permissions, sessionRoom, realmServerURL}`                                   | `SESSION_TOKEN_TTL`                                                        |
+| delegated            | `POST /_delegate-session`                              | same, plus `delegated: true`, `permissions: ['read']`                                       | `DELEGATED_TOKEN_TTL` (30m)                                                |
+| prerender service    | `buildCreatePrerenderAuth` (in-process)                | per-realm session shape, plus `realmAuthority: true` (see below)                            | `1d`                                                                       |
+| publish-realm        | `handle-publish-realm` (in-process)                    | per-realm session shape                                                                     | `1h`                                                                       |
+| diagnostic           | `POST /_diagnostic-render-token` (operator token)      | prerender shape, plus `diagnostic: {id, note, card, scope, realm}`, `permissions: ['read']` | `DIAGNOSTIC_SESSION_LIFETIME_SEC` (15m)                                    |
 
 A **diagnostic session** is what an operator renders a live card under to see
 it as the indexer does (`boxel realm-server render-token`; the
@@ -35,8 +35,12 @@ it as the indexer does (`boxel realm-server render-token`; the
 token for `diagnostic-render`, signed with the seed on the operator's machine,
 and mints one session per realm the card's render reads — the owner's read set,
 or the card's realm alone with `realmOnly` — each reading as the realm owner
-with `realmAuthority`. `diagnostic.realms` is the set the mint covers, and
-`diagnostic.id` is shared by its sessions. The mint and every use log on the
+with `realmAuthority`. `diagnostic.scope` is `realm` (the card's realm,
+`diagnostic.realm`, alone) or `owner-read-set` (any realm the owner may read
+when the session is used). The claim names the scope rather than listing the
+realms, so a session's size does not grow with the owner's read set; a list
+there would push a large read set past the request-header limit.
+`diagnostic.id` is shared by a mint's sessions. The mint and every use log on the
 `diagnostic-render` channel with the id and the operator note
 (`packages/runtime-common/diagnostic-session.ts` is the leaf module both sides
 share).
@@ -92,8 +96,8 @@ path). In order:
    with the server-wide seed and skip the permission match. Read-only is
    enforced separately.
    A **diagnostic branch** sits beside it and also returns early: the session
-   must have been issued for this realm (`acceptedDiagnosticClaim`, which also
-   bounds `exp - iat` to the family's lifetime), the request must need `read`
+   must cover this realm (`acceptedDiagnosticClaim`, which also bounds
+   `exp - iat` to the family's lifetime), the request must need `read`
    only (anything else is an `AuthorizationError`, which no policy turns into
    an admission), and the owner it reads as must still have read. On the
    public path, a write presented with a token whose claim says it is a
@@ -143,8 +147,10 @@ decides what it may do. `jwtMiddleware` and `handle-download-realm` act as the
 user in full and refuse it outright (401 `TokenInvalid`) through
 `retrieveUserSessionClaim`. `multiRealmAuthorization` holds it to the one realm
 it names. A diagnostic session verifies only at `multiRealmAuthorization`
-(`retrieveDiagnosticSessionClaim`), and only for a request naming realms all
-within its `diagnostic.realms`; every `jwtMiddleware` route refuses it.
+(`retrieveDiagnosticSessionClaim`): a `realm`-scoped session only for a
+request naming its realm alone, an `owner-read-set` session as the owner,
+whose unreadable realms are judged as for any of the owner's sessions. Every
+`jwtMiddleware` route refuses it.
 
 Permissions and revocation state are both read **fresh from Postgres on every
 request** — no memoization — because a change made against one replica has to

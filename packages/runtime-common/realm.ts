@@ -2139,8 +2139,9 @@ export interface TokenClaims {
   // written for. A render a user asks for — a capture, a command — carries that
   // user's ordinary session instead.
   realmAuthority?: true;
-  // Set on a diagnostic session (see `diagnostic-session.ts`): read-only, in
-  // the realms it was issued for, minted for the operator its note names.
+  // Set on a diagnostic session (see `diagnostic-session.ts`): read-only,
+  // within its scope (the card's realm, or the realms its owner may read),
+  // minted for the operator its note names.
   // Like a delegated session it carries only ['read'], so request
   // authorization treats it specially. It is signed under its own key, which
   // `Realm.#verifySession` picks for a token carrying this claim.
@@ -2485,7 +2486,7 @@ export type RequestContext = {
   // Set when the request's session is a diagnostic session
   // (`TokenClaims.diagnostic`). Its `authenticatedUser` is the realm owner it
   // reads as, which the session is good for only within its own requests,
-  // its realms and its fifteen minutes. So anything that would carry that
+  // its scope and its fifteen minutes. So anything that would carry that
   // identity past the request — a capture drawn as its reader, a signed
   // capture URL — treats the caller as no one.
   diagnosticSession?: true;
@@ -11471,8 +11472,8 @@ export class Realm {
   // Admits a verified diagnostic session to a read: the caller is the realm
   // owner the session names, reading with realm authority as the indexer's
   // render does, and the use is logged on the diagnostic channel with the
-  // mint it came from. A session not issued for this realm, or outside its
-  // lifetime, is refused. `recordOnly` is for a request the realm answers
+  // mint it came from. A session whose scope doesn't cover this realm, or
+  // outside its lifetime, is refused. `recordOnly` is for a request the realm answers
   // without credentials, which the session identifies but does not authorize;
   // there a session that is not valid here, or whose owner's sessions have
   // been revoked since it was minted, leaves the caller unidentified rather

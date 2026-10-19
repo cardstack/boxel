@@ -28,6 +28,7 @@ function minted(
     card: CARD,
     realm: 'https://realms.example.test/owner/realm/',
     user: '@owner:example.test',
+    scope: 'owner-read-set',
     realms: ['https://realms.example.test/owner/realm/'],
     hostURL: 'https://host.example.test/',
     mintedAt: '2026-10-16T12:00:00.000Z',

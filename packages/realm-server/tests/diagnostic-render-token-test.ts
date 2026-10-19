@@ -140,7 +140,8 @@ module(basename(import.meta.filename), function () {
             id: 'a-mint',
             note: NOTE,
             card: CARD_URL,
-            realms: [REALM_URL],
+            scope: 'realm',
+            realm: REALM_URL,
           },
           ...claims,
         },
@@ -186,7 +187,8 @@ module(basename(import.meta.filename), function () {
         id: body.id,
         note: NOTE,
         card: CARD_URL,
-        realms: [REALM_URL],
+        scope: 'realm',
+        realm: REALM_URL,
       });
       assert.strictEqual(
         claims.exp - claims.iat,
@@ -211,10 +213,30 @@ module(basename(import.meta.filename), function () {
         response.body.realms.length > 1,
         'the public realms the owner reads are covered too',
       );
+      let sessions = JSON.parse(response.body.session) as Record<
+        string,
+        string
+      >;
       assert.deepEqual(
-        Object.keys(JSON.parse(response.body.session)).length,
+        Object.keys(sessions).length,
         response.body.realms.length,
         'one session per realm',
+      );
+      assert.strictEqual(response.body.scope, 'owner-read-set');
+      let claims = jsonwebtoken.verify(
+        sessions[REALM_URL],
+        diagnosticSessionSecret(realmSecretSeed),
+      ) as Record<string, any>;
+      assert.deepEqual(
+        claims.diagnostic,
+        {
+          id: response.body.id,
+          note: NOTE,
+          card: CARD_URL,
+          scope: 'owner-read-set',
+          realm: REALM_URL,
+        },
+        'the claim names its scope rather than listing the realms, so its size does not grow with the read set',
       );
     });
 
@@ -240,6 +262,11 @@ module(basename(import.meta.filename), function () {
     test('a mint needs a note and a card on this server', async function (assert) {
       assert.strictEqual((await mint({ note: ' ' })).status, 400);
       assert.strictEqual((await mint({ note: undefined })).status, 400);
+      assert.strictEqual(
+        (await mint({ note: 'x'.repeat(301) })).status,
+        400,
+        'a note longer than 300 characters is refused',
+      );
       assert.strictEqual((await mint({ card: 'not a url' })).status, 400);
       assert.strictEqual(
         (await mint({ card: 'http://127.0.0.1:4445/elsewhere/card' })).status,
@@ -320,7 +347,7 @@ module(basename(import.meta.filename), function () {
         .set('X-HTTP-Method-Override', 'QUERY')
         .set(
           'Authorization',
-          `Bearer ${diagnosticSession({ diagnostic: { id: 'a-mint', note: NOTE, card: CARD_URL, realms: [`${SERVER_ORIGIN}/other/`] } })}`,
+          `Bearer ${diagnosticSession({ diagnostic: { id: 'a-mint', note: NOTE, card: CARD_URL, scope: 'realm', realm: `${SERVER_ORIGIN}/other/` } })}`,
         )
         .send({ realms: [REALM_URL] });
       assert.strictEqual(
@@ -330,6 +357,22 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test("a session scoped to the owner's read set is refused where the user it reads as can't read", async function (assert) {
+      let response = await readCard(
+        diagnosticSession({
+          user: '@stranger:localhost',
+          diagnostic: {
+            id: 'a-mint',
+            note: NOTE,
+            card: CARD_URL,
+            scope: 'owner-read-set',
+            realm: REALM_URL,
+          },
+        }),
+      );
+      assert.strictEqual(response.status, 401);
+    });
+
     test('a realm refuses a session not issued for it', async function (assert) {
       let response = await readCard(
         diagnosticSession({
@@ -337,7 +380,8 @@ module(basename(import.meta.filename), function () {
             id: 'a-mint',
             note: NOTE,
             card: CARD_URL,
-            realms: [`${SERVER_ORIGIN}/other/`],
+            scope: 'realm',
+            realm: `${SERVER_ORIGIN}/other/`,
           },
         }),
       );
@@ -381,7 +425,8 @@ module(basename(import.meta.filename), function () {
             id: 'a-mint',
             note: NOTE,
             card: CARD_URL,
-            realms: [REALM_URL],
+            scope: 'realm',
+            realm: REALM_URL,
           },
         },
         realmSecretSeed,

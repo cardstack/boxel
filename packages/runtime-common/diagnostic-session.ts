@@ -9,8 +9,15 @@
  * asked for it. It is signed under its own key (`diagnosticSessionSecret`)
  * rather than the bare realm seed, so every verifier of ordinary sessions
  * refuses it on its signature; it is accepted only where a verifier asks for
- * it by name: a realm's read routes, and the federated read endpoints, for
- * the realms it was issued for.
+ * it by name: a realm's read routes, and the federated read endpoints, within
+ * its scope.
+ *
+ * The scope is either the card's realm alone, or the owner's read set: every
+ * realm the owner may read when the session is used, which is the set the
+ * indexer's render carries. The claim names the scope rather than listing the
+ * realms, so a session's size does not grow with the owner's read set, and
+ * the realm and the federated endpoints check the owner's read where they
+ * already do for every session.
  *
  * Deliberately a leaf module with no imports, so the realm and the realm
  * server can share it without pulling in the runtime-common barrel.
@@ -38,10 +45,16 @@ export interface DiagnosticSessionClaim {
   note: string;
   // The card the mint was for.
   card: string;
-  // The URLs of every realm the mint issued a session for. A session is
-  // accepted by any realm, or for any federated request, within this set.
-  realms: string[];
+  // `realm`: the session is accepted by the card's realm alone, and for a
+  // federated request naming that realm alone. `owner-read-set`: by any realm
+  // the owner may read, and for a federated request naming any of them; the
+  // verifier checks the owner's read itself.
+  scope: DiagnosticSessionScope;
+  // The URL of the realm that holds the card.
+  realm: string;
 }
+
+export type DiagnosticSessionScope = 'realm' | 'owner-read-set';
 
 /**
  * The signing key for this family: the realm secret seed under a
@@ -74,9 +87,11 @@ export function presentsAsDiagnosticSession(token: string): boolean {
 }
 
 /**
- * The claim of a verified diagnostic session, when it is well formed, was
- * issued for every one of `realmURLs`, and is within its lifetime as this
- * verifier's clock sees it; otherwise undefined.
+ * The claim of a verified diagnostic session, when it is well formed, its
+ * scope covers every one of `realmURLs`, and it is within its lifetime as this
+ * verifier's clock sees it; otherwise undefined. An `owner-read-set` scope
+ * covers any realm here, so the caller checks that the owner may read the
+ * realms the request names.
  */
 export function acceptedDiagnosticClaim(
   claims: { diagnostic?: unknown; iat?: unknown; exp?: unknown },
@@ -95,21 +110,25 @@ export function acceptedDiagnosticClaim(
   ) {
     return undefined;
   }
-  let { id, note, card, realms } = diagnostic as Record<string, unknown>;
+  let { id, note, card, scope, realm } = diagnostic as Record<string, unknown>;
   if (
     typeof id !== 'string' ||
     typeof note !== 'string' ||
     typeof card !== 'string' ||
-    !Array.isArray(realms) ||
-    !realms.every((realm) => typeof realm === 'string')
+    typeof realm !== 'string' ||
+    (scope !== 'realm' && scope !== 'owner-read-set')
   ) {
     return undefined;
   }
-  let issued = new Set(realms.map(withTrailingSlash));
-  if (!realmURLs.every((realmURL) => issued.has(withTrailingSlash(realmURL)))) {
+  if (
+    scope === 'realm' &&
+    !realmURLs.every(
+      (realmURL) => withTrailingSlash(realmURL) === withTrailingSlash(realm),
+    )
+  ) {
     return undefined;
   }
-  return { id, note, card, realms };
+  return { id, note, card, scope, realm };
 }
 
 function withTrailingSlash(url: string): string {

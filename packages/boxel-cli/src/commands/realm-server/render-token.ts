@@ -28,6 +28,10 @@ export interface DiagnosticRenderSession {
   card: string;
   realm: string;
   user: string;
+  // `realm`: the card's realm alone. `owner-read-set`: any realm the owner
+  // may read when the session is used.
+  scope: 'realm' | 'owner-read-set';
+  // The realms the mint issued a session for.
   realms: string[];
   hostURL: string;
   mintedAt: string;
@@ -155,7 +159,7 @@ export function registerRenderTokenCommand(realmServer: Command): void {
     .argument('<card-url>', 'The card to render')
     .requiredOption(
       '--note <text>',
-      'Who is asking and why. The server logs it with the mint and every use of the session. A name in it is recorded as given, not verified',
+      'Who is asking and why, at most 300 characters. The server logs it with the mint and every use of the session. A name in it is recorded as given, not verified',
     )
     .option(
       '--realm-server <url>',
@@ -214,7 +218,9 @@ export function registerRenderTokenCommand(realmServer: Command): void {
           `${FG_GREEN}Issued diagnostic session ${render.id}.${RESET}`,
         );
         console.log(`  reads as: ${render.user}`);
-        console.log(`  realms: ${render.realms.join(', ')}`);
+        console.log(
+          `  covers: ${render.scope === 'realm' ? `its realm alone (${render.realm})` : `every realm the owner may read (${render.realms.length} at the mint)`}`,
+        );
         console.log(`  expires: ${render.expiresAt}`);
         console.log(`  render URL: ${render.renderURL}`);
         if (options.output) {
