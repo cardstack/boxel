@@ -74,9 +74,9 @@ format.
 
 ### 1.6. Each realm server serves its own infrastructure realms
 
-Each realm server MUST serve its own copy of the infrastructure realms (base,
-catalog, and skills), addressed by their `@cardstack/<realm>/` prefixes
-(ADR 002 §1.4).
+Each realm server SHOULD serve its own copy of the infrastructure realms
+(base, catalog, and skills). What a prefix means in content read from another
+realm server is an open question (§5).
 
 ### 1.7. Each realm server answers only for its own realms
 
@@ -124,8 +124,10 @@ account on the paired homeserver, so opening a realm to the whole federation
 takes an explicit rule [10]. Users of other homeservers get server-qualified
 realm paths because localparts collide [10].
 
-Each server serves its own infrastructure realms because that is how prefixes
-already resolve (ADR 002 §1.4) [9, 10].
+Each server serves its own infrastructure realms [10]. Each VirtualNetwork
+maps the `@cardstack/<realm>/` prefixes to the realms its own environment
+names (ADR 002 §1.4) [9]. That makes card JSON portable between environments,
+but not between realm servers (§5).
 
 A cross-server query fans out from the client because each server applies its
 own permissions to its own realms, with the caller's own session on that
@@ -152,7 +154,7 @@ to find [10].
 - **A per-server allowlist of homeservers.** Realm permissions and policies
   already express this per realm [10].
 - **One shared deployment of the infrastructure realms.** Each server serves
-  its own copy, as prefixes already assume [10].
+  its own copy instead [10].
 - **The home realm server proxies cross-server queries.** This needs
   delegated identity, which does not exist [10].
 
@@ -176,7 +178,20 @@ change:
   Synapse admin API reach only the local server's realms and users.
 - Every test realm server shares one homeserver.
 
-## 5. Sources
+## 5. Open questions
+
+- **What does a prefix mean in content read from another realm server?** The
+  host maps each prefix to its own server's realm and serves base from its own
+  bundle [11, 12]. So a host paired with server A resolves a
+  `@cardstack/catalog/` link in a card from server B to A's catalog, and runs
+  B's card definitions against A's base. The leading candidate treats base as
+  part of the platform: the reader's copy, under a compatibility rule that
+  servers in a federation follow. Catalog and skills would then resolve
+  against the server the content came from, as URLs, which needs module
+  imports resolved by the importing module's server. Ask Luke Melia, and
+  `@backspace`, who designed prefix resolution [13].
+
+## 6. Sources
 
 1. #967 (`1a296c8936`, `0bc38061ed`), which added realm authentication over
    Matrix.
@@ -193,5 +208,10 @@ change:
    unreachable.
 8. `skills/realm-policy-authoring/SKILL.md` in cardstack/boxel-skills, on
    `actor() | endswith(":school.example")`.
-9. ADR 002 §1.4.
+9. ADR 002 §1.4 and §2.
 10. Luke Melia, answering this ADR's questions, 2026-10-18.
+11. `packages/host/app/services/network.ts`, which registers each prefix
+    against the realm the host's own config names.
+12. `shimBundledBase` in `packages/host/app/lib/bundled-base.ts`, which serves
+    `@cardstack/base/*` from the host bundle.
+13. `docs/realm-resource-identifiers.md`, added in #5720.
