@@ -19,6 +19,7 @@ import {
 import { nodeStreamToText, nodeStreamToBuffer } from '../stream.ts';
 import { guardDeclaredLength } from '../lib/declared-length-guard.ts';
 import { retrieveUserSessionClaim } from '../utils/jwt.ts';
+import { getInstanceId, INSTANCE_ID_HEADER } from '../lib/instance-id.ts';
 import {
   verifyOperatorToken,
   type OperatorScope,
@@ -190,9 +191,18 @@ export function livenessCheck(ctxt: Koa.Context, _next: Koa.Next) {
   ctxt.set('server', '@cardstack/host');
 }
 
-// Respond to AWS ELB health check
+// Answers the load balancer's health check from memory, ahead of the host-app
+// and realm-serving middleware. The deployment names its health checker's
+// user-agent prefixes in HEALTH_CHECK_USER_AGENTS (comma-separated), so the
+// code carries no provider's name (ADR 003 §1.6). Read per request, so tests
+// and operators can change it without a stale snapshot.
 export function healthCheck(ctxt: Koa.Context, next: Koa.Next) {
-  if (ctxt.req.headers['user-agent']?.startsWith('ELB-HealthChecker')) {
+  let userAgent = ctxt.req.headers['user-agent'];
+  let prefixes = (process.env.HEALTH_CHECK_USER_AGENTS ?? '')
+    .split(',')
+    .map((prefix) => prefix.trim())
+    .filter(Boolean);
+  if (userAgent && prefixes.some((prefix) => userAgent.startsWith(prefix))) {
     ctxt.body = 'OK';
     return;
   }
@@ -489,13 +499,10 @@ async function shedSearch(ctxt: Koa.Context, waitedMs: number) {
   );
 }
 
-export function ecsMetadata(ctxt: Koa.Context, next: Koa.Next) {
-  if (process.env['ECS_CONTAINER_METADATA_URI_V4']) {
-    ctxt.set(
-      'X-ECS-Container-Metadata-URI-v4',
-      process.env['ECS_CONTAINER_METADATA_URI_V4'],
-    );
-  }
+// Names the replica that answered, so a client behind a load balancer can tell
+// replicas apart and see when one is replaced.
+export function instanceIdHeader(ctxt: Koa.Context, next: Koa.Next) {
+  ctxt.set(INSTANCE_ID_HEADER, getInstanceId());
   return next();
 }
 

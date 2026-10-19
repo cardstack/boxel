@@ -60,7 +60,7 @@ import pluralize from 'pluralize';
 import Koa from 'koa';
 import Router from '@koa/router';
 import {
-  ecsMetadata,
+  instanceIdHeader,
   fullRequestURL,
   livenessCheck,
 } from './middleware/index.ts';
@@ -91,6 +91,7 @@ import {
 } from './lib/worker-request-forwarder.ts';
 import { isDeployedServerURL } from './lib/outbound/client.ts';
 import { withCredentialHeadersMasked } from './lib/request-telemetry.ts';
+import { getInstanceId, INSTANCE_ID_ENV } from './lib/instance-id.ts';
 import {
   encodeSecretsKeyringIpc,
   SECRETS_KEYRING_REQUEST,
@@ -119,12 +120,6 @@ const WORKER_START_TIMEOUT_MS = (() => {
   );
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 30_000;
 })();
-
-// This is an ENV var we get from ECS that looks like:
-// http://169.254.170.2/v3/a1de500d004f49bea02ace30cefb0f01-3236013547 where the
-// last segment is the "container runtime ID", where the value on the left of
-// the '-' is the task ID.
-const ECS_CONTAINER_METADATA_URI = process.env.ECS_CONTAINER_METADATA_URI;
 
 const REALM_SECRET_SEED = process.env.REALM_SECRET_SEED;
 if (!REALM_SECRET_SEED) {
@@ -210,8 +205,11 @@ let {
 let isReady = false;
 let isExiting = false;
 let workers: ChildProcess[] = [];
+// The indexing dashboard is for development. A worker manager is deployed when
+// any realm it serves is mapped to a deployed origin, the same test that the
+// secrets-at-rest startup check uses.
 function isIndexingDashboardEnabled(): boolean {
-  return !ECS_CONTAINER_METADATA_URI;
+  return !toUrls.some((to) => isDeployedServerURL(String(to)));
 }
 
 // Always create the sink — its in-memory state is small, and the
@@ -323,7 +321,7 @@ if (port != null) {
       });
       return next();
     })
-    .use(ecsMetadata);
+    .use(instanceIdHeader);
 
   webServer.on('error', (err: any) => {
     log.error(`worker manager HTTP server error: ${err.message}`);
@@ -858,13 +856,10 @@ async function startWorker(
     ],
     {
       stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
+      env: { ...process.env, [INSTANCE_ID_ENV]: getInstanceId() },
     },
   );
-  let name = String(
-    (ECS_CONTAINER_METADATA_URI
-      ? `${ECS_CONTAINER_METADATA_URI.split('/').pop()!}-pid-${worker.pid}`
-      : worker.pid)!,
-  );
+  let name = `${getInstanceId()}-pid-${worker.pid}`;
 
   let watchdog: NodeJS.Timeout;
   let workerId: string | undefined;

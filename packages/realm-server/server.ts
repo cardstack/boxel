@@ -25,7 +25,7 @@ import fsExtra from 'fs-extra';
 const { ensureDirSync } = fsExtra;
 import {
   httpLogging,
-  ecsMetadata,
+  instanceIdHeader,
   searchAdmission,
   orderConnectionsByRealm,
   methodOverrideSupport,
@@ -931,7 +931,7 @@ export class RealmServer {
       // headers it sets.
       .use(clientAddress(this.clientAddress))
       .use(httpLogging)
-      .use(ecsMetadata)
+      .use(instanceIdHeader)
       .use(
         cors({
           origin: '*',

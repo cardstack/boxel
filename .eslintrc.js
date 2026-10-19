@@ -5,6 +5,11 @@ const {
   CJS_GLOBALS_IN_ESM,
 } = require('./eslint/erasable-syntax-selectors.cjs');
 const { DATA_TEST_SELECTORS } = require('./eslint/data-test-selectors.cjs');
+const {
+  CLOUD_PROVIDER_SDK_IMPORTS,
+  RUNTIME_PACKAGE_FILES,
+  CLOUD_PROVIDER_ADAPTER_MODULES,
+} = require('./eslint/cloud-provider-sdk-imports.cjs');
 
 module.exports = {
   root: true,
@@ -98,6 +103,22 @@ module.exports = {
       files: ['**/src/**/*.{ts,mts}', '**/scripts/**/*.{ts,mts}'],
       rules: {
         'no-restricted-globals': ['error', ...CJS_GLOBALS_IN_ESM],
+      },
+    },
+    {
+      // Cloud provider SDKs only in adapter modules (ADR 003 §1.2). The
+      // runtime packages with their own `root: true` config, `ai-bot` and
+      // `host`, re-declare it.
+      files: RUNTIME_PACKAGE_FILES,
+      excludedFiles: ['**/tests/**'],
+      rules: {
+        'no-restricted-imports': ['error', CLOUD_PROVIDER_SDK_IMPORTS],
+      },
+    },
+    {
+      files: CLOUD_PROVIDER_ADAPTER_MODULES,
+      rules: {
+        'no-restricted-imports': 'off',
       },
     },
   ],

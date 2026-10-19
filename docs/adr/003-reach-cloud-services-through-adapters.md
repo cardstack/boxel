@@ -35,8 +35,9 @@ and only when, they appear in all capitals, as shown here.
 
 This ADR governs runtime code: code that runs in a deployed service or in the
 browser. Infrastructure-as-code, deploy configuration such as
-`packages/host/config/deploy.js`, CI workflows, and operational runbooks and
-skills are provider-specific by nature, and this ADR does not govern them.
+`packages/host/config/deploy.js` and the realm-server's deployed
+`scripts/start-*.sh`, CI workflows, and operational runbooks and skills are
+provider-specific by nature, and this ADR does not govern them.
 
 ### 1.2. Proprietary services sit behind an adapter
 
@@ -49,9 +50,10 @@ provider error codes. An adapter MUST translate provider errors into the
 interface's own results or errors.
 
 A provider SDK (`@aws-sdk/*`, and the SDK of any other cloud provider) MUST be
-imported only in an adapter module. A lint rule MUST enforce this. The rule's
-allowlist names each adapter module. A change to the allowlist is a reviewed
-change to the boundary.
+imported only in an adapter module, or in a module that speaks the S3 API
+(§1.3). A lint rule MUST enforce this. The rule's allowlist,
+`eslint/cloud-provider-sdk-imports.cjs`, names each such module. A change to
+the allowlist is a reviewed change to the boundary.
 
 ### 1.3. Open protocols are the boundary
 
@@ -66,7 +68,7 @@ An S3 client MUST take its endpoint, region, and path-style addressing from
 configuration, so that it can reach any S3-compatible store. It MUST get
 credentials from configuration or the SDK's default chain, and it MUST NOT
 assume a particular source for them. The runtime SHOULD construct S3 clients
-through one shared helper.
+through `packages/realm-server/lib/s3-client.ts`.
 
 ### 1.4. Every capability runs locally
 
@@ -79,20 +81,20 @@ local-disk adapter.
 
 One factory per capability MUST choose the adapter from configuration at
 startup. Code outside the factory MUST depend on the interface, and it MUST
-NOT know which adapter is in use. Partial or conflicting configuration MUST
-fail startup. It MUST NOT fall back silently. Settings that only one adapter
-reads MAY be named for its provider, such as `SECRETS_KMS_KEY_ARN`. Only that
-adapter's factory MAY read them.
+NOT know which adapter is in use. Incomplete configuration for an adapter MUST
+fail startup. It MUST NOT fall back silently to another adapter. Settings that
+only one adapter reads MAY be named for its provider, such as
+`SECRETS_KMS_KEY_ARN`. Only that adapter's factory MAY read them.
 
 ### 1.6. No assumptions about the hosting platform
 
 Runtime code MUST NOT detect its platform from environment variables that a
-provider injects, such as `ECS_CONTAINER_METADATA_URI`. It MUST NOT change
-behavior based on provider-specific request headers or user agents, such as
-`ELB-HealthChecker`. A fact about the deployment, such as an instance id or
-whether the server is deployed, MUST come from a provider-neutral setting that
-the deployment configuration sets. Health and readiness MUST be served on
-paths that any load balancer or orchestrator can probe.
+provider injects, such as `ECS_CONTAINER_METADATA_URI`. Code MUST NOT name a
+provider-specific request header or user agent, such as `ELB-HealthChecker`.
+When behavior depends on one, the deployment configuration MUST name it. A
+fact about the deployment, such as an instance id or whether the server is
+deployed, MUST come from a provider-neutral setting or derivation, such as the
+server's own URL.
 
 ### 1.7. New dependencies
 
@@ -148,21 +150,8 @@ it.
 - **Self-hosted open-source services only, such as MinIO or Vault, in
   production.** This avoids proprietary APIs, but at an operational cost that
   adapters make unnecessary.
-
-## 4. Consequences
-
-The runtime does not yet meet this ADR in these places. Each is follow-up
-work:
-
-- No lint rule restricts provider SDK imports (§1.2).
-- `S3MediaCacheAdapter` (`packages/realm-server/media-cache/s3-adapter.ts`)
-  and the prerender artifact sink
-  (`packages/realm-server/prerender/artifact-sink.ts`) construct `S3Client`
-  with a region only, and no endpoint can be configured (§1.3).
-- `worker.ts` and `worker-manager.ts` derive worker ids from
-  `ECS_CONTAINER_METADATA_URI`. `worker-manager.ts` enables the local indexing
-  dashboard when that variable is absent (§1.6).
-- `healthCheck` in `packages/realm-server/middleware/index.ts` answers only
-  requests whose user agent is `ELB-HealthChecker` (§1.6).
-- The `ecsMetadata` middleware sends an `X-ECS-Container-Metadata-URI-v4`
-  response header (§1.6).
+- **A dedicated health-check path instead of a configured user agent.** This
+  is the more common pattern. But it moves the load balancer's probe, so the
+  application and the infrastructure must change in a set order. A
+  configured user agent keeps the probe where it is, and a different load
+  balancer needs only a new setting.
