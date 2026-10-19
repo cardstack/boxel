@@ -88,10 +88,29 @@ function lastModifiedSeconds(stat: Stats): number {
 export class NodeAdapter implements RealmAdapter {
   private realmDir: string;
   private enableFileWatcher?: boolean;
+  // Told about every file this adapter changes, so a Deck realm's History can
+  // commit host saves (debounced, then sealed by deckd). It must never throw
+  // into the write path.
+  private onMutation?: (path: LocalPath) => void;
 
-  constructor(realmDir: string, enableFileWatcher?: boolean) {
+  constructor(
+    realmDir: string,
+    enableFileWatcher?: boolean,
+    onMutation?: (path: LocalPath) => void,
+  ) {
     this.realmDir = realmDir;
     this.enableFileWatcher = enableFileWatcher;
+    this.onMutation = onMutation;
+  }
+
+  private noteMutation(path: LocalPath) {
+    try {
+      this.onMutation?.(path);
+    } catch (e: any) {
+      realmEventsLog.warn(
+        `History mutation hook failed for ${path}: ${e?.message ?? e}`,
+      );
+    }
   }
 
   get dir(): string {
@@ -303,6 +322,7 @@ export class NodeAdapter implements RealmAdapter {
     } finally {
       removeSync(stagedPath);
     }
+    this.noteMutation(path as LocalPath);
     return {
       path: absolutePath,
       lastModified: lastModifiedSeconds(statSync(absolutePath)),
@@ -324,6 +344,7 @@ export class NodeAdapter implements RealmAdapter {
     let absolutePath = join(this.realmDir, path);
     ensureFileSync(absolutePath);
     appendFileSync(absolutePath, contents);
+    this.noteMutation(path);
     let stat = statSync(absolutePath);
     return {
       path: absolutePath,
@@ -357,6 +378,7 @@ export class NodeAdapter implements RealmAdapter {
     } finally {
       removeSync(stagedPath);
     }
+    this.noteMutation(path);
     return {
       path: absolutePath,
       lastModified: lastModifiedSeconds(statSync(absolutePath)),
@@ -383,6 +405,7 @@ export class NodeAdapter implements RealmAdapter {
   async remove(path: LocalPath): Promise<void> {
     let absolutePath = join(this.realmDir, path);
     removeSync(absolutePath);
+    this.noteMutation(path);
   }
 
   createStreamingResponse(

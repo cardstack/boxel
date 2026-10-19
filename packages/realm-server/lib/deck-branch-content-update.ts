@@ -227,6 +227,9 @@ export async function updateDeckBranchContent(options: {
       // The first write with History adopts an existing main branch whose
       // head may predate deckd. Seal the state being left before changing bytes;
       // later calls are no-ops because that tree is already History HEAD.
+      // Host saves still waiting out the debounce are committed first, as
+      // their own Step, so the branch update's Step holds only its own change.
+      await options.history.flush(options.realmDir);
       await options.history.seal(options.realmDir, 'History baseline');
       let materialized = await writeTreeToDir(options.realmDir, files);
       liveChanged =

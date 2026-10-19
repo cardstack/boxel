@@ -30,15 +30,24 @@ const policy = { enabled: true, realmRRIs: new Set([realmRRI]) };
 
 class RecordingHistory implements HistoryBackend {
   readonly kind = 'deckd' as const;
-  entries: Array<{ id: string; files: Map<string, Buffer> }> = [];
+  entries: Array<{ id: string; files: Map<string, Buffer>; message: string }> =
+    [];
+  pending = new Set<string>();
 
-  noteMutation(): void {}
-  async flush(): Promise<string | undefined> {
-    return undefined;
+  noteMutation(_dir: string, path: string): void {
+    this.pending.add(path);
+  }
+  async flush(dir: string): Promise<string | undefined> {
+    if (this.pending.size === 0) {
+      return undefined;
+    }
+    let message = `save: ${[...this.pending].join(', ')}`;
+    this.pending.clear();
+    return this.seal(dir, message);
   }
   async seal(
     dir: string,
-    _message: string,
+    message: string,
     _actor?: HistoryActor,
   ): Promise<string | undefined> {
     let files = await readTreeFromDir(dir);
@@ -51,7 +60,7 @@ class RecordingHistory implements HistoryBackend {
       return undefined;
     }
     let id = `step${this.entries.length + 1}`;
-    this.entries.push({ id, files });
+    this.entries.push({ id, files, message });
     return id;
   }
   async head(): Promise<string | undefined> {
@@ -171,6 +180,28 @@ module(basename(import.meta.filename), function (hooks) {
       history.entries[0].files.get('index.js')?.toString(),
       'export const version = 1;\n',
       'the first write adopts the state being left as a History baseline',
+    );
+  });
+
+  test('host saves waiting out the debounce are committed before a branch update', async function (assert) {
+    await writeFile(join(realmDir, 'notes.md'), 'from the host\n');
+    history.noteMutation(realmDir, 'notes.md');
+    await updateDeckBranchContent({
+      realmDir,
+      realmRRI,
+      branch: 'main',
+      policy,
+      history,
+      request: await request('export const version = 2;\n'),
+    });
+    assert.deepEqual(
+      history.entries.map((entry) => entry.message),
+      ['save: notes.md', 'save: index.js'],
+      'the host save is its own Step, ahead of the branch update',
+    );
+    assert.strictEqual(
+      history.entries[0].files.get('notes.md')?.toString(),
+      'from the host\n',
     );
   });
 

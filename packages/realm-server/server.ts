@@ -1,6 +1,6 @@
 import Koa from 'koa';
 import cors from '@koa/cors';
-import { DeckdHistory } from '@cardstack/deck-history/deckd';
+import { sharedDeckHistory } from './lib/deck-save-history.ts';
 import http from 'http';
 import http2 from 'http2';
 import net from 'net';
@@ -935,10 +935,9 @@ export class RealmServer {
       virtualNetwork: this.virtualNetwork,
       deckCollaboration: deckCollaborationPolicyFromEnvironment(),
       realmSecretSeed: this.realmSecretSeed,
-      // Realm Server owns accepted write batches and seals them explicitly.
-      // Disabling deckd's standalone FS watcher prevents a large tree
-      // materialization from being sealed halfway through.
-      deckHistory: new DeckdHistory({ watch: false }),
+      // The same deckd client the file adapters note host saves to, so a
+      // branch update commits pending saves before it seals its own Step.
+      deckHistory: sharedDeckHistory(),
     });
     let sendEvent = createSendEvent({
       matrixClient: this.matrixClient,
