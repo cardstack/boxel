@@ -30,6 +30,7 @@ import type { ResolvedCodeRef } from '@cardstack/runtime-common';
 import {
   Deferred,
   baseRealm,
+  baseRRI,
   skillCardRef,
   rri,
 } from '@cardstack/runtime-common';
@@ -2334,6 +2335,34 @@ module('Acceptance | AI Assistant tests', function (hooks) {
         canWrite: true,
       },
       'Context sent with message contains correct realmPermissions',
+    );
+  });
+
+  test('code mode context names a base module by its prefix form', async function (assert) {
+    let { virtualNetwork } = getService('network');
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: virtualNetwork.toURLHref(baseRRI('card-api.gts')),
+      stacks: [[]],
+    });
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+    await fillIn('[data-test-message-field]', `Message`);
+    await click('[data-test-send-message-btn]');
+
+    let roomEvents = mockMatrixUtils.getRoomEvents(matrixRoomId);
+    let contextSent: BoxelContext = JSON.parse(
+      roomEvents[roomEvents.length - 1].content.data,
+    ).context;
+    assert.strictEqual(
+      contextSent.codeMode!.currentFile,
+      baseRRI('card-api.gts'),
+      'currentFile is the prefix form',
+    );
+    assert.strictEqual(
+      contextSent.realmPrefixes?.[baseRRI('')],
+      virtualNetwork.toURLHref(baseRRI('')),
+      'the context maps the base prefix to the URL it is served from',
     );
   });
 

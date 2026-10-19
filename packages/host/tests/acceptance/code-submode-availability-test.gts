@@ -242,7 +242,7 @@ module('Acceptance | code submode availability', function (hooks) {
       'in code mode, a card whose module the user cannot read is not shown',
     );
     assert.strictEqual(
-      operatorModeStateService.state.codePath?.href,
+      operatorModeStateService.state.codePath,
       `${readableRealmURL}pet.gts`,
       'and the editor stays where it was',
     );

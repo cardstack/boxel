@@ -37,6 +37,7 @@ import {
   isListingDef,
   isListingInstance,
   isRealmIndexCard,
+  rri,
   type ResolvedCodeRef,
   type CardErrorJSONAPI,
 } from '@cardstack/runtime-common';
@@ -187,8 +188,9 @@ export default class DetailPanel extends Component<Signature> {
     return this.isModule && this.isEmptyFile;
   }
 
-  private get codePath() {
-    return this.operatorModeStateService.state.codePath;
+  // The open file's URL, which the delete request goes to.
+  private get fileURL() {
+    return this.network.virtualNetwork.toURL(this.args.readyFile.url);
   }
 
   private get showInheritancePanel() {
@@ -357,7 +359,7 @@ export default class DetailPanel extends Component<Signature> {
         {
           label: 'Delete',
           icon: IconTrash,
-          handler: () => this.args.delete(this.codePath),
+          handler: () => this.args.delete(this.fileURL),
         },
       ];
     } else {
@@ -517,20 +519,10 @@ export default class DetailPanel extends Component<Signature> {
     if (!this.args.selectedDeclaration?.exportName) {
       throw new Error(`bug: only exported cards/fields can be inherited`);
     }
-    // Operator-mode state holds the code path as the served URL (a base
-    // module is `http://…/base/card-api.gts`, not `@cardstack/base/card-api`).
-    // Code refs compare by string, so the module is unresolved to its RRI
-    // here.
-    // TODO: operator-mode state should hold the code path as an RRI, converting
-    // to a URL only for readers that need one; this then becomes a plain
-    // extension trim with no virtual network.
     return {
       name: this.args.selectedDeclaration.exportName,
-      module: this.network.virtualNetwork.unresolveURL(
-        this.operatorModeStateService.state.codePath!.href.replace(
-          /\.[^.]+$/,
-          '',
-        ),
+      module: rri(
+        this.operatorModeStateService.state.codePath!.replace(/\.[^.]+$/, ''),
       ),
     };
   }
@@ -643,7 +635,7 @@ export default class DetailPanel extends Component<Signature> {
                   @icon='delete'
                   @size='extra-small'
                   @variant='destructive'
-                  {{on 'click' (fn @delete this.codePath)}}
+                  {{on 'click' (fn @delete this.fileURL)}}
                   class='delete-module-button'
                   @label='Delete Module'
                   data-test-delete-module-button
@@ -674,7 +666,7 @@ export default class DetailPanel extends Component<Signature> {
                   @icon='delete'
                   @size='extra-small'
                   @variant='destructive'
-                  {{on 'click' (fn @delete this.codePath)}}
+                  {{on 'click' (fn @delete this.fileURL)}}
                   class='delete-module-button'
                   @label='Delete Module'
                   data-test-delete-module-button

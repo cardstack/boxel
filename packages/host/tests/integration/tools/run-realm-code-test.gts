@@ -416,7 +416,7 @@ return { show: 'Pet/biscuit' };`,
     assert.notOk(result.showError);
     assert.strictEqual(operatorModeStateService.state.submode, 'code');
     assert.strictEqual(
-      operatorModeStateService.state.codePath?.href,
+      operatorModeStateService.state.codePath,
       `${testRealmURL}notes/first.md`,
     );
   });
@@ -2546,7 +2546,7 @@ return queued;`,
     );
     assert.strictEqual(operatorModeStateService.state.submode, 'code');
     assert.strictEqual(
-      operatorModeStateService.state.codePath?.href,
+      operatorModeStateService.state.codePath,
       `${testRealmURL}pet.gts`,
     );
     assert.strictEqual(
@@ -2608,7 +2608,7 @@ await realm.ui.openFile('notes/second.md');`,
 
     assert.strictEqual(result.uiActions[0]?.status, 'done');
     assert.strictEqual(
-      operatorModeStateService.state.codePath?.href,
+      operatorModeStateService.state.codePath,
       `${testRealmURL}notes/second.md`,
     );
   });
