@@ -162,12 +162,16 @@ module('Integration | tools | copy-file-to-realm', function (hooks) {
         'code',
         'submode is switched to code',
       );
+      let codePath = operatorModeStateService.state?.codePath;
       assert.strictEqual(
-        operatorModeStateService.state?.codePath?.href,
+        codePath ? virtualNetwork.toURL(codePath).href : undefined,
         `${testRealmURL}hello.txt`,
         'code path is the file the prefix-form identifier names',
       );
     } finally {
+      // The code path is held in the prefix form, so it is cleared before the
+      // prefix stops resolving.
+      await operatorModeStateService.updateCodePath(null);
       virtualNetwork.removeRealmMapping(testRealmPrefix);
     }
   });
