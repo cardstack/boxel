@@ -38,6 +38,10 @@ ruleTester.run('no-url-form-base-imports', rule, {
     // A template literal whose leading spelling is not the alias
     'let mod = await import(`@cardstack/base/${name}`);',
     'let mod = await loader.import(`${realm}https://cardstack.com/base/x`);',
+    // `baseRealm.url` outside an import position, or not interpolated first
+    'let id = `${baseRealm.url}index`;',
+    'let mod = await loader.import(`${realm}${baseRealm.url}x`);',
+    'let mod = await loader.import(`${other.url}card-api`);',
     // A template literal outside an import position
     'let url = `https://cardstack.com/base/${name}`;',
     // `importResource` with a canonical specifier, or one it cannot read
@@ -99,6 +103,17 @@ ruleTester.run('no-url-form-base-imports', rule, {
     {
       code: "let api = await loader.import(`${'https://cardstack.com/base/'}card-api`);",
       output: "let api = await loader.import(`${'@cardstack/base/'}card-api`);",
+      errors: [{ messageId: 'no-url-form-base-imports' }],
+    },
+    // `baseRealm.url` interpolated first
+    {
+      code: 'let mod = await loader.import(`${baseRealm.url}card-api`);',
+      output: 'let mod = await loader.import(`@cardstack/base/card-api`);',
+      errors: [{ messageId: 'no-url-form-base-imports' }],
+    },
+    {
+      code: 'let mod = await import(`${baseRealm.url}${name}`);',
+      output: 'let mod = await import(`@cardstack/base/${name}`);',
       errors: [{ messageId: 'no-url-form-base-imports' }],
     },
     // `importResource` thunks

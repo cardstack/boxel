@@ -19,8 +19,9 @@ This rule flags (and auto-fixes) the URL-form specifier in:
 - `importResource(this, () => …)`, whose thunk returns the specifier
 
 A specifier written as a template literal is flagged when its leading spelling is
-the URL form: either the text before the first interpolation, or a string
-literal interpolated first (`` `${'https://cardstack.com/base/'}card-api` ``).
+the URL form: the text before the first interpolation, a string literal
+interpolated first (`` `${'https://cardstack.com/base/'}card-api` ``), or
+`baseRealm.url` interpolated first (`` `${baseRealm.url}card-api` ``).
 
 It deliberately ignores the URL in other positions — fetch targets, alias
 registration (e.g. `VirtualNetwork` mappings), and test assertions about served

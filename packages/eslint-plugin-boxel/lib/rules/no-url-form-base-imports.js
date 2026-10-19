@@ -60,8 +60,9 @@ module.exports = {
     }
 
     // A template literal's leading spelling decides which module it names, so
-    // only that is read: the first quasi when it has text, otherwise a string
-    // literal interpolated first (`${'https://cardstack.com/base/'}x`).
+    // only that is read: the first quasi when it has text, otherwise what is
+    // interpolated first — a string literal
+    // (`${'https://cardstack.com/base/'}x`) or `baseRealm.url`.
     function checkTemplateLiteral(node) {
       let first = node.quasis[0];
       if (first.value.raw !== '') {
@@ -79,9 +80,36 @@ module.exports = {
         });
         return;
       }
-      if (node.expressions.length > 0) {
-        check(node.expressions[0]);
+      let lead = node.expressions[0];
+      if (isBaseRealmURL(lead)) {
+        let specifier = context.sourceCode.getText(node).slice(1, -1);
+        report(
+          node,
+          specifier.replace(/^\$\{[^}]*\}/, URL_FORM_PREFIX),
+          (fixer) =>
+            // From after the opening backtick through the `}` closing the
+            // interpolation, which starts the second quasi.
+            fixer.replaceTextRange(
+              [node.range[0] + 1, node.quasis[1].range[0] + 1],
+              CANONICAL_PREFIX,
+            ),
+        );
+        return;
       }
+      check(lead);
+    }
+
+    // `baseRealm.url`, the runtime-common constant that holds the URL form.
+    function isBaseRealmURL(node) {
+      return (
+        node &&
+        node.type === 'MemberExpression' &&
+        !node.computed &&
+        node.object.type === 'Identifier' &&
+        node.object.name === 'baseRealm' &&
+        node.property.type === 'Identifier' &&
+        node.property.name === 'url'
+      );
     }
 
     function check(node) {
