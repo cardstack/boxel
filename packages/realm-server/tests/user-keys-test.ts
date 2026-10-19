@@ -800,6 +800,69 @@ module(basename(import.meta.filename), function () {
       }
     });
 
+    test("the migration leaves the owner's own privileges when the owner administers the read-only role", async function (assert) {
+      await dbAdapter.execute(
+        `DO $$
+         BEGIN
+           CREATE ROLE readonly_role;
+         EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL;
+         END
+         $$`,
+      );
+      await dbAdapter.execute(
+        `GRANT SELECT ON ALL TABLES IN SCHEMA public TO readonly_role`,
+      );
+      // As Postgres 16 makes a role with CREATEROLE that creates the
+      // read-only role: a member with ADMIN alone, neither inheriting nor
+      // able to SET ROLE to it. Here that role owns both tables.
+      const OWNER = 'admin_owner_for_user_keys_test';
+      await dbAdapter.execute(
+        `DO $$
+         BEGIN
+           CREATE ROLE ${OWNER};
+         EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL;
+         END
+         $$`,
+      );
+      await dbAdapter.execute(`ALTER TABLE user_keys OWNER TO ${OWNER}`);
+      await dbAdapter.execute(
+        `ALTER TABLE key_write_tickets OWNER TO ${OWNER}`,
+      );
+      await dbAdapter.execute(
+        `GRANT readonly_role TO ${OWNER} WITH ADMIN TRUE, INHERIT FALSE, SET FALSE`,
+      );
+      try {
+        let ownerSelects = async () => {
+          return await dbAdapter.execute(
+            `SELECT tbl.relname::text AS table_name
+             FROM pg_class tbl
+             CROSS JOIN LATERAL aclexplode(tbl.relacl) acl
+             WHERE tbl.relname IN ('user_keys', 'key_write_tickets')
+               AND acl.grantee = tbl.relowner
+               AND acl.privilege_type = 'SELECT'
+             ORDER BY 1`,
+          );
+        };
+        let before = await ownerSelects();
+        assert.deepEqual(before, [
+          { table_name: 'key_write_tickets' },
+          { table_name: 'user_keys' },
+        ]);
+
+        let statements: string[] = [];
+        require(USER_KEYS_MIGRATION).up({
+          sql: (statement: string) => statements.push(statement),
+        });
+        for (let statement of statements) {
+          await dbAdapter.execute(statement);
+        }
+
+        assert.deepEqual(await ownerSelects(), before);
+      } finally {
+        await dbAdapter.execute(`REVOKE readonly_role FROM ${OWNER}`);
+      }
+    });
+
     test("the read-only role can't select either table", async function (assert) {
       // The role and its blanket grant as staging and production have them,
       // then the migration that withholds these tables.
@@ -814,21 +877,75 @@ module(basename(import.meta.filename), function () {
       await dbAdapter.execute(
         `GRANT SELECT ON ALL TABLES IN SCHEMA public TO readonly_role`,
       );
+      async function createRole(name: string) {
+        await dbAdapter.execute(
+          `DO $$
+           BEGIN
+             CREATE ROLE ${name};
+           EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL;
+           END
+           $$`,
+        );
+      }
+      async function grantAs(role: string, sql: string) {
+        await dbAdapter.withTransaction(async (query: any) => {
+          await query([`SET LOCAL ROLE ${role}`]);
+          await query([sql]);
+        });
+      }
       // A user that inherits the role and was also granted SELECT on the
-      // tables directly.
-      await dbAdapter.execute(
-        `DO $$
-         BEGIN
-           CREATE ROLE readonly_member_for_user_keys_test;
-         EXCEPTION WHEN duplicate_object OR unique_violation THEN NULL;
-         END
-         $$`,
-      );
+      // tables directly, with the right to grant it on, which it used to pass
+      // SELECT on to a role outside the read-only role.
+      await createRole('readonly_member_for_user_keys_test');
+      await createRole('recipient_for_user_keys_test');
       await dbAdapter.execute(
         `GRANT readonly_role TO readonly_member_for_user_keys_test`,
       );
       await dbAdapter.execute(
-        `GRANT SELECT ON TABLE user_keys, key_write_tickets TO readonly_member_for_user_keys_test`,
+        `GRANT SELECT ON TABLE user_keys, key_write_tickets TO readonly_member_for_user_keys_test WITH GRANT OPTION`,
+      );
+      await grantAs(
+        'readonly_member_for_user_keys_test',
+        `GRANT SELECT ON TABLE user_keys, key_write_tickets TO recipient_for_user_keys_test`,
+      );
+      // A user that inherits the role and was granted SELECT on a column of
+      // each table by that member, from its table grant.
+      await createRole('readonly_column_recipient_for_user_keys_test');
+      await dbAdapter.execute(
+        `GRANT readonly_role TO readonly_column_recipient_for_user_keys_test`,
+      );
+      for (let table of ['user_keys', 'key_write_tickets']) {
+        await grantAs(
+          'readonly_member_for_user_keys_test',
+          `GRANT SELECT (owner) ON TABLE ${table} TO readonly_column_recipient_for_user_keys_test`,
+        );
+      }
+      // A user that inherits the role and was granted SELECT on the tables by
+      // a role other than their owner.
+      await createRole('readonly_delegated_member_for_user_keys_test');
+      await createRole('delegator_for_user_keys_test');
+      await dbAdapter.execute(
+        `GRANT readonly_role TO readonly_delegated_member_for_user_keys_test`,
+      );
+      await dbAdapter.execute(
+        `GRANT SELECT ON TABLE user_keys, key_write_tickets TO delegator_for_user_keys_test WITH GRANT OPTION`,
+      );
+      await grantAs(
+        'delegator_for_user_keys_test',
+        `GRANT SELECT ON TABLE user_keys, key_write_tickets TO readonly_delegated_member_for_user_keys_test`,
+      );
+      // A user that reaches the role through another role, and was granted
+      // SELECT on the tables directly.
+      await createRole('readonly_group_for_user_keys_test');
+      await createRole('readonly_group_member_for_user_keys_test');
+      await dbAdapter.execute(
+        `GRANT readonly_role TO readonly_group_for_user_keys_test`,
+      );
+      await dbAdapter.execute(
+        `GRANT readonly_group_for_user_keys_test TO readonly_group_member_for_user_keys_test`,
+      );
+      await dbAdapter.execute(
+        `GRANT SELECT ON TABLE user_keys, key_write_tickets TO readonly_group_member_for_user_keys_test`,
       );
       let statements: string[] = [];
       require(USER_KEYS_MIGRATION).up({
@@ -853,6 +970,9 @@ module(basename(import.meta.filename), function () {
       for (let role of [
         'readonly_role',
         'readonly_member_for_user_keys_test',
+        'readonly_column_recipient_for_user_keys_test',
+        'readonly_delegated_member_for_user_keys_test',
+        'readonly_group_member_for_user_keys_test',
       ]) {
         for (let table of ['user_keys', 'key_write_tickets']) {
           await assert.rejects(
