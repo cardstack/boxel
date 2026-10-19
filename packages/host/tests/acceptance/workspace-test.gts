@@ -532,9 +532,12 @@ module('Acceptance | workspace card | Library pages', function (hooks) {
     // realm event is dispatched on a later macrotask, debounced into the
     // matrix timeline, and coalesced into a live-search refresh; that refresh
     // re-runs the page-2 query, finds it empty, moves the Library back to
-    // page 1, and runs the query again. Every step is held by a test waiter
-    // or the run loop, so wait for all of it to settle instead of polling
-    // against a fixed clock.
+    // page 1, and runs the query again. The searches are held by test waiters
+    // and the debounce by the run loop, so wait for them to settle instead of
+    // polling against a fixed clock. The timeline drain that the debounce
+    // starts is not held by a waiter; here it continues only on microtasks,
+    // which settle before `settled()` checks again. If a later change makes
+    // that drain wait on a macrotask, the warning below fires.
     let deletedAt = Date.now();
     await settled();
     let settledAfterMs = Date.now() - deletedAt;
