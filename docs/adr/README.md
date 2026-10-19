@@ -15,4 +15,5 @@ or backfill one.
 | ADR                                                                          | Title                                                                             | Status   |
 | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------- |
 | [001](001-record-architecture-decisions.md)                                  | Record architecture decisions as short, normative ADRs                            | proposed |
+| [003](003-reach-cloud-services-through-adapters.md)                          | Reach proprietary cloud services only through adapters                            | proposed |
 | [005](005-authorize-key-changes-only-with-a-session-card-code-cant-reach.md) | Authorize changes to a user's keys only with a session that card code can't reach | proposed |
