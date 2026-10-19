@@ -12,6 +12,7 @@ import {
   linksToMany,
   CardInfoField,
   Theme,
+  meta,
 } from '@cardstack/base/card-api';
 import NumberField from '@cardstack/base/number';
 import StringField from '@cardstack/base/string';
@@ -20,6 +21,7 @@ import { module, test } from 'qunit';
 
 import {
   PermissionsContextName,
+  realmURL,
   type Permissions,
 } from '@cardstack/runtime-common';
 import type { Loader } from '@cardstack/runtime-common/loader';
@@ -665,6 +667,383 @@ module('Integration | computeds', function (hooks) {
     assert
       .dom('[data-test-categories] [data-test-category-name]')
       .exists({ count: 3 });
+  });
+
+  test('a computed read several times in one render runs its computeVia once per data change', async function (assert) {
+    let totalCalls = 0;
+    class Ledger extends CardDef {
+      @field amounts = containsMany(NumberField);
+      @field total = contains(NumberField, {
+        computeVia: function (this: Ledger) {
+          totalCalls++;
+          return this.amounts.reduce((sum, amount) => sum + amount, 0);
+        },
+      });
+      @field doubled = contains(NumberField, {
+        computeVia: function (this: Ledger) {
+          return this.total + this.total;
+        },
+      });
+      @field summary = contains(StringField, {
+        computeVia: function (this: Ledger) {
+          return `${this.total} (${this.doubled})`;
+        },
+      });
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div data-test-total><@fields.total /></div>
+          <div data-test-total-again>{{@model.total}}</div>
+          <div data-test-doubled><@fields.doubled /></div>
+          <div data-test-summary><@fields.summary /></div>
+        </template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      skipBootIndex: true,
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Ledger },
+      },
+    });
+
+    let ledger = new Ledger({ amounts: [1, 2] });
+    await renderCard(loader, ledger, 'isolated');
+    assert.dom('[data-test-total]').hasText('3');
+    assert.dom('[data-test-total-again]').hasText('3');
+    assert.dom('[data-test-doubled]').hasText('6');
+    assert.dom('[data-test-summary]').hasText('3 (6)');
+    assert.strictEqual(
+      totalCalls,
+      1,
+      'the render evaluates the computed once, however many reads reach it',
+    );
+
+    ledger.amounts = [1, 2, 4];
+    await settled();
+    assert.dom('[data-test-total]').hasText('7');
+    assert.dom('[data-test-total-again]').hasText('7');
+    assert.dom('[data-test-doubled]').hasText('14');
+    assert.dom('[data-test-summary]').hasText('7 (14)');
+    assert.strictEqual(
+      totalCalls,
+      2,
+      'the re-render after one data change evaluates the computed once more',
+    );
+  });
+
+  test('iterating a computed containsMany in a render runs its computeVia once', async function (assert) {
+    let daysCalls = 0;
+    class Day extends FieldDef {
+      @field label = contains(StringField);
+      @field minutes = contains(NumberField);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <span data-test-day><@fields.label /> <@fields.minutes /></span>
+        </template>
+      };
+    }
+    class Timesheet extends CardDef {
+      @field minutesByDay = containsMany(NumberField);
+      @field days = containsMany(Day, {
+        computeVia: function (this: Timesheet) {
+          daysCalls++;
+          return this.minutesByDay.map(
+            (minutes, index) => new Day({ label: `Day ${index + 1}`, minutes }),
+          );
+        },
+      });
+      @field totalMinutes = contains(NumberField, {
+        computeVia: function (this: Timesheet) {
+          return this.days.reduce((sum, day) => sum + day.minutes, 0);
+        },
+      });
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div data-test-days><@fields.days /></div>
+          <ul>
+            {{#each @fields.days as |Day|}}
+              <li data-test-each-day><Day /></li>
+            {{/each}}
+          </ul>
+          <div data-test-total-minutes><@fields.totalMinutes /></div>
+        </template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      skipBootIndex: true,
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Timesheet, Day },
+      },
+    });
+
+    let timesheet = new Timesheet({ minutesByDay: [480, 450, 510, 300] });
+    await renderCard(loader, timesheet, 'isolated');
+    assert.dom('[data-test-days] [data-test-day]').exists({ count: 4 });
+    assert.dom('[data-test-each-day]').exists({ count: 4 });
+    assert.dom('[data-test-total-minutes]').hasText('1740');
+    assert.strictEqual(
+      daysCalls,
+      1,
+      'every row, the iteration and the derived total share one evaluation',
+    );
+  });
+
+  test('iterating a computed containsMany on a store-loaded card runs its computeVia once per render', async function (assert) {
+    let daysCalls = 0;
+    class Day extends FieldDef {
+      @field label = contains(StringField);
+      @field minutes = contains(NumberField);
+      static embedded = class Embedded extends Component<typeof this> {
+        <template>
+          <span data-test-day><@fields.label /> <@fields.minutes /></span>
+        </template>
+      };
+    }
+    class Timesheet extends CardDef {
+      @field minutesByDay = containsMany(NumberField);
+      @field days = containsMany(Day, {
+        computeVia: function (this: Timesheet) {
+          daysCalls++;
+          return this.minutesByDay.map(
+            (minutes, index) => new Day({ label: `Day ${index + 1}`, minutes }),
+          );
+        },
+      });
+      @field totalMinutes = contains(NumberField, {
+        computeVia: function (this: Timesheet) {
+          return this.days.reduce((sum, day) => sum + day.minutes, 0);
+        },
+      });
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <div data-test-days><@fields.days /></div>
+          <ul>
+            {{#each @fields.days as |Day|}}
+              <li data-test-each-day><Day /></li>
+            {{/each}}
+          </ul>
+          <div data-test-total-minutes><@fields.totalMinutes /></div>
+        </template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Timesheet, Day },
+        'Timesheet/week.json': {
+          data: {
+            type: 'card',
+            attributes: { minutesByDay: [480, 450, 510, 300] },
+            meta: {
+              adoptsFrom: {
+                module: `${testRealmURL}test-cards`,
+                name: 'Timesheet',
+              },
+            },
+          },
+        },
+      },
+    });
+
+    let store = getService('store');
+    let timesheet = (await store.get(
+      `${testRealmURL}Timesheet/week`,
+    )) as Timesheet;
+    await store.loaded();
+    assert.ok(
+      timesheet[meta]?.realmURL,
+      'the instance carries the realm meta a served card has',
+    );
+
+    daysCalls = 0;
+    await renderCard(loader, timesheet, 'isolated');
+    assert.dom('[data-test-days] [data-test-day]').exists({ count: 4 });
+    assert.dom('[data-test-each-day]').exists({ count: 4 });
+    assert.dom('[data-test-total-minutes]').hasText('1740');
+    assert.strictEqual(
+      daysCalls,
+      1,
+      'every row, the iteration and the derived total share one evaluation',
+    );
+  });
+
+  test('every place that reads a memoized computed re-renders when its dependency changes', async function (this: RenderingTestContext, assert) {
+    class Author extends FieldDef {
+      @field firstName = contains(StringField);
+    }
+    class Post extends CardDef {
+      @field author = contains(Author);
+      @field byline = contains(StringField, {
+        computeVia: function (this: Post) {
+          return `by ${this.author.firstName}`;
+        },
+      });
+      static isolated = class Isolated extends Component<typeof this> {
+        <template>
+          <header data-test-header-byline><@fields.byline /></header>
+          <footer data-test-footer-byline>{{@model.byline}}</footer>
+        </template>
+      };
+    }
+
+    await setupIntegrationTestRealm({
+      skipBootIndex: true,
+      mockMatrixUtils,
+      contents: {
+        'test-cards.gts': { Post, Author },
+      },
+    });
+
+    let author = new Author({ firstName: 'Mango' });
+    let post = new Post({ author });
+    await renderCard(loader, post, 'isolated');
+    assert.dom('[data-test-header-byline]').hasText('by Mango');
+    assert.dom('[data-test-footer-byline]').hasText('by Mango');
+
+    author.firstName = 'Van Gogh';
+    await settled();
+    assert.dom('[data-test-header-byline]').hasText('by Van Gogh');
+    assert.dom('[data-test-footer-byline]').hasText('by Van Gogh');
+  });
+
+  test('a computed read in the same turn as a write reflects the write', async function (assert) {
+    let totalCalls = 0;
+    class Ledger extends CardDef {
+      @field label = contains(StringField);
+      @field amounts = containsMany(NumberField);
+      @field total = contains(NumberField, {
+        computeVia: function (this: Ledger) {
+          totalCalls++;
+          return this.amounts.reduce((sum, amount) => sum + amount, 0);
+        },
+      });
+      @field title = contains(StringField, {
+        computeVia: function (this: Ledger) {
+          return `${this.label}: ${this.total}`;
+        },
+      });
+    }
+
+    let ledger = new Ledger({ label: 'Petty cash', amounts: [1, 2] });
+    assert.strictEqual(ledger.total, 3);
+    assert.strictEqual(ledger.total, 3);
+    assert.strictEqual(
+      totalCalls,
+      1,
+      'repeated reads with no write between them evaluate once',
+    );
+
+    ledger.amounts.push(4);
+    assert.strictEqual(
+      ledger.total,
+      7,
+      'an in-place array mutation is seen by the next read in the same turn',
+    );
+
+    ledger.amounts = [10];
+    assert.strictEqual(
+      ledger.total,
+      10,
+      'a field assignment is seen by the next read in the same turn',
+    );
+
+    ledger.label = 'Float';
+    assert.strictEqual(
+      ledger.title,
+      'Float: 10',
+      'a computed derived from a memoized one sees a write to its other dependency',
+    );
+  });
+
+  test('a computed that reads realm meta sees a meta assignment in the same turn', async function (assert) {
+    class Note extends CardDef {
+      @field home = contains(StringField, {
+        computeVia: function (this: Note) {
+          return this[realmURL]?.href ?? 'nowhere';
+        },
+      });
+    }
+
+    let note = new Note();
+    note[meta] = {
+      ...note[meta],
+      realmURL: 'http://example.com/first/',
+    } as (typeof note)[typeof meta];
+    assert.strictEqual(note.home, 'http://example.com/first/');
+
+    note[meta] = {
+      ...note[meta],
+      realmURL: 'http://example.com/second/',
+    } as (typeof note)[typeof meta];
+    assert.strictEqual(
+      note.home,
+      'http://example.com/second/',
+      'the read after the assignment is not served the memoized value',
+    );
+  });
+
+  test('a field computed that reads its realm sees the realm it is attached to in the same turn', async function (assert) {
+    class Place extends FieldDef {
+      @field home = contains(StringField, {
+        computeVia: function (this: Place) {
+          return this[realmURL]?.href ?? 'nowhere';
+        },
+      });
+    }
+    class Trip extends CardDef {
+      @field place = contains(Place);
+    }
+
+    let trip = new Trip();
+    trip[meta] = {
+      ...trip[meta],
+      realmURL: 'http://example.com/trips/',
+    } as (typeof trip)[typeof meta];
+
+    let place = new Place();
+    assert.strictEqual(place.home, 'nowhere');
+    trip.place = place;
+    assert.strictEqual(
+      trip.place.home,
+      'http://example.com/trips/',
+      'the read after the field is attached is not served the detached value',
+    );
+  });
+
+  test('a computed whose computeVia throws throws on every read in the turn', async function (assert) {
+    class Gauge extends CardDef {
+      @field reading = contains(NumberField);
+      @field level = contains(NumberField, {
+        computeVia: function (this: Gauge) {
+          if (this.reading < 0) {
+            throw new Error('negative reading');
+          }
+          return this.reading * 2;
+        },
+      });
+    }
+
+    let failing = new Gauge({ reading: -1 });
+    assert.throws(() => failing.level, /negative reading/);
+    assert.throws(
+      () => failing.level,
+      /negative reading/,
+      'a failed first evaluation is not served as a value',
+    );
+
+    let gauge = new Gauge({ reading: 1 });
+    assert.strictEqual(gauge.level, 2);
+    gauge.reading = -1;
+    assert.throws(() => gauge.level, /negative reading/);
+    assert.throws(
+      () => gauge.level,
+      /negative reading/,
+      'a failed recompute does not fall back to the last good value',
+    );
   });
 
   test('CardDef.cardTheme resolves from cardInfo.theme', async function (assert) {
