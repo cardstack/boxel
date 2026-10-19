@@ -214,6 +214,54 @@ module('Unit | url', function () {
       );
     });
 
+    test('writes an RRI reference inside the realm relative to the file', function (assert) {
+      assert.strictEqual(
+        portableReference(
+          rri('https://example.com/realm/animal'),
+          file,
+          realm,
+          network,
+        ),
+        './animal',
+      );
+    });
+
+    test('writes an RRI reference into another realm by its registered prefix', function (assert) {
+      assert.strictEqual(
+        portableReference(
+          rri('https://example.com/catalog/fields/address'),
+          file,
+          realm,
+          network,
+        ),
+        '@cardstack/catalog/fields/address',
+      );
+    });
+
+    test('writes an RRI reference into a realm with no registered prefix by its URL', function (assert) {
+      assert.strictEqual(
+        portableReference(
+          rri('https://example.com/other/animal'),
+          file,
+          realm,
+          network,
+        ),
+        'https://example.com/other/animal',
+      );
+    });
+
+    test('keeps a prefix-form RRI reference into another realm as it is', function (assert) {
+      assert.strictEqual(
+        portableReference(
+          rri('@cardstack/catalog/fields/address'),
+          file,
+          realm,
+          network,
+        ),
+        '@cardstack/catalog/fields/address',
+      );
+    });
+
     test('with no realm, nothing is written relative', function (assert) {
       assert.strictEqual(
         portableReference(

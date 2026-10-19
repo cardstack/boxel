@@ -41,6 +41,7 @@ import {
   portableReference,
   RealmPaths,
   ri,
+  rri,
   specRef,
   SupportedMimeType,
   type CardErrorJSONAPI,
@@ -930,7 +931,7 @@ export default class CreateFileModal extends Component<Signature> {
     // prefix-form input; `portableReference` writes it relative, by prefix
     // (matching the `Component` import emitted below) or by URL.
     let moduleURL = portableReference(
-      new URL(absoluteModuleHref), // eslint-disable-line @cardstack/boxel/no-url-from-realm-identifier
+      rri(absoluteModuleHref),
       url,
       new URL(this.selectedRealmURL),
       this.network.virtualNetwork,

@@ -134,16 +134,17 @@ export function maybeRelativeReference(
 // answers to in the current environment. With no `realm`, nothing is treated
 // as inside it.
 export function portableReference(
-  reference: URL,
+  reference: RealmResourceIdentifier | URL,
   relativeTo: URL,
   realm: URL | undefined,
   virtualNetwork: VirtualNetwork,
 ): string {
+  let absolute = reference instanceof URL ? reference.href : reference;
   let relative = realm
     ? maybeRelativeReference(reference, relativeTo, realm)
-    : reference.href;
-  return relative === reference.href
-    ? virtualNetwork.unresolveURL(reference.href)
+    : absolute;
+  return relative === absolute
+    ? virtualNetwork.unresolveURL(absolute)
     : relative;
 }
 
