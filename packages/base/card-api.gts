@@ -812,26 +812,28 @@ function cardTypeFor(
   boxedElement?: Box<BaseDef>,
   overrides?: () => Map<string, typeof BaseDef> | undefined,
 ): typeof BaseDef {
+  // Reading a box's value walks back up to the containing field, which
+  // re-evaluates it when it is computed, so it is read once.
+  let value = boxedElement?.value;
   let override: typeof BaseDef | undefined;
   if (overrides) {
     let valueKey = `${field.name}${
       boxedElement ? '.' + boxedElement.name : ''
     }`;
-    override = boxedElement?.value ? overrides()?.get(valueKey) : undefined;
+    override = value ? overrides()?.get(valueKey) : undefined;
   } else {
     override =
-      boxedElement?.value && typeof boxedElement.value === 'object'
-        ? getFieldOverrides(boxedElement.value)?.get(field.name)
+      value && typeof value === 'object'
+        ? getFieldOverrides(value)?.get(field.name)
         : undefined;
   }
   if (primitive in field.card) {
     return override ?? field.card;
   }
-  if (boxedElement === undefined || boxedElement.value == null) {
+  if (value == null) {
     return field.card;
   }
-  return Reflect.getPrototypeOf(boxedElement.value)!
-    .constructor as typeof BaseDef;
+  return Reflect.getPrototypeOf(value)!.constructor as typeof BaseDef;
 }
 
 function assertNoDeserializeOverride(cardClass: typeof BaseDef) {
