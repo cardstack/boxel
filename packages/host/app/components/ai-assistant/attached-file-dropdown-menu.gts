@@ -53,10 +53,9 @@ export default class AttachedFileDropdownMenu extends Component<{
     }
     if (
       this.operatorModeStateService.state.submode === Submodes.Code &&
-      this.operatorModeStateService.state.codePath &&
-      this.network.virtualNetwork.toURLHref(
-        this.operatorModeStateService.state.codePath,
-      ) === this.args.file.sourceUrl
+      this.args.file.sourceUrl &&
+      this.network.virtualNetwork.unresolveURL(this.args.file.sourceUrl) ===
+        this.operatorModeStateService.state.codePath
     ) {
       return;
     }
