@@ -11,8 +11,8 @@ import {
   logger,
 } from './index.ts';
 import { rri } from './realm-identifiers.ts';
-import type { VirtualNetwork } from './virtual-network.ts';
-import { canonicalURL } from './index-runner/dependency-url.ts';
+import { isUrlLike, type VirtualNetwork } from './virtual-network.ts';
+import { normalizeDependencyForLookup } from './index-runner/dependency-normalization.ts';
 import {
   getCreatedTime,
   ensureFileCreatedAt,
@@ -4884,9 +4884,14 @@ export class Batch {
   }
 
   private normalizeDependency(dep: string, entryURL: URL): string {
-    return trimExecutableExtension(
-      canonicalURL(dep, entryURL.href, this.virtualNetwork),
-    );
+    // A specifier that is neither URL-like nor a registered prefix (an npm
+    // package, or a prefix this process has no mapping for) names nothing
+    // relative to the entry, so it is kept as it was recorded rather than
+    // joined onto the entry's URL.
+    if (!isUrlLike(dep) && !this.virtualNetwork.isRegisteredPrefix(dep)) {
+      return dep;
+    }
+    return normalizeDependencyForLookup(dep, entryURL, this.virtualNetwork);
   }
 
   // Rewrite inline scoped-CSS deps (the `glimmer-scoped-css` form that

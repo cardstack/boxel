@@ -52,6 +52,8 @@ module(basename(import.meta.filename), function (hooks) {
           '@cardstack/base/card-api.gts',
           './person.gts',
           `${testRealm}pets/pet.gts?x=1#y`,
+          '@cardstack/boxel-ui/components',
+          'lodash',
         ],
       },
     });
@@ -65,6 +67,8 @@ module(basename(import.meta.filename), function (hooks) {
       '@cardstack/base/card-api',
       `${testRealm}person`,
       `${testRealm}pets/pet`,
+      '@cardstack/boxel-ui/components',
+      'lodash',
     ]);
   });
 });
