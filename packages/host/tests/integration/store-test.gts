@@ -28,6 +28,7 @@ import { module, test } from 'qunit';
 
 import {
   isCardInstance,
+  isFileDefInstance,
   localId,
   baseCardRef,
   realmURL,
@@ -37,6 +38,7 @@ import {
   type Realm,
   type SingleCardDocument,
   type LooseSingleCardDocument,
+  type StoreReadType,
 } from '@cardstack/runtime-common';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
@@ -210,24 +212,25 @@ module('Integration | Store', function (hooks) {
     };
   }
 
-  // Wait for a resource's card to load and render. The resource's read is a
-  // realm round trip whose length has no bound on a loaded runner, and it holds
-  // a store test waiter for its whole length, so `settled()` covers it where a
-  // selector poll with a fixed timeout does not. When the card is still not in
-  // the DOM after the store settles, log what the store holds for it, so a
-  // failure tells a read that ended as an error or never landed in the
-  // identity map apart from a slow one.
+  // Wait for a resource's card or file to load and render. The resource's read
+  // is a realm round trip whose length has no bound on a loaded runner, and it
+  // holds a store test waiter for its whole length (for both read types), so
+  // `settled()` covers it where a selector poll with a fixed timeout does not.
+  // When the item is still not in the DOM after the store settles, log what the
+  // store holds for it, so a failure tells a read that ended as an error or
+  // never landed in the identity map apart from a slow one.
   async function settleCardRender(
     assert: Assert,
     id: string,
     selector: string,
+    opts?: { type?: StoreReadType },
   ) {
     let start = performance.now();
     await settled();
     let elapsedMs = Math.round(performance.now() - start);
     if (!find(selector)) {
-      let held = storeService.peek(id);
-      let error = storeService.peekError(id);
+      let held = storeService.peek(id, { type: opts?.type });
+      let error = storeService.peekError(id, { type: opts?.type });
       console.error(
         [
           `[card-render-diag] ${selector} is not rendered after settled() (${elapsedMs}ms)`,
@@ -235,8 +238,8 @@ module('Integration | Store', function (hooks) {
           `peek: ${
             held === undefined
               ? '<nothing>'
-              : isCardInstance(held)
-                ? `card instance ${held.id}`
+              : isCardInstance(held) || isFileDefInstance(held)
+                ? `instance ${held.id}`
                 : `error ${JSON.stringify(held)}`
           }`,
           `peekError: ${error ? JSON.stringify(error) : '<none>'}`,
@@ -4917,7 +4920,12 @@ module('Integration | Store', function (hooks) {
 
     driver.showComponent = true;
     driver.id = firstFile;
-    await waitFor(`[data-test-rendered-file="${firstFile}"]`);
+    await settleCardRender(
+      assert,
+      firstFile,
+      `[data-test-rendered-file="${firstFile}"]`,
+      { type: 'file-meta' },
+    );
     assert.strictEqual(
       storeService.getReferenceCount(firstFile),
       1,
@@ -4930,7 +4938,12 @@ module('Integration | Store', function (hooks) {
     );
 
     driver.id = secondFile;
-    await waitFor(`[data-test-rendered-file="${secondFile}"]`);
+    await settleCardRender(
+      assert,
+      secondFile,
+      `[data-test-rendered-file="${secondFile}"]`,
+      { type: 'file-meta' },
+    );
     assert.strictEqual(
       storeService.getReferenceCount(firstFile),
       0,
