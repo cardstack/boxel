@@ -1,5 +1,6 @@
 import { isScopedCSSRequest, scopedCSSServingHref } from './scoped-css.ts';
 import { cloneDeep } from 'lodash-es';
+import { parseRRI } from '@cardstack/deck';
 import {
   SupportedMimeType,
   isJsonContentType,
@@ -1889,6 +1890,22 @@ export class RealmIndexQueryEngine {
     // same definitions, and the walk is what reads them.
     let queryFieldPlans: QueryFieldPlanCache = new Map();
     let vnForIdentity = this.#realm.virtualNetwork;
+    // A Deck-backed index stores portable RRI identity. Root resources are
+    // direct evidence of their package-to-realm mapping, so establish it
+    // before normalizing omitted, visited, and included identities.
+    for (let resource of rootResources) {
+      if (!resource.id?.startsWith('@')) {
+        continue;
+      }
+      try {
+        vnForIdentity.addRealmMapping(
+          parseRRI(resource.id).root,
+          realmURL.href,
+        );
+      } catch {
+        // Leave malformed identities to the ordinary resolution error below.
+      }
+    }
     let realmPath = new RealmPaths(realmURL, vnForIdentity);
     // `omit`/root ids may arrive in either resolved-URL or registered-alias
     // form (the entry's item resource id is always resolved, while a

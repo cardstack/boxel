@@ -5,10 +5,14 @@ import Service, { service } from '@ember/service';
 import { isTesting } from '@embroider/macros';
 
 import {
+  DeckPackageResolver,
+  DynamicRRIResolution,
   PREFIX_REALMS,
   VirtualNetwork,
   authorizationMiddleware,
   fetcher,
+  resolveImportThroughDeck,
+  type ResolutionChangeSubscribe,
 } from '@cardstack/runtime-common';
 
 import config from '@cardstack/host/config/environment';
@@ -31,9 +35,38 @@ export default class NetworkService extends Service {
 
   virtualNetwork = this.makeVirtualNetwork();
 
+  // Deck packages, when the feature is on. The resolver holds the installed
+  // locks and answers in RRIs; discovery finds each package's lock as its
+  // modules load. Neither is part of the network: they reach it only through
+  // the routes it already exposes.
+  private deckEnabled = config.featureFlags?.DECK_COLLABORATION === true;
+  private deckPackageResolver = new DeckPackageResolver();
+  dynamicRRIResolution = this.makeDynamicRRIResolution();
+  private deckResolveImport = resolveImportThroughDeck(
+    this.deckPackageResolver,
+    this.virtualNetwork,
+  );
+
   constructor(owner: Owner) {
     super(owner);
     this.session.register(this);
+  }
+
+  // Tells a loader when the installed locks change what they would answer.
+  subscribeResolutionChange: ResolutionChangeSubscribe = (listener) =>
+    this.deckPackageResolver.onChange(listener);
+
+  invalidateDynamicRRIResolution() {
+    this.dynamicRRIResolution.invalidate();
+  }
+
+  private makeDynamicRRIResolution() {
+    return new DynamicRRIResolution(
+      this.deckPackageResolver,
+      this.virtualNetwork,
+      (input, init) => this.authedFetch(input, init),
+      { enabled: this.deckEnabled },
+    );
   }
 
   get fetch() {
@@ -41,7 +74,9 @@ export default class NetworkService extends Service {
   }
 
   get resolveImport() {
-    return this.virtualNetwork.resolveImport;
+    return this.deckEnabled
+      ? this.deckResolveImport
+      : this.virtualNetwork.resolveImport;
   }
 
   get authedFetch() {
@@ -146,6 +181,9 @@ export default class NetworkService extends Service {
   resetState = () => {
     this.virtualNetwork.reset();
     this.configureVirtualNetwork(this.virtualNetwork);
+    // The locks were installed for the realms just forgotten.
+    this.deckPackageResolver.clear();
+    this.dynamicRRIResolution = this.makeDynamicRRIResolution();
   };
 }
 

@@ -1949,11 +1949,16 @@ export { getCreatedTime } from './file-meta.ts';
 export { mergeRelationships } from './merge-relationships.ts';
 export { makeLogDefinitions, logger, reapplyLogLevels } from './log.ts';
 export { Loader };
-export type { ResolutionChangeSubscribe } from './loader.ts';
+export type {
+  PrepareModuleResolution,
+  ResolutionChangeSubscribe,
+} from './loader.ts';
 export {
   DeckPackageResolver,
   resolveImportThroughDeck,
+  routeVersion,
   type DeckResolutionChange,
+  type DeckRoutes,
 } from './deck-package-resolver.ts';
 export {
   fetchWithTransientRetry,
@@ -1998,6 +2003,7 @@ export {
   parseExactVersionTransportURL,
   type ExactVersionTransport,
 } from './deck-version-url.ts';
+export { DynamicRRIResolution } from './dynamic-rri-resolution.ts';
 export {
   DECKLIST_PATH,
   deckLibSpecFromPackage,
@@ -2035,6 +2041,7 @@ export {
 export {
   isUrlLike,
   VirtualNetwork,
+  type MappingChange,
   type ResponseWithNodeStream,
 } from './virtual-network.ts';
 export { RealmAuthDataSource } from './realm-auth-data-source.ts';

@@ -21,6 +21,12 @@ export type ResolutionChangeSubscribe = (
   listener: (change: 'additive' | 'destructive') => void,
 ) => () => void;
 
+// Prepares resolution for a module from its response, before it transpiles.
+export type PrepareModuleResolution = (
+  moduleURL: URL,
+  response: Response,
+) => Promise<void>;
+
 type FetchingModule = {
   state: 'fetching';
   deferred: Deferred<void>;
@@ -337,6 +343,9 @@ export class Loader {
   // would answer. Kept so a clone subscribes to the same source.
   private onResolutionChange: ResolutionChangeSubscribe | undefined;
   private unsubscribeResolutionChange: (() => void) | undefined;
+  // Runs after a module's response arrives and before the module transpiles.
+  // Kept so a clone runs the same preparation.
+  private prepareModuleResolution: PrepareModuleResolution | undefined;
   // Unsubscribe for the realm-mapping-change listener registered below. The
   // VirtualNetwork outlives any single loader (LoaderService replaces the
   // loader on every module edit / session boundary), so a loader that isn't
@@ -359,6 +368,7 @@ export class Loader {
       retrySleep?: (ms: number) => Promise<void>;
       virtualNetwork?: VirtualNetwork;
       onResolutionChange?: ResolutionChangeSubscribe;
+      prepareModuleResolution?: PrepareModuleResolution;
     },
   ) {
     this.fetchImplementation = fetch;
@@ -370,15 +380,32 @@ export class Loader {
     // relationship to a real URL is only stable between realm-mapping changes.
     // Discard the RRI-keyed caches whenever a mapping is added or removed so an
     // entry can't outlive the spelling it was keyed under.
-    this.unsubscribeMappingChange = this.virtualNetwork?.onMappingChange(() => {
-      this.modules.clear();
-      this.moduleCanonicalURLs.clear();
-      this.knownDepsCache.clear();
-      this.trackingKeyCache.clear();
-    });
+    //
+    // A prefix that had no mapping before is the one exception. It changes the
+    // key only of a module that lives under its target, so when no cached
+    // module does, the modules are kept and only the derived memos go. This is
+    // what lets a package be discovered while other modules are loaded without
+    // re-evaluating them, which would give their classes a second identity.
+    this.unsubscribeMappingChange = this.virtualNetwork?.onMappingChange(
+      (change) => {
+        if (
+          change.kind === 'added' &&
+          !this.hasCachedModuleUnder(change.target)
+        ) {
+          this.knownDepsCache.clear();
+          this.trackingKeyCache.clear();
+          return;
+        }
+        this.modules.clear();
+        this.moduleCanonicalURLs.clear();
+        this.knownDepsCache.clear();
+        this.trackingKeyCache.clear();
+      },
+    );
     // A resolver change that only adds answers cannot change a module already
     // registered: its dependencies were resolved when it registered. Anything
     // else can, so it discards the caches the way a mapping change does.
+    this.prepareModuleResolution = options?.prepareModuleResolution;
     this.onResolutionChange = options?.onResolutionChange;
     this.unsubscribeResolutionChange = this.onResolutionChange?.((change) => {
       if (change === 'additive') {
@@ -411,6 +438,7 @@ export class Loader {
       retrySleep: loader.retrySleep,
       virtualNetwork: loader.virtualNetwork,
       onResolutionChange: loader.onResolutionChange,
+      prepareModuleResolution: loader.prepareModuleResolution,
     });
     for (let [moduleIdentifier, module] of loader.moduleShims) {
       clone.shimModule(moduleIdentifier, module);
@@ -1340,6 +1368,21 @@ export class Loader {
   // The RRI→URL relationship is only stable between realm-mapping changes, so
   // the caches keyed here are discarded whenever a mapping is added or removed
   // (see the `onMappingChange` subscription in the constructor).
+  // Whether any cached module is keyed, or canonically located, under `target`.
+  private hasCachedModuleUnder(target: string): boolean {
+    for (let key of this.modules.keys()) {
+      if (key.startsWith(target)) {
+        return true;
+      }
+    }
+    for (let url of this.moduleCanonicalURLs.values()) {
+      if (url.startsWith(target)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   private moduleCacheKey(moduleIdentifier: string): string {
     let trimmed = trimModuleIdentifier(moduleIdentifier);
     return this.virtualNetwork
@@ -1782,6 +1825,12 @@ export class Loader {
       }
       throw error;
     }
+
+    // What a module's imports mean can depend on the response: a package
+    // names its lock there. AMD registration resolves the dependencies
+    // synchronously, so whatever resolution needs must be in place before the
+    // module transpiles.
+    await this.prepareModuleResolution?.(moduleURL, response);
 
     let canonicalPath = response.headers.get('X-Boxel-Canonical-Path');
     let canonicalURL = canonicalPath

@@ -202,6 +202,14 @@ export default class CardService extends Service {
 
       throw err;
     }
+    // A cold card may already contain RRI identity before its defining module
+    // has loaded. Discover package identity and its lock before deserializing.
+    if (response.url) {
+      await this.network.dynamicRRIResolution.prepare(
+        new URL(response.url),
+        response,
+      );
+    }
     if (response.status !== 204) {
       // A relationship link can point at a non-card URL (e.g. an image);
       // gate on Content-Type so the binary body never reaches JSON.parse.

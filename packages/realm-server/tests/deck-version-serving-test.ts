@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 
@@ -90,6 +90,8 @@ module(basename(import.meta.filename), function (hooks) {
   });
 
   hooks.beforeEach(async function () {
+    authorized = true;
+    publicReadable = true;
     realmDir = await mkdtemp(join(tmpdir(), 'deck-version-serving-'));
     virtualNetwork = new VirtualNetwork();
     virtualNetwork.addRealmMapping(
@@ -113,6 +115,10 @@ module(basename(import.meta.filename), function (hooks) {
       '1.1.0',
       packageBytes('1.1.0'),
     );
+    await writeFile(
+      join(realmDir, 'package.json'),
+      JSON.stringify({ name: '@acme/theme', version: '1.1.0' }),
+    );
   });
 
   hooks.afterEach(async function () {
@@ -129,7 +135,7 @@ module(basename(import.meta.filename), function (hooks) {
       resolveRealm: async () => realm,
       deckCollaboration: {
         enabled: true,
-        realmRRIs: new Set(['@acme/theme/']),
+        realmRRIs: new Set(['@acme/theme/', '@user/theme/']),
       },
     });
   }
@@ -157,6 +163,43 @@ module(basename(import.meta.filename), function (hooks) {
       '@acme/theme@1.1.0/index.js',
     );
     assert.ok(response?.headers.get('etag'), 'content has a stable ETag');
+  });
+
+  test('advertises the authenticated server capability only for an allowed realm', async function (assert) {
+    let allowed = await serve(
+      new Request('https://realms.example/acme/theme/.deck/capabilities'),
+    );
+    let wrongRealm = await handleDeckVersionRequest(
+      new Request('https://realms.example/acme/theme/.deck/capabilities'),
+      {
+        virtualNetwork,
+        realms: [],
+        reconciler: {} as never,
+        dbAdapter: {} as never,
+        resolveRealm: async () => realm,
+        deckCollaboration: {
+          enabled: true,
+          realmRRIs: new Set(['@cardstack/pretui/']),
+        },
+      },
+    );
+
+    assert.strictEqual(allowed?.status, 200);
+    assert.strictEqual(
+      allowed?.headers.get('x-boxel-deck-collaboration'),
+      'true',
+    );
+    assert.deepEqual(await allowed?.json(), {
+      deckCollaboration: true,
+      realmRRI: '@acme/theme/',
+    });
+    assert.strictEqual(wrongRealm?.status, 404);
+
+    authorized = false;
+    let privateResponse = await serve(
+      new Request('https://realms.example/acme/theme/.deck/capabilities'),
+    );
+    assert.strictEqual(privateResponse?.status, 401);
   });
 
   test('serves executable exact Versions while preserving CardSource reads', async function (assert) {
@@ -212,6 +255,34 @@ module(basename(import.meta.filename), function (hooks) {
     assert.strictEqual(
       document.data.links.self,
       'https://realms.example/acme/theme@1.1.0/card',
+    );
+  });
+
+  test('cold realms resolve from the official transport path without a preinstalled mapping', async function (assert) {
+    virtualNetwork = new VirtualNetwork();
+    realm = {
+      ...realm,
+      url: 'https://realms.example/user/theme/',
+    } as Realm;
+    await publishToStore(
+      join(realmDir, '.deck', 'store'),
+      'user/theme',
+      '1.1.0',
+      packageBytes('1.1.0'),
+    );
+
+    let response = await serve(
+      new Request('https://realms.example/user/theme@1.1.0/index.js'),
+    );
+
+    assert.strictEqual(response?.status, 200);
+    assert.strictEqual(
+      await response?.text(),
+      'export const accent = "tomato";\n',
+    );
+    assert.strictEqual(
+      response?.headers.get('x-boxel-version-rri'),
+      '@user/theme@1.1.0/index.js',
     );
   });
 
