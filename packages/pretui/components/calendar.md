@@ -15,7 +15,7 @@ range:   @range? / @defaultRange? / @onRangeChange?({ start, end })
 
 **Range semantics:** first click sets `start` with `end: null`, second completes; picked in reverse they swap. While the end is unset, the prospective span paints from the hovered day — **or from the keyboard focus when arrowing**, so the preview works without a pointer.
 
-**Day state is reflected as `data-*`**: `data-selected`, `data-range-start`, `data-range-end`, `data-in-range`, `data-today`, `data-outside`. A season dresses every state without the component exposing a variant.
+**Day state is reflected as `data-*`**: `data-selected`, `data-range-start`, `data-range-end`, `data-in-range`, `data-today`, `data-outside`. A stylesheet can dress every state without the component exposing a variant.
 
 `@months` puts panels side by side; **an inline-size container query collapses to the first panel** in a narrow host. Note the consequence the source flags: containment means width comes from the parent, so **a host or popover panel must give the calendar an explicit width**.
 
@@ -50,8 +50,8 @@ Concrete gaps against the pattern:
 
 `--pretui-selected` / `--primary` (selected day), `--hover` (hover and in-range fill), `--foreground` / `--muted-foreground` (day ink, and the dimmed `data-outside` days), `--border`, `--card`, `--radius`, `--text-ui-md`, `--text-ui-sm`.
 
-Every day state is a `data-*` attribute, so a season can dress `today`, `in-range`, `range-start` and `range-end` independently — including giving the range endpoints asymmetric radii, which is what makes a range read as one continuous band.
+Every day state is a `data-*` attribute, so a stylesheet can dress `today`, `in-range`, `range-start` and `range-end` independently — including giving the range endpoints asymmetric radii, which is what makes a range read as one continuous band.
 
-Two things to check per season: `data-today` must be distinguishable from `data-selected` without relying on colour alone, and `data-outside` (adjacent-month days) must be dim enough to recede but still clear **WCAG 1.4.3** — it is the most common contrast failure in any calendar.
+Two things to check per theme: `data-today` must be distinguishable from `data-selected` without relying on color alone, and `data-outside` (adjacent-month days) must be dim enough to recede but still clear **WCAG 1.4.3** — it is the most common contrast failure in any calendar.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

@@ -37,6 +37,6 @@ Where it is thinner: there is no fit or crop control — the frame does not take
 
 `--pretui-frame-aspect` (the reserved ratio, written per instance and defaulting to `auto` in the stylesheet), plus `--pretui-shadow-hairline` shared across this module.
 
-The 8px gap between picture and dimensions is fixed. The dimensions themselves inherit **Token**'s treatment, so a season that retunes the mono jewellery retunes this line with it rather than needing a frame-specific value.
+The 8px gap between picture and dimensions is fixed. The dimensions themselves inherit **Token**'s treatment, so a theme that retunes the mono jewelry retunes this line with it rather than needing a frame-specific value.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

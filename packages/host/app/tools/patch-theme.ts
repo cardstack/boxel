@@ -43,7 +43,6 @@ export default class PatchThemeTool extends HostBaseTool<
     return await useAssistant.execute({
       roomId: 'new',
       openRoom: true,
-      llmModel: 'anthropic/claude-3.5-sonnet',
       prompt,
       skillCardIds: linkedSkillId ? [linkedSkillId] : undefined,
       attachedCardIds: [input.cardId],

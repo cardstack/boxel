@@ -50,7 +50,7 @@ You rarely reach for it directly. **VideoPlayer** and **AudioPlayer** are skins 
 
 Built on **Media Chrome** (MIT, web components): `<media-controller>` and its control-bar elements are doing the transport work, not a re-implementation. **Vidstack** is the reference for the video skin above it.
 
-Where Pretui adds: the **seekable transcript** — neither upstream ships one, and it is the single most useful accessibility affordance a player can have, for readers who cannot use audio *and* for anyone who wants to find a moment without scrubbing. The **status line** is a text channel for buffering and error state rather than a spinner alone. `@autoHide` is inverted. And the reserved aspect ratio is enforced from first paint rather than being the caller's problem.
+Where Pretui adds: the **seekable transcript** — neither upstream ships one, and it is the single most useful accessibility affordance a player can have, for readers who cannot use audio _and_ for anyone who wants to find a moment without scrubbing. The **status line** is a text channel for buffering and error state rather than a spinner alone. `@autoHide` is inverted. And the reserved aspect ratio is enforced from first paint rather than being the caller's problem.
 
 Where it is thinner: there is no playlist or queue model, no quality or track selector beyond captions, no chapters UI (chapters ride along for the browser and the scrubber but get no menu of their own), and no analytics or heartbeat hooks beyond `@onSnapshot`. Anything resembling adaptive streaming is entirely the browser's business here.
 
@@ -69,6 +69,6 @@ This is the component where most of the accessibility budget went, and three dec
 
 `--pretui-media-aspect` (the reserved stage ratio, written from `@aspectRatio`), `--pretui-media-radius`, `--pretui-media-ink` (the chrome's foreground), `--pretui-media-scrim` (the wash under the controls that keeps them legible over any frame), `--pretui-destructive-ink` (the error state), `--pretui-shadow-card`, `--pretui-shadow-hairline`.
 
-The scrim is the token to watch across seasons: it is what guarantees the control bar stays readable over an arbitrary video frame, and a season that lightens it for aesthetics on a dark test clip will fail on a bright one. The kit's shared shadow tokens mean a player sits at the same elevation as the cards around it without a per-component value.
+The scrim is the token to watch across themes: it is what guarantees the control bar stays readable over an arbitrary video frame, and a theme that lightens it for aesthetics on a dark test clip will fail on a bright one. The kit's shared shadow tokens mean a player sits at the same elevation as the cards around it without a per-component value.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

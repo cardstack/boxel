@@ -26,7 +26,7 @@ Use it when the shape of the audio matters — reviewing a recording, finding a 
 
 **The height is reserved before the audio lands**, so nothing reflows when the decode finishes.
 
-**Failure is a state, not a crash.** Construction is wrapped, and `phase` — `idle → loading → ready`, or `error` — is part of the public contract, so a caller and a test can both assert on what happened without asserting that a decode succeeded. That matters more than it sounds: a headless browser has no real media pipeline, so `error` is the *expected* outcome in the test harness.
+**Failure is a state, not a crash.** Construction is wrapped, and `phase` — `idle → loading → ready`, or `error` — is part of the public contract, so a caller and a test can both assert on what happened without asserting that a decode succeeded. That matters more than it sounds: a headless browser has no real media pipeline, so `error` is the _expected_ outcome in the test harness.
 
 **`@bare` drops the transport and the readout but keeps the scrubber.** The keyboard path is never what gets removed.
 
@@ -51,6 +51,6 @@ Where it is thinner: no regions or markers exposed as a contract (the plugin is 
 
 `--pretui-wave-height` (the reserved drawing height), `--pretui-primary-ink` (the played portion and the transport), `--pretui-destructive-ink` (the error state), `--pretui-shadow-hairline`.
 
-The bar geometry is args rather than tokens, deliberately: `@barWidth` and `@barGap` change what the waveform *is* at a given zoom rather than how the season dresses it, and two waveforms in one product may legitimately want different densities. The colours are tokens, so a season recolours every wave at once and a played/unplayed split always matches the product's primary.
+The bar geometry is args rather than tokens, deliberately: `@barWidth` and `@barGap` change what the waveform _is_ at a given zoom rather than how the theme dresses it, and two waveforms in one product may legitimately want different densities. The colors are tokens, so a theme recolors every wave at once and a played/unplayed split always matches the product's primary.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

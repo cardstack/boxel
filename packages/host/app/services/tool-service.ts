@@ -298,22 +298,25 @@ export default class ToolService extends Service {
     return clientRequestId;
   }
 
+  // One write request can save several files: each file then takes the same
+  // `clientRequestId`, so the request's index event settles every one.
   trackAiAssistantCardRequest({
     action,
     roomId,
     fileUrl,
+    clientRequestId: sharedClientRequestId,
   }: {
     action: string;
     roomId: string;
     fileUrl: string;
+    clientRequestId?: string;
   }): string | undefined {
     if (!action || !roomId || !fileUrl) {
       return;
     }
-    let clientRequestId = this.registerAiAssistantClientRequestId(
-      action,
-      roomId,
-    );
+    let clientRequestId =
+      sharedClientRequestId ??
+      this.registerAiAssistantClientRequestId(action, roomId);
     // We only track invalidations for card instances and card definitions
     if (!fileUrl.endsWith('.gts') && !fileUrl.endsWith('.json')) {
       return clientRequestId;

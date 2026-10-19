@@ -25,7 +25,7 @@ It is what turns a bare slider into a readable one, and it can also stand alone 
 
 **Omitting the pick handler makes the scale decorative** — no buttons are rendered at all and the whole element becomes `aria-hidden`. That is the design's central decision: a scale that moved something without telling its owner would be the ship-blocking case, and a scale that is purely a ruler should not be a pile of buttons in the accessibility tree.
 
-**Pip density is derived, with two separate ceilings.** `@maxPips` caps what is drawn; `@maxLabels` caps what is *named*, because a scale with forty labels is unreadable long before it has forty ticks.
+**Pip density is derived, with two separate ceilings.** `@maxPips` caps what is drawn; `@maxLabels` caps what is _named_, because a scale with forty labels is unreadable long before it has forty ticks.
 
 **`@limits` narrows the selectable window without changing the scale.** Pips outside draw quiet and refuse clicks, so the reader can see the full range and the part of it that is available.
 
@@ -48,7 +48,7 @@ Where it is thinner: no logarithmic or non-linear scales, no per-pip styling or 
 
 ## Theming
 
-The scale takes the kit's shared control and muted tokens rather than defining its own surface: pip colour follows the season's border and muted-foreground, the selected span follows the accent.
+The scale takes the kit's shared control and muted tokens rather than defining its own surface: pip color follows the theme's border and muted-foreground, the selected span follows the accent.
 
 That is deliberate for a component that sits under **Slider** and under bare value displays alike — a scale that themed independently would look attached to one and pasted onto the other.
 

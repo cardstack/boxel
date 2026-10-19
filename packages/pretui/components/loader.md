@@ -20,7 +20,7 @@ No APG pattern. Spinner renders `role="status"` with `aria-label="Loading"`; pas
 
 ## Theming
 
-`currentColor` for both the track (at 25% alpha) and the indicator; there are no spinner-specific tokens. The 1.5px stroke, 0.7s period and 13px default size are fixed. A season only needs `--foreground`, `--muted-foreground` and each Button tone's on-colour to read at 25% alpha.
+`currentColor` for both the track (at 25% alpha) and the indicator; there are no spinner-specific tokens. The 1.5px stroke, 0.7s period and 13px default size are fixed. A theme only needs `--foreground`, `--muted-foreground` and each Button tone's on-color to read at 25% alpha.
 
 ## React ecosystem
 

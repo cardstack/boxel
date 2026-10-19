@@ -2,7 +2,7 @@
 
 A render gate: hold a subtree until it is in view, until the browser is idle, until the reader asks for it, or until a flag says so — with a placeholder that reserves the final space in the meantime.
 
-It is about *work*, not choreography. **InView** animates an arrival; Defer decides whether the content is built at all. They compose.
+It is about _work_, not choreography. **InView** animates an arrival; Defer decides whether the content is built at all. They compose.
 
 ## The contract
 
@@ -54,7 +54,7 @@ Where it is thinner: no priority or concurrency control across several Defers on
 
 ## Theming
 
-`@minHeight` and `@aspect` are caller values rather than tokens, since a reserved box is a property of the content rather than of the season. The default placeholder is the kit's **Skeleton**, so it inherits that component's tokens and a season retunes every pending block at once.
+`@minHeight` and `@aspect` are caller values rather than tokens, since a reserved box is a property of the content rather than of the theme. The default placeholder is the kit's **Skeleton**, so it inherits that component's tokens and a theme retunes every pending block at once.
 
 `<:placeholder>` must occupy the reserved box — a placeholder smaller than the content reintroduces exactly the layout shift the component exists to prevent.
 

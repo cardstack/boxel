@@ -45,7 +45,7 @@ Gaps:
 
 `--primary` (filled track), `--line-strong` (remaining track and thumb hairline), `--card` (thumb fill), `--shadow-ink-mid` (thumb shadow), `--font-mono` and `--ink-3` (tick labels). The 3px track, 14px thumb, 2px radius and 10px tick type are fixed.
 
-A season that sets `--card` close to `--line-strong` loses the thumb against the unfilled track — check the thumb at both ends of the range, not just the middle. And because the fill is a gradient stop rather than a separate element, a season cannot give the filled and unfilled halves different heights or radii without replacing the component.
+A theme that sets `--card` close to `--line-strong` loses the thumb against the unfilled track — check the thumb at both ends of the range, not just the middle. And because the fill is a gradient stop rather than a separate element, a theme cannot give the filled and unfilled halves different heights or radii without replacing the component.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

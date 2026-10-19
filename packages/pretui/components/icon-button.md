@@ -69,4 +69,4 @@ Gaps and cautions:
 
 Everything comes from **Button**: `--pretui-tone`/`--pretui-tone-on` per tone, `--radius`, `--hover`, `--border`, `--pretui-edge-highlight`, `--shadow-ink-mid` — plus `--pretui-button-h` (default `2.24em`) for the square width.
 
-A season retuning `--pretui-button-h` moves IconButton's width and Button's height together, so icon buttons stay square.
+A theme retuning `--pretui-button-h` moves IconButton's width and Button's height together, so icon buttons stay square.

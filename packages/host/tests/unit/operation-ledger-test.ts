@@ -312,6 +312,33 @@ module('Unit | operation ledger', function () {
     );
   });
 
+  test('an unconfirmed write the realm answered before indexing records no version over the re-read', async function (assert) {
+    // The re-read can bring back the card as it was before the write while
+    // the write's indexing is still pending. Recording the write's version
+    // over that state would also have the store take the write's own index
+    // event as already held — the event that corrects it.
+    let h = setup({ version: 'v1' });
+    let call = h.attempt({ body: 'first' });
+    await drain();
+
+    h.sends[0].answer.fulfill(
+      answerWith({
+        version: 'v9',
+        generation: null,
+        indexPending: true,
+        baseMatched: false,
+      }),
+    );
+    await call;
+
+    assert.strictEqual(h.reloads, 1, 'the card was re-read');
+    assert.deepEqual(
+      h.recorded,
+      [],
+      'and no version is recorded over what the re-read brought back',
+    );
+  });
+
   test('an unconfirmed write still leaves a base for the next operation', async function (assert) {
     // Otherwise a card's first unconfirmed write would be its last
     // confirmable one: the re-read replaces the instance's meta with what the

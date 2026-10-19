@@ -170,7 +170,7 @@ class ToggleGroupUsage extends Component {
           @defaultValue='neutral'
           @value={{this.tone}}
           @options={{this.tones}}
-          @description='Semantic hue for every member. Nothing here is hand-authored colour, so a season the component has never seen re-tints it.'
+          @description='Semantic hue for every member. Nothing here is hand-authored color, so a theme the component has never seen re-tints it.'
           @onInput={{this.setTone}}
         />
         <Args.String

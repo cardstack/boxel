@@ -180,7 +180,7 @@ class CodeBlockUsage extends Component {
   <template>
     <FreestyleUsage
       @name='CodeBlock'
-      @description='A plain surface for code — docs, logs, API responses, agent output, config. Seven grammars ship and anything else renders as plain text. The syntax colours are not a theme: each kind is one hue token dressed through Law 2, so contrast holds in light and dark with zero dark branches and a season this component has never seen re-tints the code with everything else.'
+      @description='A plain surface for code — docs, logs, API responses, agent output, config. Seven grammars ship and anything else renders as plain text. The syntax colors are not a separate palette: each kind is one hue token dressed through Law 2, so contrast holds in light and dark with zero dark branches and a theme this component has never seen re-tints the code with everything else.'
       @source={{this.usage}}
     >
       <:example>

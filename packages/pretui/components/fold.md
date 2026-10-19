@@ -20,11 +20,11 @@ Hybrid controlled/uncontrolled, the kit-wide idiom.
 
 ## Prior art
 
-**APG's Disclosure** is the governing pattern and is deliberately minimal: a button with `aria-expanded`, Enter/Space to toggle, and *no* arrow keys, no roving tabindex, no focus management — the whole keyboard contract is Tab and Enter/Space.
+**APG's Disclosure** is the governing pattern and is deliberately minimal: a button with `aria-expanded`, Enter/Space to toggle, and _no_ arrow keys, no roving tabindex, no focus management — the whole keyboard contract is Tab and Enter/Space.
 
 **Radix `Collapsible`** is `Root`/`Trigger`/`Content` with `open`/`onOpenChange`/`disabled` and a `--radix-collapsible-content-height` for animation. **Web Awesome `wa-details`** wraps a real `<details>`/`<summary>` with `open`, `summary`, `name` grouping, `appearance` and `icon-placement`. **Pretui's own Accordion** wraps boxel-ui's grid-rows disclosure engine.
 
-So there are now **three disclosure mechanisms in this kit** — `Fold`, `Accordion`, and `FormSection` — and it is worth being clear about why, because it looks like duplication. `Accordion` is a group with a shared open policy; `FormSection` is a fieldset that knows about validation and can open itself; `Fold` is a single containment step with a required receipt and a rail. They are different components, but the *disclosure* part is written three times, and consolidating that onto one primitive would be a real improvement.
+So there are now **three disclosure mechanisms in this kit** — `Fold`, `Accordion`, and `FormSection` — and it is worth being clear about why, because it looks like duplication. `Accordion` is a group with a shared open policy; `FormSection` is a fieldset that knows about validation and can open itself; `Fold` is a single containment step with a required receipt and a rail. They are different components, but the _disclosure_ part is written three times, and consolidating that onto one primitive would be a real improvement.
 
 Where Fold is better than `<details>`: the receipt is a first-class arg rather than a `<summary>` you might forget, and the rail makes nesting legible. Where it is behind: `<details>` gives you the platform's semantics and Ctrl+F expansion for free.
 
@@ -36,7 +36,7 @@ What is right: the trigger is a real `<button>` carrying **`aria-expanded`**, wh
 
 Gaps:
 
-- **No `aria-controls`** pointing at the content region. Optional in APG, but it is the only thing that tells assistive tech *what* expands, and it is one attribute.
+- **No `aria-controls`** pointing at the content region. Optional in APG, but it is the only thing that tells assistive tech _what_ expands, and it is one attribute.
 - **The receipt is the button's content, so it is the accessible name** — which is good, and means the announcement is "3 files changed, collapsed button". Verify no glyph is concatenated into it.
 - **The nesting rail conveys containment visually and nothing conveys it programmatically.** A Fold inside a Fold is announced as a button followed by content followed by another button; the containment that 14px of indent makes obvious to a sighted user is invisible. Nested `role="group"`s with labels, or a real list structure, would carry it. For a territory whose central law is "indentation encodes containment", not expressing that containment in the accessibility tree is the notable gap.
 - **The expansion is not announced beyond `aria-expanded` being re-read.** Content appearing below a button is discoverable by continuing to read, which is adequate.
@@ -47,8 +47,8 @@ Gaps:
 
 `--border` (the first-level rail), `--line-strong` (nested rails), plus the receipt's ink (`--muted-foreground` or `--foreground` depending on state) and the kit's type scale.
 
-The 14px indent, 7px offset and 1px rail are fixed — deliberately, since they *are* the fold law rather than decoration. A season should not increase the indent to make nesting more obvious; the two-tone rail is the intended mechanism, and the rails are the tokens to adjust.
+The 14px indent, 7px offset and 1px rail are fixed — deliberately, since they _are_ the fold law rather than decoration. A theme should not increase the indent to make nesting more obvious; the two-tone rail is the intended mechanism, and the rails are the tokens to adjust.
 
-Check `--line-strong` against `--border` per season: at two levels of nesting the rails are the only depth cue, and if the two tokens converge, a nested Fold looks identical to a sibling.
+Check `--line-strong` against `--border` per theme: at two levels of nesting the rails are the only depth cue, and if the two tokens converge, a nested Fold looks identical to a sibling.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

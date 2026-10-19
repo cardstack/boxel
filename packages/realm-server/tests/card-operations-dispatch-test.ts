@@ -661,6 +661,7 @@ module(basename(import.meta.filename), function () {
             callApi: {
               method: 'GET',
               url: 'https://api.example.com/items',
+              destination: 'https://api.example.com/',
               headers: { authorization: 'Bearer {{userKey}}' },
               slots: [
                 {
@@ -707,6 +708,7 @@ module(basename(import.meta.filename), function () {
             callApi: {
               method: 'GET',
               url: 'https://api.example.com/items/{name}',
+              destination: 'https://api.example.com/items/',
               path: { name: { $ref: 'params', key: 'name' } },
               slots: [],
             },
@@ -730,6 +732,35 @@ module(basename(import.meta.filename), function () {
         callApi: { status: 404, headers: {}, body: { error: 'Not found' } },
       });
     });
+    test('a callApi whose built request leaves its declared destination is refused, and nothing is sent', async function (assert) {
+      let sent = 0;
+      let { core } = stub({
+        operations: {
+          lookup: {
+            base: 'callApi',
+            deterministic: true,
+            callApi: {
+              method: 'GET',
+              url: 'https://api.example.com/v1beta/items',
+              destination: 'https://api.example.com/v1/',
+              slots: [],
+            },
+          },
+        },
+      });
+      core.callApi = {
+        async send() {
+          sent++;
+          return { status: 200, headers: {}, body: null };
+        },
+      };
+      let error = await refusalFrom(() =>
+        runOperation(core, invoke(CARD, 'lookup')),
+      );
+      assert.strictEqual(error.code, 'guard-refused');
+      assert.strictEqual(error.meta?.reason, 'destination');
+      assert.strictEqual(sent, 0, 'nothing was sent');
+    });
     test("a callApi's `output` maps the response to an object, and nothing else", async function (assert) {
       let response = { status: 200, headers: {}, body: { id: 7 } };
       let declare = (source: string) =>
@@ -742,6 +773,7 @@ module(basename(import.meta.filename), function () {
               callApi: {
                 method: 'GET',
                 url: 'https://api.example.com/item',
+                destination: 'https://api.example.com/',
                 slots: [],
               },
             },

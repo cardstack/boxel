@@ -35,6 +35,7 @@ import {
 } from '@cardstack/runtime-common';
 
 import CardRenderer from '@cardstack/host/components/card-renderer';
+import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
 
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import type { ModuleDeclaration } from '@cardstack/host/resources/module-contents';
@@ -148,6 +149,7 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
     return {
       id: spec.id,
       realmInfo,
+      realmURL: realmURL.href,
       localPath: spec.id ? getRelativePath(realmURL.href, spec.id) : undefined,
     };
   };
@@ -212,11 +214,13 @@ class SpecPreviewContent extends GlimmerComponent<ContentSignature> {
                   {{#let (this.getDropdownData spec) as |data|}}
                     {{#if data}}
                       <div class='spec-selector-item'>
-                        <RealmIcon
-                          @canAnimate={{true}}
-                          class='url-realm-icon'
-                          @realmInfo={{data.realmInfo}}
-                        />
+                        <RealmURLTooltip @realmURL={{data.realmURL}}>
+                          <RealmIcon
+                            @canAnimate={{true}}
+                            class='url-realm-icon'
+                            @realmInfo={{data.realmInfo}}
+                          />
+                        </RealmURLTooltip>
                         {{#if spec.id}}
                           <span data-test-spec-selector-item-path>
                             {{data.localPath}}

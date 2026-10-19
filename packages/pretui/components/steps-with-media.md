@@ -49,6 +49,6 @@ Where it is thinner: one media panel and one step list, no alternating layout ac
 
 The block composes **StepList** and **MediaViewer** and takes the kit's shared block spacing and heading tokens rather than defining its own surface.
 
-That is the right shape for a Block-tier component: it is an arrangement of other components, and a season retunes it by retuning them — a block with its own type scale would drift away from the sections above and below it on the same page.
+That is the right shape for a Block-tier component: it is an arrangement of other components, and a theme retunes it by retuning them — a block with its own type scale would drift away from the sections above and below it on the same page.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

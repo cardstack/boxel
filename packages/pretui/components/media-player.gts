@@ -14,7 +14,7 @@
 //     there is no adapter, no wrapper component per control, and no React.
 //   • It is themed exclusively through `--media-*` custom properties, which
 //     cross the shadow boundary. That is our theming contract exactly:
-//     every value below is a Pretui token, so a season recompile re-dresses
+//     every value below is a Pretui token, so a theme change re-dresses
 //     the player and there is not one dark branch anywhere in this file.
 //   • It disposes itself. `disconnectedCallback` stops the one rAF loop
 //     (the time-range playhead), clears the auto-hide timeout, disconnects
@@ -772,7 +772,7 @@ export class MediaPlayer extends Component<MediaPlayerSignature> {
            Media Chrome is themed ONLY through --media-* custom properties,
            which is the one channel that crosses a shadow boundary. Every
            value below is a Pretui token with a light-value fallback, so the
-           player re-tints with a season it has never seen and there is not
+           player re-tints with a theme it has never seen and there is not
            one dark branch in this file. */
         .pretui-media {
           --pretui-media-aspect: 16 / 9;

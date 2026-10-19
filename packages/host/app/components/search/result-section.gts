@@ -17,6 +17,7 @@ import type {
   RenderableSearchEntryLike,
 } from '@cardstack/runtime-common';
 
+import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
 import { urlForRealmLookup } from '@cardstack/host/lib/utils';
 import type RealmService from '@cardstack/host/services/realm';
 import { UNKNOWN_REALM_NAME } from '@cardstack/host/services/realm';
@@ -382,6 +383,7 @@ export default class ResultSection extends Component<Signature> {
         <SearchSheetSectionHeader
           @realmInfo={{this.realmSection.realmInfo}}
           @title={{this.realmSection.realmInfo.name}}
+          @realmURL={{this.sectionRealmUrl}}
           @totalCount={{this.realmSection.totalCount}}
           @showOnlyLabel={{unless this.isMini this.realmSection.realmInfo.name}}
           @showOnlyChecked={{@isFocused}}
@@ -450,6 +452,7 @@ export default class ResultSection extends Component<Signature> {
         <SearchSheetSectionHeader
           @realmInfo={{this.urlSection.realmInfo}}
           @title={{this.urlSection.realmInfo.name}}
+          @urlInRealm={{urlForRealmLookup this.urlSection.card}}
           @totalCount={{1}}
         />
         <GridContainer
@@ -518,17 +521,23 @@ export default class ResultSection extends Component<Signature> {
               </:default>
               <:after>
                 {{#let (this.realm.info card.realmUrl) as |realmInfo|}}
-                  <div
-                    class={{cn
-                      'realm-name'
-                      realm-name--compact=@isCompact
-                      boxel-ellipsize=@isCompact
-                    }}
-                    data-test-realm-name
+                  <RealmURLTooltip
+                    class='realm-name-tooltip'
+                    @realmURL={{card.realmUrl}}
+                    @announce={{true}}
                   >
-                    in
-                    {{realmInfo.name}}
-                  </div>
+                    <div
+                      class={{cn
+                        'realm-name'
+                        realm-name--compact=@isCompact
+                        boxel-ellipsize=@isCompact
+                      }}
+                      data-test-realm-name
+                    >
+                      in
+                      {{realmInfo.name}}
+                    </div>
+                  </RealmURLTooltip>
                 {{/let}}
               </:after>
             </GridItem>
@@ -563,17 +572,23 @@ export default class ResultSection extends Component<Signature> {
                     (this.realm.info (urlForRealmLookup card))
                     as |realmInfo|
                   }}
-                    <div
-                      class={{cn
-                        'realm-name'
-                        realm-name--compact=@isCompact
-                        boxel-ellipsize=@isCompact
-                      }}
-                      data-test-realm-name
+                    <RealmURLTooltip
+                      class='realm-name-tooltip'
+                      @urlInRealm={{urlForRealmLookup card}}
+                      @announce={{true}}
                     >
-                      in
-                      {{realmInfo.name}}
-                    </div>
+                      <div
+                        class={{cn
+                          'realm-name'
+                          realm-name--compact=@isCompact
+                          boxel-ellipsize=@isCompact
+                        }}
+                        data-test-realm-name
+                      >
+                        in
+                        {{realmInfo.name}}
+                      </div>
+                    </RealmURLTooltip>
                   {{/let}}
                 {{/if}}
               </:after>
@@ -642,6 +657,7 @@ export default class ResultSection extends Component<Signature> {
          + name only. The Spec card type also renders a `spec-tag-pill`
          badge inside its prerendered body; suppress it for the same
          single-line reason. */
+      .search-result-block--mini .realm-name-tooltip,
       .search-result-block--mini .realm-name,
       .search-result-block--mini :deep(.spec-tag-pill) {
         display: none;
@@ -715,6 +731,9 @@ export default class ResultSection extends Component<Signature> {
       }
       .realm-name--compact {
         max-width: 15rem;
+      }
+      .realm-name-tooltip {
+        max-width: 100%;
       }
     </style>
   </template>

@@ -420,7 +420,11 @@ export default class CardService extends Service {
     await api.flushLogs();
   }
 
-  async executeAtomicOperations(operations: AtomicOperation[], realmURL: URL) {
+  async executeAtomicOperations(
+    operations: AtomicOperation[],
+    realmURL: URL,
+    opts?: { clientRequestId?: string },
+  ) {
     for (let operation of operations) {
       if (operation.data?.type === 'source') {
         let content = operation.data.attributes?.content;
@@ -433,10 +437,16 @@ export default class CardService extends Service {
       }
     }
     let doc = createAtomicDocument(operations);
+    if (opts?.clientRequestId) {
+      this.clientRequestIds.add(opts.clientRequestId);
+    }
     let response = await this.network.authedFetch(`${realmURL.href}_atomic`, {
       method: 'POST',
       headers: {
         Accept: SupportedMimeType.JSONAPI,
+        ...(opts?.clientRequestId
+          ? { 'X-Boxel-Client-Request-Id': opts.clientRequestId }
+          : {}),
       },
       body: JSON.stringify(doc),
     });

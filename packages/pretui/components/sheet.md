@@ -1,6 +1,6 @@
 ## What it is
 
-A spreadsheet-grade editable data grid: cells you select with the arrow keys, edit in place, sort and quick-filter. **Reach for it when values must be *edited* in place.** **DataGrid** and **Table** are read-only presentations and are the right choice when values only need to be read — they are far less machinery and, being APG *Tables*, do not put the page into a cell-navigation mode.
+A spreadsheet-grade editable data grid: cells you select with the arrow keys, edit in place, sort and quick-filter. **Reach for it when values must be _edited_ in place.** **DataGrid** and **Table** are read-only presentations and are the right choice when values only need to be read — they are far less machinery and, being APG _Tables_, do not put the page into a cell-navigation mode.
 
 ## The contract
 
@@ -23,14 +23,14 @@ Ported from **`@cardstack/surfaces` boxel-grid** — a self-contained ESM bundle
 
 **What Pretui adds, and why — this list is the component:**
 
-1. **The cloth.** boxel-grid declares its palette *on* the grid element, which beats any inherited value; the documented override channel is the inline `style` splat, so a token map routes every engine variable onto a Pretui token.
+1. **The cloth.** boxel-grid declares its palette _on_ the grid element, which beats any inherited value; the documented override channel is the inline `style` splat, so a token map routes every engine variable onto a Pretui token.
 2. **`@chrome='none'` plus our own surface**, because upstream's header ships a fixed `box-shadow` behind no variable — un-themable otherwise, and `:deep()` is forbidden.
-3. **Sort and quick filter.** `getSheet` builds the table with the core row model only — no sorted row model, no column filters — so the engine cannot sort despite advertising `sortable: true`. Pretui sorts and filters the array *before* handing it over, preserving row object identity so edits still write through.
+3. **Sort and quick filter.** `getSheet` builds the table with the core row model only — no sorted row model, no column filters — so the engine cannot sort despite advertising `sortable: true`. Pretui sorts and filters the array _before_ handing it over, preserving row object identity so edits still write through.
 4. **Header semantics.** Upstream's examples put `role="columnheader"` directly inside the rowgroup — invalid ARIA, and it fails the realm linter. Pretui wraps them in a real `role="row"` subgrid, carries `aria-sort`, and makes each sortable header a real `<button>`.
 5. **`aria-rowcount` / `-colcount` / `-rowindex` / `-colindex`.** The engine emits none; without them a screen reader cannot say "row 4 of 18".
 6. **Tab is not a trap** — see below.
 7. **PageUp/PageDown and Ctrl+Home/Ctrl+End**, bound through the runtime's public `keyboard.bind()` extension point, because the APG grid pattern expects them and the defaults omit them. Space toggles a boolean cell without opening an editor.
-8. **Edits actually appear.** Row objects are plain and untracked, so after the engine writes `row[key] = next` nothing invalidates and the cell re-renders its *pre-edit* value. A tracked generation counter bumps on every commit.
+8. **Edits actually appear.** Row objects are plain and untracked, so after the engine writes `row[key] = next` nothing invalidates and the cell re-renders its _pre-edit_ value. A tracked generation counter bumps on every commit.
 9. **Date columns that work.** `getSheet`'s `type: 'date'` reads through `isoDate()`, which returns `''` for anything that is not a `Date` instance — so an ISO string silently renders an empty column. Pretui declares date columns to the engine as text and passes `@type='date'` to the cell, then validates the ISO shape on commit.
 10. Validation hook, tabular/mono machine values, density, zebra, sticky first column, empty state, and a live status line.
 
@@ -48,15 +48,15 @@ Remaining gaps:
 
 - **The grid's name defaults to "Data sheet".** Pass `@label` on every Sheet; two Sheets on a page left on the default share one name.
 - **In-range styling exists for a selection that cannot happen** — harmless, but a user told about multi-cell selection will not find it.
-- **`@validate` returning false keeps the editor open** and the invalid value visible, but nothing announces *why* it was rejected; there is no message channel (**WCAG 3.3.1/3.3.3**).
+- **`@validate` returning false keeps the editor open** and the invalid value visible, but nothing announces _why_ it was rejected; there is no message channel (**WCAG 3.3.1/3.3.3**).
 - **Every visible row renders**; with no virtualisation, `aria-rowcount` equals the rendered count, which is honest but means large data sets are a performance problem before they are an accessibility one.
 - Boolean cells are checkboxes (`aria-checked`) that toggle on Space without an editor, so the new state is announced as the cell's checked state.
 
 ## Theming
 
-Every boxel-grid engine token is mapped onto a Pretui token with a light literal fallback, delivered through the inline `style` splat because the engine declares its own palette *on* the grid element. Pretui-owned chrome (the hairline, the depth shadow, the header band) uses `--card`, `--inset`, `--border`, `--line-strong`, `--stripe`, `--hover`, plus `--font-mono` for machine values and the density scale.
+Every boxel-grid engine token is mapped onto a Pretui token with a light literal fallback, delivered through the inline `style` splat because the engine declares its own palette _on_ the grid element. Pretui-owned chrome (the hairline, the depth shadow, the header band) uses `--card`, `--inset`, `--border`, `--line-strong`, `--stripe`, `--hover`, plus `--font-mono` for machine values and the density scale.
 
-Nothing branches on dark; every value is `var(--token, lightLiteral)`. The one thing a season cannot reach is anything boxel-grid hard-codes outside its own variable set — which is exactly why `@chrome='none'` exists.
+Nothing branches on dark; every value is `var(--token, lightLiteral)`. The one thing a theme cannot reach is anything boxel-grid hard-codes outside its own variable set — which is exactly why `@chrome='none'` exists.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 
@@ -67,12 +67,12 @@ The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides 
 > panel**. In Pretui, Sheet is a **spreadsheet**. Agents who type "Sheet"
 > for a drawer want **Drawer** (also aliased as **SlideOver**).
 
-| Agent types | Give them |
-| --- | --- |
-| Sheet (slide-over) | **Drawer** / **SlideOver** |
-| Sheet (spreadsheet) | this tile |
+| Agent types            | Give them                    |
+| ---------------------- | ---------------------------- |
+| Sheet (slide-over)     | **Drawer** / **SlideOver**   |
+| Sheet (spreadsheet)    | this tile                    |
 | Data table / data grid | **DataTable** / **DataGrid** |
-| Excel-like editor | this tile |
+| Excel-like editor      | this tile                    |
 
 Do not rename this component. Do teach the collision in every usage page
 and in the catalog brief (already: "Spreadsheet-grade editable grid").

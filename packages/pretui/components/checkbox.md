@@ -14,7 +14,7 @@ Element: HTMLLabelElement
 
 **Hybrid controlled/uncontrolled**, the kit-wide idiom: `@checked ?? @internal`, with `@internal` written only when `@checked === undefined`. `@onCheckedChange` receives a boolean read off the event target, never the event.
 
-The face is `appearance: none` plus a `clip-path` polygon check mark on `::before` — no SVG, no icon dependency, and it inherits `--primary-foreground` so the tick recolours with the season.
+The face is `appearance: none` plus a `clip-path` polygon check mark on `::before` — no SVG, no icon dependency, and it inherits `--primary-foreground` so the tick recolors with the theme.
 
 ## Prior art
 
@@ -37,7 +37,7 @@ Honest gaps:
 
 - **`@label` is optional and nothing enforces a name.** `<Checkbox />` with no `@label` and no `aria-label` on the label element produces an unnamed control. It is easy to reach for in a table row's select column and end up with a grid full of unlabelled checkboxes.
 - **`@disabled` uses the native attribute**, removing the control from the tab order — so a disabled checkbox cannot be discovered or read by a keyboard user scanning the form. Spectrum and Web Awesome behave the same way, so this is conventional, but `aria-disabled` would be kinder in a long form.
-- **`opacity: 0.45` for disabled** will fail text contrast against most seasons' backgrounds.
+- **`opacity: 0.45` for disabled** will fail text contrast against most themes' backgrounds.
 - **Focus-visible paints its own ring**: `outline: 2px solid var(--ring)` with a 2px offset, since `appearance: none` discards the UA ring.
 - The `clip-path` tick has no `forced-colors` treatment, so in Windows High Contrast mode the checked state may render as an empty box.
 
@@ -45,7 +45,7 @@ Honest gaps:
 
 `--pretui-control-rest` (falling back to `--field`), `--pretui-control-border` (falling back to `--input`), `--pretui-control-hover` (falling back to `--hover`), `--primary` (checked fill), `--primary-foreground` (the tick), `--border` (mixed into the checked hairline), `--pretui-edge-highlight` (the inset top highlight that gives the checked box its pressed-metal read), `--pretui-dur-snap` / `--pretui-ease-snap`, `--text-ui-md`.
 
-The 15px box, 5px radius and 9px tick are fixed; a season cannot scale the control. If a season sets `--primary` very light, the tick (painted `--primary-foreground`, usually white) disappears — define both together, as with Button's tone/on-tone pairs.
+The 15px box, 5px radius and 9px tick are fixed; a theme cannot scale the control. If a theme sets `--primary` very light, the tick (painted `--primary-foreground`, usually white) disappears — define both together, as with Button's tone/on-tone pairs.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

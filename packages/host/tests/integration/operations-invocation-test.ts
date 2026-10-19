@@ -395,6 +395,27 @@ module('Integration | operations invocation', function (hooks) {
       );
     });
 
+    test('a write from a bucket that skips the index wait answers ahead of its indexing', async function (assert) {
+      // The realm answers a write that skips the wait once its bytes are
+      // durable, and says the indexing is still to come. Only the header the
+      // transport sends for it gets that answer: a write that waits reports
+      // the generation its indexing landed on.
+      let report = await cardAt('report-transformed');
+      let result = (await (
+        operations(report, { skipIndexWait: true }) as any
+      ).addComment({ body: 'Noted without waiting.' })) as OperationWriteResult;
+
+      assert.true(result.indexPending, 'the answer says indexing is pending');
+      assert.strictEqual(result.generation, null, 'and so names no generation');
+      let stored = await storedCard('report-transformed.json');
+      let comments = stored.data.attributes.comments as { body: string }[];
+      assert.strictEqual(
+        comments[comments.length - 1].body,
+        'Noted without waiting.',
+        'the write is in the realm',
+      );
+    });
+
     test('a delete answers with nothing left to describe', async function (assert) {
       let report = await cardAt('report-deleted');
       let result = await (operations(report) as any).delete();

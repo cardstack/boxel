@@ -1,5 +1,4 @@
 import type { Listing } from '@cardstack/runtime-common';
-import { DEFAULT_CODING_LLM } from '@cardstack/runtime-common/matrix-constants';
 
 import HostBaseTool from '../lib/host-base-tool';
 import { skillFileURL } from '../lib/utils';
@@ -50,7 +49,6 @@ export default class ListingActionBuildTool extends HostBaseTool<
     if (roomId) {
       await new SetActiveLLMTool(this.toolContext).execute({
         roomId,
-        model: DEFAULT_CODING_LLM,
         mode: 'act',
       });
 

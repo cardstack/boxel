@@ -1,6 +1,6 @@
 ## What it is
 
-Ant's inline "are you sure?": a small confirm bubble anchored to the control it guards, with a question, an optional line of detail and two buttons. Use it when the object of the verb is the thing you just clicked and it is still on screen — deleting *this* row, revoking *this* key, unpublishing *this* draft. The bubble points at the object, so the question needs no noun, and the page never went away, so the whole exchange feels reversible.
+Ant's inline "are you sure?": a small confirm bubble anchored to the control it guards, with a question, an optional line of detail and two buttons. Use it when the object of the verb is the thing you just clicked and it is still on screen — deleting _this_ row, revoking _this_ key, unpublishing _this_ draft. The bubble points at the object, so the question needs no noun, and the page never went away, so the whole exchange feels reversible.
 
 Reach for **AlertDialog** instead when the consequence is not visible from where the click happened, needs more than a line to state, spans more than one object, or is genuinely irreversible; a modal earns its interruption by forcing the reader to stop. The tell that a Popconfirm should have been an AlertDialog is wanting a third paragraph, a checkbox, or a type-the-name-to-confirm field inside it. **Popover** is the free-form version with no buttons and no answer; **Tooltip** is a string and never asks anything.
 
@@ -57,7 +57,7 @@ The caller's part: put a real control in the trigger block. The contract is appl
 
 Read directly: `--popover` and `--popover-foreground` (the bubble), `--radius-surface`, `--space-2`, `--space-3`, `--space-4`, `--font-sans`, `--text-ui-md` and `--text-ui-sm`, `--muted-foreground` (the description line), `--warning` and `--pretui-on-warning` (the mark), `--pretui-shadow-overlay`, and the enter motion pair `--pretui-dur-enter` / `--pretui-ease-enter`.
 
-One knob of its own: `--pretui-popconfirm-max-width` (default `min(280px, 100vw - 16px)`). The buttons are the kit's **Button** at size `s`, so they take the season's control tokens through it; the confirm's colour is whatever `@tone` resolves to in the season.
+One knob of its own: `--pretui-popconfirm-max-width` (default `min(280px, 100vw - 16px)`). The buttons are the kit's **Button** at size `s`, so they take the theme's control tokens through it; the confirm's color is whatever `@tone` resolves to in the theme.
 
 Entry motion is `@starting-style` (opacity plus a 0.97 scale, 180ms) with a `prefers-reduced-motion` opt-out. The 15px warning disc and its 9px glyph are fixed.
 
@@ -65,14 +65,14 @@ The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides 
 
 ## React ecosystem
 
-| Agent types | Give them |
-| --- | --- |
-| Ant `title` / `description` | `@title` / `@description` |
-| Ant `onConfirm` / `onCancel` | same |
-| Ant `okText` / `cancelText` | accepted as-is (aliases of `@confirmLabel` / `@cancelLabel`) |
-| Ant `okType='danger'` | `@tone='danger'` — the default |
-| Ant `showCancel` / `placement` / `disabled` | same |
-| Ant `okButtonProps={{ loading }}` | `@busy` |
-| Ant `trigger='hover'` | not offered; click only |
-| shadcn / Chakra "Popover + two buttons" | this tile |
-| anything needing a paragraph or a field | **AlertDialog** |
+| Agent types                                 | Give them                                                    |
+| ------------------------------------------- | ------------------------------------------------------------ |
+| Ant `title` / `description`                 | `@title` / `@description`                                    |
+| Ant `onConfirm` / `onCancel`                | same                                                         |
+| Ant `okText` / `cancelText`                 | accepted as-is (aliases of `@confirmLabel` / `@cancelLabel`) |
+| Ant `okType='danger'`                       | `@tone='danger'` — the default                               |
+| Ant `showCancel` / `placement` / `disabled` | same                                                         |
+| Ant `okButtonProps={{ loading }}`           | `@busy`                                                      |
+| Ant `trigger='hover'`                       | not offered; click only                                      |
+| shadcn / Chakra "Popover + two buttons"     | this tile                                                    |
+| anything needing a paragraph or a field     | **AlertDialog**                                              |

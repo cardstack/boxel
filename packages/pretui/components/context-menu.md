@@ -55,20 +55,20 @@ The caller's part: keep the region a thing, not the page. The tab stop and the a
 
 ## Theming
 
-The region reads `--radius-surface` for its focus outline shape and `--ring` for the outline itself. Everything else — panel surface, border, shadow, rows, shortcut faces, the destructive tone, check and submenu indicators — is `MenuPanel`'s and follows **Menu**'s theming exactly. Nothing here has a knob of its own; a season that retunes Menu retunes this with it, which is the point of sharing the engine.
+The region reads `--radius-surface` for its focus outline shape and `--ring` for the outline itself. Everything else — panel surface, border, shadow, rows, shortcut faces, the destructive tone, check and submenu indicators — is `MenuPanel`'s and follows **Menu**'s theming exactly. Nothing here has a knob of its own; a theme that retunes Menu retunes this with it, which is the point of sharing the engine.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 
 ## React ecosystem
 
-| Agent types | Give them |
-| --- | --- |
-| `ContextMenuTrigger` | the `<:default>` block — the region |
-| `ContextMenuContent` / `Item` / `Sub` / `Separator` | the `@items` tree |
-| `CheckboxItem` / `RadioItem` | `kind: 'toggle'` / `kind: 'radio'` nodes |
-| `ContextMenuShortcut` | `kbd: 'Mod+O'` on the node; `@platform` fixes the face |
-| Radix `onSelect` on an item | the node's `onSelect`, plus `@onSelect` for the component |
-| `onContextMenu` + `preventDefault` | done for you — do not add another |
-| MUI `anchorReference='anchorPosition'` | built in; the point comes from the gesture |
-| a button that opens a menu | **Menu** |
-| commands across the whole app | **CommandPalette** |
+| Agent types                                         | Give them                                                 |
+| --------------------------------------------------- | --------------------------------------------------------- |
+| `ContextMenuTrigger`                                | the `<:default>` block — the region                       |
+| `ContextMenuContent` / `Item` / `Sub` / `Separator` | the `@items` tree                                         |
+| `CheckboxItem` / `RadioItem`                        | `kind: 'toggle'` / `kind: 'radio'` nodes                  |
+| `ContextMenuShortcut`                               | `kbd: 'Mod+O'` on the node; `@platform` fixes the face    |
+| Radix `onSelect` on an item                         | the node's `onSelect`, plus `@onSelect` for the component |
+| `onContextMenu` + `preventDefault`                  | done for you — do not add another                         |
+| MUI `anchorReference='anchorPosition'`              | built in; the point comes from the gesture                |
+| a button that opens a menu                          | **Menu**                                                  |
+| commands across the whole app                       | **CommandPalette**                                        |
