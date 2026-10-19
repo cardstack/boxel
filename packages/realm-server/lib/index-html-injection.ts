@@ -1,6 +1,7 @@
 import type { DBAdapter } from '@cardstack/runtime-common';
 import { query } from '@cardstack/runtime-common';
 import {
+  INSTANCE_ROWS_FIRST,
   indexURLCandidates,
   indexCandidateExpressions,
 } from './index-url-utils.ts';
@@ -10,13 +11,22 @@ import {
 // `foo/index.json`), and whatever governs the markup is that card's.
 export interface RetrievedMarkup {
   html: string | null;
-  // The card whose row the markup came from, as a card URL; null when no row
-  // held any.
+  // The card or file whose row the markup came from, as the URL it is read
+  // by; null when no row held any.
   cardURL: URL | null;
 }
 
-function matchedCardURL(rowURL: string | null | undefined): URL | null {
-  return rowURL ? new URL(rowURL.replace(/\.json$/, '')) : null;
+// A card's row is keyed by its `.json` source and the card is read without
+// the extension; a file is read by its own URL, extension and all.
+function matchedCardURL(
+  row: { url?: string; type?: string } | undefined,
+): URL | null {
+  if (!row?.url) {
+    return null;
+  }
+  return new URL(
+    row.type === 'instance' ? row.url.replace(/\.json$/, '') : row.url,
+  );
 }
 
 export async function retrieveHeadHTML({
@@ -42,21 +52,22 @@ export async function retrieveHeadHTML({
   }
 
   // The head HTML lives on prerendered_html; the boxel_index join scopes the
-  // lookup to a live instance row and supplies the generation for logging.
+  // lookup to a live instance or file row and supplies the generation for
+  // logging.
   let rows = await query(dbAdapter, [
     `
-      SELECT ph.head_html AS head_html, i.url AS url, i.generation
+      SELECT ph.head_html AS head_html, i.url AS url, i.type AS type, i.generation
       FROM boxel_index AS i
       JOIN prerendered_html AS ph
         ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type
-      WHERE i.type = 'instance'
+      WHERE i.type IN ('instance', 'file')
        AND ph.head_html IS NOT NULL
        AND i.is_deleted IS NOT TRUE
        AND
     `,
     ...indexCandidateExpressions(candidates, 'i'),
     `
-      ORDER BY i.generation DESC
+      ORDER BY ${INSTANCE_ROWS_FIRST}, i.generation DESC
       LIMIT 1
     `,
   ]);
@@ -64,7 +75,12 @@ export async function retrieveHeadHTML({
   log?.debug('Head query result for %s', cardURL.href, rows);
 
   let headRow = rows[0] as
-    | { head_html?: string | null; url?: string; generation?: string | number }
+    | {
+        head_html?: string | null;
+        url?: string;
+        type?: string;
+        generation?: string | number;
+      }
     | undefined;
 
   if (headRow?.head_html != null) {
@@ -76,7 +92,7 @@ export async function retrieveHeadHTML({
   }
   return {
     html: headRow?.head_html ?? null,
-    cardURL: matchedCardURL(headRow?.url),
+    cardURL: matchedCardURL(headRow),
   };
 }
 
@@ -103,21 +119,22 @@ export async function retrieveIsolatedHTML({
   }
 
   // The isolated HTML lives on prerendered_html; the boxel_index join scopes
-  // the lookup to a live instance row and supplies the generation for logging.
+  // the lookup to a live instance or file row and supplies the generation for
+  // logging.
   let rows = await query(dbAdapter, [
     `
-      SELECT ph.isolated_html AS isolated_html, i.url AS url, i.generation
+      SELECT ph.isolated_html AS isolated_html, i.url AS url, i.type AS type, i.generation
       FROM boxel_index AS i
       JOIN prerendered_html AS ph
         ON ph.url = i.url AND ph.realm_url = i.realm_url AND ph.type = i.type
       WHERE ph.isolated_html IS NOT NULL
-        AND i.type = 'instance'
+        AND i.type IN ('instance', 'file')
         AND i.is_deleted IS NOT TRUE
         AND
       `,
     ...indexCandidateExpressions(candidates, 'i'),
     `
-      ORDER BY i.generation DESC
+      ORDER BY ${INSTANCE_ROWS_FIRST}, i.generation DESC
       LIMIT 1
     `,
   ]);
@@ -128,6 +145,7 @@ export async function retrieveIsolatedHTML({
     | {
         isolated_html?: string | null;
         url?: string;
+        type?: string;
         generation?: string | number;
       }
     | undefined;
@@ -142,7 +160,7 @@ export async function retrieveIsolatedHTML({
 
   return {
     html: isolatedRow?.isolated_html ?? null,
-    cardURL: matchedCardURL(isolatedRow?.url),
+    cardURL: matchedCardURL(isolatedRow),
   };
 }
 

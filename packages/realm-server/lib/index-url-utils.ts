@@ -23,6 +23,12 @@ export function indexURLCandidates(cardURL: URL): string[] {
   return [...new Set(candidates)];
 }
 
+// A page URL's candidates can match both a card's instance row and the `file`
+// row of its own `.json` source. A page for a card serves the card, so an
+// instance row wins; a file row is served only for a URL no card claims, such
+// as a Markdown file's.
+export const INSTANCE_ROWS_FIRST = `CASE WHEN i.type = 'instance' THEN 0 ELSE 1 END`;
+
 export function indexCandidateExpressions(
   candidates: string[],
   // Table alias to qualify `url` / `file_alias` with. Required when the query

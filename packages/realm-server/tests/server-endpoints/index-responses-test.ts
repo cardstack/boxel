@@ -378,6 +378,8 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           // A binary document for the embed-negotiation tests — the realm
           // serves it verbatim with its extension's content type.
           'report.pdf': '%PDF-1.4 fake-pdf-bytes',
+          'spring-guide.md':
+            '# Spring Guide\n\nSprings settle toward their target.\n',
           'person.gts': `import {
                             contains,
                             field,
@@ -750,6 +752,51 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         assert.ok(
           response.text.includes('Subdirectory Index'),
           'isolated HTML is injected into the HTML response',
+        );
+      });
+
+      test('serves head, isolated HTML and scoped CSS for a Markdown file URL', async function (assert) {
+        let response = await request
+          .get('/test/spring-guide.md')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        assert.ok(
+          /<title[^>]*>Spring Guide<\/title>/.test(response.text),
+          'head HTML titles the page from the Markdown file',
+        );
+        assert.notOk(
+          response.text.includes('<title>Boxel</title>'),
+          'the generic title is not used',
+        );
+        assert.ok(
+          response.text.includes('Springs settle toward their target.'),
+          'isolated HTML renders the Markdown content',
+        );
+        assert.ok(
+          response.text.includes('data-boxel-scoped-css'),
+          'scoped CSS for the Markdown render is injected',
+        );
+      });
+
+      test('a card URL serves its instance markup, not its .json source file', async function (assert) {
+        let fileRows = await dbAdapter.execute(
+          `SELECT url FROM boxel_index WHERE type = 'file' AND url = '${testRealmURL.href}isolated-test.json'`,
+        );
+        assert.strictEqual(
+          fileRows.length,
+          1,
+          'the card source also has a file row the page could match',
+        );
+
+        let response = await request
+          .get('/test/isolated-test')
+          .set('Accept', 'text/html');
+
+        assert.strictEqual(response.status, 200, 'serves HTML response');
+        assert.ok(
+          response.text.includes('data-test-isolated-html'),
+          "the card's isolated HTML is injected",
         );
       });
 

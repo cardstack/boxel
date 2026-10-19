@@ -2276,6 +2276,13 @@ export default class StoreService extends Service implements StoreInterface {
           instanceOrError = await this.getCardInstance({
             idOrDoc: url,
           });
+          // The card read of a file URL reroutes to a file-meta load, which
+          // has already filed the FileDef under file-meta. Recording it as a
+          // card would land it in the card error bucket.
+          if (isFileDefInstance(instanceOrError)) {
+            deferred.fulfill();
+            return;
+          }
           this.setIdentityContext(instanceOrError);
         }
         await this.startAutoSaving(instanceOrError);
