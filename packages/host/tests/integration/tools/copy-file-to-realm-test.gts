@@ -141,6 +141,37 @@ module('Integration | tools | copy-file-to-realm', function (hooks) {
     );
   });
 
+  test('show file command opens a prefix-form file identifier', async function (assert) {
+    let toolService = getService('tool-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+    let { virtualNetwork } = getService('network');
+    let testRealmPrefix = '@test/show-realm/';
+    virtualNetwork.addRealmMapping(testRealmPrefix, testRealmURL);
+    try {
+      operatorModeStateService.restore({
+        stacks: [[]],
+        submode: 'interact',
+      });
+
+      await new ShowFileTool(toolService.toolContext).execute({
+        fileIdentifier: `${testRealmPrefix}hello.txt`,
+      });
+
+      assert.strictEqual(
+        operatorModeStateService.state?.submode,
+        'code',
+        'submode is switched to code',
+      );
+      assert.strictEqual(
+        operatorModeStateService.state?.codePath?.href,
+        `${testRealmURL}hello.txt`,
+        'code path is the file the prefix-form identifier names',
+      );
+    } finally {
+      virtualNetwork.removeRealmMapping(testRealmPrefix);
+    }
+  });
+
   test('errors when user does not have write permissions to target realm', async function (assert) {
     let toolService = getService('tool-service');
     let copyFileCommand = new CopyFileToRealmTool(toolService.toolContext);
