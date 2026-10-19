@@ -93,12 +93,14 @@ under the new target.
 
 ### 1.7. Serving Versions
 
-An exact Version MUST be served read-only at `/<scope>/<name>@<version>/<path>`
-from the realm's `.deck/store`, to the realm's readers, checked through
-`Realm.handle`. It MUST be served as immutable, public or private as the realm
-is. A module request MUST get JavaScript transpiled under the exact RRI. A
-range or tag MUST be resolved by a `?spec=` request whose answer is not
-cached.
+An exact Version MUST be served read-only at its package's root followed by
+`@<version>/<path>`, from the realm's `.deck/store`, to the realm's readers. A
+realm MAY host several packages, listed in `.deck/repository.json`, each
+serving its own Versions. Access MUST be checked with `Realm.aclAdmits`, the
+realm's own access list. A Version MUST be served as immutable, public or
+private as the realm is. A module request MUST get JavaScript transpiled
+under the exact RRI. A range or tag MUST be resolved by a `?spec=` request
+whose answer is not cached.
 
 ### 1.8. Gated
 
@@ -162,8 +164,10 @@ well-known realms (ADR 002 §1.4). Under federation (ADR 004), moving a Version
 to another server changes only how an RRI is projected, never the lock or a
 card.
 
-Locks are scoped per package because a realm can host competing apps. One
-shared map forces every app onto one Version of every dependency.
+Locks are scoped per package because each package's dependencies are its
+own. Two packages loaded side by side, from one realm or several, may need
+different Versions of one dependency; one shared map would force every
+package onto one Version of every dependency.
 
 Proposed ADR 002 makes the network the only place an RRI becomes a URL, and
 open work is moving consumers off the VirtualNetwork (#6073). A resolver that
@@ -175,7 +179,10 @@ Resolution stays in the Loader rather than the browser's import maps.
 Packages appear at runtime, a browser map cannot change a specifier it has
 resolved, and the browser cannot evict a module when card code is edited.
 Resolution is not baked into served bytes either: Deck allows a transform
-before the seal, never after it.
+before the seal, never after it. Serving a Version does transpile its sealed
+`.gts` on request. That transform is deterministic in the sealed bytes and
+the RRI, so a Version's modules never change, but it runs after the seal; §4
+records it as an open question.
 
 The lock must be in place before transpilation because AMD registration
 resolves a module's dependencies synchronously. Loaded modules are kept when
@@ -204,8 +211,10 @@ content hash, not a modification time that a copy or a clock can change.
 Branching and an explicit merge are left out deliberately. They need their
 own commands and review, and a force push would undo the guarantee.
 
-Probing authorization through `Realm.handle` keeps every read rule in one
-place. `addRealmMapping` refuses an undeclared `@cardstack/` prefix (#5965),
+Checking access with `Realm.aclAdmits`, the realm's own access list, keeps
+Deck's routes under the same rules as the realm's files without a probe
+request, and a realm with a policy cannot leak a Version to a caller its
+list refuses. `addRealmMapping` refuses an undeclared `@cardstack/` prefix (#5965),
 so a lock that pins a Version of base fails instead of loading a second copy
 of base's classes, which the host bundle must not have (#6445).
 
@@ -224,8 +233,9 @@ of base's classes, which the host bundle must not have (#6445).
 - **A realm-relative package door, `<realm>/_packages/…`, with a short
   alias.** It puts realm URLs and the store layout into card JSON, against
   ADR 002, and the alias names an entry module no scope covers.
-- **One import map for the realm or the process.** It couples competing apps,
-  and it is the global registry ADR 002 §3 rejects.
+- **One import map for the realm or the process.** It couples every package
+  to one Version of each dependency, and it is the global registry ADR 002 §3
+  rejects.
 - **deckd's file watcher commits saves (History).** It cannot tell a host save
   from a half-written branch materialization, and it would commit Deck's own
   bookkeeping.
@@ -243,6 +253,8 @@ of base's classes, which the host bundle must not have (#6445).
   registered makes the Loader discard its caches. Resolving through RRIs does
   not.
 - Querying across Versions is not part of this integration.
+- Open question: whether a Version should seal its transpiled JavaScript as a
+  derived Version, so serving runs no transform after the seal.
 - A file both a host save and a boxel-cli user changed is reported to the CLI
   user, not merged within the file.
 - `main` moves often, so a boxel-cli History restore needs a fresh sync first:
@@ -255,9 +267,13 @@ of base's classes, which the host bundle must not have (#6445).
 1. `deck/restack-01-core` to `deck/restack-06-version-index`: `5c6f3c9f34`,
    `d7801cccea`, `3aaba08d09`, `c5043412f4`, `d3582d926c`, `ef357bbba6`,
    `b7af804295`.
-2. `deck/restack-09-content-sync` and `deck/restack-10-history`: History
+2. `deck/restack-07-collaboration` and `deck/restack-08-storage`: verified
+   Repository, branch, Checkpoint and Review objects; conditional storage.
+3. `deck/restack-09-content-sync` and `deck/restack-10-history`: History
    Steps, forward restore, content-addressed sync; `77491e337e` (every save
    committed, debounced) and `78a6804b60` (one HEAD, per-file sync).
-3. ADR 002 §1.2, §1.4, §3; ADR 004.
-4. #5965 (reserved `@cardstack/` names); #6073 (code refs without a
+4. `deck/restack-11-packages` and `deck/restack-12-versions`: several
+   packages per realm; cutting a Version from the branch head.
+5. ADR 002 §1.2, §1.4, §3; ADR 004.
+6. #5965 (reserved `@cardstack/` names); #6073 (code refs without a
    VirtualNetwork); #6445 (base in the host bundle).
