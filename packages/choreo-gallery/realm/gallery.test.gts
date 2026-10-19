@@ -9,7 +9,13 @@
 import { setupChoreo } from '@cardstack/choreo/test-support';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { renderCard } from '@cardstack/host/tests/helpers/render-component';
-import { click, render, settled, waitUntil } from '@ember/test-helpers';
+import {
+  click,
+  render,
+  settled,
+  triggerKeyEvent,
+  waitUntil,
+} from '@ember/test-helpers';
 import { tracked } from '@glimmer/tracking';
 import { getService } from '@universal-ember/test-support';
 import { DialStore } from 'dialkit/vanilla';
@@ -21,6 +27,7 @@ import { GalleryDemo, WalkthroughStep } from './demo';
 import { ChoreoGallery } from './gallery';
 import { openThroughHost } from './lib/pointer';
 import { Theater } from './lib/theater';
+import { setThemeMode, theme } from './lib/theme';
 import { DemoPage } from './shell/demo-page';
 import { KeyframesDemo } from './stages/keyframes';
 
@@ -121,6 +128,86 @@ module('Choreo gallery | site', function (hooks) {
     assert.strictEqual(chip('Layout').getAttribute('aria-pressed'), 'true');
   });
 
+  test('a filter says what the grid now shows, for a screen reader', async function (assert) {
+    await renderGallery();
+    let status = () => one('[role="status"]');
+
+    assert.strictEqual(
+      status()?.textContent?.trim(),
+      '',
+      'nothing is said before a filter is chosen',
+    );
+
+    await click(chip('Layout'));
+    assert.strictEqual(status()?.textContent?.trim(), 'Layout: 2 of 4 demos');
+
+    await click(chip('All'));
+    assert.strictEqual(status()?.textContent?.trim(), 'All 4 demos');
+  });
+
+  test('the appearance picker is one radio group, and gives focus back to its pill', async function (assert) {
+    let mode = theme.mode;
+    await renderGallery();
+    let picker = one('.header-picker') as HTMLDetailsElement;
+    let summary = picker.querySelector('summary')!;
+    let radio = (label: string) =>
+      Array.from(
+        picker.querySelectorAll<HTMLButtonElement>('[role="radio"]'),
+      ).find((button) => button.textContent?.trim() === label)!;
+
+    try {
+      setThemeMode('dark');
+      await settled();
+      assert.ok(
+        picker.querySelector('[role="radiogroup"][aria-label="Appearance"]'),
+        'the segments are one named group',
+      );
+      assert.deepEqual(
+        Array.from(picker.querySelectorAll('[role="radio"]')).map((button) =>
+          button.getAttribute('tabindex'),
+        ),
+        ['-1', '-1', '0'],
+        'and one Tab stop, on the chosen segment',
+      );
+
+      await click(summary);
+      radio('Dark').focus();
+      await triggerKeyEvent(radio('Dark'), 'keydown', 'ArrowRight');
+      assert.strictEqual(
+        theme.mode,
+        'auto',
+        'an arrow chooses, wrapping round',
+      );
+      assert.strictEqual(document.activeElement, radio('Auto'), 'and focuses');
+      assert.true(picker.open, 'the menu stays open while arrowing');
+
+      await click(radio('Light'));
+      assert.strictEqual(theme.mode, 'light', 'a click chooses');
+      assert.false(picker.open, 'and closes the menu');
+      assert.strictEqual(
+        document.activeElement,
+        summary,
+        'with focus back on the pill',
+      );
+
+      await click(summary);
+      let escapes: KeyboardEvent[] = [];
+      let hear = (event: KeyboardEvent) => escapes.push(event);
+      document.addEventListener('keydown', hear);
+      await triggerKeyEvent(picker, 'keydown', 'Escape');
+      document.removeEventListener('keydown', hear);
+      assert.false(picker.open, 'Escape closes it');
+      assert.strictEqual(
+        escapes.length,
+        0,
+        'and goes no further, so the host does not close the card as well',
+      );
+      assert.strictEqual(document.activeElement, summary, 'onto the pill too');
+    } finally {
+      setThemeMode(mode);
+    }
+  });
+
   test('a click on a tile leaves the host’s URL and title alone', async function (assert) {
     let title = document.title;
     let href = location.href;
@@ -196,8 +283,15 @@ module('Choreo gallery | demo page', function (hooks) {
       Array.from(root().querySelectorAll('.pager a')).map((a) =>
         a.textContent?.replace(/\s+/g, ' ').trim(),
       ),
-      ['← Title alpha', 'Title charlie →'],
+      ['← Previous: Title alpha', 'Next: Title charlie →'],
       'and either side of it at the foot',
+    );
+    assert.deepEqual(
+      Array.from(root().querySelectorAll('.pager a [aria-hidden="true"]')).map(
+        (arrow) => arrow.textContent?.trim(),
+      ),
+      ['←', '→'],
+      'the arrows are drawn, not read; the words say which way',
     );
 
     await click('.next-demo');
@@ -266,7 +360,7 @@ module('Choreo gallery | demo page', function (hooks) {
     assert.strictEqual(motionSpeed(), 1, 'the next demo starts at full speed');
     assert.notOk(one('.second .speeds'), 'though it has no speed picker');
     assert.strictEqual(
-      speed('Full').getAttribute('aria-pressed'),
+      speed('Full').getAttribute('aria-checked'),
       'true',
       'and the picker on the page underneath says so',
     );
@@ -298,7 +392,10 @@ module('Choreo gallery | formats', function (hooks) {
       'the usage example',
     );
     assert.ok(one('.topbar .brand'), 'the site’s brand');
-    assert.ok(one('summary[aria-label="Appearance"]'), 'and its theme picker');
+    assert.ok(
+      one('[role="radiogroup"][aria-label="Appearance"]'),
+      'and its theme picker',
+    );
     assert.notOk(one('.pager'), 'no gallery lists it, so no pager');
   });
 
