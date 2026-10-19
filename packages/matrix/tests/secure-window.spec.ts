@@ -7,6 +7,7 @@ import { appURL, secureOriginURL } from '../support/isolated-realm-server.ts';
 import {
   createSubscribedUser,
   createSubscribedUserAndLogin,
+  getExternalIdsForIdp,
   setupPermissions,
   subjectFor,
   updateSynapseUser,
@@ -34,6 +35,15 @@ async function expectAppSignedIn(page: Page) {
   );
 }
 
+async function signedInUser(secure: Page): Promise<string> {
+  await expect(secure.locator('[data-test-secure-signed-in]')).toBeVisible({
+    timeout: 60000,
+  });
+  return JSON.parse(
+    (await secure.evaluate((key) => localStorage.getItem(key), STORAGE_KEY))!,
+  ).user;
+}
+
 async function openSecureWindow(page: Page, query: string): Promise<Page> {
   let secure = await page.context().newPage();
   await secure.goto(`${secureOriginURL}?${query}`);
@@ -43,13 +53,18 @@ async function openSecureWindow(page: Page, query: string): Promise<Page> {
 // Signs in on the mock identity provider's form, as the given Google account.
 async function signInAtGoogle(
   page: Page,
-  identity: { sub: string; email: string; name: string },
+  identity: {
+    sub: string;
+    email: string;
+    name: string;
+    emailVerified?: boolean;
+  },
 ) {
   await page.locator('input[name="username"]').fill(identity.sub);
   await page.locator('textarea[name="claims"]').fill(
     JSON.stringify({
       email: identity.email,
-      email_verified: true,
+      email_verified: identity.emailVerified ?? true,
       name: identity.name,
     }),
   );
@@ -213,20 +228,95 @@ test.describe('the secure window signs in on its own', () => {
     await snapshot(testInfo, secure, 'secure-window-4-google-signed-in');
   });
 
-  test('refuses a Google account not linked to Boxel', async ({ page }) => {
+  test('links Google to the account that registered its email with a password', async ({
+    page,
+  }, testInfo) => {
+    let { username, credentials } = await createSubscribedUserAndLogin(
+      page,
+      'secure-link',
+    );
+    await expectAppSignedIn(page);
+    let email = `${username}@example.com`;
+    await updateSynapseUser(credentials.userId, { emailAddresses: [email] });
+    let sub = subjectFor(username);
+
+    let secure = await openSecureWindow(page, 'mode=sign-in');
+    await secure.locator('[data-test-secure-google]').click();
+    await signInAtGoogle(secure, { sub, email, name: 'Linked Google User' });
+    expect(
+      await signedInUser(secure),
+      'the window is signed in as the account that holds the email',
+    ).toBe(credentials.userId);
+    expect(
+      await getExternalIdsForIdp(credentials.userId, 'oidc-google'),
+    ).toEqual([sub]);
+    await snapshot(testInfo, secure, 'secure-window-6-google-linked-by-email');
+  });
+
+  test('makes an account for a new Google user', async ({ page }, testInfo) => {
+    let localpart = `secure-new-${randomBytes(6).toString('hex')}`;
+    let sub = subjectFor(localpart);
+
     let secure = await openSecureWindow(page, 'mode=sign-in');
     await secure.locator('[data-test-secure-google]').click();
     await signInAtGoogle(secure, {
-      sub: `unlinked-${randomBytes(6).toString('hex')}`,
-      email: `unlinked-${randomBytes(6).toString('hex')}@example.com`,
-      name: 'Unlinked Google User',
+      sub,
+      email: `${localpart}@example.com`,
+      name: 'New Google User',
+    });
+    let user = await signedInUser(secure);
+    expect(user, 'the account takes the email’s local part').toBe(
+      `@${localpart}:localhost`,
+    );
+    expect(await getExternalIdsForIdp(user, 'oidc-google')).toEqual([sub]);
+    await snapshot(testInfo, secure, 'secure-window-7-google-new-account');
+  });
+
+  test('refuses a Google account whose email isn’t verified', async ({
+    page,
+  }, testInfo) => {
+    let localpart = `secure-unverified-${randomBytes(6).toString('hex')}`;
+    let secure = await openSecureWindow(page, 'mode=sign-in');
+    await secure.locator('[data-test-secure-google]').click();
+    await signInAtGoogle(secure, {
+      sub: subjectFor(localpart),
+      email: `${localpart}@example.com`,
+      name: 'Unverified Google User',
+      emailVerified: false,
     });
     await expect(secure.locator('[data-test-secure-error]')).toContainText(
-      'isn’t linked to Boxel',
+      'Google sign-in requires a verified email address.',
     );
     await expect(
       secure.locator('[data-test-secure-start-again]'),
     ).toBeVisible();
+    await snapshot(testInfo, secure, 'secure-window-8-google-unverified');
+  });
+
+  test('refuses a deactivated account with Google', async ({
+    page,
+  }, testInfo) => {
+    let { username, credentials } = await createSubscribedUser('secure-gone');
+    let email = `${username}@example.com`;
+    await updateSynapseUser(credentials.userId, { emailAddresses: [email] });
+    let identity = {
+      sub: subjectFor(username),
+      email,
+      name: 'Deactivated Google User',
+    };
+    let secure = await openSecureWindow(page, 'mode=sign-in');
+    await secure.locator('[data-test-secure-google]').click();
+    await signInAtGoogle(secure, identity);
+    expect(await signedInUser(secure)).toBe(credentials.userId);
+    await secure.evaluate(() => (window as any).boxelSignOut());
+
+    await updateSynapseUser(credentials.userId, { deactivated: true });
+    await secure.locator('[data-test-secure-google]').click();
+    await signInAtGoogle(secure, identity);
+    await expect(secure.locator('[data-test-secure-error]')).toContainText(
+      'Sign-in failed. Please check your credentials and try again.',
+    );
+    await snapshot(testInfo, secure, 'secure-window-9-google-deactivated');
   });
 
   test('hands a session to the CLI listening on this machine', async ({

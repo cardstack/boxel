@@ -288,7 +288,10 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.get('/_secure-origin', handleSecureOriginInfo(args));
   router.post(SECURE_SESSION_PATH, handlePasswordSignIn(args));
   router.get(`${SECURE_SESSION_PATH}/google`, handleGoogleSignInStart(args));
-  router.post(`${SECURE_SESSION_PATH}/google`, handleGoogleSignIn(args));
+  router.post(
+    `${SECURE_SESSION_PATH}/google`,
+    handleGoogleSignIn(args, createRealmDeps),
+  );
   router.delete(
     SECURE_SESSION_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
