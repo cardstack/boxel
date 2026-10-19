@@ -1243,8 +1243,9 @@ export default class OperatorModeStackItem extends Component<Signature> {
         animation: none;
       }
 
-      /* reduced motion: a card fades in and out where it stands, and the
-         cards under it keep their places rather than sliding */
+      /* reduced motion: a card fades in and out where it stands, on a phone
+         as on a wide screen, and the cards under it keep their places rather
+         than sliding */
       @keyframes stackItemFadeIn {
         from {
           opacity: 0;
@@ -1262,7 +1263,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
           transition: none;
         }
 
-        .item.opening-animation {
+        .item.opening-animation,
+        .item.phone-layout.opening-animation {
           animation-name: stackItemFadeIn;
         }
 
