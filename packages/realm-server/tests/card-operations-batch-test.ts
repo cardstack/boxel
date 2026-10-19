@@ -1847,15 +1847,11 @@ module(basename(import.meta.filename), function () {
         'nothing is locked for a card whose path no other writer can know',
       );
     });
-    test('a batch that removes a card keeps its locks past the durable write', async function (assert) {
-      // A removal's place in the order is not settled when its bytes are gone.
-      // An index pass resolves a removal and a write of one url as the
-      // removal, whichever reached it first, and then skips the visit without
-      // asking whether the file came back — so a writer that recreated the
-      // path while the removal's pass was still pending would be folded into
-      // it and the row dropped for a file that is on disk. The realm's commit
-      // is what withholds the boundary; this pins the coordinator carrying
-      // whatever it decides rather than announcing one of its own.
+    test('a batch whose commit announces no durable boundary keeps its locks to the end', async function (assert) {
+      // Where the locks end is the commit's to announce. This pins the
+      // coordinator carrying whatever the commit decides rather than
+      // announcing a boundary of its own: a commit that never says its bytes
+      // are durable runs the section to its end holding the files.
       let s = stub({
         stored: {
           'person-1.json': cardFile({ firstName: 'Original' }, PERSON),
@@ -1867,9 +1863,8 @@ module(basename(import.meta.filename), function () {
         async commitUnlocked(batch, options) {
           let committed = await s.core.commitUnlocked(batch, {
             ...options,
-            // What the realm does for a change set carrying a removal: the
-            // boundary is not announced, so the section runs to its end still
-            // holding the files.
+            // A commit that announces no boundary, so the section runs to its
+            // end still holding the files.
             onDurable: undefined,
           });
           observed.push(`indexWait:held=${s.heldNow()}`);
@@ -1882,7 +1877,7 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(
         observed,
         ['indexWait:held=1'],
-        'the files stay shut while the removal is indexed',
+        'the files stay shut while the commit indexes',
       );
       assert.strictEqual(
         s.heldNow(),

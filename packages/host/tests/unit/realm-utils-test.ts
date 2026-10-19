@@ -10,6 +10,7 @@ import ENV from '@cardstack/host/config/environment';
 import {
   canonicalRealmIdentifier,
   realmIdentifierSegments,
+  realmURLDisplayText,
   resolvedRealmURLHref,
   serverRealmURLs,
 } from '@cardstack/host/lib/realm-utils';
@@ -111,6 +112,29 @@ module('Unit | realm-utils', function (hooks) {
       assert.throws(
         () => virtualNetwork.toURL('@unmapped/thing/'),
         'the underlying VirtualNetwork call is the one that throws',
+      );
+    });
+  });
+
+  module('realmURLDisplayText', function () {
+    test('every spelling of a realm displays the URL the realm calls itself', function (assert) {
+      for (let identifier of [
+        baseRealm.url,
+        '@cardstack/base/',
+        resolvedBaseRealmURL,
+      ]) {
+        assert.strictEqual(
+          realmURLDisplayText(virtualNetwork, identifier),
+          'cardstack.com/base',
+          `${identifier} displays as the base realm's own URL`,
+        );
+      }
+    });
+
+    test('an identifier no mapping covers is shown as given', function (assert) {
+      assert.strictEqual(
+        realmURLDisplayText(virtualNetwork, '@unmapped/thing/'),
+        '@unmapped/thing/',
       );
     });
   });

@@ -55,6 +55,6 @@ Where it is thinner: the vendored lean entry constrains what marks are available
 
 `--pretui-chart-gap` and `--pretui-chart-key` (plot spacing and the legend key), `--pretui-shadow-hairline`, `--pretui-z-sticky` for the legend.
 
-Series colours come from the season's chart palette rather than from Plot's defaults, which is what makes a chart look like part of the product — and, combined with `@symbols`, means a season can choose a palette on aesthetics without breaking series distinguishability.
+Series colors come from the theme's chart palette rather than from Plot's defaults, which is what makes a chart look like part of the product — and, combined with `@symbols`, means a theme can choose a palette on aesthetics without breaking series distinguishability.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

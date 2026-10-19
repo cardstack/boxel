@@ -2,7 +2,7 @@
 
 A before/after reveal split by a draggable seam: two full-bleed layers, one clipped to the seam, and a slider that moves it.
 
-Both panes are yielded blocks, so it compares *any* content — two themed states of a component, two renderings, two revisions — not only two images.
+Both panes are yielded blocks, so it compares _any_ content — two themed states of a component, two renderings, two revisions — not only two images.
 
 ## The contract
 
@@ -41,6 +41,6 @@ Where it is thinner: **no vertical seam** — the split is horizontal only, wher
 
 `--pretui-comparison-seam-w` (the seam's width) and `--pretui-comparison-handle-size` (the grip), plus `--pretui-primary-ink` for both, `--pretui-shadow-card` for the grip's elevation, and `--pretui-dur-snap` / `--pretui-ease-snap` for the glide as the seam moves.
 
-Riding the shared snap duration and easing is what makes the seam feel like the rest of the kit rather than like a bespoke drag surface — a season that changes how things snap changes this with it.
+Riding the shared snap duration and easing is what makes the seam feel like the rest of the kit rather than like a bespoke drag surface — a theme that changes how things snap changes this with it.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

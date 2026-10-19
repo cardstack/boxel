@@ -57,7 +57,7 @@ No APG pattern. A frame is layout, and it carries no role unless it is itself th
 
 `--pretui-aspect-ratio` (set from `@ratio`, default `1`), `--pretui-aspect-bg` (set from `@background`; the default is `--foreground` mixed 6% into `--card`), `--pretui-aspect-radius` (set from `@radius`, default `--radius`), `--pretui-aspect-object-fit` (the `actual` image's fit, default `cover`) and `--pretui-shadow-hairline` for `@bordered`, falling back to a 1px `--border` ring.
 
-A season changes the empty-frame ground and the corner through `--card`, `--foreground` and `--radius`. Everything else is geometry, and that is fixed: full inline size, `min-inline-size: 0`, and clipped overflow.
+A theme changes the empty-frame ground and the corner through `--card`, `--foreground` and `--radius`. Everything else is geometry, and that is fixed: full inline size, `min-inline-size: 0`, and clipped overflow.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

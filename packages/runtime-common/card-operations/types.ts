@@ -988,6 +988,13 @@ export interface OperationIdentityResult {
     // The token a later request passes as `baseVersion`.
     version: string;
     generation: number | null;
+    // The batch answered before its index pass landed, so `generation` is not
+    // known yet. The pass still lands, and the index event it broadcasts
+    // carries the generation. Its absence does not say the index is current:
+    // a write that left the file's bytes as they were queues no pass of its
+    // own and reports `generation: null` without it, while an earlier write's
+    // pass for the same file may still be in flight.
+    indexPending?: true;
     lastModified: number | null;
     // When the file behind this entry was first written, as the realm
     // recorded it. Reported for the same reason as `lastModified` beside it:
@@ -1475,8 +1482,16 @@ export type CallApiBodyTemplate =
 
 export interface OperationCallApi {
   method: CallApiMethod;
-  // Absolute, with each segment `path` fills still written `{name}`.
+  // Absolute and serialized as the URL parser does, with each segment `path`
+  // fills still written `{name}`.
   url: string;
+  // Where the request goes: the origin and the path up to and including the
+  // last `/` before the first `{name}` segment, or the path's last `/` when it
+  // has none, serialized as the URL parser does. Every request this
+  // declaration builds must stay under it (`destinationCovers`), and it is the
+  // unit a key is approved for: nothing reads it for that until a binding
+  // fills a slot.
+  destination: string;
   path?: Record<string, OperationTemplate>;
   headers?: Record<string, OperationTemplate>;
   query?: Record<string, OperationTemplate>;

@@ -3,7 +3,7 @@
 import { module, test } from 'qunit';
 import { render, waitFor, click, fillIn } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
-import { PretUISpec } from './pretui-component';
+import { CURRENT_RELEASE, PretUISpec } from './pretui-component';
 import { loadDemo, siblingHref } from './demo-locations';
 import { PretuiNote } from './pretui-note';
 import { realmURL } from 'https://cardstack.com/base/card-api';
@@ -11,8 +11,15 @@ import { realmURL } from 'https://cardstack.com/base/card-api';
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const Isolated = PretUISpec.isolated as any;
 
-function specModel(name: string, stage = 'live', tier = 'Element') {
-  return { componentName: name, stage, tier, category: 'Actions' };
+function specModel(name: string, overrides: Record<string, unknown> = {}) {
+  return {
+    componentName: name,
+    implementationStatus: 'implemented',
+    ownership: 'pretui',
+    tier: 'Element',
+    category: 'Actions',
+    ...overrides,
+  };
 }
 
 module('Pretui | PretUISpec', function (hooks) {
@@ -22,7 +29,9 @@ module('Pretui | PretUISpec', function (hooks) {
     let model = specModel('Button');
     await render(<template><Isolated @model={{model}} /></template>);
     await waitFor('[data-demo-policy="included"] [data-test-pretui-usage]');
-    assert.dom('[data-demo-policy="included"] [data-test-pretui-usage]').exists();
+    assert
+      .dom('[data-demo-policy="included"] [data-test-pretui-usage]')
+      .exists();
     await waitFor('[data-test-pretui-examples]');
     assert.dom('[data-test-pretui-examples]').containsText('Examples');
   });
@@ -31,7 +40,9 @@ module('Pretui | PretUISpec', function (hooks) {
     let model = specModel('EmailInput');
     await render(<template><Isolated @model={{model}} /></template>);
     await waitFor('[data-demo-policy="included"] [data-test-pretui-usage]');
-    assert.dom('[data-demo-policy="included"] [data-test-pretui-usage]').exists();
+    assert
+      .dom('[data-demo-policy="included"] [data-test-pretui-usage]')
+      .exists();
   });
 
   test('a component with no usage page says so', async function (assert) {
@@ -44,16 +55,78 @@ module('Pretui | PretUISpec', function (hooks) {
   });
 
   test('a planned entry that has a page shows it', async function (assert) {
-    let model = specModel('Button', 'planned');
+    let model = specModel('Button', { implementationStatus: 'planned' });
     await render(<template><Isolated @model={{model}} /></template>);
     await waitFor('[data-demo-policy="included"] [data-test-pretui-usage]');
-    assert.dom('[data-demo-policy="included"] [data-test-pretui-usage]').exists();
+    assert
+      .dom('[data-demo-policy="included"] [data-test-pretui-usage]')
+      .exists();
   });
 
   test('a Runtime entry without a page is excluded', async function (assert) {
-    let model = specModel('UsageString', 'live', 'Runtime');
+    let model = specModel('UsageString', { tier: 'Runtime' });
     await render(<template><Isolated @model={{model}} /></template>);
     assert.dom('[data-demo-policy="excluded"]').exists();
+  });
+
+  test('a host-owned entry without a page is excluded as host chrome', async function (assert) {
+    let model = specModel('NoSuchComponent', { ownership: 'host' });
+    await render(<template><Isolated @model={{model}} /></template>);
+    await waitFor('[data-demo-policy="excluded"]');
+    assert.dom('[data-demo-policy="excluded"]').containsText('Host chrome');
+  });
+
+  test('a component introduced in the current release is marked new', async function (assert) {
+    let model = specModel('Button', { introducedVersion: CURRENT_RELEASE });
+    await render(<template><Isolated @model={{model}} /></template>);
+    assert.dom('[data-test-pretui-new]').exists();
+  });
+
+  test('a component from an earlier release is not marked new', async function (assert) {
+    let model = specModel('Button', { introducedVersion: '0.0.1' });
+    await render(<template><Isolated @model={{model}} /></template>);
+    assert.dom('[data-test-pretui-new]').doesNotExist();
+  });
+
+  test('an in-use component shows its version', async function (assert) {
+    let model = specModel('Button', {
+      adoptionStatus: 'in-use',
+      version: '1.2.0',
+    });
+    await render(<template><Isolated @model={{model}} /></template>);
+    assert.dom('[data-test-pretui-version]').containsText('1.2.0');
+    assert
+      .dom('[data-test-pretui-status]')
+      .hasAttribute('data-tone', 'success');
+  });
+
+  test('a component not yet in use shows no version', async function (assert) {
+    let model = specModel('Button', {
+      adoptionStatus: 'demo-ready',
+      version: '1.2.0',
+    });
+    await render(<template><Isolated @model={{model}} /></template>);
+    assert.dom('[data-test-pretui-version]').doesNotExist();
+  });
+
+  test('a deprecated component carries a danger-toned status chip', async function (assert) {
+    let model = specModel('Button', { adoptionStatus: 'deprecated' });
+    await render(<template><Isolated @model={{model}} /></template>);
+    assert.dom('[data-test-pretui-status]').hasAttribute('data-tone', 'danger');
+  });
+
+  test('the status chip names the adoption status, else the implementation status', async function (assert) {
+    let adopted = specModel('Button', { adoptionStatus: 'demo-ready' });
+    await render(<template><Isolated @model={{adopted}} /></template>);
+    assert.dom('[data-test-pretui-status]').hasText('Demo ready');
+
+    let planned = specModel('Button', { implementationStatus: 'planned' });
+    await render(<template><Isolated @model={{planned}} /></template>);
+    assert.dom('[data-test-pretui-status]').hasText('Planned');
+
+    let unset = specModel('Button', { implementationStatus: undefined });
+    await render(<template><Isolated @model={{unset}} /></template>);
+    assert.dom('[data-test-pretui-status]').doesNotExist();
   });
 
   test('each input page loads from its own usage module', async function (assert) {
@@ -79,7 +152,9 @@ module('Pretui | PretUISpec', function (hooks) {
     let model = specModel('Button');
     await render(<template><Isolated @model={{model}} /></template>);
     assert.dom('[data-test-pretui-spec-crumb]').containsText('Pret UI');
-    assert.dom('[data-test-pretui-spec-crumb] button').doesNotExist('no navigation to a card that is not here');
+    assert
+      .dom('[data-test-pretui-spec-crumb] button')
+      .doesNotExist('no navigation to a card that is not here');
   });
 
   test('a note adopts from the PretuiNote module in this package, wherever the Spec lives', async function (assert) {
@@ -101,10 +176,16 @@ module('Pretui | PretUISpec', function (hooks) {
       id: '@cardstack/catalog/Spec/pretui-button',
       [realmURL]: new URL('https://example.test/some-catalog/'),
     };
-    await render(<template><Isolated @model={{model}} @context={{context}} /></template>);
+    await render(
+      <template><Isolated @model={{model}} @context={{context}} /></template>,
+    );
     await click('[data-test-pretui-note-add]');
-    let draft = document.querySelector('[data-test-pretui-note-draft]') as HTMLElement;
-    let field = (draft.matches('textarea') ? draft : draft.querySelector('textarea')) as HTMLTextAreaElement;
+    let draft = document.querySelector(
+      '[data-test-pretui-note-draft]',
+    ) as HTMLElement;
+    let field = (
+      draft.matches('textarea') ? draft : draft.querySelector('textarea')
+    ) as HTMLTextAreaElement;
     await fillIn(field, 'Needs a loading state');
     await click('[data-test-pretui-note-save]');
     assert.strictEqual(created.length, 1, 'save creates one note');
@@ -113,7 +194,11 @@ module('Pretui | PretUISpec', function (hooks) {
       { module: siblingHref('./pretui-note'), name: 'PretuiNote' },
       'the note adopts from the package module, not a path beside the Spec instance',
     );
-    assert.strictEqual(createdIn[0]?.href, 'https://example.test/some-catalog/', "the note is created in the Spec's realm");
+    assert.strictEqual(
+      createdIn[0]?.href,
+      'https://example.test/some-catalog/',
+      "the note is created in the Spec's realm",
+    );
   });
 
   test('notes are found and opened by their prefix-form ids', async function (assert) {
@@ -121,9 +206,17 @@ module('Pretui | PretUISpec', function (hooks) {
     let viewed: unknown[] = [];
     let noteId = '@cardstack/catalog/PretuiNote/sample-note';
     let context = {
-      getCards: (_parent: unknown, _query: unknown, realms: () => string[] | undefined) => {
+      getCards: (
+        _parent: unknown,
+        _query: unknown,
+        realms: () => string[] | undefined,
+      ) => {
         searchedIn.push(...(realms() ?? []));
-        return { instances: [{ id: noteId, note: 'Tighten the hit area', status: 'open' }] };
+        return {
+          instances: [
+            { id: noteId, note: 'Tighten the hit area', status: 'open' },
+          ],
+        };
       },
     };
     let viewCard = (card: unknown) => viewed.push(card);
@@ -132,8 +225,20 @@ module('Pretui | PretUISpec', function (hooks) {
       id: '@cardstack/catalog/Spec/pretui-button',
       [realmURL]: new URL('https://example.test/some-catalog/'),
     };
-    await render(<template><Isolated @model={{model}} @context={{context}} @viewCard={{viewCard}} /></template>);
-    assert.deepEqual(searchedIn, ['https://example.test/some-catalog/'], "notes are searched in the Spec's realm");
+    await render(
+      <template>
+        <Isolated
+          @model={{model}}
+          @context={{context}}
+          @viewCard={{viewCard}}
+        />
+      </template>,
+    );
+    assert.deepEqual(
+      searchedIn,
+      ['https://example.test/some-catalog/'],
+      "notes are searched in the Spec's realm",
+    );
     await click('[data-test-pretui-note]');
     assert.deepEqual(viewed, [noteId], 'the note opens by its id as given');
   });

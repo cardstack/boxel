@@ -1,6 +1,6 @@
 ## What it is
 
-**Transmutation**: three cuts of one truth, in one element. A tool call is a VERB (`READ`), a LABEL (`README.md`), and a CALL (`read_file(path="README.md")`) — and which of the three you want depends on whether you are skimming, reading, or debugging. Use it for every tool invocation an agent reports. If the thing has a state and a lifecycle, that is **WorkItem**; Transmute is the *name* of an action, not its progress.
+**Transmutation**: three cuts of one truth, in one element. A tool call is a VERB (`READ`), a LABEL (`README.md`), and a CALL (`read_file(path="README.md")`) — and which of the three you want depends on whether you are skimming, reading, or debugging. Use it for every tool invocation an agent reports. If the thing has a state and a lifecycle, that is **WorkItem**; Transmute is the _name_ of an action, not its progress.
 
 ## The contract
 
@@ -19,7 +19,7 @@ Element: HTMLSpanElement
 
 ## Prior art
 
-Nothing in the component-library world does this. The closest analogues are **progressive disclosure of a call signature** in developer tools — Chrome DevTools' collapsed console objects, a stack frame that expands to its arguments — and the general typographic idea of a *hierarchy of detail in one line*, which is closer to editorial design than to UI components.
+Nothing in the component-library world does this. The closest analogues are **progressive disclosure of a call signature** in developer tools — Chrome DevTools' collapsed console objects, a stack frame that expands to its arguments — and the general typographic idea of a _hierarchy of detail in one line_, which is closer to editorial design than to UI components.
 
 What is genuinely novel here, and worth naming as the improvement: **the three representations are the same object, not three states of a toggle.** The usual solution is a disclosure — click to see the full call — which costs an interaction and moves the layout. Here all three exist simultaneously and the tier is a width, so the transitions are continuous, reversible on hover, and free.
 
@@ -33,7 +33,7 @@ No pattern governs it, and this is where the design's cleverness costs something
 
 - **All three tiers are in the DOM at all times.** The tier is expressed by width, not by presence — so a screen reader encounters the verb, the label **and** the call on every single row, regardless of `@tier`. A T0 trace that looks like a column of one-word verbs announces as a column of full function calls. That is the component's central accessibility problem and it is a direct consequence of the grid-fr morph. The fix is `aria-hidden` on the tails that are not at the current tier — which does mean the hover promotion would then also need to update it, or accept that the hover reveal is sighted-only.
 - **The hover promotion is pointer-only.** There is no `:focus-within` companion, no keyboard route to T2, and no focusable element at all — so a keyboard user cannot promote a tier. If the DOM issue above is fixed by hiding tails, this becomes a genuine information loss rather than a redundancy.
-- **The verb is 10px mono uppercase at `--muted-foreground`**, which is the smallest, quietest text in the kit. Check it against **WCAG 1.4.3** per season; it is a strong candidate to fail.
+- **The verb is 10px mono uppercase at `--muted-foreground`**, which is the smallest, quietest text in the kit. Check it against **WCAG 1.4.3** per theme; it is a strong candidate to fail.
 - **`text-transform` is not in play** (the verbs are presumably authored uppercase), so screen readers may spell out short all-caps verbs — "R E A D". Authoring them in normal case and uppercasing in CSS, as **Label** does, avoids that.
 - **No semantic relationship between the three parts.** They are three sibling spans; nothing says the label is the verb's object.
 - **Motion**: the grid-fr morph runs on hover. There is no `prefers-reduced-motion` branch mentioned; verify one exists, since a column of rows that all animate on pointer transit is exactly the kind of incidental motion that setting is for.
@@ -42,8 +42,8 @@ No pattern governs it, and this is where the design's cleverness costs something
 
 `--font-mono` and `--muted-foreground` (the verb voice, at a fixed 10px / 600 / 0.06em), plus the tail inks and the morph's easing and duration.
 
-The verb's 10px size and letterspacing are hard-coded rather than tokenised, which is an inconsistency with the rest of the kit's eyebrow voice (**Label**, **Panel**, **DataGrid** all read `--text-ui-xs` and `--track-eyebrow`). A season retuning the eyebrow scale will move those three and not this one.
+The verb's 10px size and letterspacing are hard-coded rather than tokenized, which is an inconsistency with the rest of the kit's eyebrow voice (**Label**, **Panel**, **DataGrid** all read `--text-ui-xs` and `--track-eyebrow`). A theme retuning the eyebrow scale will move those three and not this one.
 
-The tail inks should recede relative to the verb — the tier hierarchy is carried by ink weight as much as by width, so a season that flattens the ink ramp loses the sense that T2 is *more detail* rather than *more text*.
+The tail inks should recede relative to the verb — the tier hierarchy is carried by ink weight as much as by width, so a theme that flattens the ink ramp loses the sense that T2 is _more detail_ rather than _more text_.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

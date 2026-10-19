@@ -1,7 +1,10 @@
 import { service } from '@ember/service';
 
+import { cloneDeep, mergeWith } from 'lodash-es';
+
 import {
   assertQuery,
+  clearReplacedArrayFieldMeta,
   coerceErrorMessage,
   ensureTrailingSlash,
   isBinaryContentType,
@@ -13,6 +16,7 @@ import {
   rri,
   searchEntryWireQueryFromQuery,
   SupportedMimeType,
+  validateWriteSize,
   type CardResource,
   type EntryCollectionDocument,
   type Format,
@@ -22,10 +26,6 @@ import {
   type Saved,
   type SearchEntryWireQuery,
 } from '@cardstack/runtime-common';
-import {
-  APP_BOXEL_ACTIVE_LLM,
-  DEFAULT_FALLBACK_MODELS,
-} from '@cardstack/runtime-common/matrix-constants';
 
 import {
   generateImage,
@@ -35,7 +35,10 @@ import {
   sourceImageDataUrl,
   type GeneratedImage,
 } from '../lib/generate-image';
-import HostBaseTool, { type ResultAttachment } from '../lib/host-base-tool';
+import HostBaseTool, {
+  type ClickReason,
+  type ResultAttachment,
+} from '../lib/host-base-tool';
 import { RealmCaptures, type CaptureURL } from '../lib/realm-runner/captures';
 import {
   RoomActions,
@@ -73,6 +76,7 @@ import UpdateRoomSkillsTool from './update-room-skills';
 import type { RealmRunnerCallMethod } from '../lib/realm-runner/types';
 
 import type CardService from '../services/card-service';
+import type EnvironmentService from '../services/environment-service';
 import type MatrixService from '../services/matrix-service';
 import type NetworkService from '../services/network';
 import type OperatorModeStateService from '../services/operator-mode-state-service';
@@ -88,6 +92,10 @@ const log = logger('tools:run-realm-code');
 
 const MAX_CODE_SIZE = 100_000;
 const MAX_FILES = 20;
+// realm.cards.update has its own limit: a script that edits every card a
+// search found must not stop at MAX_FILES. The updates are saved in one
+// request when the script finishes, not one save each.
+const MAX_CARD_UPDATES = 200;
 const MAX_FILE_SIZE = 500_000;
 // A UTF-8 character is at most 4 bytes, so a larger body is always too large.
 const MAX_READ_BYTES = MAX_FILE_SIZE * 4;
@@ -161,15 +169,23 @@ type WriteFile = (
   options?: { lint?: boolean },
 ) => Promise<string>;
 
+// Saves the card instances realm.cards.update changed, all or none, in one
+// request. `expected` is each file's content when the run first read it; the
+// save refuses if the realm no longer matches it.
+type SaveCards = (
+  updates: { url: string; content: string; expected: string }[],
+) => Promise<void>;
+
 // Saves one binary file that did not exist.
 type WriteBinaryFile = (url: string, bytes: Uint8Array) => Promise<void>;
 
-// Deletes one file. `expected` is the text the run last saved to it, or the
-// SHA-256 of the bytes it saved to a binary file; the delete refuses if the
-// realm no longer matches it.
+// Deletes one file. `expected` is the text the run last read from it or saved
+// to it, or the SHA-256 of the bytes it saved to a binary file; the delete
+// refuses if the realm no longer matches it. It is undefined for a binary
+// file that existed before the run, whose bytes the run never read.
 type DeleteFile = (
   url: string,
-  expected: { content: string } | { sha256: string },
+  expected: { content: string } | { sha256: string } | undefined,
 ) => Promise<void>;
 
 // Asks the image model for one image. `sourceImageUrl` is a data URL or the
@@ -256,21 +272,27 @@ const MAX_INVALIDATE_PATHS = 100;
 // names the call in its code. Such a run always waits for the user's click
 // (`neverAutoExecutesFor`), and only such a run may make the call: a script
 // that reaches it another way is refused, so none of them runs without a
-// click.
-const CLICK_REQUIRED_CALLS = [
-  'realm.workspaces.delete',
-  'realm.images.generate',
-  'realm.index.fullReindex',
-  'realm.index.cancelJob',
-  'realm.fs.download',
-] as const;
-type ClickRequiredCall = (typeof CLICK_REQUIRED_CALLS)[number];
+// click. Each call has the reason the approval panel shows the user for it,
+// so the panel and the click rule read the same list.
+const CLICK_REQUIRED_CALLS = {
+  'realm.workspaces.delete': 'Deletes a workspace. This cannot be undone.',
+  'realm.fs.delete': 'Deletes a file. This cannot be undone.',
+  'realm.images.generate': 'Generates images, which uses your credit.',
+  'realm.index.fullReindex':
+    'Indexes the whole workspace again from the start, which can take a long time.',
+  'realm.index.cancelJob': "Cancels the workspace's running index job.",
+  'realm.fs.download':
+    'Downloads a file from an outside URL into the workspace.',
+} as const;
+type ClickRequiredCall = keyof typeof CLICK_REQUIRED_CALLS;
 
 // The click-required calls a script names in its code.
 export function clickRequiredCallsIn(code: unknown): Set<ClickRequiredCall> {
   return new Set(
     typeof code === 'string'
-      ? CLICK_REQUIRED_CALLS.filter((name) => code.includes(name))
+      ? (Object.keys(CLICK_REQUIRED_CALLS) as ClickRequiredCall[]).filter(
+          (name) => code.includes(name),
+        )
       : [],
   );
 }
@@ -295,6 +317,7 @@ const REQUIRES_WRITE: Record<RealmRunnerCallMethod, boolean> = {
   'fs.download': true,
   'cards.search': false,
   'cards.get': false,
+  'cards.update': true,
   'entries.search': false,
   'fs.delete': true,
   capture: false,
@@ -350,12 +373,20 @@ class RealmFsSession {
   // Files saved by this run, in the order of their first save. A file the
   // run deleted is no longer here.
   readonly saved = new Set<string>();
-  // Files this run created that still exist: the only files realm.fs.delete
-  // may delete, so a script can undo its own mistake but cannot remove a file
-  // that was there before the run.
+  // Files this run created that still exist, so a delete is reported as
+  // undoing the run's own write rather than removing an earlier file.
   private created = new Set<string>();
   // Files this run created and then deleted, in the order of their delete.
   readonly deleted = new Set<string>();
+  // Card instances realm.cards.update changed, keyed by file URL, in the
+  // order of their first update. None is saved until the script finishes.
+  private cardUpdates = new Map<
+    string,
+    { expected: string; doc: LooseSingleCardDocument }
+  >();
+  // Files that existed before this run and that realm.fs.delete deleted, in
+  // the order of their delete.
+  readonly deletedExisting = new Set<string>();
   // Workspaces created by this run, in order.
   readonly createdWorkspaces: string[] = [];
   // Workspaces deleted by this run, in order.
@@ -399,6 +430,7 @@ class RealmFsSession {
     private realmURL: string,
     private readSource: ReadSource,
     private writeFile: WriteFile,
+    private saveCards: SaveCards,
     private writeBinaryFile: WriteBinaryFile,
     private deleteFile: DeleteFile,
     private downloadFile: DownloadFile,
@@ -417,6 +449,8 @@ class RealmFsSession {
     private namedCalls: Set<ClickRequiredCall>,
     private index: IndexActions,
     private mayWrite: boolean,
+    // The most bytes a card file may hold, as the realm enforces it.
+    private cardSizeLimitBytes: number,
     readonly room: RoomActions,
   ) {
     this.captures = new RealmCaptures(captureURL);
@@ -631,15 +665,28 @@ class RealmFsSession {
           relationships,
         };
       }
+      case 'cards.update':
+        return await this.updateCard(args[0], args[1]);
       case 'entries.search':
         return await this.searchEntriesFor(args[0], args[1]);
+      // Deletes a file, one this run created or one that was there before
+      // the run. The run waits for the user's click, since the delete cannot
+      // be undone.
       case 'fs.delete': {
+        if (!this.namedCalls.has('realm.fs.delete')) {
+          throw notNamedError('realm.fs.delete');
+        }
+        // A path that ends in `/` is refused here, so no folder is deleted.
         let url = this.resolve(method, args[0]);
-        if (!this.created.has(url)) {
+        this.assertNoCardUpdate(url);
+        // A text file is compared with what the run last read or saved, so
+        // a file someone changed after the script read it is kept.
+        let content = await this.lookup(url);
+        if (content === undefined) {
           throw new Error(
-            this.deleted.has(url)
+            this.deleted.has(url) || this.deletedExisting.has(url)
               ? `File not found; this run already deleted it: ${url}`
-              : `realm.fs.delete deletes only a file this run created: ${url}`,
+              : `File not found: ${url}`,
           );
         }
         if (this.closed) {
@@ -649,16 +696,15 @@ class RealmFsSession {
         let digest = this.binaryDigests.get(url);
         await this.deleteFile(
           url,
-          digest !== undefined
-            ? { sha256: digest }
-            : { content: this.known.get(url) ?? '' },
+          content !== BINARY
+            ? { content }
+            : digest !== undefined
+              ? { sha256: digest }
+              : undefined,
         );
-        this.created.delete(url);
-        this.saved.delete(url);
-        this.binary.delete(url);
-        this.binaryDigests.delete(url);
-        this.known.set(url, undefined);
-        this.deleted.add(url);
+        let created = this.created.has(url);
+        this.forgetDeleted(url);
+        (created ? this.deleted : this.deletedExisting).add(url);
         return { path: this.relative(url), deleted: true };
       }
       // The host fetches the file and saves it; the bytes never enter the
@@ -805,7 +851,7 @@ class RealmFsSession {
       case 'room.disableSkills':
         return this.room.disableSkills(args[0]);
       case 'room.setModel':
-        return this.room.setModel(args[0]);
+        return await this.room.setModel(args[0]);
       case 'ui.switchSubmode': {
         let submode = args[0];
         if (submode !== 'interact' && submode !== 'code') {
@@ -906,6 +952,141 @@ class RealmFsSession {
         return { cancelled: true };
       default:
         throw new Error(`Unknown realm call: ${String(method)}`);
+    }
+  }
+
+  // Card updates the script asked for that are not saved yet.
+  get pendingCardUpdates(): number {
+    return this.cardUpdates.size;
+  }
+
+  // Merges `attributes` into the card's `data.attributes`. A nested object
+  // merges into the value it replaces, so `{ address: { city } }` keeps the
+  // address's other fields; an array or any other value replaces it. The
+  // change is saved when the script finishes, with every other card update of
+  // the run, so the script can update many cards without a save for each.
+  private async updateCard(path: unknown, attributes: unknown) {
+    if (
+      attributes === null ||
+      typeof attributes !== 'object' ||
+      Array.isArray(attributes)
+    ) {
+      throw new TypeError(
+        'realm.cards.update expects a card path and an attributes object',
+      );
+    }
+    let url = this.resolve('cards.update', path);
+    if (!url.endsWith('.json')) {
+      url = `${url}.json`;
+    }
+    let pending = this.cardUpdates.get(url);
+    if (!pending) {
+      if (this.cardUpdates.size >= MAX_CARD_UPDATES) {
+        throw new Error(
+          `Realm code may update at most ${MAX_CARD_UPDATES} cards`,
+        );
+      }
+      let expected = await this.cardSource(url);
+      let doc: LooseSingleCardDocument | undefined;
+      try {
+        doc = JSON.parse(expected);
+      } catch {
+        // reported below
+      }
+      if (
+        !doc?.data ||
+        typeof doc.data !== 'object' ||
+        !doc.data.meta?.adoptsFrom
+      ) {
+        throw new Error(`Not a card instance: ${url}`);
+      }
+      pending = { expected, doc };
+    }
+    let patch = attributes as Record<string, unknown>;
+    let doc = cloneDeep(pending.doc);
+    clearReplacedArrayFieldMeta(doc.data.meta, patch);
+    doc.data.attributes = mergeWith(
+      doc.data.attributes ?? {},
+      patch,
+      // An array replaces the one in the card, so an item can be removed.
+      (_target: unknown, source: unknown) =>
+        Array.isArray(source) ? source : undefined,
+    );
+    // The realm refuses the whole batch for one card over the limit, and only
+    // after the script has ended, so the call that makes it too large fails.
+    try {
+      validateWriteSize(
+        JSON.stringify(doc, null, 2),
+        this.cardSizeLimitBytes,
+        'card',
+      );
+    } catch (error) {
+      throw new Error(
+        `Card is too large after this update: ${url}. ${coerceErrorMessage(error, '')}`.trim(),
+      );
+    }
+    this.cardUpdates.set(url, { expected: pending.expected, doc });
+    return {
+      path: this.relative(url),
+      fields: Object.keys(patch),
+      saves: 'after the script finishes',
+    };
+  }
+
+  // A card's file content as the realm holds it, or as this run saved it.
+  // It is read without a MAX_FILES slot: card updates have their own limit.
+  private async cardSource(url: string): Promise<string> {
+    if (this.binary.has(url)) {
+      throw new Error(`Not a card instance: ${url}`);
+    }
+    if (this.known.has(url)) {
+      let content = this.known.get(url);
+      if (content === undefined) {
+        throw new Error(`Card not found: ${url}`);
+      }
+      return content;
+    }
+    let source = await this.readSource(url);
+    if (source.status === 404) {
+      throw new Error(`Card not found: ${url}`);
+    }
+    if (source.binary) {
+      throw new Error(`Not a card instance: ${url}`);
+    }
+    if (source.status !== 200) {
+      throw new Error(`Unable to read ${url}: ${source.status}`);
+    }
+    if (source.tooLarge || source.content.length > MAX_FILE_SIZE) {
+      throw new Error(`File is too large: ${url}`);
+    }
+    return source.content;
+  }
+
+  // Saves every card update of the run in one request, all or none. Called
+  // once the script has finished.
+  async saveCardUpdates(): Promise<void> {
+    if (this.cardUpdates.size === 0) {
+      return;
+    }
+    let updates = [...this.cardUpdates].map(([url, { expected, doc }]) => ({
+      url,
+      expected,
+      content: JSON.stringify(doc, null, 2),
+    }));
+    await this.saveCards(updates);
+    this.cardUpdates.clear();
+    for (let { url } of updates) {
+      this.saved.add(url);
+    }
+  }
+
+  // realm.fs does not see a card update until it is saved, so it may not
+  // read or change that card in the same run.
+  private assertNoCardUpdate(url: string) {
+    if (this.cardUpdates.has(url)) {
+      throw new Error(
+        `${url} has a realm.cards.update that is saved when the script finishes; realm.fs cannot read or change it in the same run`,
+      );
     }
   }
 
@@ -1375,6 +1556,7 @@ class RealmFsSession {
   private async lookup(
     url: string,
   ): Promise<string | typeof BINARY | undefined> {
+    this.assertNoCardUpdate(url);
     if (this.known.has(url)) {
       return this.known.get(url);
     }
@@ -1430,7 +1612,74 @@ class RealmFsSession {
     this.saved.add(url);
     // A file created again after a delete is reported as saved.
     this.deleted.delete(url);
+    this.deletedExisting.delete(url);
   }
+
+  // What the run knows of a file it has just deleted.
+  private forgetDeleted(url: string) {
+    this.created.delete(url);
+    this.saved.delete(url);
+    this.binary.delete(url);
+    this.binaryDigests.delete(url);
+    this.known.set(url, undefined);
+  }
+}
+
+// What a failed run reports: the error, and everything the run already did,
+// so the model knows what state it left and a retry does not repeat it.
+function failureReport(session: RealmFsSession, error: unknown): string {
+  // Writes are saved as they happen, so a failed run can have saved some
+  // files already. Name them, so the model knows what state it left.
+  let message = error instanceof Error ? error.message : String(error);
+  let saved = [...session.saved];
+  // A call the script did not await either finished before the session
+  // closed, and is named as saved, or was refused after it closed. Which
+  // one happened depends on timing, so record it.
+  log.debug(
+    `run failed: saved=${saved.length} refusedAfterClose=${session.refusedAfterClose}: ${message}`,
+  );
+  let report =
+    saved.length > 0
+      ? `${message}. Files already saved by this run: ${saved.join(', ')}`
+      : `${message}. No file was saved.`;
+  if (session.deleted.size > 0) {
+    report += ` Files this run created and already deleted: ${[...session.deleted].join(', ')}`;
+  }
+  // A delete of a file from before the run cannot be undone, so the
+  // model must know it happened.
+  if (session.deletedExisting.size > 0) {
+    report += ` Files that existed before this run and that it already deleted: ${[...session.deletedExisting].join(', ')}`;
+  }
+  // Workspaces stay created too. Name them, so a retry does not create
+  // them again. The run failed, so none of them is opened.
+  if (session.createdWorkspaces.length > 0) {
+    report += ` Workspaces already created by this run: ${session.createdWorkspaces.join(', ')}`;
+  }
+  // A delete cannot be undone, so the model must know it happened.
+  if (session.deletedWorkspaces.length > 0) {
+    report += ` Workspaces already deleted by this run: ${session.deletedWorkspaces.join(', ')}`;
+  }
+  // Index actions start on the realm server when the call returns, so
+  // name them, so a retry does not start a full reindex again.
+  if (session.indexActions.length > 0) {
+    report += ` Index actions already started by this run: ${session.indexActions.join('; ')}`;
+  }
+  // Room changes are made only after a run that finished, so a failed
+  // run made none.
+  if (session.room.requested) {
+    report += ' The room changes it asked for were not made.';
+  }
+  // UI actions are done only after a run that finished, so a failed run
+  // did none.
+  if (session.uiActions.length > 0) {
+    report += ' The UI actions it asked for were not done.';
+  }
+  // Card updates are saved only after a run that finished, all or none, so
+  // a failed run saved none of them.
+  if (session.pendingCardUpdates > 0) {
+    report += ' The card updates it asked for were not saved.';
+  }
+  return report;
 }
 
 const UTF8 = new TextDecoder('utf-8', { fatal: true });
@@ -1504,6 +1753,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
   typeof BaseToolModule.RunRealmCodeResult
 > {
   @service declare private cardService: CardService;
+  @service declare private environmentService: EnvironmentService;
   @service declare private matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private network: NetworkService;
@@ -1516,7 +1766,8 @@ export default class RunRealmCodeTool extends HostBaseTool<
   description =
     'Run safe Realm code that reads and edits realm source files, finds ' +
     'cards with realm.cards.search, reads cards as JSON data with ' +
-    'realm.cards.get, finds cards, specs and files across realms with ' +
+    'realm.cards.get, changes card fields with realm.cards.update, finds ' +
+    'cards, specs and files across realms with ' +
     'realm.entries.search, can look at cards and files with realm.capture ' +
     '(a path in the realm, or the URL of a card or file in any workspace ' +
     'the user can read), can generate images into the realm with ' +
@@ -1532,10 +1783,14 @@ export default class RunRealmCodeTool extends HostBaseTool<
   // room it has joined.
   static bindsToInvokingRoom = true;
 
-  static neverAutoExecutesFor(
+  // A run waits for the click when its script names a click-required call.
+  static clickReasonsFor(
     attributes: Record<string, unknown> | undefined,
-  ): boolean {
-    return clickRequiredCallsIn(attributes?.code).size > 0;
+  ): ClickReason[] {
+    return [...clickRequiredCallsIn(attributes?.code)].map((call) => ({
+      call,
+      reason: CLICK_REQUIRED_CALLS[call],
+    }));
   }
 
   // A run that may generate images gets the image time budget on top of the
@@ -1600,6 +1855,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
       (url) => this.readSource(url),
       (url, content, expected, options) =>
         this.writeFile(roomId, url, content, expected, options),
+      (updates) => this.saveCards(roomId, this.realmRootURL(realmURL), updates),
       (url, bytes) => this.writeBinaryFile(roomId, url, bytes),
       (url, expected) => this.deleteFile(url, expected),
       (url, maxBytes, signal) => this.downloadFile(url, maxBytes, signal),
@@ -1645,9 +1901,10 @@ export default class RunRealmCodeTool extends HostBaseTool<
         cancelJob: () => this.realm.cancelIndexingJob(realmURL),
       },
       this.realm.canWrite(realmURL),
+      this.environmentService.cardSizeLimitBytes,
       new RoomActions({
         checkSkill: (id) => this.checkSkill(id),
-        knownModels: () => this.knownModels(roomId),
+        knownModels: () => this.matrixService.pickableModelIds(roomId),
       }),
     );
     let runnerResult;
@@ -1682,53 +1939,17 @@ export default class RunRealmCodeTool extends HostBaseTool<
       // report nor be missing from it.
       session.close();
       await session.idle();
-      // Writes are saved as they happen, so a failed run can have saved some
-      // files already. Name them, so the model knows what state it left.
-      let message = error instanceof Error ? error.message : String(error);
-      let saved = [...session.saved];
-      // A call the script did not await either finished before the session
-      // closed, and is named as saved, or was refused after it closed. Which
-      // one happened depends on timing, so record it.
-      log.debug(
-        `run failed: saved=${saved.length} refusedAfterClose=${session.refusedAfterClose}: ${message}`,
-      );
-      let report =
-        saved.length > 0
-          ? `${message}. Files already saved by this run: ${saved.join(', ')}`
-          : `${message}. No file was saved.`;
-      if (session.deleted.size > 0) {
-        report += ` Files this run created and already deleted: ${[...session.deleted].join(', ')}`;
-      }
-      // Workspaces stay created too. Name them, so a retry does not create
-      // them again. The run failed, so none of them is opened.
-      if (session.createdWorkspaces.length > 0) {
-        report += ` Workspaces already created by this run: ${session.createdWorkspaces.join(', ')}`;
-      }
-      // A delete cannot be undone, so the model must know it happened.
-      if (session.deletedWorkspaces.length > 0) {
-        report += ` Workspaces already deleted by this run: ${session.deletedWorkspaces.join(', ')}`;
-      }
-      // Index actions start on the realm server when the call returns, so
-      // name them, so a retry does not start a full reindex again.
-      if (session.indexActions.length > 0) {
-        report += ` Index actions already started by this run: ${session.indexActions.join('; ')}`;
-      }
-      // Room changes are made only after a run that finished, so a failed
-      // run made none.
-      if (session.room.requested) {
-        report += ' The room changes it asked for were not made.';
-      }
-      // UI actions are done only after a run that finished, so a failed run
-      // did none.
-      if (session.uiActions.length > 0) {
-        report += ' The UI actions it asked for were not done.';
-      }
-      throw new Error(report);
+      throw new Error(failureReport(session, error));
     }
 
     clearTimeout(deadlineTimer);
     session.close();
     await session.idle();
+    try {
+      await session.saveCardUpdates();
+    } catch (error) {
+      throw new Error(failureReport(session, error));
+    }
     await this.openCreatedWorkspace(session);
     let roomChanges = session.room.requested
       ? await this.changeRoom(roomId, session.room.requested)
@@ -1765,6 +1986,14 @@ export default class RunRealmCodeTool extends HostBaseTool<
               fileUrl,
               status: 'deleted',
               detail: 'Created by this run and then deleted.',
+            }),
+        ),
+        ...[...session.deletedExisting].map(
+          (fileUrl) =>
+            new commandModule.RealmCodeFileResult({
+              fileUrl,
+              status: 'deleted',
+              detail: 'Existed before this run; deleted.',
             }),
         ),
       ],
@@ -1844,22 +2073,6 @@ export default class RunRealmCodeTool extends HostBaseTool<
     if (!source) {
       throw new Error(`Not a skill card or skill markdown file: ${id}`);
     }
-  }
-
-  // The models the room's model picker offers: the configured ones, and any
-  // model the room has used before.
-  private knownModels(roomId: string): string[] {
-    let configs = this.matrixService.systemCard?.modelConfigurations;
-    let models = configs
-      ? configs.flatMap((config) => (config.modelId ? [config.modelId] : []))
-      : DEFAULT_FALLBACK_MODELS.map((model) => model.modelId);
-    // The same models the room resource's `usedLLMs` lists, read from the
-    // room's events, which exist whether or not the room is rendered.
-    let usedLLMs = (this.matrixService.getRoomData(roomId)?.events ?? [])
-      .filter((event) => event.type === APP_BOXEL_ACTIVE_LLM)
-      .map((event) => (event.content as { model?: string }).model)
-      .filter((model): model is string => !!model);
-    return [...new Set([...models, ...usedLLMs])];
   }
 
   // The files it saved, then the captures it took.
@@ -2073,6 +2286,59 @@ export default class RunRealmCodeTool extends HostBaseTool<
     return content;
   }
 
+  // Checks the realm still holds each card as the run first read it, then
+  // saves every card in one atomic request: all of them or none. Each card is
+  // tracked under the request's one client request id, so the correctness
+  // check waits for its index event like any other saved file.
+  private async saveCards(
+    roomId: string,
+    realmURL: string,
+    updates: { url: string; content: string; expected: string }[],
+  ): Promise<void> {
+    let changed = (
+      await Promise.all(
+        updates.map(async ({ url, expected }) => {
+          let current = await this.readSource(url);
+          return current.status !== 200 ||
+            current.binary ||
+            current.content !== expected
+            ? url
+            : undefined;
+        }),
+      )
+    ).filter((url) => url !== undefined);
+    if (changed.length > 0) {
+      throw new Error(
+        `Cards changed while the script ran: ${changed.join(', ')}; no card update was saved`,
+      );
+    }
+    let clientRequestId: string | undefined;
+    for (let { url } of updates) {
+      clientRequestId = this.toolService.trackAiAssistantCardRequest({
+        action: 'run-realm-code',
+        roomId,
+        fileUrl: url,
+        clientRequestId,
+      });
+    }
+    let response = await this.cardService.executeAtomicOperations(
+      updates.map(({ url, content }) => ({
+        op: 'update' as const,
+        href: url,
+        data: { type: 'source' as const, attributes: { content }, meta: {} },
+      })),
+      new URL(realmURL),
+      { clientRequestId },
+    );
+    if (!Array.isArray(response?.['atomic:results'])) {
+      let detail = (response as { errors?: { detail?: string }[] })?.errors?.[0]
+        ?.detail;
+      throw new Error(
+        `The card updates were not saved: ${detail ?? 'the realm refused the write'}`,
+      );
+    }
+  }
+
   // Reads a file's source. A file is binary when its bytes are not UTF-8, so
   // a text file saves back as the same bytes whatever content type the realm
   // serves it as. A body larger than any file realm.fs reads is not
@@ -2179,17 +2445,19 @@ export default class RunRealmCodeTool extends HostBaseTool<
   // Checks the realm still holds what the run saved, and deletes the file.
   private async deleteFile(
     url: string,
-    expected: { content: string } | { sha256: string },
+    expected: { content: string } | { sha256: string } | undefined,
   ): Promise<void> {
     let unchanged =
-      'sha256' in expected
-        ? (await this.readBinaryDigest(url)) === expected.sha256
-        : await this.readSource(url).then(
-            (current) =>
-              current.status === 200 &&
-              !current.binary &&
-              current.content === expected.content,
-          );
+      expected === undefined
+        ? true
+        : 'sha256' in expected
+          ? (await this.readBinaryDigest(url)) === expected.sha256
+          : await this.readSource(url).then(
+              (current) =>
+                current.status === 200 &&
+                !current.binary &&
+                current.content === expected.content,
+            );
     if (!unchanged) {
       throw new Error(`File changed while the script ran: ${url}`);
     }

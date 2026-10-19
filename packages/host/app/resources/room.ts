@@ -24,7 +24,6 @@ import {
 } from '@cardstack/runtime-common/ai/stop';
 import type { ToolRequest } from '@cardstack/runtime-common/commands';
 import {
-  APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
   LEGACY_APP_BOXEL_COMMAND_RESULT_EVENT_TYPE,
   getToolRequests,
@@ -47,8 +46,9 @@ import {
 } from '../lib/matrix-classes/member';
 
 import MessageBuilder from '../lib/matrix-classes/message-builder';
-
 import { decodeWireData } from '../lib/matrix-classes/room';
+import { usedLLMsFromEvents } from '../lib/pickable-models';
+
 import {
   getSkillSourceTools,
   isMarkdownSkillId,
@@ -79,7 +79,6 @@ import type {
   MessageEvent,
   ToolResultEvent,
   RealmServerEvent,
-  ActiveLLMEvent,
 } from '@cardstack/base/matrix-event';
 import type { Skill } from '@cardstack/base/skill';
 import type { TaskInstance } from 'ember-concurrency';
@@ -574,16 +573,7 @@ export class RoomResource extends Resource<Args> {
 
   @cached
   get usedLLMs(): string[] {
-    let usedLLMs = new Set<string>();
-    for (let event of this.events) {
-      if (event.type === APP_BOXEL_ACTIVE_LLM) {
-        let activeLLMEvent = event as ActiveLLMEvent;
-        if (activeLLMEvent.content.model) {
-          usedLLMs.add(activeLLMEvent.content.model);
-        }
-      }
-    }
-    return Array.from(usedLLMs);
+    return usedLLMsFromEvents(this.events);
   }
 
   get isActivatingLLM() {

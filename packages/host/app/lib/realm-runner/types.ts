@@ -13,6 +13,7 @@ export type RealmRunnerCallMethod =
   | 'fs.download'
   | 'cards.search'
   | 'cards.get'
+  | 'cards.update'
   | 'entries.search'
   | 'fs.delete'
   | 'capture'

@@ -19,7 +19,7 @@
 // never restyle another gridstack instance that happens to share the page, and
 // every colour is a token with a light-value fallback — the sheet lives in
 // `document.head` but its custom properties resolve against the plane element,
-// which sits inside the themed subtree and inherits the season.
+// which sits inside the themed subtree and inherits the theme.
 //
 // Ported from gridstack 13.1.2 `src/gridstack.scss`. DROPPED on purpose:
 // the grey `rgba(0,0,0,0.1)` placeholder fill and the grey inline-SVG arrow

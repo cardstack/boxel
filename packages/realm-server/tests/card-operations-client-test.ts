@@ -220,7 +220,11 @@ interface Sent {
   realmURL: string;
   method: OperationsMethod;
   envelope: OperationsEnvelope;
-  opts?: { clientRequestId?: string; adopted?: string[] };
+  opts?: {
+    clientRequestId?: string;
+    adopted?: string[];
+    skipIndexWait?: boolean;
+  };
 }
 
 // One search a query asked the session for: the wire query it resolved to, the
@@ -637,6 +641,86 @@ module(basename(import.meta.filename), function () {
         /could not find a writable realm/,
         'a type names no realm, so one has to be named or defaulted',
       );
+    });
+  });
+
+  // Chosen where the bucket is built, so it covers each write the bucket makes
+  // and nothing it reads.
+  module('skipping the index wait', function () {
+    test('a write from a bucket that skips the wait asks the transport to', async function (assert) {
+      let { sent, env } = harness({ answer: writeAnswer(`${REALM}report-1`) });
+      let bucket = buildOperations(reportInstance(), {
+        ...env,
+        options: { skipIndexWait: true },
+      });
+      await (bucket.addComment as (payload: unknown) => Promise<unknown>)({
+        body: 'Reviewed.',
+      });
+      assert.strictEqual(sent[0].method, 'POST');
+      assert.true(sent[0].opts?.skipIndexWait, 'the write skips the wait');
+    });
+
+    test('a read from that bucket does not', async function (assert) {
+      let { sent, env } = harness({
+        answer: { 'atomic:results': [{ data: { type: 'card', id: 'x' } }] },
+      });
+      let bucket = buildOperations(reportInstance(), {
+        ...env,
+        options: { skipIndexWait: true },
+      });
+      await (bucket.read as () => Promise<unknown>)();
+      assert.strictEqual(sent[0].method, 'QUERY');
+      assert.strictEqual(
+        sent[0].opts?.skipIndexWait,
+        undefined,
+        'a read has no index wait to skip',
+      );
+    });
+
+    test('a batch that writes skips it too', async function (assert) {
+      let { sent, env } = harness({ answer: writeAnswer(`${REALM}notes.txt`) });
+      let bucket = buildOperations(reportInstance(), {
+        ...env,
+        options: { skipIndexWait: true },
+      });
+      await (bucket.atomic as (build: (b: any) => unknown) => Promise<unknown>)(
+        (b: any) => {
+          b.on('notes.txt').appendLine({ line: 'x' });
+        },
+      );
+      assert.strictEqual(sent[0].method, 'POST');
+      assert.true(sent[0].opts?.skipIndexWait, 'the batch skips the wait');
+    });
+
+    test('a bucket built without the option waits', async function (assert) {
+      let { sent, env } = harness({ answer: writeAnswer(`${REALM}report-1`) });
+      let bucket = buildOperations(reportInstance(), env);
+      await (bucket.addComment as (payload: unknown) => Promise<unknown>)({
+        body: 'Reviewed.',
+      });
+      assert.strictEqual(sent[0].opts?.skipIndexWait, undefined);
+    });
+
+    test('a write the realm answered ahead of its indexing says so', async function (assert) {
+      let { env } = harness({
+        answer: writeAnswer(`${REALM}report-1`, {
+          version: 'v1',
+          generation: null,
+          indexPending: true,
+          lastModified: 99,
+        }),
+      });
+      let bucket = buildOperations(reportInstance(), env);
+      let result = await (
+        bucket.addComment as (payload: unknown) => Promise<any>
+      )({ body: 'Reviewed.' });
+      assert.deepEqual(result, {
+        id: `${REALM}report-1`,
+        version: 'v1',
+        generation: null,
+        indexPending: true,
+        lastModified: 99,
+      });
     });
   });
 

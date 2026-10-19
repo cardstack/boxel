@@ -42,6 +42,6 @@ Where it is thinner: single list only — no dragging between lists — no neste
 
 The rows and handles take the kit's shared control, border and shadow tokens; the lifted row uses the shared raised elevation rather than a component-specific one.
 
-Using the shared elevation is what makes a dragged row read as the same "picked up" gesture as every other lifted surface in the season — a bespoke shadow here is how a reorderable list ends up feeling like a different application.
+Using the shared elevation is what makes a dragged row read as the same "picked up" gesture as every other lifted surface in the theme — a bespoke shadow here is how a reorderable list ends up feeling like a different application.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

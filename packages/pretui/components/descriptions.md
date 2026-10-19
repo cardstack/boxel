@@ -55,19 +55,19 @@ Consumed directly: `--foreground`, `--muted-foreground`, `--card`, `--border`, `
 
 Its own properties: `--pretui-desc-cols-req` (set from `@columns` on the root), `--pretui-desc-cols` (resolved on the grid and overridden by the container queries), `--pretui-desc-label-w` (set from `@labelWidth`; default `max-content`).
 
-The title is the serif heading voice at 1.5em with `--track-heading`. Labels are `--muted-foreground` at 0.94em; in bordered mode they sit on `--inset` at weight 500 with a `--border` hairline. Density is `@size` on the root `font-size`. A season retunes the whole record through the type tokens and `--inset`; the 44rem and 26rem fold points are fixed.
+The title is the serif heading voice at 1.5em with `--track-heading`. Labels are `--muted-foreground` at 0.94em; in bordered mode they sit on `--inset` at weight 500 with a `--border` hairline. Density is `@size` on the root `font-size`. A theme retunes the whole record through the type tokens and `--inset`; the 44rem and 26rem fold points are fixed.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 
 ## React ecosystem
 
-| Ant / Mantine / Chakra | Pretui |
-| --- | --- |
-| `items` / `data` | `@items` |
-| `column` | `@columns` (`@column` accepted) — reduced by the pane, never by the window |
-| `layout` / `orientation` | `@layout` |
-| `bordered` | `@bordered` |
-| `colon` (default true) | `@colon` (default false) |
-| `size` | `@size` |
-| `title` / `extra` | `@title` or `<:title>`; `<:extra>` |
-| `Descriptions.Item` children | not supported; pass `@items` |
+| Ant / Mantine / Chakra       | Pretui                                                                     |
+| ---------------------------- | -------------------------------------------------------------------------- |
+| `items` / `data`             | `@items`                                                                   |
+| `column`                     | `@columns` (`@column` accepted) — reduced by the pane, never by the window |
+| `layout` / `orientation`     | `@layout`                                                                  |
+| `bordered`                   | `@bordered`                                                                |
+| `colon` (default true)       | `@colon` (default false)                                                   |
+| `size`                       | `@size`                                                                    |
+| `title` / `extra`            | `@title` or `<:title>`; `<:extra>`                                         |
+| `Descriptions.Item` children | not supported; pass `@items`                                               |

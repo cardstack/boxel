@@ -37,7 +37,7 @@ Where it is thinner: **no typed input.** The field is a button, so you can't typ
 A disclosure trigger opening a dialog-like popover, composed from **Calendar** and **TimeInput**, each with its own pattern.
 
 - **The trigger** is a `<button>` with `aria-haspopup="dialog"` and `aria-expanded`. It is named "{label}: {date}, {time}", or "{label}: {placeholder}" while empty, so the name includes the visible text (WCAG 2.5.3) and the committed value is heard. The tests assert the name, including the committed time, and the expanded state.
-- **The calendar** is Calendar's grid of day buttons with its roving keyboard, and **the time** is TimeInput's labelled group of spinbuttons.
+- **The calendar** is Calendar's grid of day buttons with its roving keyboard, and **the time** is TimeInput's labelled group of spinbuttons — or, on a touch screen, the native time input TimeInput swaps in for them.
 - **Done is `aria-disabled`, not `disabled`,** so it stays focusable and announced while it refuses. The tests assert that it refuses and then commits.
 - **ArrowDown on the trigger opens it**, as for DatePicker. Escape and an outside click close it through **Popover**.
 

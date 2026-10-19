@@ -64,7 +64,9 @@ class ScheduleIsolated extends Component<typeof ServicePlanSchedule> {
   }
 
   // Copies the linked provider's id into the field the policy reads. A realm
-  // writer's step; the policy grants no `update` on a schedule.
+  // writer's step; the policy grants no `update` on a schedule. Nothing reads
+  // the result; the card re-renders from the index event the write produces,
+  // so the write does not wait for the realm to index it.
   @action async syncProviderId() {
     let provider = this.rosterProvider;
     if (provider.state !== 'ready') {
@@ -73,7 +75,7 @@ class ScheduleIsolated extends Component<typeof ServicePlanSchedule> {
     this.refusal = undefined;
     this.running = true;
     try {
-      await operations(this.schedule).update({
+      await operations(this.schedule, { skipIndexWait: true }).update({
         attributes: { providerId: provider.ids[0] ?? null },
       });
     } catch (err) {

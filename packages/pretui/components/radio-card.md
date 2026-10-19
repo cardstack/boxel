@@ -57,16 +57,16 @@ From the host theme: `--card` and `--card-foreground` (the card surface and its 
 
 Kit tokens, each named once on the card: `--space-4` (padding), `--space-3` (gap), `--text-ui-md` and `--text-ui-sm` (title and description), `--weight-strong` (title weight), `--radius-surface` (card radius), `--pretui-dur-snap` and `--pretui-ease-snap` (the ring and fill transitions), `--pretui-shadow-control` (the resting shadow), `--pretui-edge-highlight` (the inset highlight on a selected mark). The grid reads `--space-3` for its gap.
 
-A season retunes the selected treatment entirely through `--primary`; the 12% halo mix, the 15px mark and the 11rem minimum card width in `horizontal` are fixed.
+A theme retunes the selected treatment entirely through `--primary`; the 12% halo mix, the 15px mark and the 11rem minimum card width in `horizontal` are fixed.
 
 ## React ecosystem
 
-| React | Pretui |
-| --- | --- |
-| value / onChange | `@value` / `@onValueChange` (`@onChange` accepted) |
-| defaultValue | `@defaultValue` |
-| items | `@items` (alias of `@options`) |
-| orientation | `@orientation` |
-| disabled / isDisabled | `@disabled` / `@isDisabled` |
-| RadioCard.Item children | the default block, yielded the option |
-| ItemAddon / indicator | not separate — `meta` on the option and the corner mark |
+| React                   | Pretui                                                  |
+| ----------------------- | ------------------------------------------------------- |
+| value / onChange        | `@value` / `@onValueChange` (`@onChange` accepted)      |
+| defaultValue            | `@defaultValue`                                         |
+| items                   | `@items` (alias of `@options`)                          |
+| orientation             | `@orientation`                                          |
+| disabled / isDisabled   | `@disabled` / `@isDisabled`                             |
+| RadioCard.Item children | the default block, yielded the option                   |
+| ItemAddon / indicator   | not separate — `meta` on the option and the corner mark |

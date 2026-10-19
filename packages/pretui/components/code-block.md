@@ -56,6 +56,6 @@ Where it is thinner: no diff view — that is **DiffBlock** — no editable mode
 
 `--pretui-code-size`, `--pretui-code-leading` and `--pretui-code-tab` (type metrics), `--pretui-code-gutter`, `--pretui-code-max` (the scroll ceiling), `--pretui-shadow-card`, `--pretui-ease-snap`, plus the syntax channel: `--pretui-code-keyword`, `--pretui-code-string`, `--pretui-code-number`, `--pretui-code-comment`, `--pretui-code-name`, `--pretui-code-digits`.
 
-The syntax colours being tokens rather than a bundled stylesheet is what lets a season own its own code palette — and it is the reason a code block in a dark season is a dark code block rather than a light one embedded in the page.
+The syntax colors being tokens rather than a bundled stylesheet is what lets a theme own its own code palette — and it is the reason a code block in dark mode is a dark code block rather than a light one embedded in the page.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

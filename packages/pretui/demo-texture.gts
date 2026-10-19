@@ -1,7 +1,7 @@
 // Pretui — demo-texture: the hue rail the BackgroundField, Backdrop and PulsingBorder usage pages share.
 
 // A curated hue rail. Every entry but the first is a THEME TOKEN, because the
-// point being demonstrated is that a field re-tints with the season and with
+// point being demonstrated is that a field re-tints with the theme and with
 // light/dark on its own — the one literal at the end is there to prove the
 // arg also takes a plain CSS color when a caller really wants one.
 export const HUE_OPTIONS = [
@@ -19,4 +19,3 @@ export const HUE_OPTIONS = [
 export function hueArg(value: string): string | undefined {
   return value === 'default' ? undefined : value;
 }
-

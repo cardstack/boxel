@@ -61,6 +61,15 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         .send({ data: { type: 'incoming-webhook', id } });
     }
 
+    function deleteWebhook(user: string, id: string) {
+      return context.request
+        .delete('/_incoming-webhooks')
+        .set('Accept', 'application/vnd.api+json')
+        .set('Content-Type', 'application/vnd.api+json')
+        .set('Authorization', jwtFor(user))
+        .send({ data: { type: 'incoming-webhook', id } });
+    }
+
     function deliver(webhookPath: string, signingSecret: string) {
       let payload = JSON.stringify({ event: 'push' });
       return context.request
@@ -671,6 +680,51 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         `SELECT id FROM incoming_webhooks`,
       );
       assert.strictEqual(rows.length, 1, 'incoming webhook preserved');
+    });
+
+    test('a webhook id that is not a UUID is a bad request to delete and to rotate', async function (assert) {
+      let matrixUserId = '@user:localhost';
+      await insertUser(
+        context.dbAdapter,
+        matrixUserId,
+        'cus_123',
+        'user@example.com',
+      );
+      await createWebhook(matrixUserId);
+
+      for (let id of ['not-a-uuid', ' ']) {
+        let deleted = await deleteWebhook(matrixUserId, id);
+        assert.strictEqual(
+          deleted.status,
+          400,
+          `delete answers 400 for id ${JSON.stringify(id)}`,
+        );
+
+        let rotated = await rotate(matrixUserId, id);
+        assert.strictEqual(
+          rotated.status,
+          400,
+          `rotate answers 400 for id ${JSON.stringify(id)}`,
+        );
+      }
+
+      let rows = await context.dbAdapter.execute(
+        `SELECT id FROM incoming_webhooks`,
+      );
+      assert.strictEqual(rows.length, 1, 'incoming webhook preserved');
+    });
+
+    test('deleting a webhook that does not exist succeeds', async function (assert) {
+      let matrixUserId = '@user:localhost';
+      await insertUser(
+        context.dbAdapter,
+        matrixUserId,
+        'cus_123',
+        'user@example.com',
+      );
+
+      let response = await deleteWebhook(matrixUserId, uuidv4());
+      assert.strictEqual(response.status, 204, 'HTTP 204 status');
     });
 
     test('deleting incoming webhook cascades to webhook commands', async function (assert) {

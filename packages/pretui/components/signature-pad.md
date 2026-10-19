@@ -52,6 +52,6 @@ Where it is thinner: no pressure or tilt input, no stroke smoothing options beyo
 
 `--pretui-sigpad-paper` (the surface), `--pretui-sigpad-ink` (the default pen), `--pretui-sigpad-radius`, `--pretui-sigpad-script` (the typeface the typed name renders in), over `--pretui-shadow-control`.
 
-`--pretui-sigpad-script` is the one that matters for the typed path: a typed signature set in the interface font reads as a text field, and set in a script face it reads as a signature. A season that leaves it unset makes the alternative feel like a lesser option, which is exactly what it must not be.
+`--pretui-sigpad-script` is the one that matters for the typed path: a typed signature set in the interface font reads as a text field, and set in a script face it reads as a signature. A theme that leaves it unset makes the alternative feel like a lesser option, which is exactly what it must not be.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

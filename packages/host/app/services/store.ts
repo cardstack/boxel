@@ -1243,9 +1243,14 @@ export default class StoreService extends Service implements StoreInterface {
     return api.serializeFileDef(fileDef, {}) as SingleFileMetaDocument;
   }
 
-  // `opts.type` is host-only: the card-facing `Store` interface declares
-  // `delete(id)` alone, so card code reaches the card route and nothing else.
-  async delete(id: string, opts?: { type?: StoreReadType }): Promise<void> {
+  // `opts.type` is host-only: the card-facing `Store` interface does not
+  // declare it, so card code reaches the card route and nothing else.
+  // `opts.skipIndexWait` asks the realm to answer a card's removal once it is
+  // durable rather than once it is indexed (see SKIP_INDEX_WAIT_HEADER).
+  async delete(
+    id: string,
+    opts?: { type?: StoreReadType; skipIndexWait?: boolean },
+  ): Promise<void> {
     id = asURL(id, this.network.virtualNetwork);
     if (!id) {
       // the card isn't actually saved yet, so do nothing
@@ -1279,7 +1284,12 @@ export default class StoreService extends Service implements StoreInterface {
         api.notifyLinksToTargetDeleted(consumer, id);
       }
     }
-    await this.cardService.fetchJSON(id, { method: 'DELETE' });
+    await this.cardService.fetchJSON(id, {
+      method: 'DELETE',
+      ...(opts?.skipIndexWait
+        ? { headers: { [SKIP_INDEX_WAIT_HEADER]: '1' } }
+        : {}),
+    });
     // Notify direct-reference holders (e.g. MatrixService's `_systemCard`)
     // only AFTER the server DELETE completes — these subscribers typically
     // re-evaluate by calling `store.get(id)`, which is cache-first and would
@@ -3100,9 +3110,36 @@ export default class StoreService extends Service implements StoreInterface {
         remoteIds.add(id);
       }
     }
-    await Promise.all(
-      [...remoteIds].map((id) => this.getCardInstance({ idOrDoc: id })),
-    );
+    // Every start line gets a finish line, cancelled or failed runs included,
+    // so a start line with none means a read never settled.
+    let shouldLog = remoteIds.size > 0;
+    let fields = `references=${remoteIds.size} epoch=${this.#identityEpoch}`;
+    let start = performance.now();
+    let outcome = 'cancelled';
+    let errored = '';
+    if (shouldLog) {
+      storeLogger.info(`re-establishing ${fields} outcome=started`);
+    }
+    try {
+      let results = await Promise.all(
+        [...remoteIds].map((id) => this.getCardInstance({ idOrDoc: id })),
+      );
+      // A failed read resolves to an error document rather than rejecting.
+      let count = results.filter(
+        (result) => !isCardInstance(result) && !isFileDefInstance(result),
+      ).length;
+      outcome = 'settled';
+      errored = ` errored=${count}`;
+    } catch (e) {
+      outcome = 'failed';
+      throw e;
+    } finally {
+      if (shouldLog) {
+        storeLogger.info(
+          `re-establishing ${fields} outcome=${outcome}${errored} durationMs=${Math.round(performance.now() - start)}`,
+        );
+      }
+    }
     return remoteIds.size;
   });
 

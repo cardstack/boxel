@@ -22,7 +22,7 @@ Four decisions, and they interlock.
 
 **And it auto-expands once a commit has been refused and it holds a blocking issue.** A user cannot fix what they cannot see, and leaving them to hunt through disclosures is the enterprise-form sin this whole territory exists to avoid.
 
-The yielded `Field` and `Layout` are pre-curried with both the form context *and* this section, so a two-column arrangement inside a section still counts toward the section's badge.
+The yielded `Field` and `Layout` are pre-curried with both the form context _and_ this section, so a two-column arrangement inside a section still counts toward the section's badge.
 
 ## Prior art
 
@@ -32,7 +32,7 @@ Pretui's departure is the whole value: **a disclosure that is aware of the form'
 
 - the legend carries a live issue count, which is the collapsed section's only synchronous signal that something is wrong inside it (`@hideIssueCount` exists but leaving it on is strongly advised);
 - the section auto-expands on a refused submit when it holds a blocking issue;
-- the section can be opened *by the form*, on demand, so an ErrorSummary row can land focus inside it.
+- the section can be opened _by the form_, on demand, so an ErrorSummary row can land focus inside it.
 
 Using Radix Accordion plus a form library gets you none of these without writing the coordination yourself, and the coordination is the hard part.
 
@@ -40,7 +40,7 @@ The trade against Radix: `forceMount`-always means no render savings from collap
 
 ## Accessibility
 
-Governing patterns: the native `<fieldset>`/`<legend>` grouping, plus APG **Disclosure** for the collapsible case (trigger is a button with `aria-expanded`; no arrow keys, no roving tabindex, Enter/Space toggle — that is the entire keyboard contract, and the arrow keys people expect come from APG's *example*, not the pattern).
+Governing patterns: the native `<fieldset>`/`<legend>` grouping, plus APG **Disclosure** for the collapsible case (trigger is a button with `aria-expanded`; no arrow keys, no roving tabindex, Enter/Space toggle — that is the entire keyboard contract, and the arrow keys people expect come from APG's _example_, not the pattern).
 
 What is right:
 
@@ -62,6 +62,6 @@ Gaps:
 
 `--border` and `--pretui-shadow-hairline` for the fieldset edge, `--foreground` for the legend, `--muted-foreground` for the description, `--destructive` / `--warning` / `--pretui-info` for the issue count tiers, plus whatever **FormField** and **FormLayout** consume inside.
 
-`data-pretui-form-section` (carrying the section id) and `data-pretui-form-section-body` are structural hooks the form's focus routing depends on — a season must not repurpose or remove them. `@span` defaults to spanning every column of an enclosing FormLayout, which is almost always what a section should do.
+`data-pretui-form-section` (carrying the section id) and `data-pretui-form-section-body` are structural hooks the form's focus routing depends on — no stylesheet or call site should repurpose or remove them. `@span` defaults to spanning every column of an enclosing FormLayout, which is almost always what a section should do.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

@@ -57,21 +57,21 @@ Kit tokens, each named once on the root and read through an internal variable: `
 
 Fixed: the caret's 0.75rem box and its 1.5 stroke, the 1px hairline, the 2px focus outline, the 0.45 disabled opacity.
 
-A season retunes the field face through `--field` and `--input` alongside **Input**, so the two read as one family; the size scale follows `--control-h`.
+A theme retunes the field face through `--field` and `--input` alongside **Input**, so the two read as one family; the size scale follows `--control-h`.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 
 ## React ecosystem
 
-| React | Pretui |
-| --- | --- |
-| value / onChange | `@value` / `@onChange` (a string, not an event) |
-| defaultValue | `@defaultValue` |
-| placeholder | `@placeholder` — a disabled empty option |
-| size (shadcn `sm`, Mantine `xs`–`xl`) | `@size` |
-| disabled / isDisabled | `@disabled` / `@isDisabled` |
-| required / isRequired | `@required` / `@isRequired` |
-| error (Mantine) / hasError (Tremor) / isInvalid | `@invalid` / `@isInvalid` |
-| data (Mantine) | `@options` / `@items` |
-| children `<option>` | the default block |
-| label / description (Mantine) | **Field** |
+| React                                           | Pretui                                          |
+| ----------------------------------------------- | ----------------------------------------------- |
+| value / onChange                                | `@value` / `@onChange` (a string, not an event) |
+| defaultValue                                    | `@defaultValue`                                 |
+| placeholder                                     | `@placeholder` — a disabled empty option        |
+| size (shadcn `sm`, Mantine `xs`–`xl`)           | `@size`                                         |
+| disabled / isDisabled                           | `@disabled` / `@isDisabled`                     |
+| required / isRequired                           | `@required` / `@isRequired`                     |
+| error (Mantine) / hasError (Tremor) / isInvalid | `@invalid` / `@isInvalid`                       |
+| data (Mantine)                                  | `@options` / `@items`                           |
+| children `<option>`                             | the default block                               |
+| label / description (Mantine)                   | **Field**                                       |

@@ -159,6 +159,34 @@ export function canonicalRealmIdentifier(
 }
 
 /**
+ * A realm's URL as shown beside its name, so realms that share a name can be
+ * told apart: host and path, without the scheme or trailing slash.
+ *
+ * Every spelling (registered prefix, virtual alias, real URL) is folded onto
+ * the real served URL, then back through any registered URL alias, as
+ * `VirtualNetwork.realmForReference` does. For an aliased realm like base,
+ * that is the URL its card ids use rather than the host serving it.
+ *
+ * @example
+ * realmURLDisplayText(vn, '@cardstack/base/')                   // 'cardstack.com/base'
+ * realmURLDisplayText(vn, 'https://app.boxel.ai/user/pret-ui/') // 'app.boxel.ai/user/pret-ui'
+ * realmURLDisplayText(vn, '@unmapped/thing/')                   // '@unmapped/thing/'
+ */
+export function realmURLDisplayText(
+  virtualNetwork: VirtualNetwork,
+  realmIdentifier: string,
+): string {
+  let real = virtualNetwork.keyForIdentifier(realmIdentifier);
+  let url: URL;
+  try {
+    url = virtualNetwork.mapURL(real, 'real-to-virtual') ?? new URL(real);
+  } catch {
+    return real;
+  }
+  return url.host + url.pathname.replace(/\/$/, '');
+}
+
+/**
  * The segments that *name* a realm, in whichever form its identifier is
  * expressed. For naming a realm — a label, a heading — not for locating it.
  *

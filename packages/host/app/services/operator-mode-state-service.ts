@@ -4,6 +4,8 @@ import type RouterService from '@ember/routing/router-service';
 import { scheduleOnce } from '@ember/runloop';
 import Service, { service } from '@ember/service';
 
+import { isTesting } from '@embroider/macros';
+
 import { tracked, cached } from '@glimmer/tracking';
 
 import { task, restartableTask } from 'ember-concurrency';
@@ -197,20 +199,36 @@ export default class OperatorModeStateService extends Service {
   // and renders normally; when it pops back to the top, the stored
   // intent re-applies and the card re-expands.
   private expandedStackItems: TrackedMap<string, boolean> = new TrackedMap();
-  isStackItemExpanded(itemKey: string): boolean {
-    return this.expandedStackItems.get(itemKey) ?? false;
+  @tracked isMobileViewport = false;
+  private mobileViewportQuery: MediaQueryList | undefined;
+
+  // On a phone-width viewport only the first stack is shown, and its
+  // cards are always expanded in interact mode. Membership is read from
+  // the tracked stack rather than the untracked `item.stackIndex`,
+  // which is renumbered in place.
+  isStackItemExpanded(item: StackItem): boolean {
+    if (this.isMobileViewport) {
+      return (
+        this._state.submode === Submodes.Interact &&
+        Boolean(this._state.stacks[0]?.includes(item))
+      );
+    }
+    return this.expandedStackItems.get(item.instanceId) ?? false;
   }
-  setStackItemExpanded(itemKey: string, value: boolean) {
+  setStackItemExpanded(item: StackItem, value: boolean) {
     if (value) {
       // Only one card can be expanded at a time — clear all others so
       // the same card open in two stacks can't leave both expanded.
       this.expandedStackItems.clear();
-      this.expandedStackItems.set(itemKey, true);
+      this.expandedStackItems.set(item.instanceId, true);
     } else {
-      this.expandedStackItems.delete(itemKey);
+      this.expandedStackItems.delete(item.instanceId);
     }
     this.schedulePersist();
   }
+  private onMobileViewportChange = (event: MediaQueryListEvent) => {
+    this.isMobileViewport = event.matches;
+  };
   // True when at least one stack's TOP card has expand intent — used
   // to drive the bar's glass-morphism + .has-expanded-card class. Only
   // top cards count: when a card with expand intent gets buried under
@@ -222,10 +240,9 @@ export default class OperatorModeStateService extends Service {
   // intent kept, frost off; close C → B top again, intent fires,
   // frost back on; close B → A top again, intent fires, frost on.
   get hasAnyStackItemExpanded(): boolean {
-    if (this.expandedStackItems.size === 0) return false;
     return this._state.stacks.some((stack) => {
       const top = stack[stack.length - 1];
-      return top && this.expandedStackItems.has(top.instanceId);
+      return top && this.isStackItemExpanded(top);
     });
   }
 
@@ -264,6 +281,28 @@ export default class OperatorModeStateService extends Service {
     );
     this.moduleInspectorHistory = new TrackedObject(
       moduleInspectorHistory ? JSON.parse(moduleInspectorHistory) : {},
+    );
+
+    // Same breakpoint as the operator-mode container's phone layout. Tests
+    // don't read the window, so its size never decides their layout; they
+    // set isMobileViewport themselves.
+    this.mobileViewportQuery = isTesting()
+      ? undefined
+      : globalThis.matchMedia?.('(max-width: 30rem)');
+    if (this.mobileViewportQuery) {
+      this.isMobileViewport = this.mobileViewportQuery.matches;
+      this.mobileViewportQuery.addEventListener(
+        'change',
+        this.onMobileViewportChange,
+      );
+    }
+  }
+
+  willDestroy() {
+    super.willDestroy();
+    this.mobileViewportQuery?.removeEventListener(
+      'change',
+      this.onMobileViewportChange,
     );
   }
 

@@ -57,6 +57,8 @@ import { EXAMPLES_CHECKBOX } from './components/checkbox.examples';
 import { EXAMPLES_SWITCH } from './components/switch.examples';
 import { EXAMPLES_SLIDER } from './components/slider.examples';
 import { EXAMPLES_RATING } from './components/rating.examples';
+import { EXAMPLES_STATEMENT_TABLE } from './components/statement-table.examples';
+import { EXAMPLES_LINE_GRID } from './components/line-grid.examples';
 import { mergeRegistry } from './registry';
 
 // slugOf is intentionally absent: it was private to this module before the
@@ -126,7 +128,7 @@ const ChipTagRail: TemplateOnlyComponent = <template>
 
 const ChipDotless: TemplateOnlyComponent = <template>
   <Row>
-    <Chip @label='SS26' @dot={{false}} />
+    <Chip @label='Draft' @dot={{false}} />
     <Chip @label={{chiTea}} @dot={{false}} />
   </Row>
 </template>;
@@ -220,11 +222,22 @@ const alePriceTea = pick(ALE, 4, TEAS);
 const alePlace = pick(ALE, 5, PLACES);
 const aleHoldDate = pick(ALE, 6, DATES);
 const aleConfirmBody =
-  aleAmount + ' of ' + aleTea + ' from ' + aleSupplier + ' lands ' + aleDate + '.';
+  aleAmount +
+  ' of ' +
+  aleTea +
+  ' from ' +
+  aleSupplier +
+  ' lands ' +
+  aleDate +
+  '.';
 const aleDriftBody =
   alePriceTea + ' has moved 9% since the spring booking was priced.';
 const aleHoldBody =
-  'The ' + alePlace + ' shipment is held at customs — paperwork due ' + aleHoldDate + '.';
+  'The ' +
+  alePlace +
+  ' shipment is held at customs — paperwork due ' +
+  aleHoldDate +
+  '.';
 
 const AlertOrderConfirmed: TemplateOnlyComponent = <template>
   <Alert @tone='success' @title='Order confirmed'>{{aleConfirmBody}}</Alert>
@@ -234,7 +247,11 @@ const AlertPriceDrift: TemplateOnlyComponent = <template>
   <Alert @tone='warning' @title='Price drift'>
     <:default>{{aleDriftBody}}</:default>
     <:action>
-      <Button @tone='warning' @appearance='outlined' @size='xs'>Re-price</Button>
+      <Button
+        @tone='warning'
+        @appearance='outlined'
+        @size='xs'
+      >Re-price</Button>
     </:action>
   </Alert>
 </template>;
@@ -311,7 +328,10 @@ const kvOrderItems: KeyValueItem[] = [
   { key: 'Ship date', value: pick(KV, 3, DATES) },
 ];
 const kvShipmentItems: KeyValueItem[] = [
-  { key: 'Batch', value: 'lot_' + pick(KV, 4, DATES).replaceAll('-', '').slice(2) },
+  {
+    key: 'Batch',
+    value: 'lot_' + pick(KV, 4, DATES).replaceAll('-', '').slice(2),
+  },
   { key: 'Owner', value: pick(KV, 5, PEOPLE) },
   { key: 'Status', value: 'curing' },
 ];
@@ -350,7 +370,12 @@ const staSince = 'since ' + pick(STA, 1, DATES);
 const StatKpiRow: TemplateOnlyComponent = <template>
   <div class='ex-stats'>
     <Stat @label='Margin' @value='61%' @delta={{8}} @hint='this season' />
-    <Stat @label='Avg price' @value={{staPrice}} @delta={{-3}} @hint='vs spring' />
+    <Stat
+      @label='Avg price'
+      @value={{staPrice}}
+      @delta={{-3}}
+      @hint='vs spring'
+    />
     <Stat @label='Suppliers' @value={{staSuppliers}} />
   </div>
   <style scoped>
@@ -554,4 +579,6 @@ export const EXAMPLES: Record<string, ExampleSpec[]> = mergeRegistry({
   EXAMPLES_SWITCH,
   EXAMPLES_SLIDER,
   EXAMPLES_RATING,
+  EXAMPLES_STATEMENT_TABLE,
+  EXAMPLES_LINE_GRID,
 });

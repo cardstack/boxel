@@ -15,7 +15,7 @@ Use it wherever a record's contact field is shown to a reader. If the value is a
 @hue?      — a hue for the Law-2 treatment; defaults to --primary
 ```
 
-**The href is built, never passed through.** Each channel validates the caller's characters against its own shape first, and the URL channels are re-serialised by the platform's own parser afterwards. An email must match a deliberately conservative shape and is then percent-encoded. A phone number is checked *whole* against digits and the punctuation people write numbers with — that check is what stops an arbitrary string with a few digits in it from being harvested into a plausible `tel:` — and is then rebuilt from digits plus a single leading plus, 3 to 20 of them, so nothing can smuggle a second URI component past the dialler. A handle is matched against a strict shape and appended to its channel's base. Only `http:` and `https:` survive; `javascript:`, `data:`, `vbscript:` and `file:` are refused everywhere, not only on the URL channel.
+**The href is built, never passed through.** Each channel validates the caller's characters against its own shape first, and the URL channels are re-serialized by the platform's own parser afterwards. An email must match a deliberately conservative shape and is then percent-encoded. A phone number is checked _whole_ against digits and the punctuation people write numbers with — that check is what stops an arbitrary string with a few digits in it from being harvested into a plausible `tel:` — and is then rebuilt from digits plus a single leading plus, 3 to 20 of them, so nothing can smuggle a second URI component past the dialler. A handle is matched against a strict shape and appended to its channel's base. Only `http:` and `https:` survive; `javascript:`, `data:`, `vbscript:` and `file:` are refused everywhere, not only on the URL channel.
 
 **The display string and the destination are computed separately, and the display one never builds an href.** A host renders without its scheme and without `www.`, a handle renders with its `@`, an address renders as typed. Conflating the two is how a link ends up going somewhere other than what it says.
 
@@ -31,7 +31,7 @@ There is no equivalent to compare against, because most kits do not have this co
 
 So the comparison worth making is against that one line rather than against another kit. What this adds is a validator per channel, a rebuilt rather than forwarded `href`, an honest fallback, and an accessible name that survives a row of four.
 
-Where it is thinner: the validators are conservative rather than RFC-complete, and deliberately so — the cost of a false negative is a value rendered as text with a note, which is recoverable, while the cost of a false positive is an `href` nobody checked. But it means legitimately odd addresses will be refused, and a single-label intranet host (`https://wiki`) is turned away on purpose. There is also no copy affordance and no verification state: the component says whether a value is *shaped* like a destination, never whether it reaches one.
+Where it is thinner: the validators are conservative rather than RFC-complete, and deliberately so — the cost of a false negative is a value rendered as text with a note, which is recoverable, while the cost of a false positive is an `href` nobody checked. But it means legitimately odd addresses will be refused, and a single-label intranet host (`https://wiki`) is turned away on purpose. There is also no copy affordance and no verification state: the component says whether a value is _shaped_ like a destination, never whether it reaches one.
 
 ## Accessibility
 
@@ -48,6 +48,6 @@ Where it is thinner: the validators are conservative rather than RFC-complete, a
 
 The caller hue reaches CSS through the kit's `cssStyle` guard, so a rejected value drops the declaration and the default stands rather than half a declaration landing in the attribute.
 
-Because every colour mixes against `--card`, a dark season gets correct dark contact chips with no per-season work — but it must pick a `--primary` that survives a 12% mix against a dark `--card`, or the chip and its background converge and only the mark separates them. Retuning `--pretui-capsule-base` restyles this alongside every other capsule in the kit, which is the intent: a contact chip should read as the same family as the chips beside it.
+Because every color mixes against `--card`, dark mode gets correct dark contact chips with no extra work — but a theme must pick a `--primary` that survives a 12% mix against a dark `--card`, or the chip and its background converge and only the mark separates them. Retuning `--pretui-capsule-base` restyles this alongside every other capsule in the kit, which is the intent: a contact chip should read as the same family as the chips beside it.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

@@ -62,18 +62,18 @@ No APG pattern names this exactly; it is a **button** that discloses an **input*
 
 Read from the host theme: `--hover` and `--border` (the trigger's hover surface and hairline), `--ring` (the focus outline), `--radius`, `--muted-foreground` (the empty-state placeholder and the pencil). Hoisted once on the root as internal variables: `--control-h` (the trigger's minimum height, so the text does not jump when the field opens), `--text-ui-md`, `--space-2`, `--track-ui`, and `--pretui-dur-snap` / `--pretui-ease-snap` for the hover transition.
 
-The trigger paints nothing at rest, so it inherits the surface and ink it sits on; hover adds the `--hover` fill and a `--border` hairline so the text reads as editable. The open field is **Input**'s dress entirely, so a season that retunes Input retunes this. Fixed here: the 0.75rem pencil and its hover-only opacity.
+The trigger paints nothing at rest, so it inherits the surface and ink it sits on; hover adds the `--hover` fill and a `--border` hairline so the text reads as editable. The open field is **Input**'s dress entirely, so a theme that retunes Input retunes this. Fixed here: the 0.75rem pencil and its hover-only opacity.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 
 ## React ecosystem
 
-| Agent types | Give them |
-| --- | --- |
-| Chakra `Editable` + `EditablePreview` + `EditableInput` | this component; the preview and input are built in |
-| `EditableControls` (submit / cancel buttons) | not offered; Enter, Escape and blur are the paths |
-| `EditableTextarea` | **Textarea** in a **Field** |
+| Agent types                                             | Give them                                                                      |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Chakra `Editable` + `EditablePreview` + `EditableInput` | this component; the preview and input are built in                             |
+| `EditableControls` (submit / cancel buttons)            | not offered; Enter, Escape and blur are the paths                              |
+| `EditableTextarea`                                      | **Textarea** in a **Field**                                                    |
 | `startWithEditView`, `selectAllOnFocus`, `submitOnBlur` | `@startWithEditView` (or `@defaultEditing`), `@selectOnFocus`, `@submitOnBlur` |
-| `isPreviewFocusable`, `isDisabled` | always focusable; `@isDisabled` or `@disabled` |
-| SLDS inline edit, Ant `Typography editable` | this component |
-| a whole record of inline edits with save / undo | **RecordDetail** |
+| `isPreviewFocusable`, `isDisabled`                      | always focusable; `@isDisabled` or `@disabled`                                 |
+| SLDS inline edit, Ant `Typography editable`             | this component                                                                 |
+| a whole record of inline edits with save / undo         | **RecordDetail**                                                               |

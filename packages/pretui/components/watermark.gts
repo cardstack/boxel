@@ -44,9 +44,9 @@ function escapeXml(text: string): string {
  * — the layer is `aria-hidden` and ignores the pointer. When the state
  * matters, say it in words too (a Chip, a banner).
  *
- * Text is drawn as an SVG mask, so its ink is a theme colour
- * (`--pretui-watermark-ink`) rather than a hex baked into a data URI, and a
- * dark season gets a light mark. The SVG and any `@image` reach CSS only
+ * Text is drawn as an SVG mask, so its ink is a theme color
+ * (`--pretui-watermark-ink`) rather than a hex baked into a data URI, so
+ * dark mode gets a light mark. The SVG and any `@image` reach CSS only
  * through the kit's url guard.
  */
 export class Watermark extends Component<WatermarkSignature> {

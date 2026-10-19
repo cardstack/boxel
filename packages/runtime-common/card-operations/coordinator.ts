@@ -174,6 +174,8 @@ export interface BatchCore {
       clientRequestId?: string | null;
       clientAuthored?: string[];
       waitForIndex?: boolean;
+      // See `CommitBatchOptions.indexWaitBudgetMs`.
+      indexWaitBudgetMs?: number;
       initiatingUser?: string | null;
       // Where the commit stamps the stages it owns. The durable write, the
       // index enqueue, the wait for the worker and the invalidation that
@@ -198,6 +200,9 @@ export interface BatchCore {
       contentHash: string;
     }[];
     generation: number | null;
+    // The commit answered ahead of its index pass, by not waiting for it or
+    // by stopping at `indexWaitBudgetMs`, so the pass is still to land.
+    indexPending?: true;
   }>;
   serializeCard(
     doc: LooseSingleCardDocument,
@@ -277,6 +282,19 @@ export interface CommitBatchOptions {
   // requirement rather than a preference: the job it would wait on needs the
   // render slot that caller is holding, so waiting deadlocks.
   waitForIndex?: boolean;
+  // The longest a batch that waits for its own indexing waits for it, in
+  // milliseconds. Past it the batch answers with its writes durable and each
+  // entry's generation `null`, meaning the pass is still to land; the pass and
+  // its index event follow. Absent, a waiting batch waits for as long as the
+  // pass takes.
+  //
+  // The pass renders every file it visits, so how long it takes is up to the
+  // prerender pool rather than the batch. A caller answering a person over
+  // HTTP bounds it, so a stalled pool costs them a pending generation rather
+  // than a write that never answers. It bounds only the batch's own pass: the
+  // drain ahead of staging is what the batch's serialization resolves
+  // against.
+  indexWaitBudgetMs?: number;
   // A caller's own precondition, run inside the write lock and before
   // anything is staged. It exists because a precondition evaluated before
   // `commitBatch` is not binding: the lock is acquired here, so a request
@@ -2401,6 +2419,9 @@ async function commitStaged(
       clientRequestId: opts.clientRequestId ?? null,
       ...(clientAuthored === undefined ? {} : { clientAuthored }),
       waitForIndex: opts.waitForIndex ?? true,
+      ...(opts.indexWaitBudgetMs === undefined
+        ? {}
+        : { indexWaitBudgetMs: opts.indexWaitBudgetMs }),
       // The batch's index job is tagged with the user whose request produced
       // it, the same as every other write path, so a reader draining its own
       // writes waits for this job rather than returning ahead of it.
@@ -2456,6 +2477,7 @@ async function commitStaged(
       meta: {
         version: written.contentHash,
         generation: committed.generation,
+        ...(committed.indexPending ? { indexPending: true as const } : {}),
         lastModified: written.lastModified,
         created: written.created,
         // Whether this entry left the file holding something other than what

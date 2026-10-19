@@ -3,7 +3,7 @@
 // otherwise the monogram placeholder (wordmark letter on foreground).
 // Translated from pretui-design-system (components/fitted + css/structure.css).
 //
-// Naming (catalog-taxonomy.md): `fitted` is a Boxel rendering format; CopyFit
+// Naming (docs/catalog-taxonomy.md): `fitted` is a Boxel rendering format; CopyFit
 // is the layout MECHANISM that makes copy and optional media adapt across the
 // fitted format's quantums.
 import Component from '@glimmer/component';

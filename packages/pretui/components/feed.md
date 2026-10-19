@@ -12,7 +12,7 @@ A stream of independently-authored articles the reader pages through: an activit
 
 **Content is a slot, not a prop bag.** Callers render their own article bodies — Law 7 of the kit. The consequence is that a Feed knows nothing about what is in it, which is why `label` exists on the item (see below).
 
-**It is generic over `T extends FeedItem`.** `FeedItem` is a lower bound, not the item type: pass `Activity[]` and the `<:item>` block yields `Activity`, not `unknown`. The index signature is there only so an untyped fixture stays legal. Compare **Board**, which is deliberately *not* generic because its yielded value is a position rather than a record — the two decisions are the considered opposite of each other.
+**It is generic over `T extends FeedItem`.** `FeedItem` is a lower bound, not the item type: pass `Activity[]` and the `<:item>` block yields `Activity`, not `unknown`. The index signature is there only so an untyped fixture stays legal. Compare **Board**, which is deliberately _not_ generic because its yielded value is a position rather than a record — the two decisions are the considered opposite of each other.
 
 **`@loading` sets `aria-busy` and renders a skeleton tail**, and **the tail sits outside `role="feed"`** — a feed's children must all be articles, so putting skeletons inside would produce invalid structure. `EmptyState` covers the empty case, so a feed never has a blank frame.
 
@@ -42,7 +42,7 @@ Gaps:
 - **`aria-busy` on the feed suppresses announcements while true**, which is correct behaviour and means the region must be un-busied for anything inside to be announced afterwards.
 - **Focus is not preserved across item prepends.** If new items are unshifted onto `@items`, `aria-posinset` values shift under the reader; there is no scroll or focus anchoring.
 - **`@label` defaults to the literal `'Activity'`** — two feeds on a page are both announced identically.
-- **Articles may contain their own interactive content**, and that content joins the tab sequence normally once focus is inside an article. That is correct, and it means the "one tab stop" claim is about the *articles*, not about everything in the region.
+- **Articles may contain their own interactive content**, and that content joins the tab sequence normally once focus is inside an article. That is correct, and it means the "one tab stop" claim is about the _articles_, not about everything in the region.
 - **No `aria-describedby` linking an article to its own timestamp or author**; those are content the caller renders.
 
 ## Theming
@@ -51,6 +51,6 @@ The Feed itself paints very little — it is structure plus focus management. Co
 
 Almost all visual weight belongs to what you yield into `<:item>`, which is the intent: a feed of comments and a feed of build results should look nothing alike, and the component's job is the semantics they share.
 
-The focused-article indicator is the one thing worth checking per season. Because the feed has a roving tabindex, an article *will* receive focus, and if the season paints no visible focus ring on a non-interactive `role="article"` element, a keyboard user paging with Page Down sees nothing move.
+The focused-article indicator is the one thing worth checking per theme. Because the feed has a roving tabindex, an article _will_ receive focus, and the ring on it is drawn in `--ring`; if that does not stand out against `--card`, a keyboard user paging with Page Down sees nothing move.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

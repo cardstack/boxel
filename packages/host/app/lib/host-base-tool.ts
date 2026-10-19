@@ -19,6 +19,13 @@ export interface ResultAttachment {
   contentSize?: number;
 }
 
+// A call in a tool's input that makes the tool wait for the user's click, and
+// the reason the approval panel shows for it.
+export interface ClickReason {
+  call: string;
+  reason: string;
+}
+
 export default abstract class HostBaseTool<
   CardInputType extends CardDefConstructor | undefined,
   CardResultType extends CardDefConstructor | undefined = undefined,
@@ -35,14 +42,26 @@ export default abstract class HostBaseTool<
   // Reserved for actions that destroy data and cannot be undone.
   static neverAutoExecutes = false;
 
-  // The same rule for one call, for a tool where only some inputs destroy
-  // data. It gets the call's input attributes as the model sent them, and is
+  // The same rule for one call, for a tool where only some inputs need the
+  // click. It gets the call's input attributes as the model sent them, and is
   // asked again whenever they change, so a call whose input is still
-  // streaming is never judged early.
+  // streaming is never judged early. A call waits exactly when its input has a
+  // click reason, so the rule and the reasons the panel shows cannot disagree:
+  // a tool overrides `clickReasonsFor`, not this.
   static neverAutoExecutesFor(
-    _attributes: Record<string, unknown> | undefined,
+    this: Pick<typeof HostBaseTool, 'clickReasonsFor'>,
+    attributes: Record<string, unknown> | undefined,
   ): boolean {
-    return false;
+    return this.clickReasonsFor(attributes).length > 0;
+  }
+
+  // Why this call waits for the user's click, one entry for each part of its
+  // input that needs the click. The approval panel shows them, so the user
+  // knows what the click allows.
+  static clickReasonsFor(
+    _attributes: Record<string, unknown> | undefined,
+  ): ClickReason[] {
+    return [];
   }
 
   // Time this call may take beyond the tool service's execute timeout, for a

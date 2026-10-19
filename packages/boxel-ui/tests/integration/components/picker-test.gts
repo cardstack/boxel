@@ -4,6 +4,7 @@ import {
   click,
   fillIn,
   render,
+  triggerEvent,
   triggerKeyEvent,
   waitFor,
 } from '@ember/test-helpers';
@@ -389,6 +390,70 @@ module('Integration | Component | picker', function (hooks) {
       ['3'],
       'Main list shows only search-matching options',
     );
+  });
+
+  module('option tooltips', function () {
+    const longURL = `example.test/${'very-long-segment/'.repeat(20)}realm`;
+    const tooltipOptions: PickerOption[] = [
+      selectAllOption,
+      { id: 'a', label: 'Pret UI', tooltip: 'example.test/user/pret-ui' },
+      { id: 'b', label: 'Pret UI', tooltip: longURL },
+    ];
+
+    test('a selected pill shows its tooltip on hover and carries it as accessible text', async function (assert) {
+      const selected = [tooltipOptions[1]!];
+
+      await render(
+        <template>
+          <Picker
+            @options={{tooltipOptions}}
+            @selected={{selected}}
+            @onChange={{noop}}
+            @label='Realm'
+          />
+        </template>,
+      );
+
+      assert
+        .dom('[data-test-boxel-picker-selected-item="Pret UI"]')
+        .includesText('example.test/user/pret-ui');
+
+      await triggerEvent(
+        '[data-test-boxel-picker-selected-item-tooltip="Pret UI"]',
+        'mouseenter',
+      );
+      assert
+        .dom('[data-test-tooltip-content]')
+        .hasText('example.test/user/pret-ui');
+    });
+
+    test('a long tooltip wraps within the viewport', async function (assert) {
+      const selected = [tooltipOptions[2]!];
+
+      await render(
+        <template>
+          <Picker
+            @options={{tooltipOptions}}
+            @selected={{selected}}
+            @onChange={{noop}}
+            @label='Realm'
+          />
+        </template>,
+      );
+
+      await triggerEvent(
+        '[data-test-boxel-picker-selected-item-tooltip="Pret UI"]',
+        'mouseenter',
+      );
+      let tooltip = document.querySelector(
+        '[data-test-tooltip-content]',
+      ) as HTMLElement;
+      assert.dom(tooltip).hasText(longURL);
+      assert.ok(
+        tooltip.getBoundingClientRect().width < window.innerWidth,
+        'the tooltip is narrower than the viewport',
+      );
+    });
   });
 
   test('picker removes select-all when another option is selected', async function (assert) {

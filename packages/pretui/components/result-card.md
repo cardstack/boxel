@@ -1,6 +1,6 @@
 ## What it is
 
-What an agent produced, as a small card: an eyebrow, a title, a few lines, and an overflow menu. Use it when a run yields an artefact worth surfacing — a file it wrote, a record it created, a summary it generated. If you are showing a *change* rather than a product, **DiffBlock**. If you are showing progress, **WorkItem**. If the result is a real Boxel card, **FittedCard** renders the card itself and is the better choice.
+What an agent produced, as a small card: an eyebrow, a title, a few lines, and an overflow menu. Use it when a run yields an artifact worth surfacing — a file it wrote, a record it created, a summary it generated. If you are showing a _change_ rather than a product, **DiffBlock**. If you are showing progress, **WorkItem**. If the result is a real Boxel card, **FittedCard** renders the card itself and is the better choice.
 
 ## The contract
 
@@ -10,7 +10,7 @@ What an agent produced, as a small card: an eyebrow, a title, a few lines, and a
 
 **`@lines` is an array of strings, not a block.** That is the constraining decision: a ResultCard cannot contain arbitrary markup, so it cannot grow into a mini-dashboard inside a transcript. Three or four lines of plain text, and anything richer is a different component. In a territory whose failure mode is transcript rows competing with each other for attention, that is a discipline rather than a limitation.
 
-**The overflow menu is a single `@onMenu` callback**, not a **Menu**. The `⋯` button calls you and you decide what opens. That keeps the card free of dropdown machinery and means a transcript of forty results is not forty **Menu** instances — but it also means the affordance is a button that *looks* like a menu trigger and has none of the semantics (see below).
+**The overflow menu is a single `@onMenu` callback**, not a **Menu**. The `⋯` button calls you and you decide what opens. That keeps the card free of dropdown machinery and means a transcript of forty results is not forty **Menu** instances — but it also means the affordance is a button that _looks_ like a menu trigger and has none of the semantics (see below).
 
 `@eyebrow` uses the kit's mono uppercase voice, shared with **Panel**, **Toolbar** and **DataGrid** headers.
 
@@ -28,7 +28,7 @@ No pattern governs it; it is a small content card with one button.
 
 Gaps, and the menu button is the clearest:
 
-- **The `⋯` button is labelled `aria-label="More"` and nothing else.** It carries no `aria-haspopup`, no `aria-expanded`, and — because the menu is the caller's — nothing connects it to whatever it opens. "More" also does not say more *about what*: on a transcript with eight results, eight buttons all announce identically. `aria-label="More actions for {{@title}}"` would fix the second problem; `aria-haspopup="menu"` plus `aria-expanded` managed by the caller would fix the first. Note **Menu** in this kit has the same wiring gap, so composing them does not resolve it.
+- **The `⋯` button is labeled `aria-label="More"` and nothing else.** It carries no `aria-haspopup`, no `aria-expanded`, and — because the menu is the caller's — nothing connects it to whatever it opens. "More" also does not say more _about what_: on a transcript with eight results, eight buttons all announce identically. `aria-label="More actions for {{@title}}"` would fix the second problem; `aria-haspopup="menu"` plus `aria-expanded` managed by the caller would fix the first. Note **Menu** in this kit has the same wiring gap, so composing them does not resolve it.
 - **The card has no accessible name or grouping.** Eyebrow, title and lines are sibling elements, so a screen-reader user hears them as one run with no indication that they form a unit or where it ends. `role="group"` with `aria-labelledby` pointing at the title would give it a boundary — worth doing precisely because a transcript is a long series of these.
 - **The title is not a heading**, so a transcript of results has no structure to navigate by. Same gap as **Panel**, **Toolbar**, **EmptyState** and **Stat** — the kit needs an authorable heading level.
 - **The eyebrow is announced as loose text before the title**, so the title alone is often not self-describing.
@@ -40,6 +40,6 @@ Gaps, and the menu button is the clearest:
 
 `--card` (the surface), `--border` and `--pretui-shadow-card` (its edge), `--foreground` (title), `--muted-foreground` (eyebrow and lines), `--font-mono` + `--text-ui-xs` + `--track-eyebrow` (the eyebrow voice), `--hover` (the menu button's hover), `--text-ui-md`.
 
-Because the surface is `--card` and it sits inside a transcript that is usually also on `--card`, a season must keep `--pretui-shadow-card` doing real work — the hairline is the only thing separating a result from the rows around it. A season that reduces it to nothing leaves the card indistinguishable from the transcript, which is exactly the distinction this component exists to draw.
+Because the surface is `--card` and it sits inside a transcript that is usually also on `--card`, a theme must keep `--pretui-shadow-card` doing real work — the hairline is the only thing separating a result from the rows around it. A theme that reduces it to nothing leaves the card indistinguishable from the transcript, which is exactly the distinction this component exists to draw.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

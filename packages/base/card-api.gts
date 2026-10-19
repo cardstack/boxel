@@ -3140,11 +3140,23 @@ type PdfCaptureSpec = {
   // of the capture's identity: a change of name alone never changes the
   // capture's URL, and a `keyBy: 'file-content'` slot whose bytes are
   // unchanged carries its capture forward under the new name.
-  filename?: string | CaptureFilenameFunction;
+  filename?: string | CaptureTextFunction;
+  // The document's title, written into the PDF's metadata — what a PDF viewer
+  // shows as the document's name. A string, or a function of the instance,
+  // like `filename`:
+  //
+  //   title: (card: Statement) => `${card.accountName} — ${card.period}`,
+  //
+  // Defaults to the card's `cardTitle` (a FileDef's `name`, minus its
+  // extension). A function that throws or returns an empty value falls back
+  // to that default. The title is part of the document's bytes, so unlike
+  // `filename` it is part of the capture's identity: a change of title
+  // recaptures.
+  title?: string | CaptureTextFunction;
 } & CaptureSpecSource;
 
 // `any` so an author can annotate the parameter as their own card class.
-type CaptureFilenameFunction = (instance: any) => string | null | undefined;
+type CaptureTextFunction = (instance: any) => string | null | undefined;
 
 export type CaptureSpec = RasterCaptureSpec | PdfCaptureSpec;
 
@@ -3159,6 +3171,7 @@ const DECLARED_CAPTURE_SPEC_FIELDS = new Set([
   'keyBy',
   'type',
   'filename',
+  'title',
 ]);
 const DECLARED_CAPTURE_KEY_BY_VALUES = new Set(['generation', 'file-content']);
 const RASTER_OUTPUT_TYPES = new Set(['png', 'jpeg', 'webp']);
@@ -3247,14 +3260,17 @@ function assertValidCaptureSpec(
         `${prefix}: useAsThumbnail cannot appear on a pdf capture — a thumbnail must be an image`,
       );
     }
-    if (
-      entry.filename !== undefined &&
-      typeof entry.filename !== 'function' &&
-      (typeof entry.filename !== 'string' || entry.filename.trim() === '')
-    ) {
-      throw new Error(
-        `${prefix}: filename must be a non-empty string or a function of the instance`,
-      );
+    for (let field of ['filename', 'title'] as const) {
+      let value = entry[field];
+      if (
+        value !== undefined &&
+        typeof value !== 'function' &&
+        (typeof value !== 'string' || value.trim() === '')
+      ) {
+        throw new Error(
+          `${prefix}: ${field} must be a non-empty string or a function of the instance`,
+        );
+      }
     }
     if (
       entry.keyBy !== undefined &&
@@ -3332,6 +3348,11 @@ function assertValidCaptureSpec(
   if (entry.filename !== undefined) {
     throw new Error(
       `${prefix}: filename names a saved document and is only valid on a pdf capture (type: 'pdf')`,
+    );
+  }
+  if (entry.title !== undefined) {
+    throw new Error(
+      `${prefix}: title names a document and is only valid on a pdf capture (type: 'pdf')`,
     );
   }
   if (
@@ -3452,9 +3473,9 @@ export function getCaptures(
 // page boundary to the capture engine: identical to the specs except the
 // capture-only component, which cannot serialize — it is flagged
 // `render: true` and re-resolved in-page by slot name when its capture
-// renders — and a pdf entry's `filename`, which is resolved against
-// `instance` when one is given (the render being captured) and left out
-// otherwise.
+// renders — and a pdf entry's `filename` and `title`, which are resolved
+// against `instance` when one is given (the render being captured) and left
+// out otherwise.
 export function serializeDeclaredCaptures(
   cardOrFileClass: typeof CardDef | typeof FileDef,
   instance?: CardDef | FileDef,
@@ -3491,9 +3512,23 @@ export function serializeDeclaredCaptures(
       payload.format = spec.format;
     }
     if (spec.type === 'pdf' && instance) {
-      let filename = resolveCaptureFilename(spec, instance);
+      let filename = resolveCaptureText(
+        spec,
+        'filename',
+        instance,
+        defaultCaptureFilename(instance),
+      );
       if (filename !== undefined) {
         payload.filename = filename;
+      }
+      let title = resolveCaptureText(
+        spec,
+        'title',
+        instance,
+        defaultCaptureTitle(instance),
+      );
+      if (title !== undefined) {
+        payload.title = title;
       }
     }
     roster[name] = payload;
@@ -3501,31 +3536,30 @@ export function serializeDeclaredCaptures(
   return roster;
 }
 
-// The longest name a roster carries. The serving route sanitizes and caps the
-// name it puts in a header; this bound only keeps an unbounded computed value
-// out of the index's capture manifest.
-const CAPTURE_FILENAME_ROSTER_MAX_LENGTH = 255;
+// The longest name or title a roster carries. The serving route sanitizes and
+// caps the name it puts in a header; this bound only keeps an unbounded
+// computed value out of the index's capture manifest and the PDF's metadata.
+const CAPTURE_TEXT_ROSTER_MAX_LENGTH = 255;
 
-// A pdf slot's save-as name for one instance: the declaration's string or
-// function result, else the instance's default (see `PdfCaptureSpec.filename`).
-function resolveCaptureFilename(
+// A pdf slot's save-as name or title for one instance: the declaration's
+// string or function result, else `fallback`, the instance's default (see
+// `PdfCaptureSpec.filename` and `PdfCaptureSpec.title`).
+function resolveCaptureText(
   spec: PdfCaptureSpec,
+  field: 'filename' | 'title',
   instance: CardDef | FileDef,
+  fallback: string | undefined,
 ): string | undefined {
+  let declaration = spec[field];
   let declared: unknown;
   try {
     declared =
-      typeof spec.filename === 'function'
-        ? spec.filename(instance)
-        : spec.filename;
+      typeof declaration === 'function' ? declaration(instance) : declaration;
   } catch (e) {
-    console.warn(`capture filename function threw; using the default`, e);
+    console.warn(`capture ${field} function threw; using the default`, e);
     declared = undefined;
   }
-  return (
-    boundedCaptureFilename(declared) ??
-    boundedCaptureFilename(defaultCaptureFilename(instance))
-  );
+  return boundedCaptureText(declared) ?? boundedCaptureText(fallback);
 }
 
 // The instance's own name for itself: a FileDef's `name` minus its extension,
@@ -3543,7 +3577,17 @@ function defaultCaptureFilename(
     : title;
 }
 
-function boundedCaptureFilename(value: unknown): string | undefined {
+// The document title a card or file gives itself: a FileDef's `name` minus
+// its extension, or a card's `cardTitle` — the untitled placeholder included,
+// which still names the document better than the host page's own title.
+function defaultCaptureTitle(instance: CardDef | FileDef): string | undefined {
+  if (instance instanceof FileDef) {
+    return instance.name?.replace(/\.[^.]+$/, '');
+  }
+  return instance.cardTitle;
+}
+
+function boundedCaptureText(value: unknown): string | undefined {
   if (typeof value !== 'string') {
     return undefined;
   }
@@ -3554,7 +3598,7 @@ function boundedCaptureFilename(value: unknown): string | undefined {
   if (!trimmed) {
     return undefined;
   }
-  return [...trimmed].slice(0, CAPTURE_FILENAME_ROSTER_MAX_LENGTH).join('');
+  return [...trimmed].slice(0, CAPTURE_TEXT_ROSTER_MAX_LENGTH).join('');
 }
 
 // Shared body of the `captureURLs` getter on CardDef and FileDef (two

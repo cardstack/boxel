@@ -11,7 +11,7 @@ A selected record as a removable capsule: icon or initials **Avatar**, label, an
 Element: HTMLSpanElement
 ```
 
-`@disabled` suppresses the remove button *and* dims the capsule — one arg, both consequences, so a disabled pill cannot be half-interactive.
+`@disabled` suppresses the remove button _and_ dims the capsule — one arg, both consequences, so a disabled pill cannot be half-interactive.
 
 **It is built as its own primitive rather than buried inside Lookup**, and the reason is stated in the source: every record-valued form control needs it. **MultiSelect** already set the precedent of a purpose-built removable chip.
 
@@ -29,7 +29,7 @@ Also absent: no size axis, no click-to-open (a pill representing a record you ca
 
 ## Accessibility
 
-No APG pattern for a pill; the applicable model for a *set* of them is Spectrum's grid-based `TagGroup`.
+No APG pattern for a pill; the applicable model for a _set_ of them is Spectrum's grid-based `TagGroup`.
 
 What is right:
 
@@ -40,7 +40,7 @@ What is right:
 Gaps:
 
 - **No group semantics** (above). This is the substantive one: a row of pills is a set, and nothing says so — no count, no `role="list"`, no roving focus, no Delete-key removal.
-- **The pill itself is not focusable**, only its remove button. So keyboard users tab *past* the label to reach the remove control, and there is no way to focus a pill to inspect or open it.
+- **The pill itself is not focusable**, only its remove button. So keyboard users tab _past_ the label to reach the remove control, and there is no way to focus a pill to inspect or open it.
 - **Removal is not announced.** The pill disappears and nothing says "Acme Corp removed" — except inside **Lookup**, which has its own live region doing exactly that. A bare RecordPill outside Lookup announces nothing, which is worth knowing before using it in a filter bar.
 - **Focus after removal is unmanaged.** Removing the last pill in a row leaves focus on a detached node; focus should move to the next pill or to the field. This is the classic removable-tag bug and every implementation has to solve it explicitly.
 - **The label may truncate** with no full-text fallback, though the accessible name carries the full string.
@@ -50,6 +50,6 @@ Gaps:
 
 The **FilterChips** capsule dress at 24px: the per-record hue derivation (`--pretui-chip-mix`, `--pretui-ink-mix` mixed against `--card`, hairline against `--border`), `--foreground`, `--muted-foreground`, `--hover` for the remove button, and **Avatar**'s hash palette for the initials fallback.
 
-Because the dress is shared with FilterChips, a season retuning chip tints moves record pills too — intended, and worth knowing if you were tuning filter chips and forgot they also appear inside every Lookup. The 24px height is fixed; a season cannot make pills denser without breaking the remove button's already-marginal target size.
+Because the dress is shared with FilterChips, a theme retuning chip tints moves record pills too — intended, and worth knowing if you were tuning filter chips and forgot they also appear inside every Lookup. The 24px height is fixed; a theme cannot make pills denser without breaking the remove button's already-marginal target size.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

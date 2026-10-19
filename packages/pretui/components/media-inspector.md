@@ -41,6 +41,6 @@ Where it is thinner: the row set is fixed — there is no way to reorder, relabe
 
 `--pretui-shadow-hairline` for the panel's edge, `--pretui-on-neutral` for the header ink, and the **KeyValue** and **Token** treatments for everything inside.
 
-There is almost no surface of its own, which is the intent: an inspector is a table with a heading, and a season that retunes KeyValue and Token retunes every metadata panel in the product with it. `--pretui-assets-tile` and `--pretui-assets-aspect` are shared with the other components in this module, so an inspector sitting beside an **AssetGrid** inherits the same geometry.
+There is almost no surface of its own, which is the intent: an inspector is a table with a heading, and a theme that retunes KeyValue and Token retunes every metadata panel in the product with it. `--pretui-assets-tile` and `--pretui-assets-aspect` are shared with the other components in this module, so an inspector sitting beside an **AssetGrid** inherits the same geometry.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

@@ -8,7 +8,7 @@ import CreateAiAssistantRoomTool from './create-ai-assistant-room';
 import OpenAiAssistantRoomTool from './open-ai-assistant-room';
 
 import SendAiAssistantMessageTool from './send-ai-assistant-message';
-import SetActiveLLMTool from './set-active-llm';
+import SetActiveLLMTool, { checkActiveLLMInput } from './set-active-llm';
 import UpdateRoomSkillsTool from './update-room-skills';
 
 import type MatrixService from '../services/matrix-service';
@@ -48,21 +48,26 @@ export default class UseAiAssistantTool extends HostBaseTool<
   protected async run(
     input: BaseToolModule.UseAiAssistantInput,
   ): Promise<BaseToolModule.SendAiAssistantMessageResult> {
+    // Checked before the room is made or changed, so that a refused model or
+    // mode leaves no new room behind.
+    let llm = await checkActiveLLMInput(
+      this.matrixService,
+      this.existingRoomId(input),
+      { model: input.llmModel, mode: input.llmMode },
+    );
     let roomId = await this.createRoomIfNeeded(input);
 
     let openRoomPromise = this.maybeOpenRoom(input, roomId);
     let loadSkillsPromise = this.maybeLoadSkillCards(input, roomId);
     let attachedCardsPromise = this.ensureAttachedCardsLoaded(input);
     let openCardsPromise = this.maybeGetOpenCards(input);
-    let setActiveLLMPromise = this.maybeSetActiveLLM(input, roomId);
-    let setLLMModePromise = this.maybeSetLLMMode(input, roomId);
+    let setActiveLLMPromise = this.maybeSetActiveLLM(llm, roomId);
     await Promise.all([
       openRoomPromise,
       loadSkillsPromise,
       attachedCardsPromise,
       openCardsPromise,
       setActiveLLMPromise,
-      setLLMModePromise,
     ]);
 
     // Only send message if prompt is provided
@@ -100,18 +105,27 @@ export default class UseAiAssistantTool extends HostBaseTool<
     return new SendAiAssistantMessageResult({ roomId });
   }
 
-  async createRoomIfNeeded(
+  // The room the call goes to, when it is one that exists already.
+  private existingRoomId(
     input: BaseToolModule.UseAiAssistantInput,
-  ): Promise<string> {
+  ): string | undefined {
     // If a specific roomId is provided and it's not 'new', use that room
     if (input.roomId && input.roomId !== 'new') {
       return input.roomId;
     }
-
     // Check if there's a current room open (only when roomId is not 'new')
-    let currentRoomId = this.matrixService.currentRoomId;
-    if (input.roomId !== 'new' && currentRoomId) {
-      return currentRoomId;
+    if (input.roomId !== 'new') {
+      return this.matrixService.currentRoomId;
+    }
+    return undefined;
+  }
+
+  async createRoomIfNeeded(
+    input: BaseToolModule.UseAiAssistantInput,
+  ): Promise<string> {
+    let existingRoomId = this.existingRoomId(input);
+    if (existingRoomId) {
+      return existingRoomId;
     }
 
     // Create a new room if no roomId is provided and no current room exists
@@ -197,25 +211,17 @@ export default class UseAiAssistantTool extends HostBaseTool<
     return attachedCards;
   }
 
+  // The model and the mode go in one call, after `checkActiveLLMInput`.
   async maybeSetActiveLLM(
-    input: BaseToolModule.UseAiAssistantInput,
+    { model, mode }: { model?: string; mode?: 'act' | 'ask' },
     roomId: string,
   ): Promise<void> {
-    if (input.llmModel) {
-      let setActiveLLMCommand = new SetActiveLLMTool(this.toolContext);
-      await setActiveLLMCommand.execute({
+    if (model || mode) {
+      await new SetActiveLLMTool(this.toolContext).execute({
         roomId,
-        model: input.llmModel,
+        model,
+        mode,
       });
-    }
-  }
-
-  async maybeSetLLMMode(
-    input: BaseToolModule.UseAiAssistantInput,
-    roomId: string,
-  ): Promise<void> {
-    if (input.llmMode) {
-      await this.matrixService.sendLLMModeEvent(roomId, input.llmMode as any);
     }
   }
 }
