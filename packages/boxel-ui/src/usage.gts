@@ -37,6 +37,7 @@ import LoadingIndicatorUsage from './components/loading-indicator/usage.gts';
 import MarkdownContentShellUsage from './components/markdown-content-shell/usage.gts';
 import MenuUsage from './components/menu/usage.gts';
 import ModalUsage from './components/modal/usage.gts';
+import MultiSelectUsage from './components/multi-select/usage.gts';
 import PhoneInputUsage from './components/phone-input/usage.gts';
 import PickerUsage from './components/picker/usage.gts';
 import PillUsage from './components/pill/usage.gts';
@@ -93,6 +94,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['MarkdownContentShell', MarkdownContentShellUsage],
   ['Menu', MenuUsage],
   ['Modal', ModalUsage],
+  ['MultiSelect', MultiSelectUsage],
   ['PhoneInput', PhoneInputUsage],
   ['Picker', PickerUsage],
   ['Pill', PillUsage],

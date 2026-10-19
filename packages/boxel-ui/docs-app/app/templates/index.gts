@@ -89,6 +89,7 @@ const EXPORT_NAME_OVERRIDES: Record<string, string> = {
   Dropdown: 'BoxelDropdown',
   Input: 'BoxelInput',
   InputGroup: 'BoxelInputGroup',
+  MultiSelect: 'BoxelMultiSelect',
   Select: 'BoxelSelect',
   Tag: 'BoxelTag',
   EntityIconDisplay: 'EntityDisplayWithIcon',
