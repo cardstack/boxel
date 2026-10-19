@@ -935,6 +935,28 @@ module('Acceptance | interact submode | single stack tests', function (hooks) {
         .isFocused('the card in the new stack has focus');
     });
 
+    test('a card opened into a new stack on the left takes focus, not the card that shifts right', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      });
+      getService('recent-cards-service').add(`${testRealmURL}Pet/mango`);
+      let mango = `[data-test-operator-mode-stack="0"] [data-test-stack-card="${testRealmURL}Pet/mango"]`;
+      let fadhlan = `[data-test-operator-mode-stack="0"] [data-test-stack-card="${testRealmURL}Person/fadhlan"]`;
+
+      await click('[data-test-add-card-left-stack]');
+      await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
+
+      assert.dom('[data-test-operator-mode-stack="1"]').includesText('Fadhlan');
+      assert.dom(mango).isFocused('the card in the new stack has focus');
+
+      await click(`${mango} [data-test-close-button]`);
+      await waitUntil(() => !find(mango));
+
+      assert
+        .dom(fadhlan)
+        .isFocused('the card left in the remaining stack has focus');
+    });
+
     test('a card opened while focus is in the AI assistant panel leaves focus in the panel', async function (assert) {
       await visitOperatorMode({
         stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],

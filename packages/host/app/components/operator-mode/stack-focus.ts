@@ -69,19 +69,30 @@ export default class StackFocus {
     left: Placed[],
   ) {
     let active = focusedElement();
-    let opened: Placed[] = [];
+    // A stack that shifts sideways is rebuilt from copies of its items: the
+    // copies are the same cards moving, not cards opening.
+    let movedFrom = new Map<Placed, Placed>();
     for (let placed of arrived) {
-      // A stack that shifts sideways is rebuilt from copies of its items: the
-      // copies are the same cards moving, not cards opening.
-      let moved = left.find(
+      let source = left.find(
         ({ item, stackIndex }) =>
           item.id === placed.item.id && stackIndex !== placed.stackIndex,
       );
+      if (source) {
+        movedFrom.set(placed, source);
+      }
+    }
+    let moveSources = new Set(movedFrom.values());
+    let opened: Placed[] = [];
+    for (let placed of arrived) {
+      // An item that opens where another left takes over its opener, unless
+      // the one that left moved to another stack and keeps its own.
       let replaced =
-        moved ??
+        movedFrom.get(placed) ??
         left.find(
-          ({ stackIndex, itemIndex }) =>
-            stackIndex === placed.stackIndex && itemIndex === placed.itemIndex,
+          (gone) =>
+            !moveSources.has(gone) &&
+            gone.stackIndex === placed.stackIndex &&
+            gone.itemIndex === placed.itemIndex,
         );
       this.openers.set(
         placed.item,
@@ -89,7 +100,7 @@ export default class StackFocus {
           ? (this.openers.get(replaced.item) ?? null)
           : active,
       );
-      if (!moved) {
+      if (!movedFrom.has(placed)) {
         opened.push(placed);
       }
     }
