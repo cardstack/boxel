@@ -1,11 +1,17 @@
 import * as readline from 'readline';
 import { Writable } from 'stream';
 
+// A question whose input ended before it was answered. The CLI's entry point
+// prints its message without a stack, since it describes how the command was
+// run rather than a fault in it.
 export class PromptInputClosedError extends Error {
-  constructor(question: string) {
+  constructor(question: string, fromTerminal: boolean) {
     super(
-      `No answer to "${question.trim()}": input ended before one was given. ` +
-        'Run the command in a terminal, or pass what it asks for as flags or environment variables.',
+      `No answer to "${question.trim()}".` +
+        (fromTerminal
+          ? ''
+          : ' Input ended before one was given. Run the command in a terminal, ' +
+            'or pass what it asks for as flags or environment variables.'),
     );
     this.name = 'PromptInputClosedError';
   }
@@ -13,7 +19,10 @@ export class PromptInputClosedError extends Error {
 
 export interface PromptOptions {
   /** @internal The streams to read from and write to; tests pass their own. */
-  input?: NodeJS.ReadableStream & { readableFlowing?: boolean | null };
+  input?: NodeJS.ReadableStream & {
+    readableFlowing?: boolean | null;
+    isTTY?: boolean;
+  };
   output?: NodeJS.WritableStream;
 }
 
@@ -36,8 +45,16 @@ export function prompt(
     let answered = false;
     rl.once('close', () => {
       if (!answered) {
-        reject(new PromptInputClosedError(question));
+        reject(new PromptInputClosedError(question, Boolean(input.isTTY)));
       }
+    });
+    // Ctrl+C stops the command, as it does at the no-echo prompt below. Without
+    // a listener here readline would close the interface instead, which reads
+    // as a question left unanswered.
+    rl.on('SIGINT', () => {
+      answered = true;
+      rl.close();
+      process.exit(130);
     });
     rl.question(question, (answer) => {
       answered = true;

@@ -23,8 +23,17 @@ describe('prompt', () => {
     input.end();
     await expect(answer).rejects.toBeInstanceOf(PromptInputClosedError);
     await expect(answer).rejects.toThrow(
-      /No answer to "Save this profile\? \[Y\/n\]:"/,
+      /No answer to "Save this profile\? \[Y\/n\]:"\. Input ended before one was given\. Run the command in a terminal/,
     );
+  });
+
+  it('does not tell someone at a terminal to run it in one', async () => {
+    let input = Object.assign(new PassThrough(), { isTTY: true });
+    let answer = prompt('Name: ', { input, output: new PassThrough() });
+    input.end();
+    let error = await answer.catch((e: Error) => e);
+    expect(error).toBeInstanceOf(PromptInputClosedError);
+    expect((error as Error).message).toBe('No answer to "Name:".');
   });
 });
 

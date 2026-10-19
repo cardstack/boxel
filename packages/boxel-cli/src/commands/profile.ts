@@ -488,7 +488,8 @@ type AddProfileOutcome =
 // again and the person is sent through the browser again. The profile is
 // saved as the defaults would have it, and a profile already stored for the
 // account is replaced, since the browser has just proven it is that account.
-// It keeps its display name.
+// It keeps its display name. `addProfile` leaves a different active profile
+// active.
 async function addProfileViaBrowser(
   manager: ProfileManager,
   matrixUrl: string,
@@ -678,11 +679,16 @@ export async function addProfile(
 
   if (manager.getActiveProfileId() === matrixId) {
     console.log(`${DIM}This profile is now active.${RESET}`);
+  } else if (!ctx.interactive) {
+    // The browser can sign in as an account nobody meant — a Google identity
+    // with no matching account gets a new one — and without a TTY nobody has
+    // confirmed this one. The profile that was active stays active until
+    // someone chooses this one.
+    console.log(
+      `${DIM}Use 'boxel profile switch ${matrixId}' to switch to this profile.${RESET}`,
+    );
   } else {
-    // Without a TTY, take the answer the question defaults to.
-    const switchNow = ctx.interactive
-      ? await ctx.prompt('Switch to this profile now? [Y/n]: ')
-      : '';
+    const switchNow = await ctx.prompt('Switch to this profile now? [Y/n]: ');
     if (switchNow.toLowerCase() !== 'n') {
       manager.switchProfile(matrixId);
       console.log(

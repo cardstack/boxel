@@ -102,7 +102,7 @@ describe('boxel profile add through the browser', () => {
       expect(profile.displayName).toBe('Example Name');
     });
 
-    it('switches to the new profile when another one is active', async () => {
+    it('leaves a different active profile active, and names the switch command', async () => {
       let otherId = '@other-example-user:stack.cards';
       await manager.addProfileWithAuth(
         otherId,
@@ -115,7 +115,11 @@ describe('boxel profile add through the browser', () => {
       await addProfile(manager, environment, true, d);
 
       expect(prompt).not.toHaveBeenCalled();
-      expect(manager.getActiveProfileId()).toBe(matrixId);
+      expect(manager.getProfile(matrixId)).toBeDefined();
+      expect(manager.getActiveProfileId()).toBe(otherId);
+      expect(console.log).toHaveBeenCalledWith(
+        expect.stringContaining(`boxel profile switch ${matrixId}`),
+      );
     });
 
     it('fails instead of falling back to a terminal password sign-in when the browser times out', async () => {
