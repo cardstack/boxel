@@ -23,6 +23,8 @@ import {
   type Format,
   type LooseSingleCardDocument,
   type Query,
+  type RealmIdentifier,
+  type RealmResourceIdentifier,
   type Relationship,
   type Saved,
   type SearchEntryWireQuery,
@@ -1831,7 +1833,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
     }
     // Resolve to the realm's own identifier: the fallback realm URL can come
     // without the trailing slash a realm root has.
-    let realmURL = this.realm.realmOf(
+    let realmURL = this.realmOfInput(
       rri(realmInput.endsWith('/') ? realmInput : `${realmInput}/`),
     );
     // Read and write are separate grants, and either one is enough to run:
@@ -2585,6 +2587,24 @@ export default class RunRealmCodeTool extends HostBaseTool<
         kind: info.meta?.kind === 'directory' ? 'directory' : 'file',
       })),
     };
+  }
+
+  // realmOf matches an identifier only in the form the realm is keyed by, and
+  // the input may name the realm by its prefix or by its URL, so a miss is
+  // retried with the identifier resolved to its URL.
+  private realmOfInput(
+    realmId: RealmResourceIdentifier,
+  ): RealmIdentifier | undefined {
+    let realm = this.realm.realmOf(realmId);
+    if (realm) {
+      return realm;
+    }
+    try {
+      return this.realm.realmOf(this.network.virtualNetwork.toURL(realmId));
+    } catch {
+      // resolves nowhere, so it names no known realm
+      return undefined;
+    }
   }
 
   // The sandbox resolves relative paths against the realm root, and file URLs
