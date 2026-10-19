@@ -543,16 +543,15 @@ export class RunRealmCodeResult extends CardDef {
   @field showError = contains(StringField);
 
   // A run that saved no files, took no captures, changed nothing in the room,
-  // asked for no UI action and asked to show no card, such as one that only
-  // read, has nothing for the chat to show. Its script result goes to the
-  // model only.
+  // asked for no UI action and had no card it could not show, such as one
+  // that only read or only opened a card, has nothing for the chat to show.
+  // Its script result goes to the model only.
   get [hasNothingToShow](): boolean {
     return (
       !this.files?.length &&
       !this.captures?.length &&
       !this.roomChanges?.length &&
       !this.uiActions?.length &&
-      !this.shownCard &&
       !this.showError
     );
   }
@@ -598,11 +597,6 @@ export class RunRealmCodeResult extends CardDef {
               <li data-test-realm-code-room-change>{{change}}</li>
             {{/each}}
           </ul>
-        {{/if}}
-        {{#if @model.shownCard}}
-          <p class='shown-card' data-test-realm-code-shown-card>
-            <a href={{@model.shownCard}}>{{@model.shownCard}}</a>
-          </p>
         {{/if}}
         {{#if @model.showError}}
           <p class='show-error' data-test-realm-code-show-error>
@@ -656,12 +650,9 @@ export class RunRealmCodeResult extends CardDef {
           margin: 0;
           color: var(--boxel-450);
         }
-        .shown-card,
         .show-error {
           margin: 0;
           word-break: break-all;
-        }
-        .show-error {
           color: var(--boxel-error-200);
         }
         .captures {

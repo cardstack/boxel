@@ -4297,7 +4297,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       );
   });
 
-  test('a run-realm-code result says which card it opened, or why it could not', async function (assert) {
+  test('a run-realm-code result does not list the card it opened, but says why it could not open one', async function (assert) {
     let roomId = await renderAiAssistantPanel();
     let cardId = `${testRealmURL}Pet/mango`;
 
@@ -4324,8 +4324,8 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
 
     await waitFor('[data-test-realm-code-show-error]');
     assert
-      .dom('[data-test-realm-code-shown-card]')
-      .containsText(cardId, 'the opened card is named');
+      .dom('[data-test-room]')
+      .doesNotContainText(cardId, 'the opened card is not listed');
     assert
       .dom('[data-test-realm-code-show-error]')
       .containsText('The card was not shown', 'the reason is shown');
