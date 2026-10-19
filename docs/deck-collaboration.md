@@ -38,3 +38,41 @@ trust them:
 - `.deck/versions/<version>.json` records, write-once, the exact Checkpoint a
   published Version came from. It is accepted only when the Version's tree,
   index, Repository and lock all agree.
+
+## Storage
+
+```text
+realm root (or its S3 prefix)
+├── authored package files
+└── .deck/
+    ├── store/                immutable content-addressed objects and Versions
+    ├── refs/heads/           conditional mutable branch heads
+    ├── reviews/              immutable Reviews plus conditional refs
+    ├── versions/             Version → Checkpoint origin records
+    ├── history/              every-save History (see below)
+    └── prepared/             writer-owned, recoverable ref updates
+```
+
+The ordinary realm filesystem is the complete, normative backend. Desktop,
+self-hosted Boxel and small teams need nothing else.
+`packages/realm-server/lib/deck-conditional-object-store.ts` gives that backend
+and an optional S3 backend one conditional-object contract:
+
+- `RealmFileConditionalObjectStore` uses a realm-local lock plus atomic
+  replacement.
+- `S3ConditionalObjectStore` uses `If-None-Match: *` to create once and
+  `If-Match` to advance only the object version the writer read. A hosted realm
+  can mount the same prefix through S3 Files for ordinary reads and indexing;
+  both paths address the same realm-relative keys, so S3 is never a second
+  canonical tree.
+- No key may escape the realm root or prefix, and two writers holding one stale
+  ETag cannot both win.
+
+`packages/realm-server/lib/deck-prepared-branch-update.ts` adds recoverable
+branch publication on top: a prepared update is immutable and names one writer;
+replaying it after the write landed but its acknowledgement was lost reports
+`recovered: true` instead of advancing the branch twice, and a ref that moved
+elsewhere stays a conflict.
+
+The S3 suite runs against an in-memory S3 double. To run it against a real
+bucket, set `BOXEL_DECK_S3_TEST_BUCKET` and `BOXEL_DECK_S3_TEST_REGION`.
