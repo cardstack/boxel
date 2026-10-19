@@ -126,6 +126,14 @@ exports.up = (pgm) => {
       share_owner varchar
     ) RETURNS void LANGUAGE plpgsql AS $$
     BEGIN
+      -- Lock the person's shares before deciding. A resume that read no
+      -- permission row (there was none to lock) may be about to set a share
+      -- to 'owner-lost-write'. Waiting on its lock means the UPDATE below,
+      -- a new statement with a new snapshot, sees that committed reason and
+      -- resumes the share, rather than skipping it as 'suspended-by-writer'.
+      PERFORM 1 FROM key_shares
+        WHERE realm_url = share_realm_url AND owner = share_owner
+        FOR UPDATE;
       IF EXISTS (
         SELECT 1 FROM realm_user_permissions
         WHERE realm_url = share_realm_url

@@ -161,9 +161,12 @@ export function validateShareLabel(label: unknown): string {
 
 // Locks are taken in the order the triggers take them: permission rows, then
 // the key, then the share. A permission change locks its row and then,
-// through its trigger, the shares it suspends or resumes; deleting a key locks
-// the key and then the shares holding it. Taking a share before a row either
-// of them holds would deadlock against them.
+// through its trigger, every share the person holds in that realm, waiting
+// out any change to one before deciding what to suspend or resume. A row
+// that doesn't exist can't be locked, so that wait is what keeps a resume
+// and the person's write being granted from missing each other. Deleting a
+// key locks the key and then the shares holding it. Taking a share before a
+// row either of them holds would deadlock against them.
 
 // Whether each of `users` is a direct writer of the realm, with their
 // permission rows locked in username order, so two changes locking the same
