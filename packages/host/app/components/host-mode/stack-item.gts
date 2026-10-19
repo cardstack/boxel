@@ -251,6 +251,39 @@ export default class HostModeStackItem extends Component<Signature> {
         animation-duration: 0s;
       }
 
+      /* reduced motion: a card fades in and out where it stands, and the
+         cards under it keep their places rather than sliding */
+      @keyframes stackItemFadeIn {
+        from {
+          opacity: 0;
+        }
+      }
+
+      @keyframes stackItemFadeOut {
+        to {
+          opacity: 0;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .host-mode-stack-item {
+          transition: none;
+        }
+
+        .host-mode-stack-item.opening-animation {
+          animation-name: stackItemFadeIn;
+          transition: none;
+        }
+
+        .host-mode-stack-item.closing-animation {
+          animation-name: stackItemFadeOut;
+        }
+
+        .host-mode-stack-item.move-forward-animation {
+          animation: none;
+        }
+      }
+
       .host-mode-stack-item.buried {
         --realm-icon-border-radius: 4px;
       }

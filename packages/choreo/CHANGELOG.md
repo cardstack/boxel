@@ -21,6 +21,13 @@ versions may change behavior until `1.0.0`.
   clock has ended. The region now reports `delivery in flight` until the sprite's original text is
   restored, so a settled page no longer has stand-in spans in it. Pausing a run whose clock is
   past a delivery's cue lands that delivery instead of freezing its spans in place.
+- **A region honours reduced motion on every path it drives.** Choreo already let motion-dom jump
+  positional values for a viewer who asks for reduced motion, but its ambient loops, text
+  deliveries, `@path` flights, camera and `c.Scroll` steps ran on platform animations or its own
+  clock, which ignored the preference.
+  Each run now follows the region's `MotionConfig` (`'user'` by default, so the system setting):
+  with motion reduced, the score keeps its timing, positional values land at their step's start,
+  and opacity and colour still animate. `<MotionConfig @reducedMotion='never'>` opts a region out.
 - **An ambient loop keeps its place when its run is replaced.** A `@repeat={{Infinity}}` Tween's
   loop restarted from the top of its cycle whenever its region compiled a new run — an edited
   `@duration`, or any arrival in the region. The new run now carries the same loop on the same

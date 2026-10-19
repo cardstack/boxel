@@ -319,7 +319,9 @@ rename should not break a test, and a test should not stop a rename.
 
 `prefers-reduced-motion: reduce` is honoured by default. Someone who has asked their operating
 system for less movement gets transform and layout animation switched off; opacity and colour still
-animate, because those were never the problem.
+animate, because those were never the problem. A `<Choreo>` region follows the same setting through
+the same `MotionConfig`: its score keeps its timing, and its loops, flights, text deliveries and
+camera land in place instead of travelling.
 
 That is the platform default, not a feature to opt into. If you are porting a React app that relied
 on Motion's own default of ignoring the setting, it is one attribute:
