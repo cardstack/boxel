@@ -689,8 +689,15 @@ module(basename(import.meta.filename), function (hooks) {
     // Runs the `incremental-index` task over `args` with every collaborator
     // but the database stubbed, and returns what it announced. The reader
     // holds no files, so the pass visits nothing and commits what it
-    // invalidated.
-    async function runIncrementalTask(args: IncrementalArgs) {
+    // invalidated, unless the test hands it a reader of its own.
+    async function runIncrementalTask(
+      args: IncrementalArgs,
+      reader: Reader = {
+        readFile: async () => undefined,
+        readStream: async () => undefined,
+        mtimes: async () => ({}),
+      },
+    ) {
       let realmEvents: RealmEventContent[] = [];
       let notified: { channel: string; payload: string }[] = [];
       let dbAdapter = new Proxy(adapter, {
@@ -704,11 +711,6 @@ module(basename(import.meta.filename), function (hooks) {
           return typeof value === 'function' ? value.bind(target) : value;
         },
       }) as unknown as DBAdapter;
-      let reader: Reader = {
-        readFile: async () => undefined,
-        readStream: async () => undefined,
-        mtimes: async () => ({}),
-      };
       let task = incrementalIndex({
         dbAdapter,
         queuePublisher: {
@@ -810,6 +812,69 @@ module(basename(import.meta.filename), function (hooks) {
       );
       assert.deepEqual(realmEvents, [], 'the task broadcasts nothing');
       assert.deepEqual(indexUpdates, [], 'and notifies nothing');
+    });
+
+    test('a removal whose file cannot be read stays a removal, and the rest of the pass commits', async function (assert) {
+      // A folder's worth of removals, so the reads queue behind each other,
+      // and one of them fails the way a stalled realm read does.
+      let removed = Array.from({ length: 40 }, (_, i) => url(`gone-${i}`));
+      let unreadable = removed[7];
+      let inFlight = 0;
+      let mostInFlight = 0;
+      let removalReads = 0;
+      let reader: Reader = {
+        readFile: async (fileURL: URL) => {
+          if (removed.includes(fileURL.href)) {
+            removalReads++;
+          }
+          inFlight++;
+          mostInFlight = Math.max(mostInFlight, inFlight);
+          try {
+            await new Promise((resolve) => setTimeout(resolve, 5));
+            if (fileURL.href === unreadable) {
+              throw new Error('no progress while awaiting the headers');
+            }
+            return undefined;
+          } finally {
+            inFlight--;
+          }
+        },
+        readStream: async () => undefined,
+        mtimes: async () => ({}),
+      };
+
+      let { realmEvents } = await runIncrementalTask(
+        {
+          ...incrementalArgs([]),
+          changes: [
+            { url: url('x'), operation: 'update' },
+            ...removed.map((href) => ({
+              url: href,
+              operation: 'delete' as const,
+            })),
+          ],
+        },
+        reader,
+      );
+
+      let [event] = realmEvents as { invalidations?: string[] }[];
+      assert.true(
+        event?.invalidations?.includes(`${testRealm}x`),
+        'the pass commits and announces the update it carried',
+      );
+      assert.strictEqual(
+        removalReads,
+        removed.length,
+        'every removal was checked against the realm',
+      );
+      assert.true(
+        mostInFlight > 1,
+        `the removals are read side by side (${mostInFlight} at once)`,
+      );
+      assert.true(
+        mostInFlight <= 8,
+        `but only a few at a time (${mostInFlight} at once)`,
+      );
     });
   });
 });

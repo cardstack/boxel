@@ -2,7 +2,7 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename, join } from 'path';
 import fsExtra from 'fs-extra';
-const { existsSync, readFileSync } = fsExtra;
+const { existsSync, readFileSync, removeSync, writeJSONSync } = fsExtra;
 import type { Test, SuperTest } from 'supertest';
 import type { DirResult } from 'tmp';
 import type { PgAdapter } from '@cardstack/postgres';
@@ -15,12 +15,20 @@ import {
   codeRefFromInternalKey,
   rri,
   SupportedMimeType,
+  userInitiatedPriority,
 } from '@cardstack/runtime-common';
 import type {
   DBAdapter,
   LooseSingleCardDocument,
+  QueuePublisher,
   Realm,
 } from '@cardstack/runtime-common';
+import {
+  INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+  indexingWriterLane,
+  makeIncrementalArgsWithCallerMetadata,
+  mapIncrementalDoneResult,
+} from '@cardstack/runtime-common/jobs/indexing';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import type {
   IncrementalIndexEventContent,
@@ -500,6 +508,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
     let serverRequest: SuperTest<Test>;
     let testRealmHttpServer: Server;
     let dir: DirResult;
+    let publisher: QueuePublisher;
 
     setupPermissionedRealmCached(hooks, {
       mode: 'before',
@@ -517,6 +526,7 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         serverRequest = args.request;
         testRealmHttpServer = args.testRealmHttpServer;
         dir = args.dir;
+        publisher = args.publisher;
       },
     });
 
@@ -1314,6 +1324,511 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         assert.strictEqual(read.status, 200, 'HTTP 200 status');
         assert.strictEqual(read.get('Cache-Control'), 'no-store');
         assert.strictEqual(read.get('ETag'), undefined);
+      });
+    });
+
+    // A write waits for its own index pass so that it can report the
+    // generation it landed on. The pass renders what it visits in a prerender
+    // tab, so the wait is bounded, and a caller can skip it outright: either
+    // way the write answers with its bytes durable and its generation pending.
+    module('index wait', function (hooks) {
+      // Holds every index swap inside its `realm_type_generations` statement,
+      // which runs after the pass has done its rendering, for `seconds`. The
+      // write's pass therefore cannot land before then.
+      const SLOW_SWAP_FUNCTION = 'operations_test_slow_swap';
+      const SLOW_SWAP_TRIGGER = 'operations_test_slow_swap_trigger';
+      const SLOW_SWAP_SECONDS = 4;
+      let budgetBefore: string | undefined;
+
+      async function installSlowSwap() {
+        await testDbAdapter.execute(`
+          CREATE OR REPLACE FUNCTION ${SLOW_SWAP_FUNCTION}() RETURNS trigger AS $$
+          BEGIN
+            PERFORM pg_sleep(${SLOW_SWAP_SECONDS});
+            RETURN NULL;
+          END;
+          $$ LANGUAGE plpgsql;
+        `);
+        await testDbAdapter.execute(`
+          CREATE TRIGGER ${SLOW_SWAP_TRIGGER}
+          BEFORE INSERT OR UPDATE ON realm_type_generations
+          FOR EACH STATEMENT
+          EXECUTE FUNCTION ${SLOW_SWAP_FUNCTION}();
+        `);
+      }
+
+      async function removeSlowSwap() {
+        await testDbAdapter.execute(
+          `DROP TRIGGER IF EXISTS ${SLOW_SWAP_TRIGGER} ON realm_type_generations`,
+        );
+        await testDbAdapter.execute(
+          `DROP FUNCTION IF EXISTS ${SLOW_SWAP_FUNCTION}()`,
+        );
+      }
+
+      hooks.beforeEach(function () {
+        budgetBefore = process.env.INDEX_WAIT_BUDGET_MS;
+        process.env.INDEX_WAIT_BUDGET_MS = '500';
+      });
+
+      hooks.afterEach(async function () {
+        if (budgetBefore === undefined) {
+          delete process.env.INDEX_WAIT_BUDGET_MS;
+        } else {
+          process.env.INDEX_WAIT_BUDGET_MS = budgetBefore;
+        }
+        await removeSlowSwap();
+        await realm.incrementalIndexing();
+      });
+
+      function createPerson(lid: string, firstName: string) {
+        return invoke('create', {
+          data: {
+            lid,
+            type: 'card',
+            attributes: { firstName },
+            meta: { adoptsFrom: PERSON },
+          },
+        });
+      }
+
+      // A card to remove, written and indexed before the swap is slowed. Its
+      // local id names its path, so each test's cards take their own.
+      async function storedPerson(
+        lid: string,
+        firstName: string,
+      ): Promise<string> {
+        let response = await post(envelope(createPerson(lid, firstName)));
+        let id: string = response.body['atomic:results'][0].data.id;
+        await realm.incrementalIndexing();
+        return id;
+      }
+
+      function localPath(id: string): string {
+        return id.slice(testRealmHref.length);
+      }
+
+      test('a write whose index pass lands within the budget reports its generation', async function (assert) {
+        // A generous budget, so the pass lands well inside it however slow the
+        // machine running the suite is.
+        process.env.INDEX_WAIT_BUDGET_MS = '60000';
+        let response = await post(envelope(createPerson('prompt', 'Prompt')));
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        let [result] = response.body['atomic:results'];
+        assert.strictEqual(
+          typeof result.data.meta.generation,
+          'number',
+          'the result carries the generation the pass landed on',
+        );
+        assert.strictEqual(
+          result.data.meta.indexPending,
+          undefined,
+          'and does not say the pass is pending',
+        );
+      });
+
+      test('a write whose index pass outlasts the budget answers with its generation pending', async function (assert) {
+        await installSlowSwap();
+        let since = Date.now();
+        let response = await post(
+          envelope(createPerson('stalled', 'Stalled')),
+        ).set('X-Boxel-Client-Request-Id', 'index-wait-stalled');
+        let answeredMs = Date.now() - since;
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.true(
+          answeredMs < SLOW_SWAP_SECONDS * 1000,
+          `the write answered in ${answeredMs} ms, before its pass could land`,
+        );
+        let [result] = response.body['atomic:results'];
+        assert.strictEqual(
+          result.data.meta.generation,
+          null,
+          'the generation is not known yet',
+        );
+        assert.true(
+          result.data.meta.indexPending,
+          'the result says the pass is still to land',
+        );
+        assert.strictEqual(
+          typeof result.data.meta.version,
+          'string',
+          'the result still carries the version the card now holds',
+        );
+        let id: string = result.data.id;
+        assert.strictEqual(
+          storedCard(`${localPath(id)}.json`).data.attributes?.firstName,
+          'Stalled',
+          'the card is on disk',
+        );
+
+        let indexing = realm.incrementalIndexing();
+        assert.ok(indexing, "the realm's indexing reports the pass as pending");
+        await indexing;
+
+        // The realm broadcasts out of band from the pass, so the event is
+        // waited for rather than read off the moment indexing settled.
+        await waitUntil(
+          async () =>
+            (await incrementalIndexEventsSince(since)).some(
+              (event) => event.clientRequestId === 'index-wait-stalled',
+            ),
+          {
+            timeout: 30_000,
+            timeoutMessage: "the write's index event never arrived",
+          },
+        );
+        let announced = (await incrementalIndexEventsSince(since)).find(
+          (event) => event.clientRequestId === 'index-wait-stalled',
+        );
+        assert.true(
+          announced?.invalidations.includes(id),
+          'the pass is announced once it lands',
+        );
+        assert.strictEqual(
+          typeof announced?.generation,
+          'number',
+          'and its event carries the generation the write could not report',
+        );
+        let read = await request
+          .get(`/${localPath(id)}`)
+          .set('Accept', SupportedMimeType.CardJson);
+        assert.strictEqual(read.status, 200, 'the card is indexed');
+        assert.strictEqual(
+          read.body.data.attributes.firstName,
+          'Stalled',
+          'with the content the write stored',
+        );
+      });
+
+      test('a write that asks to skip the index wait answers once it is durable', async function (assert) {
+        // A budget the stalled pass would land well inside, so only the
+        // header can be what answers early.
+        process.env.INDEX_WAIT_BUDGET_MS = '60000';
+        await installSlowSwap();
+        let since = Date.now();
+        let response = await post(
+          envelope(createPerson('skipping', 'Skipping')),
+        ).set('X-Boxel-Skip-Index-Wait', '1');
+        let answeredMs = Date.now() - since;
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.true(
+          answeredMs < SLOW_SWAP_SECONDS * 1000,
+          `the write answered in ${answeredMs} ms, before its pass could land`,
+        );
+        let [result] = response.body['atomic:results'];
+        assert.strictEqual(
+          result.data.meta.generation,
+          null,
+          'the generation is not known yet',
+        );
+        assert.true(
+          result.data.meta.indexPending,
+          'the result says the pass is still to land',
+        );
+
+        await realm.incrementalIndexing();
+        let read = await request
+          .get(`/${localPath(result.data.id)}`)
+          .set('Accept', SupportedMimeType.CardJson);
+        assert.strictEqual(read.status, 200, 'the card is indexed afterwards');
+      });
+
+      // An index pass carrying a removal of `fileURL`, published the way the
+      // realm publishes one once the file's bytes are gone.
+      async function indexRemoval(fileURL: string) {
+        let job = await publisher.publish({
+          jobType: 'incremental-index',
+          ...indexingWriterLane(realm.url, undefined),
+          timeout: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
+          priority: userInitiatedPriority,
+          args: makeIncrementalArgsWithCallerMetadata(
+            {
+              realmURL: realm.url,
+              realmUsername: await realm.getRealmOwnerUsername(),
+              ignoreData: {},
+              changes: [{ url: fileURL, operation: 'delete' }],
+            },
+            null,
+          ),
+          mapResult: mapIncrementalDoneResult(null),
+        });
+        await job.done;
+      }
+
+      async function indexedAsRemoved(fileURL: string): Promise<boolean> {
+        let [row] = (await testDbAdapter.execute(
+          `select is_deleted from boxel_index where url = $1 and type = 'instance'`,
+          { bind: [fileURL] },
+        )) as { is_deleted: boolean | null }[];
+        return !row || Boolean(row.is_deleted);
+      }
+
+      async function indexedFirstName(id: string): Promise<string | undefined> {
+        let read = await request
+          .get(`/${localPath(id)}`)
+          .set('Accept', SupportedMimeType.CardJson);
+        return read.status === 200
+          ? read.body.data.attributes.firstName
+          : undefined;
+      }
+
+      test('a removal of a file that is on disk indexes the file', async function (assert) {
+        // A writer put the file back after its removal, so the pass carrying
+        // the removal finds it there. The bytes differ from what the index
+        // holds, so only a pass that reads the file again can report them.
+        let id = await storedPerson('removal-kept', 'Kept');
+        let path = `${localPath(id)}.json`;
+        let card = storedCard(path);
+        card.data.attributes = {
+          ...card.data.attributes,
+          firstName: 'Rewritten',
+        };
+        // Written past the realm, so the file watcher would index it on its
+        // own; marked as the realm's own write so that the pass under test is
+        // the only one that reads it. The source cache entry the watcher would
+        // have dropped is dropped here, as a write through the realm does.
+        await (
+          realm as unknown as { trackOwnWrite(path: string): Promise<void> }
+        ).trackOwnWrite(path);
+        writeJSONSync(realmFile(path), card);
+        realm.invalidateCache(path);
+
+        await indexRemoval(`${id}.json`);
+
+        assert.false(
+          await indexedAsRemoved(`${id}.json`),
+          'the card stays in the index, as the file it describes is on disk',
+        );
+        assert.strictEqual(
+          await indexedFirstName(id),
+          'Rewritten',
+          'and the index carries what the file holds now',
+        );
+      });
+
+      test('a removal of a file that is gone removes it', async function (assert) {
+        let id = await storedPerson('removal-gone', 'Gone');
+        let fileURL = `${id}.json`;
+        removeSync(realmFile(`${localPath(id)}.json`));
+
+        await indexRemoval(fileURL);
+
+        assert.true(
+          await indexedAsRemoved(fileURL),
+          'the card leaves the index, as its file is gone',
+        );
+      });
+
+      // A batch written as `user`, whose index jobs run in that user's writer
+      // lane: one writer's jobs run one at a time and coalesce, and different
+      // writers' jobs run side by side.
+      function postAs(user: string, body: string) {
+        return anonymousPost(body).set(
+          'Authorization',
+          `Bearer ${createJWT(realm, user, ['read', 'write'])}`,
+        );
+      }
+
+      // The realm's index jobs that have not finished, with what each carries
+      // and whether a worker has claimed it.
+      async function pendingIndexJobs(): Promise<
+        {
+          id: number;
+          claimed: boolean;
+          urls: string[];
+          callers: string[];
+        }[]
+      > {
+        return (await testDbAdapter.execute(
+          `select j.id,
+                  exists (select 1 from job_reservations r
+                           where r.job_id = j.id and r.completed_at is null)
+                    as claimed,
+                  coalesce(
+                    (select array_agg(change->>'url')
+                       from jsonb_array_elements(j.args->'changes') as change),
+                    array[]::text[]
+                  ) as urls,
+                  coalesce(
+                    (select array_agg(caller->>'clientRequestId')
+                       from jsonb_array_elements(
+                         coalesce(j.args->'coalescedCallers', '[]'::jsonb)
+                       ) as caller),
+                    array[]::text[]
+                  ) as callers
+             from jobs j
+            where j.job_type = 'incremental-index'
+              and (j.concurrency_group = $1 or j.lane_family = $1)
+              and j.status = 'unfulfilled'
+            order by j.id`,
+          { bind: [`indexing:${realm.url}`] },
+        )) as unknown as {
+          id: number;
+          claimed: boolean;
+          urls: string[];
+          callers: string[];
+        }[];
+      }
+
+      // Holds `user`'s writer lane: a write whose pass a worker has claimed
+      // and the slow swap keeps from landing, so the next index job `user`
+      // publishes waits unclaimed behind it.
+      async function occupyLane(user: string, lid: string) {
+        let response = await postAs(
+          user,
+          envelope(createPerson(lid, 'Occupying')),
+        ).set('X-Boxel-Skip-Index-Wait', '1');
+        let fileURL = `${response.body['atomic:results'][0].data.id}.json`;
+        await waitUntil(
+          async () =>
+            (await pendingIndexJobs()).some(
+              (job) => job.claimed && job.urls.includes(fileURL),
+            ),
+          {
+            timeout: 30_000,
+            interval: 100,
+            timeoutMessage: "the occupying write's pass was never claimed",
+          },
+        );
+      }
+
+      // Every pass the test started has landed, the slowed ones included.
+      async function allIndexJobsLanded() {
+        await removeSlowSwap();
+        await waitUntil(async () => (await pendingIndexJobs()).length === 0, {
+          timeout: 60_000,
+          interval: 200,
+          timeoutMessage: 'an index job never finished',
+        });
+        await realm.incrementalIndexing();
+      }
+
+      test('a card recreated by its remover while the removal waits in the queue stays indexed', async function (assert) {
+        assert.timeout(90_000);
+        let id = await storedPerson('recreated-by-remover', 'Removed');
+        await installSlowSwap();
+        await occupyLane(TESTER, 'lane-of-remover');
+
+        let removal = await post(envelope(invoke('delete', { href: id }))).set(
+          'X-Boxel-Skip-Index-Wait',
+          '1',
+        );
+        assert.strictEqual(removal.status, 200, 'the removal answers');
+        assert.false(
+          existsSync(realmFile(`${localPath(id)}.json`)),
+          'with the file gone',
+        );
+
+        let recreate = await post(
+          envelope(createPerson('recreated-by-remover', 'Recreated')),
+        )
+          .set('X-Boxel-Skip-Index-Wait', '1')
+          .set('X-Boxel-Client-Request-Id', 'recreate-by-remover');
+        assert.strictEqual(recreate.status, 200, 'the recreate answers');
+        assert.strictEqual(
+          recreate.body['atomic:results'][0].data.id,
+          id,
+          'at the path the removal freed',
+        );
+        let waiting = (await pendingIndexJobs()).find(
+          (job) => !job.claimed && job.urls.includes(`${id}.json`),
+        );
+        assert.true(
+          waiting?.callers.includes('recreate-by-remover'),
+          "the recreate joined the removal's job while it waited unclaimed",
+        );
+
+        await allIndexJobsLanded();
+        assert.strictEqual(
+          await indexedFirstName(id),
+          'Recreated',
+          'the index carries the recreated card',
+        );
+      });
+
+      test('a card another writer recreates while the removal waits in the queue stays indexed', async function (assert) {
+        assert.timeout(90_000);
+        const OTHER_WRITER = '@other-writer:localhost';
+        let id = await storedPerson('recreated-by-other', 'Removed');
+        await installSlowSwap();
+        await occupyLane(TESTER, 'lane-of-remover-2');
+
+        let removal = await post(envelope(invoke('delete', { href: id }))).set(
+          'X-Boxel-Skip-Index-Wait',
+          '1',
+        );
+        assert.strictEqual(removal.status, 200, 'the removal answers');
+
+        // The other writer's job runs in its own lane, so it never meets the
+        // removal's job in the queue: nothing but the file on disk tells the
+        // removal's pass that the card exists again.
+        let recreate = await postAs(
+          OTHER_WRITER,
+          envelope(createPerson('recreated-by-other', 'Recreated')),
+        ).set('X-Boxel-Skip-Index-Wait', '1');
+        assert.strictEqual(recreate.status, 200, 'the recreate answers');
+        assert.strictEqual(
+          recreate.body['atomic:results'][0].data.id,
+          id,
+          'at the path the removal freed',
+        );
+        assert.true(
+          (await pendingIndexJobs()).some(
+            (job) => !job.claimed && job.urls.includes(`${id}.json`),
+          ),
+          "the removal's job is still waiting when the card is recreated",
+        );
+
+        await allIndexJobsLanded();
+        assert.strictEqual(
+          await indexedFirstName(id),
+          'Recreated',
+          'the index carries the recreated card',
+        );
+      });
+
+      test('a card DELETE answers within the budget and honors the skip header', async function (assert) {
+        let bounded = await storedPerson('bounded', 'Bounded');
+        let skipped = await storedPerson('skipped', 'Skipped');
+        await installSlowSwap();
+
+        let since = Date.now();
+        let response = await request
+          .delete(`/${localPath(bounded)}`)
+          .set('Accept', SupportedMimeType.CardJson);
+        let answeredMs = Date.now() - since;
+        assert.strictEqual(response.status, 204, 'HTTP 204 status');
+        assert.true(
+          answeredMs < SLOW_SWAP_SECONDS * 1000,
+          `a DELETE answered in ${answeredMs} ms, at its budget`,
+        );
+
+        // A budget the stalled pass would land well inside, so only the
+        // header can be what answers early.
+        process.env.INDEX_WAIT_BUDGET_MS = '60000';
+        since = Date.now();
+        response = await request
+          .delete(`/${localPath(skipped)}`)
+          .set('Accept', SupportedMimeType.CardJson)
+          .set('X-Boxel-Skip-Index-Wait', '1');
+        answeredMs = Date.now() - since;
+        assert.strictEqual(response.status, 204, 'HTTP 204 status');
+        assert.true(
+          answeredMs < SLOW_SWAP_SECONDS * 1000,
+          `a DELETE asking to skip the wait answered in ${answeredMs} ms`,
+        );
+
+        await removeSlowSwap();
+        await realm.incrementalIndexing();
+        for (let id of [bounded, skipped]) {
+          let read = await request
+            .get(`/${localPath(id)}`)
+            .set('Accept', SupportedMimeType.CardJson);
+          assert.strictEqual(read.status, 404, `${id} is gone from the index`);
+        }
       });
     });
 

@@ -7,6 +7,7 @@ import { RealmIcon } from '@cardstack/boxel-ui/components';
 
 import { RealmPaths } from '@cardstack/runtime-common';
 
+import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
 import type RealmService from '@cardstack/host/services/realm';
 import type { RecentFile } from '@cardstack/host/services/recent-files-service';
 
@@ -100,7 +101,9 @@ class File extends Component<FileArgs> {
           role='button'
           {{on 'click' this.openFile}}
         >
-          <RealmIcon @realmInfo={{realm.info}} />
+          <RealmURLTooltip @realmURL={{@recentFile.realmURL.href}}>
+            <RealmIcon @realmInfo={{realm.info}} />
+          </RealmURLTooltip>
           <span class='file-name'>{{this.fileName}}</span>
           {{#if this.fileExtension}}
             <span class='file-extension'>{{this.fileExtension}}</span>

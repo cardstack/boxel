@@ -17,6 +17,7 @@ import {
   OperationsError,
   rri,
   stampBaseVersion,
+  SKIP_INDEX_WAIT_HEADER,
   SupportedMimeType,
   writeResultIn,
   type CodeRef,
@@ -205,6 +206,7 @@ export default class OperationsService
       clientRequestId?: string;
       adopted?: string[];
       optimistic?: OptimisticCandidate;
+      skipIndexWait?: boolean;
     },
   ): Promise<OperationsAnswer> {
     this.assertMayWrite(method);
@@ -236,6 +238,11 @@ export default class OperationsService
     let clientRequestId = opts?.clientRequestId ?? `instance:${uuidv4()}`;
     this.cardService.clientRequestIds.add(clientRequestId);
     headers['X-Boxel-Client-Request-Id'] = clientRequestId;
+    // The realm answers once the batch's writes are durable rather than once
+    // they are indexed, which is the same opt-out a card save takes.
+    if (opts?.skipIndexWait) {
+      headers[SKIP_INDEX_WAIT_HEADER] = '1';
+    }
 
     // A call the client core found no structural reason to refuse optimism for
     // is offered to the ledger, which answers the rest of the question — is
@@ -249,6 +256,7 @@ export default class OperationsService
         envelope,
         candidate: opts.optimistic,
         clientRequestId,
+        ...(opts.skipIndexWait ? { skipIndexWait: true } : {}),
       });
       if (optimistic) {
         return optimistic;
@@ -304,13 +312,16 @@ export default class OperationsService
         recordVersion: (instance, version) =>
           this.store.recordOperationVersion(instance, version),
         withLock: (localId, fn) => this.store.withMutationLocks([localId], fn),
-        send: (realmURL, envelope, clientRequestId) =>
+        send: (realmURL, envelope, clientRequestId, sendOpts) =>
           this.fetchAnswer(
             realmURL,
             {
               Accept: SupportedMimeType.BoxelOperations,
               'Content-Type': SupportedMimeType.BoxelOperations,
               'X-Boxel-Client-Request-Id': clientRequestId,
+              ...(sendOpts?.skipIndexWait
+                ? { [SKIP_INDEX_WAIT_HEADER]: '1' }
+                : {}),
             },
             envelope,
           ),

@@ -49,7 +49,7 @@ class CtaBandUsage extends Component {
     return this.align === 'start' ? 'start' : 'center';
   }
   /** The dark closing band the source hardcoded as #14141a — here it is
-   * two args, and a season re-dresses it. */
+   * two args, and a theme re-dresses it. */
   get darkTone(): PretuiTone {
     return 'neutral';
   }
@@ -101,7 +101,7 @@ class CtaBandUsage extends Component {
 
           <CtaBand
             @headline='The same band, tone neutral, appearance accent'
-            @lead='This is the dark closing band the source hardcoded. Nothing here is a hex; a season re-dresses it and a dark theme inverts it.'
+            @lead='This is the dark closing band the source hardcoded. Nothing here is a hex; the theme re-dresses it and dark mode inverts it.'
             @tone={{this.darkTone}}
             @appearance={{this.darkAppearance}}
             @align='start'

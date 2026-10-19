@@ -32,7 +32,7 @@ Practical consequence: **your `<th>` and `<td>` get the house styling automatica
 
 Pretui differs from shadcn on one axis and it is the interesting one: **shadcn gives you seven components, Pretui gives you three blocks.** shadcn's approach types every part and lets each be styled independently; Pretui's means a table is `<Table><:head><tr>…</tr></:head><:body>…</:body></Table>`, with `<:caption>` standing in for `TableCaption`, with native elements throughout — nothing to import, nothing to learn, and native table semantics you cannot accidentally lose by nesting a `<div>` in a `<tbody>`.
 
-The improvement over both: it **reads the boxel theme contract**, so a hand-built table follows whatever theme the card wears — surface, header band, zebra, hover, type roles and spacing ladder — with no season tokens and no literal fallbacks. DataGrid still reads the Pret season tokens and fixed metrics for the same parts, so the two differ outside a season: Table's header is set in the label role at the label size, DataGrid's in a fixed 10px eyebrow.
+The improvement over both: it **reads the boxel theme contract**, so a hand-built table follows whatever theme the card wears — surface, header band, zebra, hover, type roles and spacing ladder — with no Pret-only tokens and no literal fallbacks. DataGrid still reads Pret's own tokens and fixed metrics for the same parts, so the two differ: Table's header is set in the label role at the label size, DataGrid's in a fixed 10px eyebrow.
 
 The cost, stated plainly: no sorting, no selection, no virtualization, no column definitions, and no way to add them without switching components.
 

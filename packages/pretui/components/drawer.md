@@ -13,7 +13,7 @@ Identical control semantics to Dialog, and deliberately so: the same `modalBehav
 
 Two non-obvious points. **Sizing is a CSS custom property, not an arg.** `--pretui-drawer-size` sets width for `start`/`end` (default `360px`, clamped to `100vw - 48px`) and max-height for `bottom` (default `420px`, clamped to `80dvh`). This is the kit's component-owned-knob convention: consumers set the property on any ancestor rather than reaching in with `:deep()`. **The inner shell is a three-row grid** (`auto 1fr auto`) with `overflow-y: auto` on the body only, so a long list scrolls under a pinned title and footer — the behaviour you almost always want and the thing hand-rolled drawers get wrong.
 
-Placement is logical, not physical: `start`/`end` follow writing direction, so an RTL season mirrors for free.
+Placement is logical, not physical: `start`/`end` follow writing direction, so an RTL layout mirrors for free.
 
 ## Prior art
 
@@ -43,7 +43,7 @@ Gaps, the same ones Dialog has and worth repeating rather than cross-referencing
 
 ## Theming
 
-`--card`, `--foreground`, `--pretui-shadow-overlay`, `--pretui-overlay-scrim`, `--radius-surface`, `--pretui-drawer-size`, `--font-sans`, `--text-body`, `--text-heading`, `--weight-heading`, `--track-heading`, `--space-3/4/6`, `--border`, `--muted-foreground`, `--leading-body`. A season that wants a wide inspector sets `--pretui-drawer-size` at the layout root rather than overriding the component. Note the drawer has no `--radius-surface` on its docked edge by construction, so a season with a very large radius will look asymmetric by intent, not by accident.
+`--card`, `--foreground`, `--pretui-shadow-overlay`, `--pretui-overlay-scrim`, `--radius-surface`, `--pretui-drawer-size`, `--font-sans`, `--text-body`, `--text-heading`, `--weight-heading`, `--track-heading`, `--space-3/4/6`, `--border`, `--muted-foreground`, `--leading-body`. A theme that wants a wide inspector sets `--pretui-drawer-size` at the layout root rather than overriding the component. Note the drawer has no `--radius-surface` on its docked edge by construction, so a theme with a very large radius will look asymmetric by intent, not by accident.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

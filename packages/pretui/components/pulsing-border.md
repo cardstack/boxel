@@ -49,7 +49,7 @@ This is the best-behaved decorative component in the kit, and the reason is the 
 
 Gaps:
 
-- **`role="status"` is a live region created with its content already in it.** The same problem **Alert**, **Toast**, **Spinner** and **LoadingState** have: a region that mounts complete is frequently not announced. If the point is to announce *becoming* live, the marker should exist before `@active` flips — render the component with `@active={{false}}` rather than mounting it on activation.
+- **`role="status"` is a live region created with its content already in it.** The same problem **Alert**, **Toast**, **Spinner** and **LoadingState** have: a region that mounts complete is frequently not announced. If the point is to announce _becoming_ live, the marker should exist before `@active` flips — render the component with `@active={{false}}` rather than mounting it on activation.
 - **`@label` defaults to `'Live'`**, so two live panels announce identically and neither says what is live.
 - **`@active={{false}}` presumably stops the pulse**; whether the marker's text changes to say so is worth checking — a `role="status"` still reading "Live" on an inactive surface is worse than no marker.
 - **The pulse runs indefinitely.** **WCAG 2.2.2** governs motion that starts automatically, lasts more than five seconds and runs alongside other content; a live panel qualifies, and there is no pause control. The reduced-motion path covers users who set the preference and no one else.
@@ -60,6 +60,6 @@ Gaps:
 
 The Law-2 hue derivation (one hue in, ring, halo and marker tint all derived), `--card` and `--border` for the resting hairline, plus the **Chip** tokens the marker reuses (`--pretui-chip-mix`, `--pretui-ink-mix`) and the animation's duration and easing.
 
-Because the ring is a `box-shadow` and the halo is a transform, a season retunes intensity by changing the hue and the mix ratios rather than by changing geometry. A season must keep the *resting* hairline visible — it is what carries the state in a screenshot and under reduced motion, and a season that tunes only the animated peak will produce a component that says nothing when still.
+Because the ring is a `box-shadow` and the halo is a transform, a theme retunes intensity by changing the hue and the mix ratios rather than by changing geometry. A theme must keep the _resting_ hairline visible — it is what carries the state in a screenshot and under reduced motion, and a theme that tunes only the animated peak will produce a component that says nothing when still.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

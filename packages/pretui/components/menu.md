@@ -49,7 +49,7 @@ Where Pretui improves on all of them:
 
 ## Theming
 
-Panel surface, border, and shadow come from the popover tokens; rows from the control tokens; the destructive tone from the season's destructive ramp. Check and submenu indicators are glyph-plus-position, not colour alone, so state survives greyscale and the screenshot test. No fixed dimensions — the panel sizes to its widest row with shortcuts right-aligned in their own column, so keyboard hints line up down the panel regardless of label length.
+Panel surface, border, and shadow come from the popover tokens; rows from the control tokens; the destructive tone from the theme's destructive ramp. Check and submenu indicators are glyph-plus-position, not color alone, so state survives grayscale and the screenshot test. No fixed dimensions — the panel sizes to its widest row with shortcuts right-aligned in their own column, so keyboard hints line up down the panel regardless of label length.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

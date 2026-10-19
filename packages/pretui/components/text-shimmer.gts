@@ -9,7 +9,7 @@ import { htmlSafe } from '@ember/template';
 // gradient above a solid base-color layer) and the sheen's
 // background-position animates 100% → 0% on a linear infinite loop. The
 // upstream dark: utility fork is dropped — base and sheen ride the Pretui
-// token channel (muted-foreground → foreground), so a season recompile
+// token channel (muted-foreground → foreground), so a theme change
 // re-dresses the sweep. Sheen width follows upstream: text length × @spread
 // pixels. Reduced motion shows the base color as plain text.
 export interface TextShimmerSignature {

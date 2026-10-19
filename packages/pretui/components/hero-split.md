@@ -45,6 +45,6 @@ Where it is thinner: one media stage, no video background, no call-to-action mod
 
 The block composes **MediaViewer** and the kit's **Chip**, and takes the shared block spacing and heading tokens.
 
-A hero with its own type scale is how a marketing page ends up looking like two products — which is why the headline's size comes from the season's scale at the given heading level rather than from a hero-specific token.
+A hero with its own type scale is how a marketing page ends up looking like two products — which is why the headline's size comes from the theme's scale at the given heading level rather than from a hero-specific token.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

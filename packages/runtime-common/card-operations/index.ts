@@ -279,6 +279,7 @@ export {
 } from './types.ts';
 export {
   buildCallApiRequest,
+  destinationCovers,
   slotsIn,
   type CallApiCredential,
   type CallApiRequest,

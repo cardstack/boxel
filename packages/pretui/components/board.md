@@ -14,7 +14,7 @@ A kanban board: configurable columns, cards you drag between them, a hidden-colu
 
 **The consumer owns all state; every interaction arrives as a callback.** The board never mutates your data — it hands you the next `placements` array and you decide.
 
-**It is deliberately not generic, and the reason is worth reading.** A `KanbanPlacement` is `{ columnId, index, sortOrder }` — a **position, not a record**. The card payload never passes through the board at all; the consumer looks it up by `placement.index`. And boxel-ui's pure placement engine both *clones* placements (`placements.map(p => ({...p}))`) and *manufactures* them (`autoPlaceKanban`), so a `T extends KanbanPlacement` yielded from `<:card>` would be a cast the engine is under no obligation to honour. Typing a lie is worse than typing a position. **Grid**, **Feed** and **Masonry** are generic because their items are the caller's own rows passed straight through; Board is the one collection in the kit that keeps a closed row type, and this is why.
+**It is deliberately not generic, and the reason is worth reading.** A `KanbanPlacement` is `{ columnId, index, sortOrder }` — a **position, not a record**. The card payload never passes through the board at all; the consumer looks it up by `placement.index`. And boxel-ui's pure placement engine both _clones_ placements (`placements.map(p => ({...p}))`) and _manufactures_ them (`autoPlaceKanban`), so a `T extends KanbanPlacement` yielded from `<:card>` would be a cast the engine is under no obligation to honor. Typing a lie is worse than typing a position. **Grid**, **Feed** and **Masonry** are generic because their items are the caller's own rows passed straight through; Board is the one collection in the kit that keeps a closed row type, and this is why.
 
 `<:ghost>` renders the drag preview, receiving the dragged index.
 
@@ -49,6 +49,6 @@ Remapped into the `--boxel-kanban-*` channel, each with an explicit light fallba
 
 **The plane fills its host, so the wrapping context must have a height** — `height: 100%; min-height: 0` on the wrapper means a Board in an auto-height container renders as nothing. That is the first thing to check when it comes up blank.
 
-Column colours come from `KanbanColumnConfig.color` — caller data, not tokens — so a season cannot retune them and a caller can trivially produce column headers that fail contrast against `--inset`. Prefer deriving those colours from season tokens at the call site.
+Column colors come from `KanbanColumnConfig.color` — caller data, not tokens — so a theme cannot retune them and a caller can trivially produce column headers that fail contrast against `--inset`. Prefer deriving those colors from theme tokens at the call site.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

@@ -37,7 +37,7 @@ Where Pretui is better:
 - **The divider cannot miscount.** Glimmer has no children array to walk, so the honest port is to take the items: `@items` + `<:item>` renders n cells and n−1 rules, typed, with no dropped text children.
 - **The overflow fix is built in.** Every source leaves a flex child at `min-width: auto`, so one long unbroken label blows the row out of its container. Items-form cells carry `min-inline-size: 0`.
 - **Logical throughout.** No `row-reverse`, no `left` / `right`; RTL costs nothing.
-- **The gap re-rhythms with the season.** A scale value maps to `--space-*`, so retuning the spacing tokens moves every Stack at once, where Mantine's raw lengths do not.
+- **The gap re-rhythms with the theme.** A scale value maps to `--space-*`, so retuning the spacing tokens moves every Stack at once, where Mantine's raw lengths do not.
 
 Where it is thinner:
 
@@ -62,7 +62,7 @@ No APG pattern — Stack is layout and renders a plain `<div>` with no role.
 
 `--pretui-stack-gap` overrides the scale gap for every value of `@gap`, and is what `@gapLength` writes. Because a custom property inherits, setting it on an ancestor — or passing `@gapLength` to an outer Stack — also overrides every nested Stack's gap unless the inner one passes its own `@gapLength`. `--pretui-stack-rule-color` colours both the items-form rule and **StackDivider** (default `--border`).
 
-The scale maps to `--space-1` (xs), `--space-2` (s), `--space-4` (m), `--space-6` (l) and `--space-8` (xl); `none` is `0`. A season re-rhythms every Stack by retuning those spacing tokens.
+The scale maps to `--space-1` (xs), `--space-2` (s), `--space-4` (m), `--space-6` (l) and `--space-8` (xl); `none` is `0`. A theme re-rhythms every Stack by retuning those spacing tokens.
 
 Fixed: the rule's 1px thickness, and the root's `min-inline-size: 0`. Stack sets no colour, font or surface of its own — it inherits font-size and is invisible except for its rules.
 

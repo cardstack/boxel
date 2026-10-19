@@ -123,7 +123,7 @@ export class DynamicIslandUsage extends Component {
         <Css.Basic
           @name='pretui-island-expanded-height'
           @type='dimension'
-          @description='Height of the expanded view. The geometry is a token set, not hard-coded pixels — which is what makes the morph both animatable and re-cuttable by a season.'
+          @description='Height of the expanded view. The geometry is a token set, not hard-coded pixels — which is what makes the morph both animatable and re-cuttable by a theme.'
           @defaultValue='156px'
         />
       </:cssVars>

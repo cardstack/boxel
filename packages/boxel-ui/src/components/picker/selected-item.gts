@@ -10,6 +10,7 @@ import SelectAll from '../../icons/select-all.gts';
 import type { Icon } from '../../icons/types.ts';
 import ContextButton from '../context-button/index.gts';
 import Pill from '../pill/index.gts';
+import Tooltip from '../tooltip/index.gts';
 import type { PickerOption } from './index.gts';
 
 export interface PickerSelectedItemSignature {
@@ -37,6 +38,10 @@ export default class PickerSelectedItem extends Component<PickerSelectedItemSign
       this.args.option.icon ??
       (this.args.option.type === 'select-all' ? SelectAll : undefined)
     );
+  }
+
+  get hasNoTooltip() {
+    return !this.args.option.tooltip;
   }
 
   get text() {
@@ -92,65 +97,85 @@ export default class PickerSelectedItem extends Component<PickerSelectedItemSign
   }
 
   <template>
-    <Pill
-      class='picker-selected-item'
-      @size='small'
-      @variant='secondary'
-      data-test-boxel-picker-selected-item={{this.text}}
+    <Tooltip
+      @placement='top'
+      @disabled={{this.hasNoTooltip}}
+      data-test-boxel-picker-selected-item-tooltip={{this.text}}
     >
-      <:iconLeft>
-        {{#if this.icon}}
-          <div class='picker-selected-item__icon'>
-            {{#if this.isIconURL}}
-              <img
-                src={{this.iconString}}
-                width='14'
-                height='14'
-                alt=''
-                class='picker-selected-item__icon-image'
-              />
-            {{else if this.iconString}}
-              {{htmlSafe
-                (addClassToSVG
-                  this.iconString 'picker-selected-item__icon-image'
-                )
-              }}
-            {{else if this.iconComponent}}
-              <this.iconComponent
-                width='14'
-                height='14'
-                class='picker-selected-item__icon-component'
-                role='presentation'
+      <:trigger>
+        <Pill
+          class='picker-selected-item'
+          @size='small'
+          @variant='secondary'
+          data-test-boxel-picker-selected-item={{this.text}}
+        >
+          <:iconLeft>
+            {{#if this.icon}}
+              <div class='picker-selected-item__icon'>
+                {{#if this.isIconURL}}
+                  <img
+                    src={{this.iconString}}
+                    width='14'
+                    height='14'
+                    alt=''
+                    class='picker-selected-item__icon-image'
+                  />
+                {{else if this.iconString}}
+                  {{htmlSafe
+                    (addClassToSVG
+                      this.iconString 'picker-selected-item__icon-image'
+                    )
+                  }}
+                {{else if this.iconComponent}}
+                  <this.iconComponent
+                    width='14'
+                    height='14'
+                    class='picker-selected-item__icon-component'
+                    role='presentation'
+                  />
+                {{/if}}
+              </div>
+            {{/if}}
+          </:iconLeft>
+          <:default>
+            <span class='picker-selected-item__text'>{{this.text}}</span>
+            {{#if @option.tooltip}}
+              <span class='boxel-sr-only'>{{@option.tooltip}}</span>
+            {{/if}}
+          </:default>
+          <:iconRight>
+            {{#if this.displayRemoveButton}}
+              <ContextButton
+                @icon='close'
+                @size='extra-small'
+                @variant='highlight'
+                @label='Remove'
+                @width='14'
+                @height='14'
+                class='picker-selected-item__remove'
+                {{on 'click' (fn this.remove @option)}}
+                {{on 'keydown' (fn this.handleKeydown @option)}}
+                data-test-boxel-picker-remove-button
               />
             {{/if}}
-          </div>
-        {{/if}}
-      </:iconLeft>
-      <:default>
-        <span class='picker-selected-item__text'>{{this.text}}</span>
-      </:default>
-      <:iconRight>
-        {{#if this.displayRemoveButton}}
-          <ContextButton
-            @icon='close'
-            @size='extra-small'
-            @variant='highlight'
-            @label='Remove'
-            @width='14'
-            @height='14'
-            class='picker-selected-item__remove'
-            {{on 'click' (fn this.remove @option)}}
-            {{on 'keydown' (fn this.handleKeydown @option)}}
-            data-test-boxel-picker-remove-button
-          />
-        {{/if}}
-      </:iconRight>
-    </Pill>
+          </:iconRight>
+        </Pill>
+      </:trigger>
+      <:content>
+        <span class='picker-selected-item__tooltip-text'>
+          {{@option.tooltip}}
+        </span>
+      </:content>
+    </Tooltip>
 
     <style scoped>
       .picker-selected-item {
         --pill-gap: var(--boxel-sp-4xs);
         padding-right: 0;
+      }
+      .picker-selected-item__tooltip-text {
+        display: block;
+        text-align: start;
       }
       .picker-selected-item__icon {
         width: 14px;

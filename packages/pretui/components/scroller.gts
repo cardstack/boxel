@@ -62,7 +62,7 @@ const scrollEdges = modifier(
 
     element.addEventListener('scroll', update, { passive: true });
     // Content can change size without a scroll ever happening — a lazy image
-    // landing, a season swap changing the type scale. Observing the viewport
+    // landing, a theme change altering the type scale. Observing the viewport
     // AND its content covers both directions. Content inserted later can grow
     // the scroll extent while every observed box keeps its size (a slide
     // appended to a full-width flex track), so DOM changes re-measure too and

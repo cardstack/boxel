@@ -147,15 +147,16 @@ class ClassroomIsolated extends Component<typeof Classroom> {
   // viewer may run it; the declaration decides what it writes, and it writes
   // the viewer as `author` and this classroom as `classroom` whatever the
   // viewer sends. A teacher cannot read the Education realm, so the realm
-  // chooses the new card's id and the answer reports it.
+  // chooses the new card's id and the answer reports it. The answer is all
+  // this reads, so the write does not wait for the realm to index it.
   @action async logActivity() {
     this.refusal = undefined;
     this.loggedId = undefined;
     this.running = true;
     try {
-      let result = await operations<typeof Classroom>(
-        this.classroom,
-      ).appendActivity({ note: this.note });
+      let result = await operations<typeof Classroom>(this.classroom, {
+        skipIndexWait: true,
+      }).appendActivity({ note: this.note });
       this.loggedId = result.id;
       this.note = '';
     } catch (err) {
@@ -168,6 +169,8 @@ class ClassroomIsolated extends Component<typeof Classroom> {
   // Copies the ids of the linked staff into the lists the policy reads. Only a
   // realm writer may update a classroom — the policy grants instructors no
   // `update` — so this is the IT admin's step after the roster changes.
+  // Nothing reads the result; the card re-renders from the index event the
+  // write produces, so the write does not wait for the realm to index it.
   @action async syncStaffIds() {
     let roster = this.roster;
     if ('waiting' in roster) {
@@ -176,7 +179,7 @@ class ClassroomIsolated extends Component<typeof Classroom> {
     this.refusal = undefined;
     this.running = true;
     try {
-      await operations(this.classroom).update({
+      await operations(this.classroom, { skipIndexWait: true }).update({
         attributes: {
           teacherIds: roster.teacherIds,
           leadTeacherIds: roster.leadTeacherIds,

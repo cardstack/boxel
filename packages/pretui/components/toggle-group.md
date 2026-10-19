@@ -26,7 +26,7 @@ The line between this and **RadioGroup** is whether an empty selection is legal.
 
 **`@label` is required, not optional, and that is a deliberate departure.** The two internal components this replaced — a weekday row and a tag filter group — both shipped an unnamed pile of buttons. A group whose name is optional is a group that is usually unnamed.
 
-**`@multiple` switches the ARIA contract.** Single-select is a `radiogroup` of `role='radio'` members; multi-select is a `toolbar` of pressed toggles. This is React Aria's split and it is the right one: **with one legal answer the arrows *are* the choice; with many they cannot be**, or a reader could never travel past an option without turning it on.
+**`@multiple` switches the ARIA contract.** Single-select is a `radiogroup` of `role='radio'` members; multi-select is a `toolbar` of pressed toggles. This is React Aria's split and it is the right one: **with one legal answer the arrows _are_ the choice; with many they cannot be**, or a reader could never travel past an option without turning it on.
 
 **`@deselectable` defaults to true**, which is what keeps a single-select toggle group from quietly becoming a radio group.
 
@@ -43,7 +43,7 @@ Where it is thinner: no nested or grouped options, no overflow menu when a horiz
 ## Accessibility
 
 - **The name is mandatory**, which is the fix this component exists to carry.
-- **Single-select is a `radiogroup`**: arrows move *and* choose, one tab stop, the chosen member is the tab stop.
+- **Single-select is a `radiogroup`**: arrows move _and_ choose, one tab stop, the chosen member is the tab stop.
 - **Multi-select is a `toolbar`**: arrows move without choosing, Space or Enter presses, one tab stop for the group. Travelling past an option must not activate it.
 - **Members carry `aria-checked` in single mode and `aria-pressed` in multi**, which is why **Toggle** has an `@ariaState` arg at all.
 - **`@iconOnly` gives every member an sr-only name and a title**, so a formatting bar is still navigable by name.
@@ -54,6 +54,6 @@ Where it is thinner: no nested or grouped options, no overflow menu when a horiz
 
 Tone, appearance, pressed appearance and size resolve through the kit's shared recipe system, exactly as **Toggle** does — the group sets them once and every member inherits, so a group cannot drift internally.
 
-The consequence worth knowing: a season that changes what `accent` means changes every pressed member in every toggle group at once, and because the change is a recipe rather than a colour, it stays legible in greyscale wherever that season is applied.
+The consequence worth knowing: a theme that changes what `accent` means changes every pressed member in every toggle group at once, and because the change is a recipe rather than a color, it stays legible in grayscale wherever that theme is applied.
 
 The styles sit in `@layer PretComposite`, above Button's `PretComponent` layer, so what this component sets on Button wins by layer order. A caller's unlayered CSS overrides both without a more specific selector.

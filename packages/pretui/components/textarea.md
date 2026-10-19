@@ -26,7 +26,7 @@ Pretui is smaller than Web Awesome on purpose — no `rows`, no auto-grow, no ch
 
 The one detail worth stealing back: **`wa-textarea`'s character counter is `aria-hidden` and paired with a separate visually-hidden `aria-live="polite"` region debounced by a full second**, so the count is available to screen readers without narrating every keystroke. If Pretui adds `with-count`, that is the shape to copy.
 
-Where Pretui is better than shadcn and comparable to Spectrum: the invalid dress travels through the token channel (`Field` sets `data-invalid`, which repoints `--border` and `--background` on the wrapper), so there is no `.error` class threaded through layers and a season can redefine what invalid looks like in one place.
+Where Pretui is better than shadcn and comparable to Spectrum: the invalid dress travels through the token channel (`Field` sets `data-invalid`, which repoints `--border` and `--background` on the wrapper), so there is no `.error` class threaded through layers and a theme can redefine what invalid looks like in one place.
 
 ## Accessibility
 
@@ -38,7 +38,7 @@ Gaps, plainly:
 - **No accessible name of its own.** Outside `Field`/`FormField`, and without an explicit `aria-label`, the control is unnamed. A placeholder is not a label (and in a textarea it disappears the instant a character is typed, so it is worse here than on Input).
 - No `rows` arg means the initial height cannot express expected length — a one-sentence field and a five-paragraph field look identical, which is a WCAG 3.3.2 _instructions_ smell even though it is not a failure.
 - `@disabled` is the native attribute: out of the tab order, value not submitted. Use `readonly` via `...attributes` if you need focusable-but-fixed.
-- `resize: vertical` is good for 1.4.4/1.4.10 reflow; verify the focus ring (`--ring`, default `--primary`) against 2.4.11 in dark seasons.
+- `resize: vertical` is good for 1.4.4/1.4.10 reflow; verify the focus ring (`--ring`, default `--primary`) against 2.4.11 in dark mode.
 
 ## Theming
 
@@ -46,6 +46,6 @@ Gaps, plainly:
 
 Forwarded into boxel-ui: `--boxel-form-control-height`, `--boxel-form-control-border-radius`, `--boxel-font-size-sm`, `--boxel-font-size-xs`, `--boxel-sp-xs`, `--boxel-sp-sm`, and — inline only — `--boxel-input-height`.
 
-Note the asymmetry with Input: because the metrics ride an inline `style`, a season **cannot** retune textarea height or padding through tokens. That is the accepted cost of the boxel-ui retrofit and the one place a season will find itself blocked.
+Note the asymmetry with Input: because the metrics ride an inline `style`, a theme **cannot** retune textarea height or padding through tokens. That is the accepted cost of the boxel-ui retrofit and the one place a theme will find itself blocked.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

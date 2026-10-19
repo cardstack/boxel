@@ -70,7 +70,8 @@ export class ConsultRequest extends CardDef {
       <article class='consult'>
         <header>
           <h1>{{@model.specialty}} consult</h1>
-          <p class='subtle'>{{@model.status}} · requested by
+          <p class='subtle'>{{@model.status}}
+            · requested by
             {{@model.requestedBy}}</p>
         </header>
         <p class='question'>{{@model.question}}</p>
@@ -213,8 +214,14 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
   // The typed bucket of this record's operations. The type argument is what
   // makes the members typed: `operations(card)` alone cannot read the class off
   // an instance, so it answers a bucket that takes any name and any payload.
+  //
+  // Every action here awaits its write only to know it is done; the record and
+  // the dashboard's queries refresh from the index events the writes produce.
+  // So the writes do not wait for the realm to index them.
   get ops() {
-    return operations<typeof PatientRecord>(this.record);
+    return operations<typeof PatientRecord>(this.record, {
+      skipIndexWait: true,
+    });
   }
 
   // Whether anything is in flight. `running` carries which action it is, for a
@@ -495,7 +502,8 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
                 <li class='row' data-test-medication={{medication.name}}>
                   <span class='row-main'>
                     <span class='row-title'>{{medication.name}}</span>
-                    <span class='row-note'>{{medication.frequency}} ·
+                    <span class='row-note'>{{medication.frequency}}
+                      ·
                       {{medication.status}}</span>
                   </span>
                   <span class='row-value' data-test-dose>{{medication.doseMg}}
@@ -595,7 +603,8 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
 
         <div class='column'>
           <section class='panel'>
-            <h2>Consult team <span class='op'>transform · parallel batch</span></h2>
+            <h2>Consult team
+              <span class='op'>transform · parallel batch</span></h2>
             <@fields.consultTeam @format='fitted' />
             <h3>Available on this unit</h3>
             <ul class='rows'>
@@ -665,12 +674,14 @@ class PatientRecordIsolated extends Component<typeof PatientRecord> {
 
           <section class='panel'>
             <h2>Audit log <span class='op'>record</span></h2>
-            <p class='row-note'>A text file in this realm. The two batch
-              actions — <em>Request and list it here</em> and
-              <em>Transfer to ICU</em> — append one line to it in the same
-              commit as the card changes they make, so the log cannot record
-              something the cards did not do. The single-operation buttons
-              write no line.</p>
+            <p class='row-note'>A text file in this realm. The two batch actions
+              —
+              <em>Request and list it here</em>
+              and
+              <em>Transfer to ICU</em>
+              — append one line to it in the same commit as the card changes
+              they make, so the log cannot record something the cards did not
+              do. The single-operation buttons write no line.</p>
             <@fields.auditLog @format='embedded' />
           </section>
         </div>

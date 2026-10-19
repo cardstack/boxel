@@ -37,7 +37,7 @@ The agent input: a growing text field with a mode switch, context chips, a send/
 
 The design-mirror JSX these descend from, and the Claude and Copilot composer surfaces behind it.
 
-Where Pretui is better: **the mode note is a `role='status'`.** Upstream renders it as inert prose, so switching Ask→Act announces nothing — a change of what the agent will *do* with your message, conveyed only visually. Making it a live region is a small change that fixes a real silence.
+Where Pretui is better: **the mode note is a `role='status'`.** Upstream renders it as inert prose, so switching Ask→Act announces nothing — a change of what the agent will _do_ with your message, conveyed only visually. Making it a live region is a small change that fixes a real silence.
 
 Where it is thinner: no slash-command menu, no inline mention autocomplete, no draft persistence across unmount, and no file drop — attachments arrive as `@attachments`, they are not acquired here.
 
@@ -54,6 +54,6 @@ Where it is thinner: no slash-command menu, no inline mention autocomplete, no d
 
 The composer is built from the kit's **Button** and **SegmentedControl** and takes their shared recipe tokens rather than defining its own surface.
 
-That is deliberate for a surface this prominent: a composer that themed independently would be the one part of an agent UI that did not follow a season, and it is the part people look at most.
+That is deliberate for a surface this prominent: a composer that themed independently would be the one part of an agent UI that did not follow the theme, and it is the part people look at most.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

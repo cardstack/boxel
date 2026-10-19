@@ -179,6 +179,28 @@ module('Integration | operator-mode | card chooser', function (hooks) {
       assert.dom('.search-sheet-content').containsText('Recent');
     });
 
+    test(`hovering a recent card's realm name shows the realm URL`, async function (assert) {
+      let recentCardsService = getService('recent-cards-service');
+      recentCardsService.add(`${testRealmURL}Pet/mango`);
+
+      ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template><OperatorMode @onClose={{noop}} /></template>
+        },
+      );
+      await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+      await click(`[data-test-open-search-field]`);
+      await fillIn(`[data-test-search-field]`, 'man');
+      await waitFor(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
+
+      await triggerEvent(
+        `[data-test-realm-url-tooltip-trigger="${testRealmURL}"]:has([data-test-realm-name])`,
+        'mouseenter',
+      );
+      assert.dom('[data-test-realm-url-tooltip]').hasText('test-realm/test');
+    });
+
     test(`filters cards by search key`, async function (assert) {
       let recentCardsService = getService('recent-cards-service');
       [`${testRealmURL}Pet/mango`, `${testRealmURL}Person/fadhlan`].map((url) =>
@@ -707,6 +729,28 @@ module('Integration | operator-mode | card chooser', function (hooks) {
     await fillIn(`[data-test-search-field]`, `friend`);
     await waitFor('[data-test-item-button]', { count: 0 });
     assert.dom(`[data-test-search-content-empty]`).hasText('No results found');
+  });
+
+  test(`hovering a realm section icon shows the realm URL`, async function (assert) {
+    ctx.setCardInOperatorModeState(`${testRealmURL}grid`);
+    await renderComponent(
+      class TestDriver extends GlimmerComponent {
+        <template><OperatorMode @onClose={{noop}} /></template>
+      },
+    );
+    await waitFor(`[data-test-stack-card="${testRealmURL}grid"]`);
+    await click(`[data-test-boxel-filter-list-button="All Cards"]`);
+    await waitFor(`[data-test-cards-grid-item]`);
+    await click(`[data-test-create-new-card-button]`);
+    await waitFor(`[data-test-realm-url="${testRealmURL}"]`, {
+      timeout: 10000,
+    });
+
+    await triggerEvent(
+      `[data-test-realm-url="${testRealmURL}"] [data-test-realm-url-tooltip-trigger]`,
+      'mouseenter',
+    );
+    assert.dom('[data-test-realm-url-tooltip]').hasText('test-realm/test');
   });
 
   test(`can filter by realm after searching in card chooser`, async function (assert) {

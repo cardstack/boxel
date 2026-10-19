@@ -1,6 +1,6 @@
 ## What it is
 
-A message the user has typed while the agent is busy, shown with its **delivery semantics stated in the UI**: `steer` is delivered at the next checkpoint, `now` interrupts. Use it in the composer area of an agent surface for anything queued behind a running turn. If the message has already been delivered, it is a transcript row, not this. If the agent is asking *you* something, **AgentQuestion**.
+A message the user has typed while the agent is busy, shown with its **delivery semantics stated in the UI**: `steer` is delivered at the next checkpoint, `now` interrupts. Use it in the composer area of an agent surface for anything queued behind a running turn. If the message has already been delivered, it is a transcript row, not this. If the agent is asking _you_ something, **AgentQuestion**.
 
 ## The contract
 
@@ -46,8 +46,8 @@ Gaps:
 
 ## Theming
 
-`--inset` or `--card` (the pending surface — a queued message should read as *not yet* part of the transcript), `--border`, `--muted-foreground` (the semantics line), `--foreground` (the message text), plus **Button** tokens for the two actions and the mode's own dress.
+`--inset` or `--card` (the pending surface — a queued message should read as _not yet_ part of the transcript), `--border`, `--muted-foreground` (the semantics line), `--foreground` (the message text), plus **Button** tokens for the two actions and the mode's own dress.
 
-The visual distinction that matters is **pending versus sent**. A queued message must not look like a transcript row, or the user will believe it has gone. A season should give it a distinct surface, a dashed edge, or reduced weight — and should check that the distinction survives in dark mode, where the usual "slightly lighter grey" solution collapses.
+The visual distinction that matters is **pending versus sent**. A queued message must not look like a transcript row, or the user will believe it has gone. A theme should give it a distinct surface, a dashed edge, or reduced weight — and should check that the distinction survives in dark mode, where the usual "slightly lighter gray" solution collapses.
 
 The styles sit in `@layer PretComposite`, above Button's `PretComponent` layer, so what this component sets on Button wins by layer order. A caller's unlayered CSS overrides both without a more specific selector.

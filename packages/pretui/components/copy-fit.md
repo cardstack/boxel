@@ -48,7 +48,7 @@ Gaps, and the first two are the ones that bite in practice:
 
 `--pretui-fitted-mediabg` (the validated media background), `--card` (surface), `--border` and `--pretui-shadow-card` (edge), `--foreground` (title), `--muted-foreground` (eyebrow and meta), `--font-mono` + `--text-ui-xs` + `--track-eyebrow` (the eyebrow voice shared with **Panel**, **Toolbar** and **DataGrid**), plus the type scale per sub-format.
 
-The container-query breakpoints are not tokenised, so a season cannot retune where a strip becomes a tile. The monogram's typography is the one thing worth checking per season — it is a single large letter on a solid ground, and it is the fallback that appears most often in a realm where media is optional.
+The container-query breakpoints are not tokenized, so a theme cannot retune where a strip becomes a tile. The monogram's typography is the one thing worth checking per theme — it is a single large letter on a solid ground, and it is the fallback that appears most often in a realm where media is optional.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

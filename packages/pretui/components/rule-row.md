@@ -25,7 +25,7 @@ One BXL guide rule, edited: the metadata — label, severity, target path, messa
 
 ## Prior art
 
-**There is no upstream for this component.** SLDS's expression component stops at the condition list and never names what the conditions are *for* — so the metadata half is new work, laid out on the SLDS stacked form-element grid. The builder half is **ExpressionBuilder**, which is the SLDS port.
+**There is no upstream for this component.** SLDS's expression component stops at the condition list and never names what the conditions are _for_ — so the metadata half is new work, laid out on the SLDS stacked form-element grid. The builder half is **ExpressionBuilder**, which is the SLDS port.
 
 The comparison worth drawing is against how rule editors usually work. Two common shapes:
 
@@ -55,6 +55,6 @@ The metadata half's own gaps:
 
 **FormField**/**FormLayout** tokens for the stacked metadata grid, **Select** and **Input** for its controls, **StatusChip** for `@status`, **Token** for the composed source, **FieldError**'s severity tiers, plus everything **ExpressionBuilder** consumes.
 
-The severity control should read at the weight of its consequence — a season that renders it as one more quiet select among four understates what it does. There is no token that does this for you; it is a layout decision at the call site.
+The severity control should read at the weight of its consequence — a call site that renders it as one more quiet select among four understates what it does. There is no token that does this for you; it is a layout decision at the call site.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

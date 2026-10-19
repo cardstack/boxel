@@ -2,7 +2,7 @@
 
 A string changing into another string, with the shared letters kept in place.
 
-It is the clearest case in the kit of motion that carries meaning rather than decorating: **the transition *is* the information.** Which letters survive tells you how the two strings relate — that "draft" became "drafted" rather than being replaced by an unrelated word.
+It is the clearest case in the kit of motion that carries meaning rather than decorating: **the transition _is_ the information.** Which letters survive tells you how the two strings relate — that "draft" became "drafted" rather than being replaced by an unrelated word.
 
 ## The contract
 
@@ -31,7 +31,7 @@ Where it is thinner: the shared-letter matching is positional rather than a real
 ## Accessibility
 
 - **The glyph stack is `aria-hidden` and the current string is mirrored in a visually-hidden span.** A string chopped into one span per glyph is not text to a screen reader — it is a pile of letters, and several engines will spell it out.
-- **The mirror carries `@text`, the destination**, so assistive technology is told what the value *is* rather than what it was.
+- **The mirror carries `@text`, the destination**, so assistive technology is told what the value _is_ rather than what it was.
 - **Reduced motion lands on the end state**, never a frozen midpoint. The base styles are the end state and the keyframes only supply the journey, so `animation: none` is a complete kill switch.
 - **The meaning the morph carries is visual only.** A sighted reader learns that the two strings are related from the letters that stayed; a screen-reader user just gets the new value. If the relationship matters, it needs saying.
 - **Rapid changes overlap.** A value updating faster than `@duration` leaves glyphs mid-flight; this is a component for occasional changes, not for a live counter.
@@ -40,6 +40,6 @@ Where it is thinner: the shared-letter matching is positional rather than a real
 
 `--pretui-morph-dur` (from `@duration`), `--pretui-morph-step` (from `@stagger`), `--pretui-morph-i` (each glyph's index).
 
-No colour tokens: the morph inherits ink and typeface from context, which is what makes it usable inside a heading or a table cell without looking like a widget. A season affects it only through the text around it.
+No color tokens: the morph inherits ink and typeface from context, which is what makes it usable inside a heading or a table cell without looking like a widget. The theme affects it only through the text around it.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

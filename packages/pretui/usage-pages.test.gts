@@ -144,6 +144,7 @@ import { DEMOS_KNOWN_DATE } from './components/known-date.usage';
 import { DEMOS_LABEL } from './components/label.usage';
 import { DEMOS_LAYER_MANAGER } from './components/layer-manager.usage';
 import { DEMOS_LIGHTBOX } from './components/lightbox.usage';
+import { DEMOS_LINE_GRID } from './components/line-grid.usage';
 import { DEMOS_LIST } from './components/list.usage';
 import { DEMOS_LOADER } from './components/loader.usage';
 import { DEMOS_LOADING_OVERLAY } from './components/loading-overlay.usage';
@@ -236,6 +237,7 @@ import { DEMOS_SPOTLIGHT } from './components/spotlight.usage';
 import { DEMOS_STACK } from './components/stack.usage';
 import { DEMOS_STACKING_CARDS } from './components/stacking-cards.usage';
 import { DEMOS_STAT } from './components/stat.usage';
+import { DEMOS_STATEMENT_TABLE } from './components/statement-table.usage';
 import { DEMOS_STATUS_CHIP } from './components/status-chip.usage';
 import { DEMOS_STEP_LIST } from './components/step-list.usage';
 import { DEMOS_STEPPER } from './components/stepper.usage';
@@ -436,6 +438,7 @@ const REGISTRIES: Record<string, Record<string, unknown>> = {
   DEMOS_LABEL,
   DEMOS_LAYER_MANAGER,
   DEMOS_LIGHTBOX,
+  DEMOS_LINE_GRID,
   DEMOS_LIST,
   DEMOS_LOADER,
   DEMOS_LOADING_OVERLAY,
@@ -528,6 +531,7 @@ const REGISTRIES: Record<string, Record<string, unknown>> = {
   DEMOS_STACK,
   DEMOS_STACKING_CARDS,
   DEMOS_STAT,
+  DEMOS_STATEMENT_TABLE,
   DEMOS_STATUS_CHIP,
   DEMOS_STEP_LIST,
   DEMOS_STEPPER,

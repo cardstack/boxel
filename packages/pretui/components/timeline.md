@@ -1,6 +1,6 @@
 ## What it is
 
-A chronological sequence rendered as an ordered list with a vertical rail: audit trails, order history, a record's lifecycle, a batch's journey. Use it when the *order* and the *when* are both load-bearing. If items arrive continuously and the reader pages through them, **Feed** is the right pattern (and has the ARIA for it). If the sequence is a process the user is completing, **StepList**. If it is just a list, a list.
+A chronological sequence rendered as an ordered list with a vertical rail: audit trails, order history, a record's lifecycle, a batch's journey. Use it when the _order_ and the _when_ are both load-bearing. If items arrive continuously and the reader pages through them, **Feed** is the right pattern (and has the ARIA for it). If the sequence is a process the user is completing, **StepList**. If it is just a list, a list.
 
 ## The contract
 
@@ -58,6 +58,6 @@ Rail and markers: `--border` (rail), `--card` (marker fill), `--pretui-shadow-ha
 
 The 11px compact glyph, the marker sizes and the rail width are fixed; density is an arg, not a token.
 
-Because the rail is a pseudo-element behind opaque markers, a season must keep `--card` (the marker fill) opaque and distinct from `--border` — a transparent or near-border marker fill lets the rail show through and the sequence stops reading as discrete moments.
+Because the rail is a pseudo-element behind opaque markers, a theme must keep `--card` (the marker fill) opaque and distinct from `--border` — a transparent or near-border marker fill lets the rail show through and the sequence stops reading as discrete moments.
 
 The styles sit in `@layer PretComposite`, above RelativeTime's `PretComponent` layer, so what this component sets on RelativeTime wins by layer order. A caller's unlayered CSS overrides both without a more specific selector.

@@ -31,7 +31,7 @@ Use it for a preview the reader might want and can live without. If the content 
 
 **shadcn HoverCard** is **Radix HoverCard**: `openDelay` / `closeDelay` in milliseconds, `side` / `align` for placement, `open` / `onOpenChange` / `defaultOpen`. **Mantine HoverCard** adds a `shadow` prop and a group-open. **Base UI PreviewCard** and **React Aria PreviewTrigger** are the same idea under the accessibility-conscious names. All share the two delays, because without them the card flickers.
 
-Where this is better, and the difference is the whole component: **the card is reachable by the people the pattern usually excludes.** Radix sets `tabindex='-1'` on every tabbable node inside the card. That prevents a keyboard trap, at the price of making the card's own links unreachable by exactly the users who most needed them reachable. Here the card renders in DOM order immediately after the trigger and keeps its tab stops, so Tab walks *into* it, Tab out of the last one leaves and closes it, and Escape closes it and returns focus to the trigger. Radix also excludes touch outright, so on a phone the card does not exist; `@tapToOpen` gives it one. And the trigger carries `aria-expanded` and `aria-controls`, a relationship neither Radix nor shadcn establishes, so a screen-reader user is told the preview exists.
+Where this is better, and the difference is the whole component: **the card is reachable by the people the pattern usually excludes.** Radix sets `tabindex='-1'` on every tabbable node inside the card. That prevents a keyboard trap, at the price of making the card's own links unreachable by exactly the users who most needed them reachable. Here the card renders in DOM order immediately after the trigger and keeps its tab stops, so Tab walks _into_ it, Tab out of the last one leaves and closes it, and Escape closes it and returns focus to the trigger. Radix also excludes touch outright, so on a phone the card does not exist; `@tapToOpen` gives it one. And the trigger carries `aria-expanded` and `aria-controls`, a relationship neither Radix nor shadcn establishes, so a screen-reader user is told the preview exists.
 
 Where it is thinner: no `side` / `align` pair — one logical `@placement` resolved through the kit's own `anchorTo`; no arrow; no portal arg, because the shared `Popup` decides that; and no Mantine-style group hover. The card has no built-in layout: it is a padded surface, and what goes in it is yours.
 
@@ -54,19 +54,19 @@ The caller's part: put a real focusable control in the trigger block, or none of
 
 Read directly: `--popover` and `--popover-foreground`, `--radius-surface`, `--space-4`, `--font-sans`, `--text-ui-md`, `--pretui-shadow-overlay`, and the enter motion pair `--pretui-dur-enter` / `--pretui-ease-enter`.
 
-One knob of its own: `--pretui-hovercard-width` (default 260px), capped at the viewport minus 16px. Entry motion is `@starting-style` (opacity plus a 4px rise and 0.98 scale, 180ms) with a `prefers-reduced-motion` opt-out. Position and flip come from the shared `Popup`, so a season that retunes overlay placement retunes this with it.
+One knob of its own: `--pretui-hovercard-width` (default 260px), capped at the viewport minus 16px. Entry motion is `@starting-style` (opacity plus a 4px rise and 0.98 scale, 180ms) with a `prefers-reduced-motion` opt-out. Position and flip come from the shared `Popup`, so a theme that retunes overlay placement retunes this with it.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 
 ## React ecosystem
 
-| Agent types | Give them |
-| --- | --- |
+| Agent types                                  | Give them                                              |
+| -------------------------------------------- | ------------------------------------------------------ |
 | Radix `openDelay={700}` / `closeDelay={300}` | `@openDelay={{0.7}}` / `@closeDelay={{0.3}}` — seconds |
-| `open` / `onOpenChange` / `defaultOpen` | same |
-| `side` / `align` | one `@placement` |
-| `HoverCardTrigger` / `HoverCardContent` | `<:trigger>` / `<:default>` |
-| Mantine `shadow` | `--pretui-shadow-overlay` |
-| a preview that must be tappable on mobile | `@tapToOpen` (on by default) — Radix has no equivalent |
-| a card with a form in it | **Popover** |
-| a one-line label | **Tooltip** |
+| `open` / `onOpenChange` / `defaultOpen`      | same                                                   |
+| `side` / `align`                             | one `@placement`                                       |
+| `HoverCardTrigger` / `HoverCardContent`      | `<:trigger>` / `<:default>`                            |
+| Mantine `shadow`                             | `--pretui-shadow-overlay`                              |
+| a preview that must be tappable on mobile    | `@tapToOpen` (on by default) — Radix has no equivalent |
+| a card with a form in it                     | **Popover**                                            |
+| a one-line label                             | **Tooltip**                                            |

@@ -49,7 +49,7 @@
 //    a Pretui token — `var(--chart-1…5)`, `var(--border)`,
 //    `var(--muted-foreground)` — passed verbatim into SVG attributes
 //    (Plot's `isColor()` accepts `var()`/`color-mix()`). Zero dark branches:
-//    the season re-tints the chart with no code change.
+//    the theme re-tints the chart with no code change.
 //  * **A fixed width.** Charts here are measured with a `ResizeObserver` and
 //    redrawn at the container's width, so one chart works in a dashboard
 //    tile and in a full-bleed page. (An observer, not a timer — and it
@@ -102,7 +102,7 @@ export const PLOT_STYLE = [
   'font-family:var(--font-sans)',
   // A token, not a literal: `font-size:11px` pinned every tick and axis label
   // in the plot to 11 CSS px, so the one part of the chart that is pure text
-  // was the one part that ignored the reader's type scale and the season's.
+  // was the one part that ignored the reader's type scale and the theme's.
   'font-size:var(--text-ui-xs,11px)',
   'overflow:visible',
 ].join(';');
@@ -110,11 +110,11 @@ export const PLOT_STYLE = [
 /**
  * The categorical ramp. Ordinal scales receive these verbatim.
  *
- * Seven, not five: the theme contract compiles a seven-slot palette
+ * Seven, not five: the theme contract defines a seven-slot palette
  * (`--chart-1…7`), so stopping at five made a six-series chart silently
- * reuse colour 1 for series 6 while two perfectly good season colours went
+ * reuse color 1 for series 6 while two perfectly good theme colors went
  * unused — and it hid the top of the palette axis from anyone judging the
- * season by its charts.
+ * theme by its charts.
  */
 export const HUES = [
   'var(--chart-1)',
@@ -134,10 +134,7 @@ export const HUES = [
  * SVG untouched — which is the only way a heatmap can be theme-obedient.
  */
 export const RAMP = [15, 33, 51, 70, 92].map(
-  (pct) =>
-    'color-mix(in oklch, var(--chart-2) ' +
-    pct +
-    '%, var(--card))',
+  (pct) => 'color-mix(in oklch, var(--chart-2) ' + pct + '%, var(--card))',
 );
 
 export const BORDER = 'var(--border)';
@@ -174,101 +171,105 @@ export interface ChartDraw {
  * `boxel realm indexing-errors` all pass while the chart silently draws
  * nothing.
  */
-export const plotInto = modifier((element: HTMLElement, [draw]: [ChartDraw]) => {
-  let node: Element | undefined;
-  let lastWidth = -1;
+export const plotInto = modifier(
+  (element: HTMLElement, [draw]: [ChartDraw]) => {
+    let node: Element | undefined;
+    let lastWidth = -1;
 
-  let render = (rawWidth: number) => {
-    let width = Math.round(rawWidth);
-    // Guard the MARGINS, not just zero. Plot derives the inner plotting
-    // area as width - marginLeft - marginRight; a container narrower than
-    // those margins yields a negative inner width, which reaches the DOM as
-    // `<rect width="-35">` and sprays console errors for every mark drawn.
-    // A consumer's layout mistake should degrade, not scream.
-    if (width < 1 || width === lastWidth) {
-      return;
-    }
-    lastWidth = width;
-    let failed = (message: string): Element => {
-      let node = element.ownerDocument.createElement('p');
-      node.className = 'pretui-chart-throw';
-      node.setAttribute('data-test-pretui-chart-error', '');
-      node.textContent = 'This chart could not be drawn: ' + message;
-      return node;
-    };
-    let next: Element;
-    let spec = draw.spec;
-    if (draw.error !== undefined || spec === undefined) {
-      next = failed(draw.error ?? 'the chart specification was rejected');
-    } else {
-      try {
-        // Plot derives the inner plotting area as width - marginLeft -
-        // marginRight. A container narrower than those margins yields a
-        // NEGATIVE inner width, which reaches the DOM as
-        // `<rect width="-35">` and throws once per mark drawn. Squeeze the
-        // margins together instead: a cramped chart still reads, and a
-        // consumer's layout mistake degrades rather than screaming.
-        let marginLeft = (spec.marginLeft as number) ?? 48;
-        let marginRight = (spec.marginRight as number) ?? 18;
-        let floorWidth = marginLeft + marginRight + 8;
-        let fitted = spec;
-        if (width < floorWidth) {
-          let room = Math.max(0, width - 8);
-          let share = room / (marginLeft + marginRight);
-          fitted = {
-            ...spec,
-            marginLeft: Math.floor(marginLeft * share),
-            marginRight: Math.floor(marginRight * share),
-          };
-        }
-        next = plot({ ...fitted, width, height: draw.height }) as Element;
-      } catch (thrown) {
-        next = failed(
-          thrown instanceof Error ? thrown.message : String(thrown ?? 'unknown'),
-        );
+    let render = (rawWidth: number) => {
+      let width = Math.round(rawWidth);
+      // Guard the MARGINS, not just zero. Plot derives the inner plotting
+      // area as width - marginLeft - marginRight; a container narrower than
+      // those margins yields a negative inner width, which reaches the DOM as
+      // `<rect width="-35">` and sprays console errors for every mark drawn.
+      // A consumer's layout mistake should degrade, not scream.
+      if (width < 1 || width === lastWidth) {
+        return;
       }
-    }
-    node?.remove();
-    node = next;
-    element.replaceChildren(next);
-  };
+      lastWidth = width;
+      let failed = (message: string): Element => {
+        let node = element.ownerDocument.createElement('p');
+        node.className = 'pretui-chart-throw';
+        node.setAttribute('data-test-pretui-chart-error', '');
+        node.textContent = 'This chart could not be drawn: ' + message;
+        return node;
+      };
+      let next: Element;
+      let spec = draw.spec;
+      if (draw.error !== undefined || spec === undefined) {
+        next = failed(draw.error ?? 'the chart specification was rejected');
+      } else {
+        try {
+          // Plot derives the inner plotting area as width - marginLeft -
+          // marginRight. A container narrower than those margins yields a
+          // NEGATIVE inner width, which reaches the DOM as
+          // `<rect width="-35">` and throws once per mark drawn. Squeeze the
+          // margins together instead: a cramped chart still reads, and a
+          // consumer's layout mistake degrades rather than screaming.
+          let marginLeft = (spec.marginLeft as number) ?? 48;
+          let marginRight = (spec.marginRight as number) ?? 18;
+          let floorWidth = marginLeft + marginRight + 8;
+          let fitted = spec;
+          if (width < floorWidth) {
+            let room = Math.max(0, width - 8);
+            let share = room / (marginLeft + marginRight);
+            fitted = {
+              ...spec,
+              marginLeft: Math.floor(marginLeft * share),
+              marginRight: Math.floor(marginRight * share),
+            };
+          }
+          next = plot({ ...fitted, width, height: draw.height }) as Element;
+        } catch (thrown) {
+          next = failed(
+            thrown instanceof Error
+              ? thrown.message
+              : String(thrown ?? 'unknown'),
+          );
+        }
+      }
+      node?.remove();
+      node = next;
+      element.replaceChildren(next);
+    };
 
-  // Rebuilding the plot swaps the element's children, which can change the
-  // observed element's own size inside the observation cycle — the browser
-  // reports that as "ResizeObserver loop completed with undelivered
-  // notifications". Deferring one frame moves the rebuild outside the cycle.
-  let frame = 0;
-  let observer = new ResizeObserver((entries) => {
-    let entry = entries[entries.length - 1];
-    if (!entry) {
-      return;
-    }
-    let width = entry.contentRect.width;
-    if (frame) {
-      cancelAnimationFrame(frame);
-    }
-    // One-shot paint-cycle deferral, not a loop: only rAF escapes the
-    // ResizeObserver delivery step; a runloop/microtask hop would re-trip it.
-    // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- paint callback
-    frame = requestAnimationFrame(() => {
-      frame = 0;
-      render(width);
+    // Rebuilding the plot swaps the element's children, which can change the
+    // observed element's own size inside the observation cycle — the browser
+    // reports that as "ResizeObserver loop completed with undelivered
+    // notifications". Deferring one frame moves the rebuild outside the cycle.
+    let frame = 0;
+    let observer = new ResizeObserver((entries) => {
+      let entry = entries[entries.length - 1];
+      if (!entry) {
+        return;
+      }
+      let width = entry.contentRect.width;
+      if (frame) {
+        cancelAnimationFrame(frame);
+      }
+      // One-shot paint-cycle deferral, not a loop: only rAF escapes the
+      // ResizeObserver delivery step; a runloop/microtask hop would re-trip it.
+      // eslint-disable-next-line @cardstack/boxel/no-raf-for-state -- paint callback
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        render(width);
+      });
     });
-  });
-  observer.observe(element);
-  // First paint: the observer fires asynchronously, and a chart that only
-  // appears after a resize is a chart that never appears in a screenshot.
-  render(element.clientWidth || 640);
+    observer.observe(element);
+    // First paint: the observer fires asynchronously, and a chart that only
+    // appears after a resize is a chart that never appears in a screenshot.
+    render(element.clientWidth || 640);
 
-  return () => {
-    observer.disconnect();
-    if (frame) {
-      cancelAnimationFrame(frame);
-    }
-    node?.remove();
-    element.replaceChildren();
-  };
-});
+    return () => {
+      observer.disconnect();
+      if (frame) {
+        cancelAnimationFrame(frame);
+      }
+      node?.remove();
+      element.replaceChildren();
+    };
+  },
+);
 
 // ── The vocabulary ───────────────────────────────────────────────────────
 
