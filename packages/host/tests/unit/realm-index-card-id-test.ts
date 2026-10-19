@@ -68,6 +68,16 @@ module('Unit | isRealmIndexCardId', function () {
     );
   });
 
+  test('it recognizes a prefix-form index card against a realm URL missing its trailing slash', function (assert) {
+    assert.true(
+      isRealmIndexCardId(
+        rri('@test/cards/index'),
+        ri('https://cardstack.com/test-realm'),
+        mappedNetwork,
+      ),
+    );
+  });
+
   test('it recognizes a prefix-form index card against a virtual alias of the realm', function (assert) {
     let aliasedNetwork = new VirtualNetwork();
     aliasedNetwork.addRealmMapping(
