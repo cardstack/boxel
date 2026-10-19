@@ -1139,6 +1139,9 @@ importers:
       '@types/qunit':
         specifier: 'catalog:'
         version: 2.19.14
+      concurrently:
+        specifier: 'catalog:'
+        version: 8.2.2
       qunit:
         specifier: 'catalog:'
         version: 2.26.0
