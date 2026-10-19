@@ -1,9 +1,5 @@
 import type Koa from 'koa';
-import {
-  CLIENT_IP_HEADER,
-  logger,
-  SupportedMimeType,
-} from '@cardstack/runtime-common';
+import { logger, SupportedMimeType } from '@cardstack/runtime-common';
 import { SignInLimiter } from '../lib/sign-in-limiter.ts';
 import {
   sendResponseForError,
@@ -50,12 +46,17 @@ function deps(args: CreateRoutesArgs): SecureSessionDeps {
   };
 }
 
-async function sendJSON(ctxt: Koa.Context, status: number, body: unknown) {
+async function sendJSON(
+  ctxt: Koa.Context,
+  status: number,
+  body: unknown,
+  headers: Record<string, string> = {},
+) {
   await setContextResponse(
     ctxt,
     new Response(JSON.stringify(body), {
       status,
-      headers: { 'content-type': SupportedMimeType.JSONAPI },
+      headers: { 'content-type': SupportedMimeType.JSONAPI, ...headers },
     }),
   );
 }
@@ -131,8 +132,10 @@ function textOf(attributes: Record<string, unknown>, name: string): string {
 }
 
 // Answers a `SecureSessionError` with its status, message and code, and
-// anything else with a bare 500. Only an error's name and message are logged,
-// never the request.
+// anything else with a bare 500. A 429 that knows when to try again says so in
+// `Retry-After`, and to the millisecond in the error's `meta.retryAfterMs`,
+// which the secure window shows as the app does. Only an error's name and
+// message are logged, never the request.
 function secureSessionHandler(
   fn: (ctxt: Koa.Context) => Promise<void>,
 ): Handler {
@@ -141,11 +144,26 @@ function secureSessionHandler(
       await fn(ctxt);
     } catch (e: any) {
       if (e instanceof SecureSessionError) {
-        await sendJSON(ctxt, e.status, {
-          errors: [
-            { status: String(e.status), code: e.code, detail: e.message },
-          ],
-        });
+        let { retryAfterMs } = e;
+        await sendJSON(
+          ctxt,
+          e.status,
+          {
+            errors: [
+              {
+                status: String(e.status),
+                code: e.code,
+                detail: e.message,
+                ...(retryAfterMs === undefined
+                  ? {}
+                  : { meta: { retryAfterMs } }),
+              },
+            ],
+          },
+          retryAfterMs === undefined
+            ? {}
+            : { 'Retry-After': String(Math.ceil(retryAfterMs / 1000)) },
+        );
         return;
       }
       log.error(
@@ -168,25 +186,18 @@ async function sendSession(ctxt: Koa.Context, session: unknown) {
 }
 
 // POST /_secure-session: signs in with a username, email address or Matrix id
-// and the account's password.
+// and the account's password. Failed sign-ins are limited per account, never
+// more tightly than the Matrix server limits failed logins to the app.
 export function handlePasswordSignIn(args: CreateRoutesArgs): Handler {
   let limiter = new SignInLimiter();
   return secureSessionHandler(async (ctxt) => {
     requireSecureOrigin(ctxt, args.secureOriginURL);
     let attributes = await readAttributes(ctxt, 'secure-session');
     let { username, password } = attributes;
-    let account = typeof username === 'string' ? username : '';
-    if (!limiter.allow(account, ctxt.get(CLIENT_IP_HEADER) || undefined)) {
-      throw new SecureSessionError(
-        429,
-        'rate-limited',
-        'too many attempts; wait a moment and try again',
-      );
-    }
     await sendSession(
       ctxt,
-      await signInWithPassword(deps(args), {
-        username: account,
+      await signInWithPassword(deps(args), limiter, {
+        username: typeof username === 'string' ? username : '',
         password: typeof password === 'string' ? password : '',
         client: clientOf(attributes),
       }),

@@ -397,7 +397,7 @@ module(basename(import.meta.filename), function () {
     });
 
     test("serves the sign-in mode's scripts with the locked-down headers", async function (assert) {
-      for (let name of ['session.js', 'sign-in.js']) {
+      for (let name of ['session.js', 'sign-in.js', 'sign-in-copy.js']) {
         let response = await request
           .get(`/secure/${name}`)
           .set('Host', secureHost);

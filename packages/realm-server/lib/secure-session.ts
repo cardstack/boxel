@@ -23,6 +23,7 @@ import {
   type GoogleSignInConfig,
 } from './google-sign-in.ts';
 import { GOOGLE_CALLBACK_PATH } from './secure-origin.ts';
+import type { SignInLimiter } from './sign-in-limiter.ts';
 
 // A session signed in on the secure origin: the credential that minting a key
 // write ticket requires, which card code can't reach.
@@ -65,14 +66,18 @@ export type SecureSessionClient = 'window' | 'cli';
 export class SecureSessionError extends Error {
   readonly status: 400 | 401 | 403 | 409 | 429 | 503;
   readonly code: string;
+  // For a 429, how long until the caller may try again, when that's known.
+  readonly retryAfterMs?: number;
   constructor(
     status: SecureSessionError['status'],
     code: string,
     message: string,
+    opts: { retryAfterMs?: number } = {},
   ) {
     super(message);
     this.status = status;
     this.code = code;
+    this.retryAfterMs = opts.retryAfterMs;
   }
 }
 
@@ -103,11 +108,21 @@ function invalidCredentials() {
   );
 }
 
-function rateLimited() {
+// Too many failed sign-ins for the account, refused by this server's limit or
+// the Matrix server's.
+function rateLimited(retryAfterMs: unknown) {
   return new SecureSessionError(
     429,
     'rate-limited',
-    'too many attempts; wait a moment and try again',
+    'too many failed attempts; try again later',
+    {
+      retryAfterMs:
+        typeof retryAfterMs === 'number' &&
+        Number.isFinite(retryAfterMs) &&
+        retryAfterMs >= 0
+          ? Math.ceil(retryAfterMs)
+          : undefined,
+    },
   );
 }
 
@@ -260,9 +275,48 @@ async function asUser<T>(
   }
 }
 
+// The account a password sign-in's failures count against, keyed as the
+// Matrix server keys failed logins: an email address by the address, anything
+// else by the Matrix user id it names.
+async function failureKey(
+  deps: SecureSessionDeps,
+  username: string,
+): Promise<string> {
+  let name = username.trim();
+  if (!name.startsWith('@') && name.includes('@')) {
+    return `email:${name.toLowerCase()}`;
+  }
+  return `user:${((await resolveMatrixUser(deps, name)) ?? name).toLowerCase()}`;
+}
+
 // Signs in with a password, checked by the Matrix server's UIA check as
-// described above.
+// described above. Only failures count against the account's limit (see
+// `sign-in-limiter.ts`), and an account over it is refused before its
+// password is checked.
 export async function signInWithPassword(
+  deps: SecureSessionDeps,
+  limiter: SignInLimiter,
+  attempt: { username: string; password: string; client: SecureSessionClient },
+): Promise<SignedInSession> {
+  if (!attempt.username.trim() || !attempt.password) {
+    throw invalidCredentials();
+  }
+  let account = await failureKey(deps, attempt.username);
+  let check = limiter.check(account);
+  if (!check.allowed) {
+    throw rateLimited(check.retryAfterMs);
+  }
+  try {
+    return await checkPassword(deps, attempt);
+  } catch (e) {
+    if (e instanceof SecureSessionError && e.code === 'invalid-credentials') {
+      limiter.recordFailure(account);
+    }
+    throw e;
+  }
+}
+
+async function checkPassword(
   deps: SecureSessionDeps,
   {
     username,
@@ -270,9 +324,6 @@ export async function signInWithPassword(
     client,
   }: { username: string; password: string; client: SecureSessionClient },
 ): Promise<SignedInSession> {
-  if (!username.trim() || !password) {
-    throw invalidCredentials();
-  }
   let user = await resolveMatrixUser(deps, username);
   if (!user || !(await fetchSessionRoom(deps.dbAdapter, user))) {
     throw invalidCredentials();
@@ -289,7 +340,7 @@ export async function signInWithPassword(
     throw invalidCredentials();
   }
   if (started.status === 429) {
-    throw rateLimited();
+    throw rateLimited(started.body.retry_after_ms);
   }
   let uiaSession = started.body.session;
   if (started.status !== 401 || typeof uiaSession !== 'string') {
@@ -317,7 +368,7 @@ export async function signInWithPassword(
     throw invalidCredentials();
   }
   if (completed.status === 429) {
-    throw rateLimited();
+    throw rateLimited(completed.body.retry_after_ms);
   }
   if (completed.status === 401) {
     throw invalidCredentials();

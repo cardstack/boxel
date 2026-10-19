@@ -17,6 +17,7 @@ import {
   storedSession,
   storeSession,
 } from './session.js';
+import { tooManyFailedAttempts } from './sign-in-copy.js';
 
 const LOOPBACK_CALLBACK_PATH = '/callback';
 const GOOGLE_CALLBACK_SUFFIX = /\/google-callback$/;
@@ -251,7 +252,12 @@ function renderSignIn(
             }),
           );
         } catch (e) {
-          showError(error, e.message);
+          showError(
+            error,
+            e.code === 'rate-limited'
+              ? tooManyFailedAttempts(e.retryAfterMs)
+              : e.message,
+          );
           submit.disabled = false;
         } finally {
           passwordInput.value = '';

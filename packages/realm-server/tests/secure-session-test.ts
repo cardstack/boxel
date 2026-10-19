@@ -439,23 +439,94 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('password sign-ins are limited per account', async function (assert) {
+    test('successful password sign-ins are never limited', async function (assert) {
       let { username, password } = await registerPasswordUser(dbAdapter);
       let statuses = [];
-      for (let attempt = 0; attempt < 5; attempt++) {
+      for (let attempt = 0; attempt < 6; attempt++) {
+        statuses.push((await passwordSignIn(username, password)).status);
+      }
+      assert.deepEqual(statuses, [201, 201, 201, 201, 201, 201]);
+    });
+
+    test('password sign-ins from one address are not limited across accounts', async function (assert) {
+      // Every request here comes from the loopback address.
+      let accounts = await Promise.all(
+        Array.from({ length: 31 }, () => registerPasswordUser(dbAdapter)),
+      );
+      let statuses = [];
+      for (let { username, password } of accounts) {
+        statuses.push((await passwordSignIn(username, password)).status);
+      }
+      assert.deepEqual(
+        statuses,
+        accounts.map(() => 201),
+      );
+    });
+
+    test('repeated failed password sign-ins for an account are refused with when to try again', async function (assert) {
+      let { username, password, userId } =
+        await registerPasswordUser(dbAdapter);
+      let other = await registerPasswordUser(dbAdapter);
+      let statuses = [];
+      for (let attempt = 0; attempt < 3; attempt++) {
         statuses.push(
           (await passwordSignIn(username, `${password}-wrong-${attempt}`))
             .status,
         );
       }
-      assert.deepEqual(statuses, [401, 401, 401, 401, 401]);
+      assert.deepEqual(statuses, [401, 401, 401]);
+
       let limited = await passwordSignIn(username, password);
       assert.strictEqual(
         limited.status,
         429,
-        'even the right password waits once the limit is reached',
+        'even the right password waits once the failures fill the limit',
       );
-      assert.strictEqual(limited.body.errors[0].code, 'rate-limited');
+      let [error] = limited.body.errors;
+      assert.strictEqual(error.code, 'rate-limited');
+      // Three failures drain at 0.17 a second, so the next attempt waits
+      // until about six seconds after the first one.
+      assert.true(error.meta.retryAfterMs > 0, 'it says when to try again');
+      assert.true(
+        error.meta.retryAfterMs <= Math.ceil(1000 / 0.17),
+        `no longer than one failure takes to drain (${error.meta.retryAfterMs}ms)`,
+      );
+      assert.strictEqual(
+        limited.headers['retry-after'],
+        String(Math.ceil(error.meta.retryAfterMs / 1000)),
+        'and says so in Retry-After',
+      );
+
+      let byMatrixId = await passwordSignIn(userId, password);
+      assert.strictEqual(
+        byMatrixId.status,
+        429,
+        'the account is limited however it is named',
+      );
+      let otherAccount = await passwordSignIn(other.username, other.password);
+      assert.strictEqual(
+        otherAccount.status,
+        201,
+        'another account signs in from the same address',
+      );
+    });
+
+    test('failed password sign-ins do not limit signing in with Google', async function (assert) {
+      let { username, password, userId } =
+        await registerPasswordUser(dbAdapter);
+      let sub = `google-${randomUUID()}`;
+      await linkGoogle(userId, sub);
+      for (let attempt = 0; attempt < 4; attempt++) {
+        await passwordSignIn(username, `${password}-wrong-${attempt}`);
+      }
+      assert.strictEqual(
+        (await passwordSignIn(username, password)).status,
+        429,
+        'the password sign-in is limited',
+      );
+      let response = await googleSignIn(google.issue(sub));
+      assert.strictEqual(response.status, 201, response.text);
+      assert.strictEqual(response.body.data.attributes.user, userId);
     });
 
     test('signing in is answered only for the secure origin', async function (assert) {

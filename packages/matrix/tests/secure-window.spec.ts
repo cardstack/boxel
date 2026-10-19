@@ -293,6 +293,36 @@ test.describe('the secure window signs in on its own', () => {
     ).toBeNull();
   });
 
+  test('says when to try again after too many failed sign-ins, as the app does', async ({
+    page,
+  }) => {
+    let { username, password } = await createSubscribedUserAndLogin(
+      page,
+      'secure-window-limit',
+    );
+    await expectAppSignedIn(page);
+    let secure = await openSecureWindow(page, 'mode=sign-in');
+    let error = secure.locator('[data-test-secure-error]');
+    await secure.locator('[data-test-secure-username]').fill(username);
+    // An account may fail three times in a row; the fourth attempt waits for
+    // the first failure to drain, which takes a few seconds.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await secure
+        .locator('[data-test-secure-password]')
+        .fill(`not-the-password-${attempt}`);
+      await secure.locator('[data-test-secure-password-submit]').click();
+      await expect(error).toContainText('don’t match');
+      await expect(
+        secure.locator('[data-test-secure-password-submit]'),
+      ).toBeEnabled();
+    }
+    await secure.locator('[data-test-secure-password]').fill(password);
+    await secure.locator('[data-test-secure-password-submit]').click();
+    await expect(error).toHaveText(
+      'Sign-in failed. Too many failed attempts, try again in a few seconds.',
+    );
+  });
+
   test('refuses a CLI sign-in link that names no listener on this machine', async ({
     page,
   }) => {

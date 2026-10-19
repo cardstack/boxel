@@ -62,6 +62,20 @@ proof. Both admin-minted tokens are logged out at once. A missing account, one t
 with no password and a wrong password all answer the same `401
 invalid-credentials`.
 
+Failed password sign-ins are limited per account (`lib/sign-in-limiter.ts`)
+as the Matrix server limits failed logins to the app
+(`rc_login.failed_attempts`; by default a burst of 3, draining at 0.17 a
+second): only failures count, a successful sign-in never does, and nothing is
+limited per address. The Matrix server's own failure limit doesn't cover these
+sign-ins, because it doesn't count a wrong password in a UIA check, so the
+realm server keeps the count itself, per process. An account over the limit is
+refused before its password is checked, with `429 rate-limited`, a
+`Retry-After` header, and the exact wait in `errors[0].meta.retryAfterMs`. A
+Matrix 429's `retry_after_ms` is passed through the same way. The window
+shows it in the app's words: "Sign-in failed. Too many failed attempts, try
+again in N minutes." (`secure-origin/sign-in-copy.js`). Google sign-in has no
+limit of its own.
+
 **Google** — the realm server is its own OpenID Connect client, using the
 Matrix server's Google client (`lib/google-sign-in.ts`):
 
@@ -95,7 +109,7 @@ target and `connect-src` to the realm server (ADR 005 §1.4). `DELETE /_secure-s
 | ------------------------- | ------------------------------------------------------------------------------ |
 | 403 `forbidden`           | A sign-in not from the secure origin                                           |
 | 401 `invalid-credentials` | Any failed password sign-in (no account, no Boxel account, no password, wrong) |
-| 429 `rate-limited`        | Synapse's rate limit on failed attempts for the account                        |
+| 429 `rate-limited`        | Too many failed password sign-ins for the account; see `meta.retryAfterMs`     |
 | 401 `not-confirmed`       | Google's code didn't redeem, or its ID token didn't fit the sign-in            |
 | 403 `not-linked`          | No Boxel account is linked to that Google account                              |
 | 403 `deactivated`         | The linked account is deactivated                                              |

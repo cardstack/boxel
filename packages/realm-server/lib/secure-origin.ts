@@ -57,6 +57,10 @@ const SHELL_ASSETS: Record<string, { file: string; contentType: string }> = {
     file: 'sign-in.js',
     contentType: 'text/javascript; charset=utf-8',
   },
+  'sign-in-copy.js': {
+    file: 'sign-in-copy.js',
+    contentType: 'text/javascript; charset=utf-8',
+  },
 };
 
 // The credential fields the app frames (see `credentials.js`): the page, by
