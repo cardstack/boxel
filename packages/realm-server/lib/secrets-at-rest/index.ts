@@ -202,24 +202,9 @@ export interface PlaintextCensusEntry {
   query: string;
 }
 
-// Each table that adopts the helper adds its column here, and removes it once
-// no plain-text value can remain.
-export const PLAINTEXT_CENSUS: PlaintextCensusEntry[] = [
-  // A key is in plain text until the backfill seals it. The plain-text column
-  // is kept in step alongside the sealed one, so it isn't counted.
-  {
-    table: 'proxy_endpoints',
-    column: 'api_key',
-    query: `SELECT COUNT(*) AS count FROM proxy_endpoints
-            WHERE api_key IS NOT NULL AND api_key_ciphertext IS NULL`,
-  },
-  {
-    table: 'incoming_webhooks',
-    column: 'signing_secret',
-    query: `SELECT COUNT(*) AS count FROM incoming_webhooks
-            WHERE signing_secret_ciphertext IS NULL`,
-  },
-];
+// Each table that adopts the helper while it still has a plain-text column adds
+// that column here, and removes it once the column is dropped.
+export const PLAINTEXT_CENSUS: PlaintextCensusEntry[] = [];
 
 // Logs how many rows of each adopting table still hold their secret in plain
 // text. A count that fails to run is logged and doesn't stop startup.
@@ -228,7 +213,7 @@ export async function reportPlaintextCensus(
   entries: PlaintextCensusEntry[] = PLAINTEXT_CENSUS,
 ): Promise<void> {
   if (entries.length === 0) {
-    log.info('plaintext census: no table seals its secrets with this helper');
+    log.info('plaintext census: no plain-text secret columns');
     return;
   }
   for (let { table, column, query } of entries) {
