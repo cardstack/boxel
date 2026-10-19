@@ -12,7 +12,7 @@
 // The roles checked are `readonly_role` and every role that inherits its
 // privileges or can SET ROLE to it, directly or through other roles. A member
 // holding only the ADMIN option reads nothing through the role (on Postgres 16
-// and later the role that creates `readonly_role` holds that membership), and
+// and later a non-superuser that creates `readonly_role` holds that membership), and
 // a table's owner reads it by owning it, so neither is checked. The check
 // covers what each role reads as itself; a member that can SET ROLE to some
 // other role reads as that role.
