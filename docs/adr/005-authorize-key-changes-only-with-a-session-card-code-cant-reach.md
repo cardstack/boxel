@@ -13,6 +13,7 @@ scope:
   - packages/boxel-cli/src/commands/keys/**
   - packages/boxel-cli/src/lib/secure-session.ts
   - packages/host/app/services/realm-server.ts
+  - packages/host/app/services/matrix-service.ts
 ---
 
 # 005. Authorize changes to a user's keys only with a session that card code can't reach
@@ -76,10 +77,11 @@ call the sign-in routes itself.
 
 ### 1.6. Signing out
 
-Signing out of the app MUST end the user's secure window sessions, so a user
-who signs out of Boxel is signed out of key management too. The app page
-can't reach the window or its storage (§1.4), so the realm server MUST end
-them, at the app's request, under the outgoing account's session. That
+Signing out of the app MUST ask the realm server to end the user's secure
+window sessions, so a user who signs out of Boxel is signed out of key
+management too. The app page can't reach the window or its storage (§1.4), so
+only the realm server can end them; the app asks under the outgoing account's
+session, which the route MUST accept for a while after it expires. That
 request MUST NOT delay or block the app's sign-out. The route that serves it
 MAY take the app's session, since all it can do is end sessions; it MUST NOT
 create, extend, read or list one, and MUST answer alike whether or not a
@@ -118,6 +120,19 @@ session, and with it card code, ask for that is harmless: the worst card code
 can do is sign the user out of key management. Rows aren't tied to a browser,
 so this ends the user's windows in every browser; the CLI usually runs on
 another machine and is left signed in.
+
+The request is best effort, so sign-out can't wait on it: when the realm
+server can't be reached or fails, the user's secure window sessions stay
+signed in until they expire, at most a week. The app's own session token is
+refreshed on a timer that fires late on a slept laptop, so the route accepts
+a session that expired no longer ago than a secure session lasts.
+
+Card code can also call the route, as often as it likes, and so keep the
+user's secure windows signed out, including when the user needs one to replace
+a key they suspect is compromised. This is accepted: it is visible, since the
+window asks the user to sign in again; it grants card code nothing; and the
+CLI's session, which the route leaves alone, can still change keys. A rate
+limit wouldn't stop it, since one call after each sign-in is enough.
 
 ## 3. Considered options
 

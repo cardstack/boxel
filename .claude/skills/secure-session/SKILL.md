@@ -60,8 +60,13 @@ The app's sign-out (`MatrixService.logout()`) calls `DELETE
 /_secure-sessions?client=window` with the outgoing account's realm-server
 session, before it drops that session. It is best effort and never awaited, so
 a failing or slow server can't hold sign-out up; a failure is only a console
-warning. The app page can't clear the window's session itself: it can't read
-the secure origin's storage and keeps no handle to the window (ADR 005 §1.4).
+warning, and the user's window sessions then last until they expire. The app's
+session is refreshed on a timer that fires late on a slept laptop, so this
+route alone accepts a session that expired up to `SECURE_SESSION_TTL_SECONDS`
+ago (`jwtMiddleware`'s `expiredWithinSeconds`); every other route refuses an
+expired one. The app page can't clear the window's session itself: it can't
+read the secure origin's storage and keeps no handle to the window (ADR 005
+§1.4).
 
 That route takes any session of the user, the app's included, so card code can
 call it. All it can do is sign the user out of key management, which signing
@@ -72,8 +77,11 @@ another machine.
 
 The window checks its stored session with `GET /_secure-session` (204 while
 it's live, 401 `signed-out` once it has ended) when it opens, and again when a
-request it makes under the session is refused. An ended session is forgotten,
-and the window shows "Sign in to Boxel" with no error.
+request it makes under the session is refused with a 403, which is how a key
+write ticket refuses an ended session. An ended session is forgotten, and the
+window shows "Sign in to Boxel" with no error. When the check gets no answer
+within ten seconds, or the server can't be reached, the window keeps its
+session.
 
 ## Signing in
 
