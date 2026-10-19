@@ -59,9 +59,8 @@ administering the realm, such as granting and revoking other users' `read` and
 `write`, archiving or deleting it, and publishing or unpublishing it.
 
 The permission check MUST test each level on its own and MUST NOT infer one
-level from another. A grant of `write` MUST include `read`. The user-permission
-endpoint refuses `write` without `read`; the `_permissions` endpoint does not
-check it.
+level from another. A grant of `write` MUST include `read`, and every endpoint
+that grants permissions MUST refuse `write` without `read`.
 
 `realm-owner` MUST be assigned only when a realm is created or published, and
 always with `read`. The permissions endpoints MUST refuse to grant
