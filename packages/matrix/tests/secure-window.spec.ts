@@ -190,25 +190,50 @@ test.describe('the secure window signs in on its own', () => {
     await secure.locator('[data-test-secure-password]').fill(password);
     await secure.locator('[data-test-secure-password-submit]').click();
     await expect(secure.locator('[data-test-secure-signed-in]')).toBeVisible();
-    let { token } = JSON.parse(
-      (await secure.evaluate((key) => localStorage.getItem(key), STORAGE_KEY))!,
-    );
+    let stored = (await secure.evaluate(
+      (key) => localStorage.getItem(key),
+      STORAGE_KEY,
+    ))!;
+    let { token } = JSON.parse(stored);
     expect(await mintStatus(secure, token)).toBe(201);
-    await secure.close();
 
+    // The secure window stays open while the user signs out of the app.
     await logout(page);
     await expect(page.locator('[data-test-login-btn]')).toBeVisible();
 
     // The app's sign-out tells the realm server without waiting on it. Asked
     // from the secure origin, where only an ended session is refused.
-    let check = await openSecureWindow(page, 'mode=none');
     await expect(async () => {
-      expect(await mintStatus(check, token)).toBe(403);
+      expect(await mintStatus(secure, token)).toBe(403);
     }).toPass();
-    await check.close();
 
-    // Reopened, the window has forgotten the ended session and offers to sign
-    // in, with no error.
+    // The open window's next mint finds its session ended, forgets it, and
+    // says the user is signed out.
+    let refused = await secure.evaluate(async (base) => {
+      let session = await import(`${base}/session.js`);
+      try {
+        await session.mintKeyWriteTicket(session.readConfig(), {
+          action: 'add',
+        });
+        return 'minted';
+      } catch (e: any) {
+        return e.code;
+      }
+    }, secureOriginURL);
+    expect(refused).toBe('signed-out');
+    expect(
+      await secure.evaluate((key) => localStorage.getItem(key), STORAGE_KEY),
+    ).toBeNull();
+    await secure.close();
+
+    // A window opened with the ended session still stored checks it with the
+    // server, forgets it, and offers to sign in, with no error.
+    let check = await openSecureWindow(page, 'mode=none');
+    await check.evaluate(
+      ([key, value]) => localStorage.setItem(key, value),
+      [STORAGE_KEY, stored],
+    );
+    await check.close();
     let reopened = await openSecureWindow(page, 'mode=sign-in');
     await expect(reopened.locator('[data-test-secure-username]')).toBeVisible();
     await expect(reopened.locator('[data-test-secure-error]')).toBeHidden();
