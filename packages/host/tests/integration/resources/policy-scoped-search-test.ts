@@ -278,6 +278,33 @@ module('Integration | policy-scoped search', function (hooks) {
     );
   });
 
+  test('a local create is not merged into a policy-scoped realm the search names by a registered prefix', async function (this: RenderingTestContext, assert) {
+    // The result marks the realm by its URL, while the search and the store's
+    // ids name it by its prefix: the mark has to hold across the two forms.
+    let { virtualNetwork } = getService('network');
+    virtualNetwork.addRealmMapping('@test/scoped/', SCOPED);
+    try {
+      await setupScoped();
+      let search = liveSearch(this.owner, OPEN, ['@test/scoped/', COARSE]);
+      await search.loaded;
+      await settled();
+      assert.deepEqual(search.meta.policyScopedRealms, [SCOPED]);
+      assert.deepEqual(ids(search), [COARSE_OPEN]);
+
+      await createLocally(COARSE, 'schedules/local');
+      await createLocally(SCOPED, 'schedules/local');
+      await settled();
+
+      assert.deepEqual(
+        ids(search),
+        [`${COARSE}schedules/local`, COARSE_OPEN].sort(),
+        'the create in the realm the user reads is merged, the one in the scoped realm is not',
+      );
+    } finally {
+      virtualNetwork.removeRealmMapping('@test/scoped/');
+    }
+  });
+
   test('the same local create is merged when the result does not scope its realm', async function (this: RenderingTestContext, assert) {
     // The user reads the realm outright, so it consults no policy for them
     // and the result carries no mark.
@@ -299,6 +326,34 @@ module('Integration | policy-scoped search', function (hooks) {
       ids(search).includes(`${SCOPED}schedules/local`),
       'the create is merged into the result',
     );
+  });
+
+  test('a local create is merged into a realm the search names by its URL while the store names its cards by prefix', async function (this: RenderingTestContext, assert) {
+    // A realm with a registered prefix has its cards' ids in prefix form, so
+    // a search naming that realm by URL has to place them across the two
+    // forms to widen into it.
+    let { virtualNetwork } = getService('network');
+    virtualNetwork.addRealmMapping('@test/scoped/', SCOPED);
+    try {
+      await setupScoped(['read']);
+      let search = liveSearch(this.owner, OPEN, [SCOPED, COARSE]);
+      await search.loaded;
+      await settled();
+
+      let local = await createLocally(SCOPED, 'schedules/local');
+      assert.true(
+        String(local.id).startsWith('@test/scoped/'),
+        `the store names the card by prefix: ${local.id}`,
+      );
+      await settled();
+
+      assert.true(
+        ids(search).includes(String(local.id)),
+        'the create is merged into the result',
+      );
+    } finally {
+      virtualNetwork.removeRealmMapping('@test/scoped/');
+    }
   });
 
   // Until a search answers for a realm, the result holds no mark for it, so
