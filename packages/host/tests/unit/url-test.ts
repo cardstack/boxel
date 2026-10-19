@@ -4,11 +4,13 @@ import {
   type LooseCardResource,
   type RealmResourceIdentifier,
   maybeRelativeReference,
+  portableReference,
   relativeReference,
   resolveRRIReference,
   ri,
   rri,
   visitInstanceURLs,
+  VirtualNetwork,
 } from '@cardstack/runtime-common';
 
 module('Unit | url', function () {
@@ -164,6 +166,64 @@ module('Unit | url', function () {
       );
 
       assert.strictEqual(result, '@cardstack/base/foo');
+    });
+  });
+
+  module('portableReference', function () {
+    let realm = new URL('https://example.com/realm/');
+    let file = new URL('https://example.com/realm/pet.gts');
+    let network = new VirtualNetwork();
+    network.addRealmMapping(
+      '@cardstack/catalog/',
+      'https://example.com/catalog/',
+    );
+
+    test('writes a reference inside the realm relative to the file', function (assert) {
+      assert.strictEqual(
+        portableReference(
+          new URL('https://example.com/realm/animal'),
+          file,
+          realm,
+          network,
+        ),
+        './animal',
+      );
+    });
+
+    test('writes a reference into another realm by its registered prefix', function (assert) {
+      assert.strictEqual(
+        portableReference(
+          new URL('https://example.com/catalog/fields/address'),
+          file,
+          realm,
+          network,
+        ),
+        '@cardstack/catalog/fields/address',
+      );
+    });
+
+    test('writes a reference into a realm with no registered prefix by its URL', function (assert) {
+      assert.strictEqual(
+        portableReference(
+          new URL('https://example.com/other/animal'),
+          file,
+          realm,
+          network,
+        ),
+        'https://example.com/other/animal',
+      );
+    });
+
+    test('with no realm, nothing is written relative', function (assert) {
+      assert.strictEqual(
+        portableReference(
+          new URL('https://example.com/realm/animal'),
+          file,
+          undefined,
+          network,
+        ),
+        'https://example.com/realm/animal',
+      );
     });
   });
 

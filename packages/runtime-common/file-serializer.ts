@@ -20,6 +20,7 @@ import { serialize as serializeCodeRef } from './serializers/code-ref.ts';
 import {
   isScopedReference,
   maybeRelativeReference as makeRelativeReference,
+  portableReference,
 } from './url.ts';
 
 export default async function serialize({
@@ -47,25 +48,16 @@ export default async function serialize({
     trimExecutableExtension: true as true,
     virtualNetwork,
   };
-  // A module inside the writing realm is stored relative to the file. One in
-  // another realm is stored by that realm's registered prefix when it has one,
-  // and by its URL only when it has none, so a link to a well-known realm does
-  // not carry the URL it answers to in this environment.
   const metaCodeRefOpts = {
     ...codeRefOpts,
     allowRelative: true as true,
-    maybeRelativeReference: (reference: string) => {
-      let stored = realmURL
-        ? makeRelativeReference(
-            new URL(reference, relativeTo),
-            relativeTo,
-            realmURL,
-          )
-        : reference;
-      return isAbsoluteURL(stored)
-        ? virtualNetwork.unresolveURL(stored)
-        : stored;
-    },
+    maybeRelativeReference: (reference: string) =>
+      portableReference(
+        new URL(reference, relativeTo),
+        relativeTo,
+        realmURL,
+        virtualNetwork,
+      ),
   };
 
   const result: LooseSingleCardDocument = {
@@ -391,10 +383,6 @@ export function storedRelationshipLink(
     return virtualNetwork.unresolveURL(resolved.href);
   }
   return relative;
-}
-
-function isAbsoluteURL(reference: string): boolean {
-  return reference.startsWith('http://') || reference.startsWith('https://');
 }
 
 // The card a stored relationship's `links.self` names.

@@ -38,7 +38,7 @@ import {
   Deferred,
   GetCardContextName,
   isCardInstance,
-  maybeRelativeReference,
+  portableReference,
   RealmPaths,
   ri,
   specRef,
@@ -926,23 +926,15 @@ export default class CreateFileModal extends Component<Signature> {
         this.network.virtualNetwork,
       ) as ResolvedCodeRef
     ).module;
-    // A parent inside the selected realm is imported relative to the new
-    // file. One in another realm is imported by that realm's registered prefix
-    // (`@cardstack/base/…`, `@cardstack/catalog/…`) when it has one, matching
-    // the `Component` import emitted below, so the generated source does not
-    // carry the URL a well-known realm answers to in this environment. A realm
-    // with no registered prefix is imported by its URL.
     // `codeRefWithAbsoluteIdentifier` returns the resolved real URL for
-    // prefix-form input, so the relative form is computed from that URL.
-    let parentURL = new URL(absoluteModuleHref); // eslint-disable-line @cardstack/boxel/no-url-from-realm-identifier
-    let moduleURL = maybeRelativeReference(
-      parentURL,
+    // prefix-form input; `portableReference` writes it relative, by prefix
+    // (matching the `Component` import emitted below) or by URL.
+    let moduleURL = portableReference(
+      new URL(absoluteModuleHref), // eslint-disable-line @cardstack/boxel/no-url-from-realm-identifier
       url,
       new URL(this.selectedRealmURL),
+      this.network.virtualNetwork,
     );
-    if (moduleURL === parentURL.href) {
-      moduleURL = this.network.virtualNetwork.unresolveURL(parentURL.href);
-    }
     let src: string[] = [];
 
     let componentImport = isFileDef
