@@ -840,7 +840,7 @@
                   "value": [
                     {
                       "options": {
-                        "pattern": "^(.{6}).*$",
+                        "pattern": "^.*-([0-9a-f]{8}-pid-\\d+)$",
                         "result": {
                           "index": 0,
                           "text": "View logs ($1)"
@@ -1287,7 +1287,7 @@
                   "value": [
                     {
                       "options": {
-                        "pattern": "^(.{6}).*$",
+                        "pattern": "^.*-([0-9a-f]{8}-pid-\\d+)$",
                         "result": {
                           "index": 0,
                           "text": "View logs ($1)"
@@ -1412,7 +1412,7 @@
                   "value": [
                     {
                       "options": {
-                        "pattern": "^(.{6}).*$",
+                        "pattern": "^.*-([0-9a-f]{8}-pid-\\d+)$",
                         "result": {
                           "index": 0,
                           "text": "View logs ($1)"
@@ -1549,7 +1549,7 @@
                   "value": [
                     {
                       "options": {
-                        "pattern": "^(.{6}).*$",
+                        "pattern": "^.*-([0-9a-f]{8}-pid-\\d+)$",
                         "result": {
                           "index": 0,
                           "text": "View logs ($1)"
