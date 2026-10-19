@@ -9,6 +9,7 @@ import {
   PROXY_ENDPOINT_KEY_COLUMNS,
   proxyEndpointKeyBinding,
   readProxyEndpointKey,
+  UnreadableProxyEndpointKeyError,
   type ProxyEndpointKeyRow,
 } from './proxy-endpoint-keys.ts';
 import {
@@ -277,9 +278,17 @@ async function refuseNoteWithCurrentValue(
     `SELECT id, url, ${PROXY_ENDPOINT_KEY_COLUMNS} FROM proxy_endpoints WHERE id = $1`,
     { bind: [id] },
   );
-  let current = row
-    ? readProxyEndpointKey(row as unknown as ProxyEndpointKeyRow)
-    : null;
+  // A key that doesn't open has no value a note could carry.
+  let current: string | null = null;
+  if (row) {
+    try {
+      current = readProxyEndpointKey(row as unknown as ProxyEndpointKeyRow);
+    } catch (e) {
+      if (!(e instanceof UnreadableProxyEndpointKeyError)) {
+        throw e;
+      }
+    }
+  }
   if (current && note.includes(current)) {
     throw new SystemKeyError(400, 'the note must not contain the value');
   }

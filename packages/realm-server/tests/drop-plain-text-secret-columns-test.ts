@@ -82,7 +82,7 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(await plainTextColumns(), [], 'a second up is a no-op');
     });
 
-    test('a sealed key and secret survive the drop', async function (assert) {
+    test('a sealed key and secret survive the drop, with their plain-text copies alongside', async function (assert) {
       await runMigration('down');
       await saveProxyEndpoint(dbAdapter, {
         url: OPENROUTER_URL,
@@ -95,8 +95,22 @@ module(basename(import.meta.filename), function () {
         webhookPath: 'whk_survives',
         signingSecret: 'survives-the-drop',
       });
+      // The rows as deployed databases hold them when the drop runs: the
+      // plain-text copy kept in step beside the sealed value.
+      await dbAdapter.execute(
+        `UPDATE proxy_endpoints SET api_key = 'sk-or-v1-survives-the-drop'`,
+      );
+      await dbAdapter.execute(
+        `UPDATE incoming_webhooks SET signing_secret = 'survives-the-drop'`,
+      );
 
       await runMigration('up');
+
+      assert.deepEqual(
+        await plainTextColumns(),
+        [],
+        'both columns are dropped',
+      );
 
       let [row] = await dbAdapter.execute(
         `SELECT id, url, ${PROXY_ENDPOINT_KEY_COLUMNS} FROM proxy_endpoints`,
@@ -143,6 +157,24 @@ module(basename(import.meta.filename), function () {
       });
       await runMigration('up');
       assert.deepEqual(await plainTextColumns(), []);
+    });
+
+    test('stops rather than drop a key whose sealed value is missing a part', async function (assert) {
+      await runMigration('down');
+      await saveProxyEndpoint(dbAdapter, {
+        url: OPENROUTER_URL,
+        apiKey: 'sk-or-v1-partly-sealed',
+        creditStrategy: 'openrouter',
+        supportsStreaming: true,
+      });
+      await dbAdapter.execute(
+        `UPDATE proxy_endpoints SET api_key = 'sk-or-v1-partly-sealed', api_key_nonce = NULL`,
+      );
+
+      await assert.rejects(
+        runMigration('up'),
+        /proxy_endpoints has 1 row\(s\) whose api_key is not sealed/,
+      );
     });
 
     test('stops rather than drop a signing secret held only in plain text', async function (assert) {

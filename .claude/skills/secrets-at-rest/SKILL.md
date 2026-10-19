@@ -1,6 +1,6 @@
 ---
 name: secrets-at-rest
-description: Operate and diagnose the realm server's secrets-at-rest helper (`packages/realm-server/lib/secrets-at-rest/`) — AES-256-GCM sealing of stored secrets (API keys, OAuth client secrets and refresh tokens, service-account files, endpoint keys, webhook signing secrets) under a 32-byte data key that KMS wraps, bound to its field (table and column), owner, row id and destination. Covers the two providers (KMS and the local development key), the startup self-check the realm server and the worker manager run (workers take their keys from the manager) and what its log line reports, why a deployed server refuses to start, the KMS encryption contexts involved, key ids, re-sealing a secret with its destination, rotating the data key (`boxel realm-server data-keys status | reseal`, `SECRETS_ADDITIONAL_WRAPPED_DATA_KEYS`, the re-seal pass, retiring an old data key, the sealed census), the plaintext census (no plain-text secret columns remain), the sealed proxy endpoint (system) keys in `proxy_endpoints` and incoming webhook signing secrets in `incoming_webhooks`, what a read does with a sealed value that won't open, why a webhook's signing secret is shown only once, and the post-deploy audit that checks, as the read-only AWS role, that a deployed environment seals with KMS, holds no plain-text secrets, lets only the task roles decrypt and withholds the secret tables from the read-only database role. Use when the realm server or a worker won't boot with "Secrets-at-rest self-check failed", when reading the `secrets-at-rest` boot line, when a stored secret fails to open with SecretDecryptionError, when a table starts sealing its secrets with the helper, when rotating the data key, when a proxy endpoint is served with no key or a webhook's deliveries can't be verified, or after a deploy that changes any of this, to audit the deployed environment.
+description: Operate and diagnose the realm server's secrets-at-rest helper (`packages/realm-server/lib/secrets-at-rest/`) — AES-256-GCM sealing of stored secrets (API keys, OAuth client secrets and refresh tokens, service-account files, endpoint keys, webhook signing secrets) under a 32-byte data key that KMS wraps, bound to its field (table and column), owner, row id and destination. Covers the two providers (KMS and the local development key), the startup self-check the realm server and the worker manager run (workers take their keys from the manager) and what its log line reports, why a deployed server refuses to start, the KMS encryption contexts involved, key ids, re-sealing a secret with its destination, rotating the data key (`boxel realm-server data-keys status | reseal`, `SECRETS_ADDITIONAL_WRAPPED_DATA_KEYS`, the re-seal pass, retiring an old data key, the sealed census), the plaintext census (no plain-text secret columns remain), the sealed proxy endpoint (system) keys in `proxy_endpoints` and incoming webhook signing secrets in `incoming_webhooks`, what a read does with a sealed value that won't open, why a webhook's signing secret is shown only once, and the post-deploy audit that checks, as the read-only AWS role, that a deployed environment seals with KMS, holds no plain-text secrets, lets only the task roles decrypt and withholds the secret tables from the read-only database role. Use when the realm server or a worker won't boot with "Secrets-at-rest self-check failed", when reading the `secrets-at-rest` boot line, when a stored secret fails to open with SecretDecryptionError, when a table starts sealing its secrets with the helper, when rotating the data key, when a proxy endpoint is refused or a webhook's deliveries can't be verified, or after a deploy that changes any of this, to audit the deployed environment.
 ---
 
 # Secrets at rest (operators)
@@ -244,12 +244,27 @@ process hasn't loaded or because a column its binding reads (the row's `id`,
 its owner, its destination) was edited outside the application, has no other
 copy to fall back on. The read reports it once per sealed value, as an error
 naming the row (never the secret) on the table's log channel and to Sentry,
-and serves no value. The binding is what stops a sealed secret being moved to
+and the read fails: the proxy refuses that endpoint and the webhook receiver
+verifies none of that webhook's deliveries. The binding is what stops a sealed secret being moved to
 another row, owner or destination, so nothing re-seals such a row on its own.
 An operator gives it its value again through the application, which seals it
 under the row's current binding: `boxel realm-server keys replace` for a
 system key, a rotation for a webhook secret. Or they restore the edited
 columns.
+
+### Rolling back to a revision that reads plain text
+
+A revision that still reads `proxy_endpoints.api_key` or
+`incoming_webhooks.signing_secret` treats those columns as the source. Started
+against rows a sealed-only revision wrote, whether because a realm-server
+rollout failed and rolled back before the removal migrations ran or because the
+migrations were rolled back past the drop, its startup backfill empties the
+sealed columns of every proxy endpoint with no plain-text key, and it can't
+verify a webhook with no plain-text secret. After such a rollback, add again
+every system key written since the sealed-only revision rolled out
+(`boxel realm-server keys list` and `proxy_endpoint_history` show which) and
+rotate every webhook secret issued since then. After a rollback past the drop,
+that is every key and secret.
 
 ## Proxy endpoint keys
 
@@ -271,9 +286,13 @@ no `SELECT` on the table.
 
 - **Reads** open the sealed key. A key that doesn't open (see above) is
   logged once per sealed value on the `proxy-endpoint-keys` channel,
-  `the sealed key for proxy endpoint <url> … so the endpoint is served with no key; replace the key to seal it again`,
-  and reported to Sentry. The proxy serves the destination with no key until
-  it is replaced, so a key bound to one url is never sent to another.
+  `the sealed key for proxy endpoint <url> … so the endpoint is refused until its key is replaced`,
+  and reported to Sentry. `_request-forward` and the OpenRouter passthrough
+  refuse that destination until the key is replaced, so a key bound to one
+  url is never sent to another and the endpoint is never sent without it.
+  Every other destination stays allowed: each endpoint is loaded on its own,
+  and one that can't be (this, or an `openrouter` credit strategy with no
+  key) is logged on the `allowed-proxy-destinations` channel and refused.
 - **Writes** go through `saveProxyEndpoint` or the system-keys operator
   endpoints (`boxel realm-server keys`, see the `system-keys` skill). A
   hand-written `INSERT` or `UPDATE` can't seal a key, so it is never the way

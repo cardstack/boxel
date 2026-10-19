@@ -117,8 +117,8 @@ export interface IncomingWebhookRegistration {
   verificationConfig: Record<string, unknown>;
 }
 
-// Registers a webhook with a new signing secret, written sealed. Returns the stored row and the secret, which the caller
-// hands to the user this once.
+// Registers a webhook with a new signing secret, written sealed. Returns the
+// stored row and the secret, which the caller hands to the user this once.
 export async function insertIncomingWebhook(
   dbAdapter: DBAdapter,
   registration: IncomingWebhookRegistration,
@@ -155,10 +155,10 @@ export async function insertIncomingWebhook(
 }
 
 // Replaces a webhook's signing secret with a new one, written sealed, so a
-// signature made with the old secret stops
-// verifying at once. Returns the stored row and the new secret, which the
-// caller hands to the user this once, or undefined when the webhook doesn't
-// exist or belongs to another user.
+// signature made with the old secret stops verifying at once. Returns the
+// stored row and the new secret, which the caller hands to the user this
+// once, or undefined when the webhook doesn't exist or belongs to another
+// user.
 export async function rotateIncomingWebhookSecret(
   dbAdapter: DBAdapter,
   { id, username }: { id: string; username: string },

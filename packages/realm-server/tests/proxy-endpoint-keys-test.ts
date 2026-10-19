@@ -58,13 +58,14 @@ module(basename(import.meta.filename), function () {
       url: string,
       apiKey: string | null,
       ring: SecretsKeyring = keyring,
+      creditStrategy = 'no-credit',
     ) {
       return await saveProxyEndpoint(
         dbAdapter,
         {
           url,
           apiKey,
-          creditStrategy: 'no-credit',
+          creditStrategy,
           supportsStreaming: false,
         },
         ring,
@@ -88,13 +89,15 @@ module(basename(import.meta.filename), function () {
       };
     }
 
-    async function apiKeyServedFor(url: string) {
+    async function destinationFor(url: string) {
       AllowedProxyDestinations.reset();
-      let config =
-        await AllowedProxyDestinations.getInstance(
-          dbAdapter,
-        ).getDestinationConfig(url);
-      return config?.apiKey;
+      return await AllowedProxyDestinations.getInstance(
+        dbAdapter,
+      ).getDestinationConfig(url);
+    }
+
+    async function apiKeyServedFor(url: string) {
+      return (await destinationFor(url))?.apiKey;
     }
 
     test('the table holds no plain-text key, and the census reports no plain-text secret columns', async function (assert) {
@@ -160,24 +163,30 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(await apiKeyServedFor(EXAMPLE_URL), null);
     });
 
-    test('a sealed key whose url was edited outside the application is served with no key, and reported once', async function (assert) {
-      await saveKey(OPENROUTER_URL, OPENROUTER_KEY);
+    test('a sealed key whose url was edited outside the application is refused, and reported once, while other destinations stay allowed', async function (assert) {
+      await saveKey(OPENROUTER_URL, OPENROUTER_KEY, keyring, 'openrouter');
+      await saveKey(EXAMPLE_URL, 'example-api-key');
       let movedUrl = 'https://openrouter.ai/api/v1/moved';
       await dbAdapter.execute(
         `UPDATE proxy_endpoints SET url = $1 WHERE url = $2`,
         { bind: [movedUrl, OPENROUTER_URL] },
       );
 
-      let served: (string | null | undefined)[] = [];
+      let refused: unknown[] = [];
       let lines = await logLinesDuring(['proxy-endpoint-keys'], async () => {
-        served.push(await apiKeyServedFor(movedUrl));
-        served.push(await apiKeyServedFor(movedUrl));
+        refused.push(await destinationFor(movedUrl));
+        refused.push(await destinationFor(movedUrl));
       });
 
       assert.deepEqual(
-        served,
-        [null, null],
-        'the key bound to the old url is never sent to the new one',
+        refused,
+        [undefined, undefined],
+        'the key bound to the old url is never sent to the new one, and the endpoint is not sent without it',
+      );
+      assert.strictEqual(
+        await apiKeyServedFor(EXAMPLE_URL),
+        'example-api-key',
+        'the other destinations stay allowed',
       );
       let errors = lines.filter(({ level }) => level === 'error');
       assert.strictEqual(
@@ -191,7 +200,7 @@ module(basename(import.meta.filename), function () {
         'the report never carries the key',
       );
 
-      await saveKey(movedUrl, 'sk-or-v1-replacement');
+      await saveKey(movedUrl, 'sk-or-v1-replacement', keyring, 'openrouter');
       assert.strictEqual(
         await apiKeyServedFor(movedUrl),
         'sk-or-v1-replacement',
@@ -199,7 +208,7 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a key sealed under a data key this process has not loaded is served with no key, and reported', async function (assert) {
+    test('a key sealed under a data key this process has not loaded is refused, and reported', async function (assert) {
       // Another task, further into a data-key rotation, sealed the row under
       // a key this one doesn't hold.
       let newer = new SecretsKeyring(
@@ -208,16 +217,38 @@ module(basename(import.meta.filename), function () {
       );
       await saveKey(OPENROUTER_URL, OPENROUTER_KEY, newer);
 
-      let served: string | null | undefined;
+      let refused: unknown;
       let lines = await logLinesDuring(['proxy-endpoint-keys'], async () => {
-        served = await apiKeyServedFor(OPENROUTER_URL);
+        refused = await destinationFor(OPENROUTER_URL);
       });
 
-      assert.strictEqual(served, null);
+      assert.strictEqual(refused, undefined);
       let errors = lines.filter(({ level }) => level === 'error');
       assert.strictEqual(errors.length, 1);
       assert.true(errors[0].message.includes(OPENROUTER_URL));
       assert.false(errors[0].message.includes(OPENROUTER_KEY));
+    });
+
+    test('an endpoint that cannot be built is refused, while other destinations stay allowed', async function (assert) {
+      // The OpenRouter credit strategy needs a key; this row has none.
+      await saveKey(OPENROUTER_URL, null, keyring, 'openrouter');
+      await saveKey(EXAMPLE_URL, 'example-api-key');
+
+      let lines = await logLinesDuring(
+        ['allowed-proxy-destinations'],
+        async () => {
+          assert.strictEqual(await destinationFor(OPENROUTER_URL), undefined);
+        },
+      );
+
+      assert.strictEqual(await apiKeyServedFor(EXAMPLE_URL), 'example-api-key');
+      assert.true(
+        lines.some(
+          ({ level, message }) =>
+            level === 'error' && message.includes(OPENROUTER_URL),
+        ),
+        'the refused endpoint is logged',
+      );
     });
 
     test('a key in a statement that fails never reaches the error or its log', async function (assert) {

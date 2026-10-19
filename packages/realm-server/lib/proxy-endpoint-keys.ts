@@ -61,15 +61,25 @@ function reportUnreadable(row: ProxyEndpointKeyRow, reason: string): void {
   reportedUnreadable.add(unreadable);
   reportUnreadableSecret(
     log,
-    `the sealed key for proxy endpoint ${row.url} ${reason}, so the endpoint is served with no key; replace the key to seal it again`,
+    `the sealed key for proxy endpoint ${row.url} ${reason}, so the endpoint is refused until its key is replaced`,
   );
+}
+
+// Thrown for a row whose sealed key doesn't open. The message names the
+// endpoint, never the key.
+export class UnreadableProxyEndpointKeyError extends Error {
+  constructor(url: string) {
+    super(`the sealed key for proxy endpoint ${url} could not be opened`);
+    this.name = 'UnreadableProxyEndpointKeyError';
+  }
 }
 
 // The key a row holds, opened from its sealed columns, or null for a row with
 // no key. A sealed key that doesn't open (sealed under a data key this
 // process hasn't loaded, or on a row whose id or url was edited outside the
-// application) is reported, and the endpoint is served with no key until an
-// operator replaces it.
+// application) is reported once and throws `UnreadableProxyEndpointKeyError`,
+// so its endpoint is refused rather than sent with no key, until an operator
+// replaces the key.
 export function readProxyEndpointKey(
   row: ProxyEndpointKeyRow,
   keyring?: SecretsKeyring,
@@ -78,14 +88,16 @@ export function readProxyEndpointKey(
   if (!sealed) {
     return null;
   }
-  return (
-    openSealedColumns({
-      sealed,
-      binding: proxyEndpointKeyBinding(row),
-      keyring: keyring ?? secretsKeyring(),
-      onFailure: (reason) => reportUnreadable(row, reason),
-    }) ?? null
-  );
+  let key = openSealedColumns({
+    sealed,
+    binding: proxyEndpointKeyBinding(row),
+    keyring: keyring ?? secretsKeyring(),
+    onFailure: (reason) => reportUnreadable(row, reason),
+  });
+  if (key === undefined) {
+    throw new UnreadableProxyEndpointKeyError(row.url);
+  }
+  return key;
 }
 
 export interface ProxyEndpoint {
