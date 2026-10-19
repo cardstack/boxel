@@ -1121,7 +1121,9 @@ export function toolSourceEventIdsToCarry(
   return eventIds.slice(0, MAX_CARRIED_TOOL_SOURCE_EVENTS);
 }
 
-// The most tool-source events a compaction event carries.
+// The most tool-source events a compaction event carries. The tools of the
+// events past it leave the prompt once the history before the cut is no
+// longer loaded.
 export const MAX_CARRIED_TOOL_SOURCE_EVENTS = 200;
 
 // The skill files an applied result ai-bot published attached.

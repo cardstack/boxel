@@ -298,7 +298,8 @@ async function fetchMatrixMediaWithFallback(
 export const ROOM_EVENTS_PAGE_SIZE = 1000;
 // How far back the history window pages in a room with no compaction to stop
 // at (or only ones that carry nothing forward). A room this long without one
-// has not hit the model's context limit since compactions started carrying.
+// has either never overflowed the model's context, or has only compactions
+// without `usedToolCallIds` / `toolSourceEventIds`.
 export const ROOM_EVENTS_MAX_PAGES = 10;
 // Room config events: the host writes them when it creates the room and again
 // only when they change, so they can be older than any history window.
@@ -481,11 +482,15 @@ export async function getRoomEvents(
           ROOM_CONFIG_EVENT_TYPES.includes(event.type),
         )
       : fetchRoomEventsBackwards(roomId, client, {
-          types: ROOM_CONFIG_EVENT_TYPES,
+          // The create event stops paging at the room's start, without
+          // an empty page after it.
+          types: [...ROOM_CONFIG_EVENT_TYPES, 'm.room.create'],
           maxPages: ROOM_CONFIG_MAX_PAGES,
         }).then(({ events: configEvents }) =>
-          configEvents.filter(
+          // Oldest first, so a tie in the sort below keeps timeline order.
+          configEvents.reverse().filter(
             (event) =>
+              event.type !== 'm.room.create' &&
               !excludedIds.has(event.event_id) &&
               // Not one that arrived after the history was fetched.
               event.origin_server_ts <= trigger.origin_server_ts,

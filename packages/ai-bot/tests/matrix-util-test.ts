@@ -525,6 +525,50 @@ test('getRoomEvents - puts the events from before the cut in time order', async 
   );
 });
 
+test('getRoomEvents - keeps the timeline order of config events from the same millisecond', async function (assert) {
+  const timeline = createRoomTimeline(3000);
+  placeAt(
+    timeline,
+    5,
+    stateEvent('skills-old', APP_BOXEL_ROOM_SKILLS_EVENT_TYPE),
+  );
+  placeAt(
+    timeline,
+    6,
+    stateEvent('skills-new', APP_BOXEL_ROOM_SKILLS_EVENT_TYPE),
+  );
+  timeline[6].origin_server_ts = timeline[5].origin_server_ts;
+  placeAt(timeline, 1700, compactionEvent('compaction', 'event1500'));
+  const { client } = createMockedClient(timeline);
+
+  const result = await getRoomEvents('room123', client, 'event2999');
+
+  assert.deepEqual(
+    result.slice(0, 3).map((event) => event.event_id),
+    ['skills-old', 'skills-new', 'event1500'],
+  );
+});
+
+test('getRoomEvents - fetches the config events from before the window in one request', async function (assert) {
+  const timeline = createRoomTimeline(3000);
+  placeAt(timeline, 0, stateEvent('create', 'm.room.create'));
+  placeAt(timeline, 1, stateEvent('skills', APP_BOXEL_ROOM_SKILLS_EVENT_TYPE));
+  placeAt(timeline, 1700, compactionEvent('compaction', 'event1500'));
+  const { client, requests } = createMockedClient(timeline);
+
+  const result = await getRoomEvents('room123', client, 'event2999');
+
+  assert.strictEqual(
+    requests.filter((request) => request.filter.types).length,
+    1,
+  );
+  assert.deepEqual(
+    result.slice(0, 2).map((event) => event.event_id),
+    ['skills', 'event1500'],
+    'the create event is not put ahead of the history',
+  );
+});
+
 test('getRoomEvents - throws when a tool-source event fails to load for a reason other than not being there', async function (assert) {
   const timeline = createRoomTimeline(3000);
   placeAt(
