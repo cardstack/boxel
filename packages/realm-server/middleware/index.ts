@@ -595,9 +595,12 @@ export async function fetchRequestFromContext(
   });
 }
 
+// `expiredWithinSeconds` is for a route whose only effect is to end something
+// (see `retrieveTokenClaim`); every other route takes only an unexpired token.
 export function jwtMiddleware(
   secretSeed: string,
   dbAdapter: DBAdapter,
+  opts: { expiredWithinSeconds?: number } = {},
 ): (ctxt: Koa.Context, next: Koa.Next) => Promise<void> {
   return async function (ctxt: Koa.Context, next: Koa.Next) {
     let authorization = ctxt.req.headers['authorization'];
@@ -621,6 +624,7 @@ export function jwtMiddleware(
         authorization,
         secretSeed,
         dbAdapter,
+        opts,
       );
     } catch (e) {
       if (e instanceof AuthenticationError) {

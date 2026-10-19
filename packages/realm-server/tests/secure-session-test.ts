@@ -780,6 +780,63 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test("an app session whose refresh came late still signs the user's secure windows out", async function (assert) {
+      let { userId } = await registerPasswordUser(dbAdapter);
+      let secureWindow = await secureSessionAuth(dbAdapter, userId);
+      let appSessionExpired = (seconds: number) =>
+        `Bearer ${createRealmServerJWT(
+          { user: userId, sessionRoom: 'test-session' },
+          realmSecretSeed,
+          -seconds,
+        )}`;
+      let endWindows = (authorization: string) =>
+        request
+          .delete('/_secure-sessions?client=window')
+          .set('Authorization', authorization);
+
+      assert.strictEqual(
+        (await endWindows(appSessionExpired(8 * 24 * 60 * 60))).status,
+        401,
+        'a session that expired longer ago than a secure session lasts is refused',
+      );
+      assert.strictEqual(
+        (await mint(secureWindow)).status,
+        201,
+        'still signed in',
+      );
+
+      assert.strictEqual(
+        (await endWindows(appSessionExpired(60 * 60))).status,
+        204,
+        'a session that expired an hour ago is still the user’s',
+      );
+      assert.strictEqual(
+        (await mint(secureWindow)).status,
+        403,
+        'the window is signed out',
+      );
+
+      let expiredSecure = `Bearer ${createSecureSessionJWT(
+        {
+          user: userId,
+          sessionRoom: 'test-session',
+          secureSession: retrieveTokenClaim(secureWindow, realmSecretSeed)
+            .secureSession!,
+        },
+        realmSecretSeed,
+        -60,
+      )}`;
+      assert.strictEqual(
+        (
+          await request
+            .get('/_secure-session')
+            .set('Authorization', expiredSecure)
+        ).status,
+        401,
+        'other routes still refuse an expired session',
+      );
+    });
+
     test('no other path mints the secure-session claim', async function (assert) {
       assert.throws(
         () =>

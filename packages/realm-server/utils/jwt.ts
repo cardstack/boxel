@@ -63,13 +63,19 @@ export function createSecureSessionJWT(
   return sign(claims, secretSeed, { expiresIn: expiresInSeconds });
 }
 
+// `expiredWithinSeconds` accepts a token that expired no longer ago than
+// that, for a route whose only effect is to end something, which an app whose
+// token refresh fired late must still be able to ask for.
 export function retrieveTokenClaim(
   authorizationString: string,
   secretSeed: string,
+  { expiredWithinSeconds }: { expiredWithinSeconds?: number } = {},
 ): RealmServerTokenClaim & { iat: number; exp: number } {
   let tokenString = authorizationString.replace('Bearer ', '');
   try {
-    let claims = verify(tokenString, secretSeed) as RealmServerTokenClaim & {
+    let claims = verify(tokenString, secretSeed, {
+      clockTolerance: expiredWithinSeconds,
+    }) as RealmServerTokenClaim & {
       iat: number;
       exp: number;
     };
@@ -100,8 +106,9 @@ export async function retrieveUserSessionClaim(
   authorizationString: string,
   secretSeed: string,
   dbAdapter: DBAdapter,
+  opts: { expiredWithinSeconds?: number } = {},
 ): Promise<RealmServerTokenClaim & { iat: number; exp: number }> {
-  let token = retrieveTokenClaim(authorizationString, secretSeed);
+  let token = retrieveTokenClaim(authorizationString, secretSeed, opts);
   if (token.delegated) {
     throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
   }

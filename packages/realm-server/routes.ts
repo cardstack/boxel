@@ -119,6 +119,7 @@ import {
   handlePasswordSignIn,
   handleSecureOriginInfo,
 } from './handlers/handle-secure-session.ts';
+import { SECURE_SESSION_TTL_SECONDS } from './lib/secure-session.ts';
 import type { GoogleSignInConfig } from './lib/google-sign-in.ts';
 import {
   handleAddUserKey,
@@ -290,7 +291,13 @@ export function createRoutes(args: CreateRoutesArgs) {
   );
   router.delete(
     SECURE_SESSIONS_PATH,
-    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    // The app asks for this as it signs out, with whatever session it holds,
+    // which may have expired while a refresh was due (a slept laptop). A
+    // session that expired no longer ago than a secure session lasts is still
+    // the user's, and all this route can do is sign them out.
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter, {
+      expiredWithinSeconds: SECURE_SESSION_TTL_SECONDS,
+    }),
     handleEndWindowSessions(args),
   );
   router.post(
