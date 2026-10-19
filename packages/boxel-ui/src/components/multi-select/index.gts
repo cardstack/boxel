@@ -24,14 +24,9 @@ export interface Signature<ItemT> {
   Element: HTMLElement;
 }
 
-// CUSTOM EDIT YOUR MULTI-SELECT COMPONENT
-// There are a few custom components that you can pass in
-// 1. The selected item component
-// 2. The trigger component
-// 3. The dropdown component (which is generally called within the block in ember-power-select). We don't use the optionsComponent.
-// 4. The afterOptions component
-// 5. The beforeOptions component
-// BoxelMultiSelect gives you the flexibility to pass in these components
+// Options render through the default block. Callers may pass their own
+// selectedItem, trigger, beforeOptions and afterOptions components; only
+// beforeOptions has a default (power-select's own BeforeOptions).
 
 export class BoxelMultiSelect<ItemT> extends Component<Signature<ItemT>> {
   <template>
@@ -154,3 +149,6 @@ export class BoxelMultiSelect<ItemT> extends Component<Signature<ItemT>> {
     </style>
   </template>
 }
+
+/** @deprecated Use BoxelMultiSelect instead */
+export const BoxelMultiSelectBasic = BoxelMultiSelect;

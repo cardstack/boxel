@@ -35,9 +35,8 @@ const SPEC_FILE_PREFIX = 'boxel-ui-';
 
 // Build a slug → exported-name map from the boxel-ui barrel file. For each
 // `import X[, ...] from './components/<slug>/index.gts'` line we record the
-// default binding (X). When a slug has multiple import lines (e.g. `header`
-// is imported as both `BoxelHeader` and `Header`), prefer the binding
-// without the `Boxel` prefix — that's the public-facing name. Components
+// default binding (X). When a slug has multiple import lines, prefer the
+// binding without the `Boxel` prefix — that's the public-facing name. Components
 // whose slug never appears in the barrel are omitted from the map so the
 // generator can skip them rather than emit a spec advertising an export
 // that doesn't actually exist.

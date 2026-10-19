@@ -71,7 +71,10 @@ import LoadingIndicator from './components/loading-indicator/index.gts';
 import MarkdownContentShell from './components/markdown-content-shell/index.gts';
 import Menu from './components/menu/index.gts';
 import Modal from './components/modal/index.gts';
-import { BoxelMultiSelect } from './components/multi-select/index.gts';
+import {
+  BoxelMultiSelect,
+  BoxelMultiSelectBasic,
+} from './components/multi-select/index.gts';
 import PhoneInput from './components/phone-input/index.gts';
 import Picker, { type PickerOption } from './components/picker/index.gts';
 import Pill from './components/pill/index.gts';
@@ -100,6 +103,7 @@ import Swatch from './components/swatch/index.gts';
 import Switch from './components/switch/index.gts';
 import TabbedHeader from './components/tabbed-header/index.gts';
 import BoxelTag from './components/tag/index.gts';
+import TagList from './components/tag-list/index.gts';
 import Tooltip from './components/tooltip/index.gts';
 import ViewSelector, {
   type ViewItem,
@@ -141,6 +145,7 @@ export {
   BoxelInputValidationState,
   BoxelInputValidationStates,
   BoxelMultiSelect,
+  BoxelMultiSelectBasic,
   BoxelSelect,
   BoxelTag,
   BrokenLink as BrokenLinkTemplate,
@@ -198,6 +203,7 @@ export {
   Swatch,
   Switch,
   TabbedHeader,
+  TagList,
   toAfterOptionsComponent,
   toBeforeOptionsComponent,
   toMultiSelectTriggerComponent,
