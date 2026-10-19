@@ -3,11 +3,11 @@
  * (or `'user'`, with the preference set) keeps its score's timing but moves
  * nothing — positional values land at their step's start, on every path the
  * run drives (the engine, loops, text deliveries, path flights, the
- * camera), while opacity still animates. `'never'` is the opt-out.
+ * camera, scrolls), while opacity still animates. `'never'` is the opt-out.
  */
 import { Choreo, type ChoreoContext } from '@cardstack/choreo';
 import { setupChoreo } from '@cardstack/choreo/test-support';
-import { array } from '@ember/helper';
+import { array, concat } from '@ember/helper';
 import { find, render, settled, waitUntil } from '@ember/test-helpers';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -215,6 +215,54 @@ module('Integration | choreo | reduced motion', function (hooks) {
     const frame = find('[data-choreo]') as HTMLElement;
     const scale = new DOMMatrix(getComputedStyle(frame).transform).a;
     assert.strictEqual(scale, 2, 'the frame already holds the zoomed shot');
+  });
+
+  test('a scroll lands its container at the offset rather than gliding', async function (assert) {
+    let ctx: ChoreoContext | undefined;
+    const grab = (c: ChoreoContext) => {
+      ctx = c;
+      return '';
+    };
+    class App extends Component {
+      @tracked cited = 0;
+      constructor(o: unknown, a: object) {
+        super(o as never, a);
+        app = this;
+      }
+      <template>
+        <MotionConfig @reducedMotion='always'>
+          <Choreo class='stage' style='position:relative;width:200px' as |c|>
+            {{grab c}}
+            <div id='scroller' style='overflow-y:scroll;height:100px'>
+              {{#each (array 0 1 2 3 4 5 6 7 8 9) as |i|}}
+                <div
+                  id='row-{{i}}'
+                  data-c={{this.cited}}
+                  style='height:40px'
+                  {{motion id=(concat 'row-' i) role='row'}}
+                >row {{i}}</div>
+              {{/each}}
+            </div>
+            <c.Scroll @of={{c.id 'row-8'}} @align='center' @duration={{0.6}} />
+          </Choreo>
+        </MotionConfig>
+      </template>
+    }
+    let app: App | undefined;
+    await render(<template><App /></template>);
+    await animationsSettled();
+    const scroller = find('#scroller') as HTMLElement;
+    assert.strictEqual(scroller.scrollTop, 0);
+    app!.cited = 1;
+    await waitUntil(() => ctx?.run);
+    await nextFrame();
+    await nextFrame();
+    // row-8 spans 320..360 of 400; centered in a 100px viewport → 290
+    assert.strictEqual(
+      Math.round(scroller.scrollTop),
+      290,
+      'the container already sits at its offset, early in the window',
+    );
   });
 
   test("an engine tween follows the region's policy now, not its node's at mount", async function (assert) {

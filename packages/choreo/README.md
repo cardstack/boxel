@@ -566,7 +566,8 @@ A region follows the `MotionConfig` it sits in, as each run begins. Under glimme
 `'user'`, a viewer whose system asks for reduced motion gets the score at its usual timing with
 nothing travelling: positional values (transforms, size, position) land at their step's start
 whether the engine, an ambient loop, a text delivery, a `@path` flight or the camera drives them,
-while opacity and colour still animate. `'always'` reduces motion regardless of the setting, and
+and a `c.Scroll` lands its container at the offset rather than gliding there, while opacity and
+colour still animate. `'always'` reduces motion regardless of the setting, and
 `'never'` plays the score as written:
 
 ```gts

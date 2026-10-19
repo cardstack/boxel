@@ -23,7 +23,8 @@ versions may change behavior until `1.0.0`.
   past a delivery's cue lands that delivery instead of freezing its spans in place.
 - **A region honours reduced motion on every path it drives.** Choreo already let motion-dom jump
   positional values for a viewer who asks for reduced motion, but its ambient loops, text
-  deliveries, `@path` flights and camera ran on platform animations that ignored the preference.
+  deliveries, `@path` flights, camera and `c.Scroll` steps ran on platform animations or its own
+  clock, which ignored the preference.
   Each run now follows the region's `MotionConfig` (`'user'` by default, so the system setting):
   with motion reduced, the score keeps its timing, positional values land at their step's start,
   and opacity and colour still animate. `<MotionConfig @reducedMotion='never'>` opts a region out.

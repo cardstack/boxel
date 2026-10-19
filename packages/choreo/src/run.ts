@@ -191,7 +191,8 @@ interface RunOptions {
    * Motion is reduced for this run (`prefers-reduced-motion`, through the
    * region's MotionConfig). The score keeps its timing, but nothing it drives
    * travels: a positional value lands at its step's start — through the
-   * engine, a loop, a text delivery, a path flight or the camera — while
+   * engine, a loop, a text delivery, a path flight, the camera or a scroll —
+   * while
    * opacity and colour still animate. It is the policy glimmer-motion applies
    * to a `{{motion}}` node, held to on the paths Choreo drives itself.
    */
@@ -1588,6 +1589,10 @@ export class ChoreoRun implements Run {
 
   /** the eased progress of a plain clock-driven track */
   private flightlessProgress(t: Track, ms: number): number {
+    if (this.reduced) {
+      // the track lands at its end as its window opens
+      return ms > 0 ? 1 : 0;
+    }
     const span = t.end - t.start;
     const raw = span > 0 ? Math.min(1, Math.max(0, ms / span)) : 1;
     return easingDefinitionToFunction('easeInOut')(raw);
