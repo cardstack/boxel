@@ -7410,8 +7410,7 @@ export class Realm {
           );
           return isResolvedCodeRef(absolute) ? absolute : undefined;
         },
-        fileDefCodeRef: (url) =>
-          resolveFileDefCodeRef(url, this.#virtualNetwork),
+        fileDefCodeRef: (url) => resolveFileDefCodeRef(url),
         unresolveInstanceIds: (doc) => this.#serveInstanceIdsAsRRI(doc),
         // Read on the realm server's own authority, as the compiled-policy
         // cache reads the policy card. The type keys are the ones the index
@@ -12211,10 +12210,7 @@ export class Realm {
       return undefined;
     }
     let fileURL = this.paths.fileURL(localPath).href;
-    let fileDefCodeRef = resolveFileDefCodeRef(
-      new URL(fileURL),
-      this.#virtualNetwork,
-    );
+    let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL));
     let name = localPath.split('/').pop() ?? localPath;
     let inferredContentType = inferContentType(name);
     let createdAt = await this.getCreatedTime(localPath);
@@ -12293,7 +12289,7 @@ export class Realm {
       codeRefFromInternalKey(fileEntry.types?.[0]) ??
       (isCodeRef(fileEntry.resource?.meta?.adoptsFrom)
         ? fileEntry.resource?.meta?.adoptsFrom
-        : resolveFileDefCodeRef(new URL(fileURL), this.#virtualNetwork));
+        : resolveFileDefCodeRef(new URL(fileURL)));
     let resourceAttributes =
       (fileEntry as IndexedFile).resource?.attributes ?? {};
     let baseAttributes = {

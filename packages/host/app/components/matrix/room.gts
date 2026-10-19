@@ -1701,10 +1701,7 @@ export default class Room extends Component<Signature> {
     bytes: Uint8Array,
   ): Promise<FileDef> {
     let sourceUrl = this.buildLocalSourceUrl(localFile.name);
-    let fileDefCodeRef = resolveFileDefCodeRef(
-      new URL(sourceUrl),
-      this.network.virtualNetwork,
-    );
+    let fileDefCodeRef = resolveFileDefCodeRef(new URL(sourceUrl));
     let extractor = new FileDefAttributesExtractor({
       loaderService: this.loaderService,
       network: this.network,

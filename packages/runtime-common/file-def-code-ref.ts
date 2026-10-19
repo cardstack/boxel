@@ -1,73 +1,68 @@
-import { baseRealm, baseFileRef } from './constants.ts';
+import { baseFileRef, baseRRI } from './constants.ts';
 import { canonicalModuleKey } from './code-ref.ts';
 import type { CodeRef, ResolvedCodeRef } from './code-ref.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
+import { resolveRRIReference } from './url.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 
-// Deliberately URL form, not baseRRI: `resolveFileDefCodeRef` returns these
-// mappings verbatim via its absolute-module (`://`) early return. In prefix
-// form the modules would instead be resolved against the indexed file's URL,
-// making the stamped ref depend on the virtual network's mapping state — and
-// producing a garbage joined URL wherever the base prefix isn't registered.
-function baseModule(name: string): RealmResourceIdentifier {
-  return `${baseRealm.url}${name}` as RealmResourceIdentifier;
-}
-
+// Base modules are spelled in the `@cardstack/base/` prefix form, the form
+// `baseFileRef` and `identifyCard` use, so a stamped ref never depends on
+// which URL the base realm is served from.
 export const FILEDEF_CODE_REF_BY_EXTENSION: Readonly<
   Record<string, ResolvedCodeRef>
 > = {
-  '.markdown': { module: baseModule('markdown-file-def'), name: 'MarkdownDef' },
-  '.md': { module: baseModule('markdown-file-def'), name: 'MarkdownDef' },
-  '.html': { module: baseModule('html-file-def'), name: 'HtmlDef' },
-  '.htm': { module: baseModule('html-file-def'), name: 'HtmlDef' },
-  '.png': { module: baseModule('png-image-def'), name: 'PngDef' },
-  '.jpg': { module: baseModule('jpg-image-def'), name: 'JpgDef' },
-  '.jpeg': { module: baseModule('jpg-image-def'), name: 'JpgDef' },
-  '.svg': { module: baseModule('svg-image-def'), name: 'SvgDef' },
-  '.gif': { module: baseModule('gif-image-def'), name: 'GifDef' },
-  '.webp': { module: baseModule('webp-image-def'), name: 'WebpDef' },
-  '.avif': { module: baseModule('avif-image-def'), name: 'AvifDef' },
-  '.ts': { module: baseModule('ts-file-def'), name: 'TsFileDef' },
-  '.gts': { module: baseModule('gts-file-def'), name: 'GtsFileDef' },
-  '.txt': { module: baseModule('text-file-def'), name: 'TextFileDef' },
-  '.text': { module: baseModule('text-file-def'), name: 'TextFileDef' },
-  '.log': { module: baseModule('log-file-def'), name: 'LogFile' },
-  '.json': { module: baseModule('json-file-def'), name: 'JsonFileDef' },
-  '.jsonl': { module: baseModule('jsonl-file-def'), name: 'JSONLFile' },
-  '.csv': { module: baseModule('csv-file-def'), name: 'CsvFileDef' },
-  '.pdf': { module: baseModule('pdf-file-def'), name: 'PdfDef' },
-  '.docx': { module: baseModule('docx-file-def'), name: 'DocxDef' },
-  '.pptx': { module: baseModule('pptx-file-def'), name: 'PptxDef' },
-  '.xlsx': { module: baseModule('xlsx-file-def'), name: 'XlsxDef' },
-  '.mp3': { module: baseModule('mp3-audio-def'), name: 'Mp3Def' },
-  '.wav': { module: baseModule('wav-audio-def'), name: 'WavDef' },
-  '.ogg': { module: baseModule('ogg-audio-def'), name: 'OggDef' },
-  '.oga': { module: baseModule('ogg-audio-def'), name: 'OggDef' },
-  '.opus': { module: baseModule('ogg-audio-def'), name: 'OggDef' },
-  '.m4a': { module: baseModule('m4a-audio-def'), name: 'M4aDef' },
-  '.flac': { module: baseModule('flac-audio-def'), name: 'FlacDef' },
+  '.markdown': { module: baseRRI('markdown-file-def'), name: 'MarkdownDef' },
+  '.md': { module: baseRRI('markdown-file-def'), name: 'MarkdownDef' },
+  '.html': { module: baseRRI('html-file-def'), name: 'HtmlDef' },
+  '.htm': { module: baseRRI('html-file-def'), name: 'HtmlDef' },
+  '.png': { module: baseRRI('png-image-def'), name: 'PngDef' },
+  '.jpg': { module: baseRRI('jpg-image-def'), name: 'JpgDef' },
+  '.jpeg': { module: baseRRI('jpg-image-def'), name: 'JpgDef' },
+  '.svg': { module: baseRRI('svg-image-def'), name: 'SvgDef' },
+  '.gif': { module: baseRRI('gif-image-def'), name: 'GifDef' },
+  '.webp': { module: baseRRI('webp-image-def'), name: 'WebpDef' },
+  '.avif': { module: baseRRI('avif-image-def'), name: 'AvifDef' },
+  '.ts': { module: baseRRI('ts-file-def'), name: 'TsFileDef' },
+  '.gts': { module: baseRRI('gts-file-def'), name: 'GtsFileDef' },
+  '.txt': { module: baseRRI('text-file-def'), name: 'TextFileDef' },
+  '.text': { module: baseRRI('text-file-def'), name: 'TextFileDef' },
+  '.log': { module: baseRRI('log-file-def'), name: 'LogFile' },
+  '.json': { module: baseRRI('json-file-def'), name: 'JsonFileDef' },
+  '.jsonl': { module: baseRRI('jsonl-file-def'), name: 'JSONLFile' },
+  '.csv': { module: baseRRI('csv-file-def'), name: 'CsvFileDef' },
+  '.pdf': { module: baseRRI('pdf-file-def'), name: 'PdfDef' },
+  '.docx': { module: baseRRI('docx-file-def'), name: 'DocxDef' },
+  '.pptx': { module: baseRRI('pptx-file-def'), name: 'PptxDef' },
+  '.xlsx': { module: baseRRI('xlsx-file-def'), name: 'XlsxDef' },
+  '.mp3': { module: baseRRI('mp3-audio-def'), name: 'Mp3Def' },
+  '.wav': { module: baseRRI('wav-audio-def'), name: 'WavDef' },
+  '.ogg': { module: baseRRI('ogg-audio-def'), name: 'OggDef' },
+  '.oga': { module: baseRRI('ogg-audio-def'), name: 'OggDef' },
+  '.opus': { module: baseRRI('ogg-audio-def'), name: 'OggDef' },
+  '.m4a': { module: baseRRI('m4a-audio-def'), name: 'M4aDef' },
+  '.flac': { module: baseRRI('flac-audio-def'), name: 'FlacDef' },
   // Symbolic performance data rather than sampled audio, so `MidiDef` extends
   // FileDef directly instead of AudioDef.
-  '.mid': { module: baseModule('midi-audio-def'), name: 'MidiDef' },
-  '.midi': { module: baseModule('midi-audio-def'), name: 'MidiDef' },
+  '.mid': { module: baseRRI('midi-audio-def'), name: 'MidiDef' },
+  '.midi': { module: baseRRI('midi-audio-def'), name: 'MidiDef' },
   // MP4 and MOV are the same ISO BMFF container as .m4a; the extension is what
   // says whether to expect a picture track, so they route to distinct classes.
-  '.mp4': { module: baseModule('mp4-video-def'), name: 'Mp4Def' },
-  '.m4v': { module: baseModule('mp4-video-def'), name: 'Mp4Def' },
-  '.mov': { module: baseModule('mov-video-def'), name: 'MovDef' },
-  '.webm': { module: baseModule('webm-video-def'), name: 'WebmDef' },
+  '.mp4': { module: baseRRI('mp4-video-def'), name: 'Mp4Def' },
+  '.m4v': { module: baseRRI('mp4-video-def'), name: 'Mp4Def' },
+  '.mov': { module: baseRRI('mov-video-def'), name: 'MovDef' },
+  '.webm': { module: baseRRI('webm-video-def'), name: 'WebmDef' },
   // 3D model formats. STL is raw triangle geometry; 3MF is a zipped OPC
   // package; GLB/glTF are the binary and JSON forms of the same scene format.
   // All extend ThreeDModelDef, which renders a live client-side WebGL viewer.
-  '.stl': { module: baseModule('stl-model-def'), name: 'StlDef' },
-  '.3mf': { module: baseModule('three-mf-def'), name: 'ThreeMfDef' },
-  '.glb': { module: baseModule('gltf-model-def'), name: 'GlbDef' },
-  '.gltf': { module: baseModule('gltf-model-def'), name: 'GltfDef' },
-  '.zip': { module: baseModule('zip-file-def'), name: 'ZipDef' },
-  '.woff2': { module: baseModule('woff2-font-def'), name: 'Woff2Def' },
-  '.woff': { module: baseModule('woff-font-def'), name: 'WoffDef' },
-  '.ttf': { module: baseModule('ttf-font-def'), name: 'TtfDef' },
-  '.otf': { module: baseModule('otf-font-def'), name: 'OtfDef' },
+  '.stl': { module: baseRRI('stl-model-def'), name: 'StlDef' },
+  '.3mf': { module: baseRRI('three-mf-def'), name: 'ThreeMfDef' },
+  '.glb': { module: baseRRI('gltf-model-def'), name: 'GlbDef' },
+  '.gltf': { module: baseRRI('gltf-model-def'), name: 'GltfDef' },
+  '.zip': { module: baseRRI('zip-file-def'), name: 'ZipDef' },
+  '.woff2': { module: baseRRI('woff2-font-def'), name: 'Woff2Def' },
+  '.woff': { module: baseRRI('woff-font-def'), name: 'WoffDef' },
+  '.ttf': { module: baseRRI('ttf-font-def'), name: 'TtfDef' },
+  '.otf': { module: baseRRI('otf-font-def'), name: 'OtfDef' },
   '.mismatch': {
     module: './filedef-mismatch' as RealmResourceIdentifier,
     name: 'FileDef',
@@ -80,11 +75,10 @@ export const FILEDEF_CODE_REF_BY_EXTENSION: Readonly<
 // server having returned a row to sniff — so an empty-but-complete file-meta
 // search still reconciles locally hydrated FileDefs.
 //
-// The query carries refs in prefix form (e.g. `@cardstack/base/markdown-file-def`)
-// while `FILEDEF_CODE_REF_BY_EXTENSION` is built in full-URL form, so the module
-// strings are compared by their canonical key rather than verbatim — otherwise
-// a subtype ref (`MarkdownDef`, `PngDef`, …) would miss and the file-meta search
-// would skip local reconciliation.
+// A query may spell a module in URL form or prefix form, so the module strings
+// are compared by their canonical key rather than verbatim — otherwise a
+// URL-form subtype ref (`MarkdownDef`, `PngDef`, …) would miss and the
+// file-meta search would skip local reconciliation.
 export function isFileDefCodeRef(
   ref: CodeRef | undefined,
   virtualNetwork: VirtualNetwork,
@@ -152,10 +146,9 @@ export function referenceNamesFile(reference: string): boolean {
   return segmentNamesFile(path.slice(path.lastIndexOf('/') + 1));
 }
 
-export function resolveFileDefCodeRef(
-  fileURL: URL,
-  virtualNetwork: VirtualNetwork,
-): ResolvedCodeRef {
+// An absolute module (URL or prefix form) is returned as written; a relative
+// one is joined against the file it describes.
+export function resolveFileDefCodeRef(fileURL: URL): ResolvedCodeRef {
   let extension = extensionOf(fileURL);
   let mapping = extension
     ? FILEDEF_CODE_REF_BY_EXTENSION[extension]
@@ -163,12 +156,11 @@ export function resolveFileDefCodeRef(
   if (!mapping) {
     return baseFileRef;
   }
-  if (mapping.module.includes('://')) {
-    return mapping;
-  }
   return {
     ...mapping,
-    module: virtualNetwork.resolveURL(mapping.module, fileURL)
-      .href as RealmResourceIdentifier,
+    module: resolveRRIReference(
+      mapping.module,
+      fileURL,
+    ) as RealmResourceIdentifier,
   };
 }

@@ -20,7 +20,6 @@ import type { IndexRunnerDependencyManager } from './dependency-resolver.ts';
 import { uniqueDeps } from './dependency-collections.ts';
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
 import { CARD_INSTANCE_FILE_KEY } from '../search-doc-keys.ts';
-import type { VirtualNetwork } from '../virtual-network.ts';
 
 export interface FileIndexerOptions {
   path: LocalPath;
@@ -44,7 +43,6 @@ export interface FileIndexerOptions {
   // persisted onto `boxel_index.diagnostics` for this file's row.
   diagnostics?: Diagnostics;
   dependencyResolver: IndexRunnerDependencyManager;
-  virtualNetwork: VirtualNetwork;
   updateEntry(
     entryURL: URL,
     entry: FileEntry | FileErrorIndexEntry,
@@ -66,7 +64,6 @@ export async function performFileIndexing({
   precomputedRenderResult,
   diagnostics,
   dependencyResolver,
-  virtualNetwork,
   updateEntry,
   logWarn,
 }: FileIndexerOptions): Promise<'indexed' | 'error'> {
@@ -89,7 +86,7 @@ export async function performFileIndexing({
   let name = path.split('/').pop() ?? path;
   let contentType = inferContentType(name);
 
-  let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL), virtualNetwork);
+  let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL));
 
   let extractResult: FileExtractResponse | undefined = precomputedExtractResult;
   let uncaughtError: Error | undefined;

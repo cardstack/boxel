@@ -344,7 +344,7 @@ module(basename(import.meta.filename), function () {
           fileExtract: true,
           fileRender: true,
           fileDefCodeRef: {
-            module: 'https://cardstack.com/base/html-file-def',
+            module: '@cardstack/base/html-file-def',
             name: 'HtmlDef',
           },
         },

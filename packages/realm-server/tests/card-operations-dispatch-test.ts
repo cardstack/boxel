@@ -450,7 +450,7 @@ const REALM_POLICY: CodeRef = {
 } as CodeRef;
 
 const MARKDOWN: CodeRef = {
-  module: 'https://cardstack.com/base/markdown-file-def',
+  module: '@cardstack/base/markdown-file-def',
   name: 'MarkdownDef',
 } as CodeRef;
 
