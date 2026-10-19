@@ -601,7 +601,6 @@ export class RunRealmCodeResult extends CardDef {
         {{/if}}
         {{#if @model.shownCard}}
           <p class='shown-card' data-test-realm-code-shown-card>
-            <span class='status'>Opened</span>
             <a href={{@model.shownCard}}>{{@model.shownCard}}</a>
           </p>
         {{/if}}
@@ -643,8 +642,7 @@ export class RunRealmCodeResult extends CardDef {
           gap: var(--boxel-sp-xxxs);
         }
         .file,
-        .ui-action,
-        .shown-card {
+        .ui-action {
           display: flex;
           gap: var(--boxel-sp-xs);
           word-break: break-all;
