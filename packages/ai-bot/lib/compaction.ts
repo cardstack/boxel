@@ -243,6 +243,12 @@ export const MAX_COMPACTION_CONTENT_BYTES = 60_000;
 // larger, the oldest used tool-call ids and the latest tool sources first
 // (`getTools` keeps the first definition of each tool). A summary too large
 // by itself is left for the server to reject.
+//
+// A trimmed compaction is still a stop point for `getRoomEvents`, so what
+// trimming drops is lost: the tools of a dropped tool source leave the
+// prompt, and a dropped tool-call id can be issued again, which the host
+// then skips as already run. A summary near the limit can empty both
+// lists.
 export function fitCompactionContent(
   content: Omit<CompactionEventContent, 'responseEventId'>,
 ): Omit<CompactionEventContent, 'responseEventId'> {
