@@ -107,10 +107,13 @@ import {
   OPENROUTER_PASSTHROUGH_PATH,
   REQUEST_FORWARD_PATH,
   SECURE_SESSION_PATH,
+  SECURE_SESSIONS_PATH,
   USER_KEYS_PATH,
 } from './lib/request-telemetry.ts';
 import {
+  handleCheckSecureSession,
   handleEndSecureSession,
+  handleEndWindowSessions,
   handleGoogleSignIn,
   handleGoogleSignInStart,
   handlePasswordSignIn,
@@ -275,10 +278,20 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.post(SECURE_SESSION_PATH, handlePasswordSignIn(args));
   router.get(`${SECURE_SESSION_PATH}/google`, handleGoogleSignInStart(args));
   router.post(`${SECURE_SESSION_PATH}/google`, handleGoogleSignIn(args));
+  router.get(
+    SECURE_SESSION_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleCheckSecureSession(args),
+  );
   router.delete(
     SECURE_SESSION_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleEndSecureSession(args),
+  );
+  router.delete(
+    SECURE_SESSIONS_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleEndWindowSessions(args),
   );
   router.post(
     KEY_WRITE_TICKETS_PATH,

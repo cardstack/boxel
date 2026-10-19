@@ -13,7 +13,9 @@ import type { CreateRoutesArgs } from '../routes.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import {
   endSecureSession,
+  endWindowSessions,
   googleSignInStart,
+  isSecureSession,
   SecureSessionError,
   signInWithGoogle,
   signInWithPassword,
@@ -242,6 +244,50 @@ export function handleEndSecureSession({
       );
     }
     await endSecureSession(dbAdapter, token);
+    await setContextResponse(ctxt, new Response(null, { status: 204 }));
+  });
+}
+
+// GET /_secure-session: whether the presented secure session is still signed
+// in, so the secure window shows its sign-in rather than a session the server
+// has ended. 204 when it is, 401 `signed-out` when it isn't.
+export function handleCheckSecureSession({
+  dbAdapter,
+}: CreateRoutesArgs): Handler {
+  return secureSessionHandler(async (ctxt) => {
+    if (
+      !(await isSecureSession(
+        dbAdapter,
+        ctxt.state.token as RealmServerTokenClaim | undefined,
+      ))
+    ) {
+      throw new SecureSessionError(
+        401,
+        'signed-out',
+        'this session is signed out',
+      );
+    }
+    await setContextResponse(ctxt, new Response(null, { status: 204 }));
+  });
+}
+
+// DELETE /_secure-sessions?client=window: signs the token user's secure
+// windows out, for the app's own sign-out. Any of the user's sessions may call
+// it, card code included; all it can do is sign the user out of key
+// management, which signing in again undoes. It reads, lists and extends
+// nothing, and answers 204 whether or not there was a session to end.
+export function handleEndWindowSessions({
+  dbAdapter,
+}: CreateRoutesArgs): Handler {
+  return secureSessionHandler(async (ctxt) => {
+    let token = ctxt.state.token as RealmServerTokenClaim | undefined;
+    if (!token?.user) {
+      throw new SecureSessionError(401, 'unauthorized', 'sign in first');
+    }
+    if (ctxt.query.client !== 'window') {
+      throw new SecureSessionError(400, 'bad-request', `client is 'window'`);
+    }
+    await endWindowSessions(dbAdapter, token.user);
     await setContextResponse(ctxt, new Response(null, { status: 204 }));
   });
 }

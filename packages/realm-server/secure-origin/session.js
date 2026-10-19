@@ -241,13 +241,44 @@ export async function signOut(config) {
   }
 }
 
+// The window's session, if the server still honours it. The server ends it
+// when the user signs out here, signs out of the app, or the session expires;
+// an ended session is forgotten, so the window shows its sign-in. When the
+// server can't be reached the stored session is kept, since nothing says it
+// has ended.
+export async function liveSession(config) {
+  let session = storedSession();
+  if (!session) {
+    return undefined;
+  }
+  try {
+    await request(new URL('_secure-session', config.realmServerURL), {
+      method: 'GET',
+      token: session.token,
+    });
+  } catch (e) {
+    if (e.status === 401) {
+      forgetSession();
+      return undefined;
+    }
+  }
+  return session;
+}
+
+function signedOut() {
+  return new SecureSessionError(401, 'signed-out', 'Sign in to continue.');
+}
+
 // A request to the realm server under the window's own session. A mode that
 // changes a key uses this, so the change is authorized by this session and
-// never by the app's.
+// never by the app's. A refusal because the session has ended forgets it and
+// answers `signed-out`: a key write ticket refuses an ended session with a
+// 403, as it does any session that isn't a secure one, so a 403 is checked
+// against the server.
 export async function authorizedRequest(config, path, options = {}) {
   let session = storedSession();
   if (!session) {
-    throw new SecureSessionError(401, 'signed-out', 'Sign in to continue.');
+    throw signedOut();
   }
   try {
     return await request(new URL(path, config.realmServerURL), {
@@ -257,6 +288,10 @@ export async function authorizedRequest(config, path, options = {}) {
   } catch (e) {
     if (e.status === 401) {
       forgetSession();
+      throw signedOut();
+    }
+    if (e.status === 403 && !(await liveSession(config))) {
+      throw signedOut();
     }
     throw e;
   }

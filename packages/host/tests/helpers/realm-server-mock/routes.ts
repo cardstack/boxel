@@ -639,6 +639,14 @@ function registerAuthRoutes() {
     },
   });
 
+  // Signing out of the app signs the user's secure windows out. The mock
+  // keeps no secure sessions, so there is never anything to end.
+  registerRealmServerRoute({
+    path: '/_secure-sessions',
+    handler: async (req) =>
+      req.method === 'DELETE' ? new Response(null, { status: 204 }) : null,
+  });
+
   registerRealmServerRoute({
     path: '/_delete-realm',
     handler: async (req, _url, state: RealmServerMockState) => {

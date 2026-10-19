@@ -770,6 +770,10 @@ export default class MatrixService extends Service {
       : this._client;
     let didResetState = false;
     try {
+      // Signing out of the app signs the user out of key management too.
+      // Started first, while the realm-server session is still the outgoing
+      // account's; it is never awaited, so it can't delay sign-out.
+      this.realmServer.endSecureWindowSessions();
       // Logout should synchronously move the app into a logged-out state.
       // Waiting on background Matrix flush promises first can leave the
       // authenticated shell visible for an arbitrarily long time.
