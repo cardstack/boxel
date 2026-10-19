@@ -43,12 +43,16 @@
 //
 // A REVOKE removes only the grants its grantor made, so `up` revokes each
 // SELECT grant those roles hold on a table or its columns acting as the role
-// that made it, with CASCADE, which also removes every grant passed on from
-// it. Acting as another role needs the migrating role to be a superuser or able
-// to SET ROLE to it; where it isn't, `up` stops and names the grant rather than
-// leave the table readable. SELECT granted to PUBLIC, or to a role outside the
-// read-only role that one of its readers also belongs to, still lets them read,
-// and revoking it isn't a migration's call, so `up` then asks
+// that made it, with CASCADE, which also removes the grants passed on from it
+// at the same level. CASCADE on a table grant leaves the column grants passed
+// on from it, which nobody could then revoke, so column grants go first.
+// Within each level, grants a table's owner made go first, so a grant one
+// reader passed on to another goes with the grant it came from. Acting as
+// another role needs the migrating role to be a superuser or able to SET ROLE
+// to it; where it isn't, `up` stops and names the grant rather than leave the
+// table readable. SELECT granted to PUBLIC, or to a role outside the read-only
+// role that one of its readers also belongs to, still lets them read, and
+// revoking it isn't a migration's call, so `up` then asks
 // `has_column_privilege` about every column of both tables for each reader and
 // stops, naming the role and the column, if any of them can still read one.
 //
@@ -287,12 +291,12 @@ exports.up = (pgm) => {
               held.grantee
             INTO grantor_name, grantee_name, revoked_grantor, revoked_grantee
             FROM (
-              SELECT tbl.relowner, acl.*
+              SELECT tbl.relowner, true AS on_table, acl.*
               FROM pg_class tbl
               CROSS JOIN LATERAL aclexplode(tbl.relacl) acl
               WHERE tbl.oid = table_name::regclass
               UNION ALL
-              SELECT tbl.relowner, acl.*
+              SELECT tbl.relowner, false AS on_table, acl.*
               FROM pg_class tbl
               JOIN pg_attribute col ON col.attrelid = tbl.oid
               CROSS JOIN LATERAL aclexplode(col.attacl) acl
@@ -315,6 +319,13 @@ exports.up = (pgm) => {
                 )
                 SELECT oid FROM reader
               )
+            -- Column grants come before table grants: CASCADE on a table
+            -- grant leaves the column grants passed on from it, and once
+            -- their grantor has lost the table grant, nobody can revoke
+            -- them. Within each, grants the owner made come first, so
+            -- CASCADE takes what a reader passed on from one without acting
+            -- as that reader.
+            ORDER BY held.on_table, held.grantor <> held.relowner
             LIMIT 1;
             EXIT WHEN NOT FOUND;
             IF grantor_name IS NOT NULL THEN
