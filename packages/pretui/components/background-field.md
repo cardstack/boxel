@@ -38,7 +38,7 @@ Reach for it when a surface needs texture rather than an image. If you want a sc
 
 Three upstreams, all of them catalogues rather than components: **react-bits' Backgrounds** category (Aurora, DotGrid, GridMotion, Waves, Particles, Silk, Topography and some fifty others), **cult-ui's** `bg-*` and `hero-*` families, and **fancy's** AnimatedGradientWithSvg.
 
-Where Pretui is better: **one import and one arg instead of a component per effect**, and **colour from theme tokens instead of hardcoded palettes**, so a season restyles every ambient surface in the product at once. Motion is compositor-driven with no animation frame loop, and `prefers-reduced-motion` lands on the base rule — which *is* the resting state, so a reduced-motion reader gets a still, deliberate field rather than a frozen midpoint of a loop.
+Where Pretui is better: **one import and one arg instead of a component per effect**, and **color from theme tokens instead of hardcoded palettes**, so a theme restyles every ambient surface in the product at once. Motion is compositor-driven with no animation frame loop, and `prefers-reduced-motion` lands on the base rule — which _is_ the resting state, so a reduced-motion reader gets a still, deliberate field rather than a frozen midpoint of a loop.
 
 Where it is thinner, and the cuts were deliberate: **the shader and particle cohort is gone** — react-bits' Ballpit, MetaBalls and LiquidEther and cult-ui's shader heroes need a rendering engine, and this component owns none. **The mouse-follow variants are gone**, because a background that tracks the cursor cannot be screenshotted honestly. And nine fields is not fifty-five: the CSS-drivable subset covers the gradient, grid, wave and glow families, and anything outside it is not here at all.
 
@@ -47,7 +47,7 @@ Where it is thinner, and the cuts were deliberate: **the shader and particle coh
 - **The paint layer is `aria-hidden` and `pointer-events: none`.** It contributes nothing to the accessibility tree and cannot intercept a click meant for the content above it. That is the whole accessibility design, and it is the right one: this is decoration.
 - **`prefers-reduced-motion` stops every field.** Because the base rule is the resting state rather than frame zero of a keyframe, the still frame is composed rather than arbitrary.
 - **Contrast is the caller's problem, and it is a real one.** Text yielded over `mesh`, `aurora` or `glow` sits on a gradient whose luminance varies across the box, so a contrast ratio measured at one point does not hold at another. `@opacity` and `@fade` are the levers; neither is checked, and nothing warns.
-- **The field carries no name and no role**, so a surface whose *meaning* is partly carried by its texture — a status conveyed by which field is painted — is conveying it invisibly.
+- **The field carries no name and no role**, so a surface whose _meaning_ is partly carried by its texture — a status conveyed by which field is painted — is conveying it invisibly.
 
 ## Theming
 
@@ -57,6 +57,6 @@ Derived on the element: `--pretui-field-cell` (22px × scale) and `--pretui-fiel
 
 Per-layer internals, set by the field rules rather than by callers: `--pretui-field-o0` / `--pretui-field-o1` (layer opacity), `--pretui-field-fx0` / `--pretui-field-fy0` / `--pretui-field-fx1` / `--pretui-field-fy1` (offsets), `--pretui-field-r0` / `--pretui-field-r1` (rotation), `--pretui-field-s0` / `--pretui-field-s1` (scale), `--pretui-field-dx` / `--pretui-field-dy` with `--pretui-field-over-x` / `--pretui-field-over-y` (drift and its matching overhang).
 
-Hue defaults are per field — the `--chart-*` channel for the pattern fields, `--foreground` for `grain` — so a season that retunes its chart palette retunes every ambient surface with it, and a season that changes `--foreground` changes the grain's weight in both light and dark without touching this component.
+Hue defaults are per field — the `--chart-*` channel for the pattern fields, `--foreground` for `grain` — so a theme that retunes its chart palette retunes every ambient surface with it, and a theme that changes `--foreground` changes the grain's weight in both light and dark without touching this component.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

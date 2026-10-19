@@ -52,6 +52,6 @@ Where it is thinner: no hover-intent delay, so a pointer sweeping across a shelf
 
 `--pretui-hvp-ratio` (the reserved box, written from `@ratio` through the kit's CSS guard, so a nonsense ratio drops its declaration and the stylesheet's `16 / 9` stands).
 
-The rest — the toggle's surface, the overlay scrim, the caption's ink — comes from the kit's shared control and surface tokens rather than from a component-specific set, so a preview tile in a shelf matches the cards around it without per-season work.
+The rest — the toggle's surface, the overlay scrim, the caption's ink — comes from the kit's shared control and surface tokens rather than from a component-specific set, so a preview tile in a shelf matches the cards around it without per-theme work.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

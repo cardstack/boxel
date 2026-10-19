@@ -401,7 +401,7 @@ export class PasswordStrength extends Component<PasswordStrengthSignature> {
              attribute: no string is ever interpolated into a style. The bars
              inherit `--pretui-meter-hue` from here, so `Meter` re-dresses
              itself through the token channel and nothing reaches into its
-             markup. Each band is a documented knob, so a season re-tints
+             markup. Each band is a documented knob, so a theme re-tints
              without a fork. */
           --pretui-meter-hue: var(
             --pretui-password-strength-unscored,

@@ -141,6 +141,10 @@ export interface CaptureOptions {
   // page background for the capture. The on-demand surfaces never set this —
   // their captures are always PNG on the page's own background.
   entryOutput?: Record<string, DeclaredEntryOutput>;
+  // Declared-capture-only: the resolved title of a declared pdf slot, written
+  // into the document's metadata. Absent on the on-demand surfaces, whose pdf
+  // takes the title of the card or file on the page.
+  pdfTitle?: string;
 }
 
 // The output parameters a declared capture adds beyond the wire spec's
@@ -1646,12 +1650,41 @@ async function setCaptureBackground(
   }, background ?? '');
 }
 
+// `page.pdf()` writes the page's `document.title` into the PDF's Title
+// metadata — the name a PDF viewer shows for the document — and a render
+// page's own title is the host app's. Retitle the page for the print job with
+// the declared slot's resolved title, else the title of the card or file the
+// render route has on the page. Returns the page's prior title so the pooled
+// page can be restored.
+async function retitleForPdf(
+  page: Page,
+  declaredTitle: string | undefined,
+): Promise<string> {
+  return await page.evaluate((declared: string | null) => {
+    let prior = document.title;
+    let title = declared;
+    if (title === null) {
+      let instance = (globalThis as any).__renderModel?.instance;
+      title =
+        instance?.cardTitle ??
+        (typeof instance?.name === 'string'
+          ? instance.name.replace(/\.[^.]+$/, '')
+          : null);
+    }
+    if (typeof title === 'string' && title.trim() !== '') {
+      document.title = title;
+    }
+    return prior;
+  }, declaredTitle ?? null);
+}
+
 async function captureOneEntry(
   page: Page,
   renderId: string,
   entry: CaptureRequestEntry,
   deviceScaleFactor: number,
   output?: DeclaredEntryOutput,
+  pdfTitle?: string,
 ): Promise<CaptureRequestItem | RenderError> {
   // A pdf capture paginates the settled render onto paper instead of
   // rasterizing the viewport: same settle sequence and emulated media as a
@@ -1686,7 +1719,9 @@ async function captureOneEntry(
     // this one).
     let media = entry.media ?? 'screen';
     await page.emulateMediaType(media);
+    let priorTitle: string | undefined;
     try {
+      priorTitle = await retitleForPdf(page, pdfTitle);
       let bytes = await page.pdf({
         printBackground: true,
         // The author's own `@page { size: … }` rule wins; Chrome's default
@@ -1708,10 +1743,16 @@ async function captureOneEntry(
         pageCount: bounds.pageCount,
       };
     } finally {
-      // Restore the default (screen) media so the next capture on this pooled
-      // page renders exactly as an un-emulated one would.
+      // Restore the default (screen) media and the page's own title so the
+      // next capture on this pooled page renders exactly as an un-emulated one
+      // would.
       try {
         await page.emulateMediaType();
+        if (priorTitle !== undefined) {
+          await page.evaluate((title: string) => {
+            document.title = title;
+          }, priorTitle);
+        }
       } catch {
         // Page may be closing/evicted; a best-effort restore is enough.
       }
@@ -2123,6 +2164,7 @@ export async function runCapture(
         entry,
         currentViewport.deviceScaleFactor,
         opts?.entryOutput?.[entry.name],
+        opts?.pdfTitle,
       );
       cdpCaptureMs += Date.now() - captureStart;
       if ('type' in item) {
@@ -2345,6 +2387,7 @@ async function captureRenderBasedEntry(
             type: resolved.outputType as RasterOutputType,
             background: resolved.background,
           },
+      payload.title,
     );
   } finally {
     if (isPdf) {
@@ -2616,6 +2659,7 @@ export async function captureDeclared(
             let shot = await runCapture(page, resolved.payload.format!, 0, {
               ...opts,
               captureSpec: { captures: [entry] },
+              pdfTitle: resolved.payload.title,
             });
             outcome =
               'type' in shot

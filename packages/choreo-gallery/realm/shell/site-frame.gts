@@ -47,7 +47,7 @@ export class SiteFrame extends Component<Signature> {
             href='https://github.com/cardstack/boxel/tree/main/packages/choreo'
             target='_blank'
             rel='noopener noreferrer'
-          >GitHub</a>
+          >GitHub<span class='sr-only'> (opens in a new tab)</span></a>
         </nav>
       </header>
       <main class='page-shell'>
@@ -62,7 +62,7 @@ export class SiteFrame extends Component<Signature> {
           target='_blank'
           rel='noopener noreferrer'
         >
-          MIT License
+          MIT License<span class='sr-only'> (opens in a new tab)</span>
         </a>
       </footer>
     </ChoreoRoot>

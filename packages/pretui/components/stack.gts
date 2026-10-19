@@ -33,7 +33,7 @@ import type { Orientation, OrientationAlias, SizeAlias } from '../internal/struc
 //      Everything here is logical (`flex-direction: row`, `inset-inline`,
 //      `align-self`), so RTL is free rather than a second stylesheet.
 //   4. **`spacing` is a free-form CSS length in Mantine.** Here `@gap` rides
-// the kit's size scale so a season recompile re-rhythms every
+// the kit's size scale so a theme change re-rhythms every
 //      Stack in the kit at once; a raw length is still accepted through
 //      `@gapLength`, validated by the kit guard.
 
@@ -202,7 +202,7 @@ export class Stack<T = unknown> extends Component<StackSignature<T>> {
         .pretui-stack[data-wrap='true'] {
           flex-wrap: wrap;
         }
-        /* Gap rides the kit's size scale, so a season recompile re-rhythms every
+        /* Gap rides the kit's size scale, so a theme change re-rhythms every
            Stack at once. `--pretui-stack-gap` (from @gapLength or any ancestor)
            wins where a caller genuinely needs a length. */
         .pretui-stack[data-gap='none'] {

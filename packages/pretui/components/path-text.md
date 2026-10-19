@@ -31,7 +31,7 @@ At rest this is a **layout** capability rather than motion. It lives in the moti
 
 **A custom `@path` is validated against an allowlist** and falls back to the circle rather than being written through.
 
-**`@travel` defaults to off, and that is a rule rather than a preference.** Rotation reads as "something is ongoing". It is honoured only for the closed shapes, and when it is on it must be paired with a text affordance saying *what* is ongoing — it is never the only carrier of that fact.
+**`@travel` defaults to off, and that is a rule rather than a preference.** Rotation reads as "something is ongoing". It is honored only for the closed shapes, and when it is on it must be paired with a text affordance saying _what_ is ongoing — it is never the only carrier of that fact.
 
 ## Prior art
 
@@ -53,6 +53,6 @@ Where it is thinner: four shapes plus an allowlisted custom path, no per-glyph e
 
 `--pretui-pathtext-fill` (from `@fill`, through the CSS guard) and `--pretui-pathtext-revolution` (from `@revolution`).
 
-Everything else is geometry expressed in viewBox units and passed as args, because a ring's proportions belong to the composition rather than to the season. The fill defaults to `currentColor`'s context, so a ring inherits the ink of whatever it sits in and a season needs to do nothing.
+Everything else is geometry expressed in viewBox units and passed as args, because a ring's proportions belong to the composition rather than to the theme. The fill defaults to `currentColor`'s context, so a ring inherits the ink of whatever it sits in and a theme needs to do nothing.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

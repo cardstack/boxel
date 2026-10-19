@@ -4470,11 +4470,19 @@ module('Integration | Store', function (hooks) {
       await readHeld.promise;
 
       storeService.refreshReferencesForCodeChange('test code change');
-      await waitUntil(() => {
-        let current = storeService.peek(url) as CardDef | undefined;
-        return current !== undefined && current[localId] !== preReset[localId];
-      });
-      let reestablished = storeService.peek(url) as CardDef;
+      // Joins the re-establishing read rather than polling for its result: that
+      // read is a realm round trip, with no bound on how long it takes under load.
+      let reestablished = (await storeService.get(url)) as CardDef;
+      assert.strictEqual(
+        storeService.peek(url),
+        reestablished,
+        'the store holds the instance the code change re-established',
+      );
+      assert.notStrictEqual(
+        reestablished[localId],
+        preReset[localId],
+        'the code change re-establishes the card as a fresh instance',
+      );
 
       releaseRead.fulfill();
       await settled();

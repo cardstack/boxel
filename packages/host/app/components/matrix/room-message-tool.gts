@@ -354,6 +354,24 @@ export default class RoomMessageTool extends Component<Signature> {
     return typeof reason === 'string' && reason.trim() ? reason.trim() : '';
   }
 
+  // Why this call waits for the user's click, shown above the code while
+  // this tab offers the click that runs it (Run, Retry or Try Anyway), so the
+  // user knows what the click allows. A call another agent sent is run from
+  // that agent's tab, not this one.
+  @cached
+  private get clickReasons() {
+    let { messageTool } = this.args;
+    if (messageTool.message.agentId !== this.matrixService.agentId) {
+      return [];
+    }
+    let offersClick =
+      this.applyButtonState === 'ready' ||
+      Boolean(this.failedToolState) ||
+      this.failedToolCallState ||
+      this.invalidToolCallState;
+    return offersClick ? messageTool.clickReasons : [];
+  }
+
   // Until its command is resolved a call can't say how it will run (its
   // action verb, whether it waits for approval), so it shows as preparing, the
   // same as while its request streams in. A call already answered shows its
@@ -420,6 +438,21 @@ export default class RoomMessageTool extends Component<Signature> {
           {{/if}}
         </CodeBlock>
       {{else}}
+        {{#if this.clickReasons.length}}
+          <div class='click-reasons' data-test-tool-call-click-reasons>
+            <p class='click-reasons-intro'>This waits for your click because it
+              contains:</p>
+            <ul class='click-reasons-list'>
+              {{#each this.clickReasons as |clickReason|}}
+                <li data-test-tool-call-click-reason={{clickReason.call}}>
+                  <code>{{clickReason.call}}</code>
+                  —
+                  {{clickReason.reason}}
+                </li>
+              {{/each}}
+            </ul>
+          </div>
+        {{/if}}
         <CodeBlock
           class={{cn 'tool-code-block' compact=@isCompact}}
           {{this.scrollBottomIntoView}}
@@ -521,6 +554,22 @@ export default class RoomMessageTool extends Component<Signature> {
         padding: 0 var(--boxel-sp-xxs);
         font: var(--boxel-font-xs);
         color: var(--boxel-450);
+      }
+      .click-reasons {
+        padding: 0 var(--boxel-sp-xxs);
+        font-size: var(--boxel-font-size-xs);
+        line-height: var(--boxel-line-height-xs);
+        color: var(--boxel-light);
+      }
+      .click-reasons-intro {
+        margin: 0;
+      }
+      .click-reasons-list {
+        margin: var(--boxel-sp-xxxs) 0 0;
+        padding-left: var(--boxel-sp);
+      }
+      .click-reasons-list code {
+        font-family: var(--boxel-monospace-font-family);
       }
       .tool-result-card-header {
         --boxel-label-color: var(--boxel-450);

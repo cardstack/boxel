@@ -326,7 +326,7 @@ export class JsonTree extends JsonRowsBase<JsonTreeSignature> {
     <style scoped>
       @layer PretComponent {
         /* Every value is var(--token, lightFallback); zero dark branches — the
-           season re-resolves the tokens and the whole component re-tints. */
+           theme re-resolves the tokens and the whole component re-tints. */
         .pretui-json {
           --_indent: var(--pretui-json-indent, 14px);
           --_row-h: var(--pretui-json-row-height, 24px);

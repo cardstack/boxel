@@ -695,7 +695,7 @@ export class BackgroundField extends Component<BackgroundFieldSignature> {
         }
 
         /* ── grain (feTurbulence used as a MASK over a token color, so the
-           speckle is ink in light themes and light in dark themes — upstream
+           speckle is ink in light mode and light in dark mode — upstream
            ships a baked white/black PNG and needs a dark fork) ──────────── */
         .pretui-field[data-field='grain'] .pretui-field-l[data-l='1'] {
           inset: 0;

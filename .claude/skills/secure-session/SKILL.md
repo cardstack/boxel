@@ -5,11 +5,12 @@ description: Operate and diagnose sessions signed in on the secure origin — th
 
 # Secure sessions (operators)
 
-Card code runs in the app page, where it can read the user's realm-server
-session and Matrix access token, and carry both out of the browser. So the
-app's session can't authorize a change to a user's key. A **secure session**
-can: a realm-server session signed in on the secure origin, which card code
-can't reach. The code is `packages/realm-server/lib/secure-session.ts` and
+A **secure session** is a realm-server session signed in on the secure
+origin, which card code can't reach. Why key changes need one, and the rules
+that keep it out of card code's reach, are ADR 005
+(`docs/adr/005-authorize-key-changes-only-with-a-session-card-code-cant-reach.md`);
+read it before changing what a secure session gates or how one signs in. The
+code is `packages/realm-server/lib/secure-session.ts` and
 `handlers/handle-secure-session.ts`; the window's side is
 `secure-origin/session.js` and `secure-origin/sign-in.js`.
 
@@ -24,11 +25,9 @@ user's session does, and additionally:
 | `POST /_key-write-tickets` | `isSecureSession`: the claim, naming a row of the token's user, not expired |
 
 Minting also still requires the request's `Origin` to be the secure origin's
-or absent (the CLI). Nothing else in the server puts `secureSession` in a
-token: `createJWT` (realm-server sessions) and the realm session minter in
-`jwt.ts` refuse claims that carry it, and `createSecureSessionJWT` is called
-only from `lib/secure-session.ts` — `tests/secure-session-test.ts` asserts all
-three.
+or absent (the CLI). Only `createSecureSessionJWT` mints the claim (ADR 005
+§1.2); `tests/secure-session-test.ts` asserts that `createJWT` and the realm
+session minter in `jwt.ts` refuse it.
 
 ## `secure_sessions`
 
@@ -49,10 +48,8 @@ a user's sessions (`isSessionRevoked`) ends these too.
 
 ## Signing in
 
-A Matrix sign-in proves nothing here: any Matrix access token can mint a
-login token for a fresh device (`login_via_existing_session` without UIA).
-What card code can't produce is the user's own credential, typed or confirmed
-on the secure origin.
+Only the user's own credential, presented on the secure origin, signs in (ADR
+005 §1.3).
 
 **Password** — `POST /_secure-session` (`attributes.{username, password,
 client}`), one request. The server resolves the account (Matrix id, email via
@@ -61,16 +58,12 @@ Synapse's admin "log in as user" API, posts `account/3pid/add` with a made-up
 validation session, and completes the UIA password stage with the password.
 Synapse runs the request only once the password is right, and it then fails
 with `M_THREEPID_AUTH_FAILED` having changed nothing — that failure is the
-proof. Both admin-minted tokens are logged out at once. `account/3pid/add` is
-used because it never skips UIA for a recent sign-in (unlike device deletion
-under `ui_auth.session_timeout`) and fails harmlessly once auth passes. A
-missing account, one that has never signed in to Boxel (no session room), one
+proof. Both admin-minted tokens are logged out at once. A missing account, one that has never signed in to Boxel (no session room), one
 with no password and a wrong password all answer the same `401
 invalid-credentials`.
 
 **Google** — the realm server is its own OpenID Connect client, using the
-Matrix server's Google client so users see no new consent
-(`lib/google-sign-in.ts`):
+Matrix server's Google client (`lib/google-sign-in.ts`):
 
 1. The window gets `GET /_secure-session/google` (authorization endpoint,
    client id, and the redirect URI `<secure origin shell>/google-callback`),
@@ -94,8 +87,7 @@ CLI never calls them: `boxel keys sign-in` opens
 session (`secure_session`, `user_id`, `expires_at`, `state`) to
 `http://127.0.0.1:<port>/callback` (after a Google round trip too; the CLI's
 port and state wait in session storage). The shell's CSP allows that form
-target, and `connect-src` to the realm server, and nothing else off-origin.
-`DELETE /_secure-session` signs a secure session out.
+target and `connect-src` to the realm server (ADR 005 §1.4). `DELETE /_secure-session` signs a secure session out.
 
 ## Refusals
 

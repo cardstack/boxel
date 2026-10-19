@@ -37,7 +37,7 @@ What is right: the root is a `<section>`, and the header is a `<header>` contain
 Gaps, and the heading one matters:
 
 - **The title is hard-coded as `<h2>`.** A card does not know its host's outline — the same panel may be embedded under an `<h1>` on one page and under an `<h3>` on another — so every Panel on a page emits an `h2` regardless of depth, producing skipped and repeated levels. **ErrorSummary** in the forms territory solved exactly this with an authorable `@headingLevel`; Panel should do the same, and this is the single clearest fix.
-- **A `<section>` is only a landmark when it has an accessible name**, and nothing wires `@title` to it. There is no `aria-labelledby` pointing at the `<h2>`. So a Panel is either an unnamed `section` (ignored by landmark navigation, which is fine) or, if a season adds a role, an unlabelled one. Wiring the heading id would make panels navigable as regions — worth doing, but note that turning every panel into a landmark is its own kind of noise, so it should probably be opt-in.
+- **A `<section>` is only a landmark when it has an accessible name**, and nothing wires `@title` to it. There is no `aria-labelledby` pointing at the `<h2>`. So a Panel is either an unnamed `section` (ignored by landmark navigation, which is fine) or, if a caller adds a role, an unlabeled one. Wiring the heading id would make panels navigable as regions — worth doing, but note that turning every panel into a landmark is its own kind of noise, so it should probably be opt-in.
 - **`@eyebrow` is inside the `<header>` but outside the `<h2>`**, so it is announced as loose text before the heading. Since eyebrows are usually category names ("REVENUE", "STEP 2"), that is arguably correct — but it means the heading alone is often not self-describing.
 - **A Panel with no `@title` has no header at all** and is a bare surface; that is correct and there is nothing to announce.
 - `overflow: hidden` on the panel can clip a focus ring on an element flush to its edge (WCAG **2.4.11/2.4.13**). Give focusable content a little inset.
@@ -47,7 +47,7 @@ Gaps, and the heading one matters:
 
 `--card` (surface), `--radius-surface`, `--pretui-shadow-card` (the hairline edge), `--border` (the footer rule), `--foreground` (title), `--muted-foreground` (eyebrow and status ink), `--font-mono` + `--text-ui-xs` + `--track-eyebrow` (eyebrow voice), `--text-body`, `--text-ui`, `--track-heading`, `--space-3/4/5`.
 
-A season retuning `--radius-surface` moves Panel, **Dialog** and **Drawer** together, which is intended — those three are the kit's surface vocabulary. `--pretui-shadow-card` is where a season expresses whether panels are outlined or elevated; it defaults to a 1px ring and a season can swap it for a real shadow without touching the component.
+A theme retuning `--radius-surface` moves Panel, **Dialog** and **Drawer** together, which is intended — those three are the kit's surface vocabulary. `--pretui-shadow-card` is where a theme expresses whether panels are outlined or elevated; it defaults to a 1px ring and a theme can swap it for a real shadow without touching the component.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

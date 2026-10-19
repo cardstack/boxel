@@ -24,7 +24,7 @@ Two decisions carry the component.
 
 Pretui's yielded-id shape is closest to Radix's implicit association but explicit about it, which makes it obvious at the call site which control the label belongs to — useful when a "field" contains two controls.
 
-Where Pretui is genuinely better than all three: **the invalid dress travels through the token channel.** `Field` sets `data-invalid` on itself, and its own stylesheet repoints `--border` and `--background` on any `.pretui-inputwrap` or `.pretui-boxelwrap` descendant. The inner boxel-ui control re-dresses itself; **no Pretui CSS reaches into boxel markup**, so a boxel-ui upgrade cannot break the error styling, and a season can redefine what "invalid" looks like by changing one token. Compare the usual approach of threading an `isError` prop down through three components.
+Where Pretui is genuinely better than all three: **the invalid dress travels through the token channel.** `Field` sets `data-invalid` on itself, and its own stylesheet repoints `--border` and `--background` on any `.pretui-inputwrap` or `.pretui-boxelwrap` descendant. The inner boxel-ui control re-dresses itself; **no Pretui CSS reaches into boxel markup**, so a boxel-ui upgrade cannot break the error styling, and a theme can redefine what "invalid" looks like by changing one token. Compare the usual approach of threading an `isError` prop down through three components.
 
 Where it is behind: no `aria-describedby` wiring (below), no required/optional marker of its own, and no support for grouped controls.
 
@@ -50,7 +50,7 @@ Use **FormField** for anything validated. Field is right for a labelled control 
 
 Repointed into descendants when invalid: `--border` → `--destructive`, `--background` → a 4% `--destructive` mix over `--field`.
 
-The 5px row gap, 16px label line-height and 16px reserved message line are fixed. A season must keep `--ink-3` and `--destructive` distinguishable at 11.5px — hint and error occupy the same slot, so weight (500 on the error) plus hue is the only differentiator, and hue alone fails WCAG 1.4.1.
+The 5px row gap, 16px label line-height and 16px reserved message line are fixed. A theme must keep `--ink-3` and `--destructive` distinguishable at 11.5px — hint and error occupy the same slot, so weight (500 on the error) plus hue is the only differentiator, and hue alone fails WCAG 1.4.1.
 
 The styles sit in `@layer PretComposite`, above Input's `PretComponent` layer, so what this component sets on Input wins by layer order. A caller's unlayered CSS overrides both without a more specific selector.
 

@@ -51,6 +51,7 @@ import {
 import { getMatrixUsername } from '@cardstack/runtime-common/matrix-client';
 
 import ENV from '@cardstack/host/config/environment';
+import { realmURLDisplayText } from '@cardstack/host/lib/realm-utils';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
 
@@ -1146,9 +1147,7 @@ export default class RealmService extends Service {
   }
 
   info = (url: string): EnhancedRealmInfo => {
-    if (this.network.virtualNetwork.isRegisteredPrefix(url)) {
-      url = this.network.virtualNetwork.toURL(url).href;
-    }
+    url = this.toLookupURL(url);
     let resource = this.knownRealm(url, { tracked: false });
     if (!resource) {
       this.identifyRealm
@@ -1233,9 +1232,7 @@ export default class RealmService extends Service {
   }
 
   async allUsersPermissions(url: string) {
-    if (this.network.virtualNetwork.isRegisteredPrefix(url)) {
-      url = this.network.virtualNetwork.toURL(url).href;
-    }
+    url = this.toLookupURL(url);
     let resource = this.knownRealm(url);
     if (!resource) {
       await this.identifyRealm.perform(url);
@@ -1347,6 +1344,23 @@ export default class RealmService extends Service {
     // Misses are not cached: a realm learned later may claim this id.
     return undefined;
   }
+
+  // The realm a card, file or module URL belongs to: the one `info()` answers
+  // for, so a realm's URL always matches the name and icon shown beside it.
+  // This doesn't look an unknown realm up itself: the `info()` call for the
+  // same URL does, and the answer updates when that lookup finds it.
+  realmURLOf(urlInRealm: string): string | undefined {
+    void this.identifyRealmTracker;
+    return this.knownRealmKey(this.toLookupURL(urlInRealm));
+  }
+
+  // That realm's URL as shown beside its name.
+  realmURLTextOf = (urlInRealm: string): string | undefined => {
+    let realmURL = this.realmURLOf(urlInRealm);
+    return realmURL
+      ? realmURLDisplayText(this.network.virtualNetwork, realmURL)
+      : undefined;
+  };
 
   realmForSessionRoomId(sessionRoomId: string) {
     return Array.from(this.realms.values()).find(
@@ -1630,6 +1644,36 @@ export default class RealmService extends Service {
     return resource.publishProgress(publishedRealmURL);
   };
 
+  // The form realm lookups take a URL in.
+  private toLookupURL(url: string): string {
+    let vn = this.network.virtualNetwork;
+    return vn.isRegisteredPrefix(url) ? vn.toURL(url).href : url;
+  }
+
+  // Untracked: callers that render the answer pair it with a tracked read.
+  private knownRealmKey(url: string): string | undefined {
+    // `this.realms` is keyed by the user-facing realm URL (typically a
+    // virtual alias like `https://cardstack.com/base/`). Callers may
+    // pass the resolved real URL (e.g. `https://localhost:4201/base/`)
+    // or an RRI prefix (e.g. `@cardstack/base/`) — all three should
+    // match the same realm. Normalize both sides via
+    // `virtualNetwork.unresolveURL` (chases through any registered
+    // virtual → real URL mapping and unifies to the realm-prefix RRI
+    // form) so the comparison is form-agnostic.
+    let vn = this.network.virtualNetwork;
+    let normalizedUrl = vn.unresolveURL(url);
+    for (let key of this.realms.keys()) {
+      if (url.startsWith(key)) {
+        return key;
+      }
+      let normalizedKey = vn.unresolveURL(key);
+      if (normalizedUrl.startsWith(normalizedKey)) {
+        return key;
+      }
+    }
+    return undefined;
+  }
+
   // By default, this does a tracked read from currentKnownRealms so that your
   // answer can be invalidated if a new realm is discovered. Internally, we also
   // use it untracked to implement the read-through cache.
@@ -1644,24 +1688,9 @@ export default class RealmService extends Service {
       }
       return undefined;
     }
-    // `this.realms` is keyed by the user-facing realm URL (typically a
-    // virtual alias like `https://cardstack.com/base/`). Callers may
-    // pass the resolved real URL (e.g. `https://localhost:4201/base/`)
-    // or an RRI prefix (e.g. `@cardstack/base/`) — all three should
-    // match the same realm. Normalize both sides via
-    // `virtualNetwork.unresolveURL` (chases through any registered
-    // virtual → real URL mapping and unifies to the realm-prefix RRI
-    // form) so the comparison is form-agnostic.
-    let vn = this.network.virtualNetwork;
-    let normalizedUrl = vn.unresolveURL(url);
-    for (let [key, value] of this.realms) {
-      if (url.startsWith(key)) {
-        return value;
-      }
-      let normalizedKey = vn.unresolveURL(key);
-      if (normalizedUrl.startsWith(normalizedKey)) {
-        return value;
-      }
+    let key = this.knownRealmKey(url);
+    if (key) {
+      return this.realms.get(key);
     }
     if (tracked) {
       this.currentKnownRealms.has(url);

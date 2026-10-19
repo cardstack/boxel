@@ -89,10 +89,10 @@ signed in on the secure origin — one carrying the `secureSession` claim,
 whose `secure_sessions` row belongs to the token's user and hasn't expired
 (see the `secure-session` skill) — and only for a request with no `Origin`
 header (the CLI) or whose `Origin` is the secure origin's. Anything else is
-refused with 403. The app's session, which card code can read and carry out
-of the browser, never carries the claim, so it can't mint a ticket from any
-origin, nor can the CLI's ordinary session; the CLI gets a secure session with
-`boxel keys sign-in`.
+refused with 403. The app's session never carries the claim, so it can't
+mint a ticket from any origin, nor can the CLI's ordinary session; the CLI
+gets a secure session with `boxel keys sign-in`. ADR 005 records why (§2) and
+the rules a change here must keep (§1.1, §1.2).
 
 ## The API
 

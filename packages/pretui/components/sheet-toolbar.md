@@ -46,6 +46,6 @@ Gaps:
 
 `--inset` or `--card` for the strip, `--border` and `--line-strong` for its rule against the grid, `--foreground` and `--muted-foreground` for the title, plus **SearchInput**'s and **Button**'s full token sets.
 
-Because **Sheet** turns the engine's own chrome off (`@chrome='none'`) and paints the hairline and depth itself, this strip and the grid's header band must be seasoned together — they are two components forming one visual object, and a season that gives them different surfaces will produce a visible seam exactly where the engine's un-themable shadow used to be.
+Because **Sheet** turns the engine's own chrome off (`@chrome='none'`) and paints the hairline and depth itself, this strip and the grid's header band must be themed together — they are two components forming one visual object, and a theme that gives them different surfaces will produce a visible seam exactly where the engine's un-themable shadow used to be.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

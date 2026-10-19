@@ -25,15 +25,15 @@ Two multi-select listboxes (`role="listbox"` with `aria-multiselectable`, `role=
 
 ## Theming
 
-**RecordFace**'s row tokens, `--card` / `--inset` for the two list surfaces, `--border` for their edges, `--pretui-selected` and `--hover` for option states, and **Button** / **IconButton** tokens for the move and reorder controls. A season must keep the two surfaces visually equal and `--pretui-selected` distinguishable from `--hover` within one list.
+**RecordFace**'s row tokens, `--card` / `--inset` for the two list surfaces, `--border` for their edges, `--pretui-selected` and `--hover` for option states, and **Button** / **IconButton** tokens for the move and reorder controls. A theme must keep the two surfaces visually equal and `--pretui-selected` distinguishable from `--hover` within one list.
 
 ## React ecosystem
 
-| Ant Transfer | Pretui Transfer |
-| --- | --- |
-| `dataSource` | `@options` |
-| `targetKeys` / `onChange(nextTargetKeys)` | `@value` / `@onValueChange` — order kept |
-| `titles=[left, right]` | `@availableLabel` / `@selectedLabel` |
-| `render` | `<:option>` |
-| `oneWay` | not supported; both directions always show |
-| `showSearch` / `pagination` | not supported; filter before handing over |
+| Ant Transfer                              | Pretui Transfer                            |
+| ----------------------------------------- | ------------------------------------------ |
+| `dataSource`                              | `@options`                                 |
+| `targetKeys` / `onChange(nextTargetKeys)` | `@value` / `@onValueChange` — order kept   |
+| `titles=[left, right]`                    | `@availableLabel` / `@selectedLabel`       |
+| `render`                                  | `<:option>`                                |
+| `oneWay`                                  | not supported; both directions always show |
+| `showSearch` / `pagination`               | not supported; filter before handing over  |

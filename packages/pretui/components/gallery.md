@@ -60,6 +60,6 @@ Where it is thinner: no zoom or pan on the hero, no thumbnail reordering, no laz
 
 Both ratio tokens are written through the kit's CSS guard, so an asset with nonsense dimensions drops its declaration and the cell falls back to the stylesheet rather than carrying a broken value.
 
-The two thumb tokens are the season's density lever for the rail; `@thumbHeight` is the per-instance override. A season that shrinks thumbnails shrinks them everywhere a gallery appears, which is the intent — a rail that matched its neighbours on one screen and not another would read as a different component.
+The two thumb tokens are the theme's density lever for the rail; `@thumbHeight` is the per-instance override. A theme that shrinks thumbnails shrinks them everywhere a gallery appears, which is the intent — a rail that matched its neighbors on one screen and not another would read as a different component.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

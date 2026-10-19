@@ -68,6 +68,8 @@ const BOOTSTRAP = `
       cards: Object.freeze({
         search: (query) => call('cards.search', [query]),
         get: (path) => call('cards.get', [path]),
+        update: (path, attributes) =>
+          call('cards.update', [path, attributes]),
       }),
       entries: Object.freeze({
         search: (query, options) =>
@@ -164,6 +166,7 @@ const METHODS = new Set<RealmRunnerCallMethod>([
   'fs.download',
   'cards.search',
   'cards.get',
+  'cards.update',
   'entries.search',
   'fs.delete',
   'capture',

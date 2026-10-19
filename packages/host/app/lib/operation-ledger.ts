@@ -76,11 +76,14 @@ export interface LedgerEnvironment {
   recordVersion(instance: CardDef, version: string): void;
   // Serializes against the store's own writes of the same card.
   withLock<T>(localId: string, fn: () => Promise<T>): Promise<T>;
-  // The realm round trip.
+  // The realm round trip. `skipIndexWait` is the caller's own choice, carried
+  // through unchanged: the realm answers once the write is durable rather
+  // than once it is indexed.
   send(
     realmURL: string,
     envelope: OperationsEnvelope,
     clientRequestId: string,
+    opts?: { skipIndexWait?: boolean },
   ): Promise<OperationsAnswer>;
   // Names the base version on an envelope's single entry.
   stamp(envelope: OperationsEnvelope, baseVersion: string): OperationsEnvelope;
@@ -104,6 +107,7 @@ export interface LoweredOperation {
 
 interface LedgerEntry {
   clientRequestId: string;
+  skipIndexWait?: boolean;
   realmURL: string;
   envelope: OperationsEnvelope;
   operation: LoweredOperation;
@@ -178,6 +182,7 @@ export default class OperationLedger {
     envelope: OperationsEnvelope;
     candidate: OptimisticCandidate;
     clientRequestId: string;
+    skipIndexWait?: boolean;
   }): Promise<OperationsAnswer | undefined> {
     let instance = this.#env.held(args.candidate.id);
     if (!instance) {
@@ -209,6 +214,7 @@ export default class OperationLedger {
       envelope: OperationsEnvelope;
       candidate: OptimisticCandidate;
       clientRequestId: string;
+      skipIndexWait?: boolean;
     },
   ): Promise<LedgerEntry | undefined> {
     let operation: LoweredOperation | undefined;
@@ -239,6 +245,7 @@ export default class OperationLedger {
     }
     let entry: LedgerEntry = {
       clientRequestId: args.clientRequestId,
+      ...(args.skipIndexWait ? { skipIndexWait: true } : {}),
       realmURL: args.realmURL,
       envelope: args.envelope,
       operation,
@@ -359,6 +366,7 @@ export default class OperationLedger {
           entry.realmURL,
           envelope,
           entry.clientRequestId,
+          entry.skipIndexWait ? { skipIndexWait: true } : undefined,
         );
       } catch (err: unknown) {
         // The realm said nothing about what it now holds, so there is no
@@ -379,14 +387,26 @@ export default class OperationLedger {
       // entries queued behind it, which were computed on top of state that
       // is now gone, are rejected.
       //
-      // The version rides through the re-read. A write that is not confirmed
-      // still wrote, and the realm reported the version of the bytes it
-      // stored — which is exactly what the re-read then brings back, since a
-      // write resolves only once its indexing has settled. Dropping it would
-      // leave the next operation with no base to name either, and a card
-      // whose first unconfirmed write is its last confirmable one: the chain
-      // could never start.
-      await this.#abort(chain, entry, result?.version);
+      // The version rides through the re-read when the realm answered after
+      // indexing the write. A write that is not confirmed still wrote, and
+      // the realm reported the version of the bytes it stored — which is
+      // exactly what the re-read then brings back. Dropping it would leave
+      // the next operation with no base to name either, and a card whose
+      // first unconfirmed write is its last confirmable one: the chain could
+      // never start.
+      //
+      // Not when the realm answered with the write's indexing still pending.
+      // The re-read can then bring back the card as it was before the write,
+      // and recording the write's version over that state would also have the
+      // store take the write's own index event as already held — the one
+      // event that would correct it. Left unrecorded, the event re-reads the
+      // card once the write is indexed, and the next operation names no base
+      // until then.
+      await this.#abort(
+        chain,
+        entry,
+        result?.indexPending ? undefined : result?.version,
+      );
       return answer;
     })();
   }

@@ -60,7 +60,7 @@ APG **Alert and Message Dialogs**. The element is the native `<dialog>` opened m
 
 AlertDialog adds no tokens of its own. It wears **Dialog**'s: `--card`, `--foreground`, `--muted-foreground`, `--border`, `--radius-surface`, `--pretui-shadow-overlay`, `--pretui-overlay-scrim`, `--text-heading`, `--weight-heading`, `--track-heading`, `--text-body`, `--leading-body`, `--space-3`, `--space-4` and `--space-6`. The buttons are **Button**'s: the confirm tone reads `--destructive` / `--destructive-foreground` for `danger`, and `--pretui-button-*` for size and shape.
 
-A season that retunes Dialog and Button retunes every AlertDialog with them. The Cancel-then-Confirm order and the outlined-then-accent pairing are fixed.
+A theme that retunes Dialog and Button retunes every AlertDialog with them. The Cancel-then-Confirm order and the outlined-then-accent pairing are fixed.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

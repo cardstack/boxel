@@ -5,6 +5,7 @@ import { tracked } from '@glimmer/tracking';
 import { modifier } from 'ember-modifier';
 
 import type { StageSignature } from '../demo';
+import { passFocus, takesFocus } from '../lib/focus';
 import { FilmFrame, type FilmName } from './film-frame';
 
 /* THE WELL CAN BE RESIZED BY HAND, within reason. The film is responsive
@@ -207,7 +208,21 @@ export class FilmStage extends Component<Signature> {
     this.remember();
   };
 
-  private toggleTheater = () => this.args.theater?.toggle();
+  /** the Default size button: it goes once the frame is back to size, so
+   *  focus moves to the grip beside it first */
+  private resetFromButton = (event: Event) => {
+    (event.currentTarget as HTMLElement)
+      .closest('.film-embed')
+      ?.querySelector<HTMLElement>('.film-grip')
+      ?.focus();
+    this.reset();
+  };
+
+  /** the door into theater goes once theater is on; the way out takes focus */
+  private toggleTheater = () => {
+    passFocus('theater-exit');
+    this.args.theater?.toggle();
+  };
 
   <template>
     <div class='film-face' data-test-film={{@film}} ...attributes>
@@ -248,7 +263,8 @@ export class FilmStage extends Component<Signature> {
                 data-film-theater
                 data-test-theater-enter
                 {{on 'click' this.toggleTheater}}
-              >⛶ Theater mode</button>
+                {{takesFocus 'theater-enter'}}
+              ><span aria-hidden='true'>⛶</span> Theater mode</button>
             {{/unless}}
           {{/if}}
           {{#unless this.inTheater}}
@@ -256,8 +272,8 @@ export class FilmStage extends Component<Signature> {
               <button
                 type='button'
                 class='film-theater-btn film-reset-btn'
-                {{on 'click' this.reset}}
-              >↺ Default size</button>
+                {{on 'click' this.resetFromButton}}
+              ><span aria-hidden='true'>↺</span> Default size</button>
             {{/if}}
             {{#if this.resizable}}
               {{! the corner grip: drag to resize the frame, double-click to

@@ -2,7 +2,7 @@
 
 A date the reader already knows — a birthday, an issue date, an expiry — typed into three boxes rather than browsed in a calendar.
 
-Nobody scrolls back forty years to find their own birthday. This is not a second date control: **DatePicker** and **Calendar** are for a date you are *choosing*; this is for one you are *recalling*.
+Nobody scrolls back forty years to find their own birthday. This is not a second date control: **DatePicker** and **Calendar** are for a date you are _choosing_; this is for one you are _recalling_.
 
 ## The contract
 
@@ -51,6 +51,6 @@ Where it is thinner: no calendar fallback for a reader who would rather browse, 
 
 `--pretui-knowndate-day-width`, `--pretui-knowndate-month-width` and `--pretui-knowndate-year-width` size the three boxes independently, and `--pretui-destructive-ink` carries the invalid state.
 
-Three separate width tokens rather than one is the point: a month box wide enough for "September" and a day box wide enough for "31" are very different, and a season that sets them together produces either a cramped month or three boxes of wasted space.
+Three separate width tokens rather than one is the point: a month box wide enough for "September" and a day box wide enough for "31" are very different, and a theme that sets them together produces either a cramped month or three boxes of wasted space.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

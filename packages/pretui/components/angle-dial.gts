@@ -311,7 +311,7 @@ export class AngleDial extends Component<AngleDialSignature> {
           outline-offset: 2px;
         }
         /* The hand: one element rotated by a single custom property, so the
-           only thing a season or a value changes is that property. */
+           only thing a theme or a value changes is that property. */
         .pretui-angle-hand {
           position: absolute;
           inset: 0;

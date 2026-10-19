@@ -43,7 +43,7 @@ No APG pattern. It is an image.
 
 `--pretui-sparkline-hue` (set from the tone: `--primary` by default, or `--pretui-info`, `--success`, `--warning`, `--destructive`, `--pretui-attention`, `--muted-foreground`), `--pretui-sparkline-stroke` (line width, default 1.5), `--pretui-sparkline-fill` (area opacity, default 0.16) and `--card` (the ring around the last-point dot).
 
-Size is an arg, because a spark is sized to its context rather than to the season.
+Size is an arg, because a spark is sized to its context rather than to the theme.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

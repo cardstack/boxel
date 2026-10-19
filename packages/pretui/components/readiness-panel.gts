@@ -55,7 +55,7 @@ import type { BlockHeadingLevel } from '../internal/blocks';
 //     distinct glyph, a distinct tone and distinct words.
 //   · Success/failure glyphs CSS-drawn from hardcoded #fff gradients,
 //     invisible on a dark surface → glyphs are text, inked from the same
-//     tone token as the row, so they follow a season and a dark theme.
+//     tone token as the row, so they follow the theme and dark mode.
 //   · Empty and loading states near-identical → see (3) above.
 //   · `key='name'` assuming names are unique → `ReadinessGate.id` is the
 //     key, falling back to name+index, so two gates called "lint" coexist.

@@ -3,6 +3,9 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';
 import { fn } from '@ember/helper';
+// type-only gap: 'ember-modifier' resolves at realm runtime; glint cannot see
+// it here (accepted parse baseline, same as affix.gts / button.gts)
+import { modifier } from 'ember-modifier';
 
 // Transcribed from wa-time-input's segmented field (the Calendar family's
 // clock — same segmented spinbutton grammar the date pickers speak, applied
@@ -27,6 +30,16 @@ import { fn } from '@ember/helper';
 // them), the segments carry aria-disabled, the focus outline is
 // forced-colors-safe, and the colon separator comes from the precomputed
 // segment view.
+// Touch: the segments only answer the keyboard, and with the popup picker
+// dropped a touch device has no other way in. So the field also renders a
+// native <input type='time'> over the same segment state, and an
+// (any-pointer: coarse) rule swaps it in for the segments — a tap opens the
+// platform's own time picker (the iOS wheel). Any touch pointer, not just a
+// primary one, so a touchscreen laptop's tap works too; the native control
+// still takes a mouse and keyboard there. Hidden with display: none
+// otherwise, it is out of the tab order and the accessibility tree.
+// The native control's 12/24-hour display follows the device locale, not
+// @hourCycle; the wire value is 24-hour either way.
 
 export type TimeInputHourCycle = '24' | '12';
 
@@ -62,6 +75,22 @@ interface TimeSegmentView {
 }
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
+
+// On a touch device the native control is the only part of the field that
+// can be operated, so it carries the group's name — including an aria-label
+// or aria-labelledby a caller set on the group through ...attributes, which
+// @label alone would miss. The label argument re-runs this when @label
+// changes; a caller changing its own attribute later is not seen.
+const nameFromGroup = modifier(
+  (input: HTMLInputElement, [_label]: [string]) => {
+    let group = input.parentElement;
+    for (let attr of ['aria-label', 'aria-labelledby']) {
+      let value = group?.getAttribute(attr);
+      if (value) input.setAttribute(attr, value);
+      else input.removeAttribute(attr);
+    }
+  },
+);
 
 function parseWire(v: string | undefined): TimeSegs {
   let m = /^(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(v ?? '');
@@ -254,12 +283,13 @@ export class TimeInput extends Component<TimeInputSignature> {
     this.ss = next.ss;
     this.dp = next.dp;
     let wire = this.wireOf(next);
-    if (wire !== (this.emitted ?? '')) {
-      this.emitted = wire;
+    // compared with the value the owner holds, not the last one reported,
+    // so a value a controlled owner turned down is reported again when it
+    // is chosen again
+    if (wire !== (this.args.value ?? this.emitted ?? '')) {
       this.args.onValueChange?.(wire);
-    } else {
-      this.emitted = wire;
     }
+    this.emitted = wire;
   }
   private clearBufferState() {
     this.buffer = '';
@@ -390,6 +420,37 @@ export class TimeInput extends Component<TimeInputSignature> {
     this.clearBufferState();
   };
 
+  // the touch control's value: the wire string, '' while incomplete
+  get nativeValue(): string {
+    return this.wireOf(this.effective);
+  }
+  // A native time input may report seconds (or fractions of one) the field
+  // isn't showing, or omit seconds entirely — iOS Safari's picker has no
+  // seconds column and always writes HH:mm — so normalize to the wire shape
+  // before committing, keeping the seconds the field already holds when the
+  // platform reports none. '' (the platform's Reset) clears every segment.
+  // Wired to change alone: the platforms fire input alongside it for each
+  // value the control takes, so listening to both would commit every value
+  // twice. iOS fires the pair each time the wheel settles, so an owner hears
+  // each position the wheel stops on, as it would from any native input.
+  handleNativeChange = (ev: Event) => {
+    if (this.args.disabled) return;
+    let input = ev.target as HTMLInputElement;
+    this.clearBufferState();
+    let s = parseWire(input.value.replace(/\.\d+$/, ''));
+    if (s.hh !== null) {
+      s.ss = this.args.withSeconds ? (s.ss ?? this.effective.ss ?? 0) : null;
+    }
+    let picked = this.wireOf(s);
+    this.commit(s);
+    // A controlled owner that keeps a different @value gets it back on
+    // screen, the same way the segments stay on the held value. Only then:
+    // rewriting the value under an open picker can move its wheel.
+    if (this.nativeValue !== picked) {
+      input.value = this.nativeValue;
+    }
+  };
+
   <template>
     <div
       class='pretui-time'
@@ -420,6 +481,17 @@ export class TimeInput extends Component<TimeInputSignature> {
           <span class='pretui-time-literal' aria-hidden='true'>:</span>
         {{/if}}
       {{/each}}
+      <input
+        class='pretui-time-native'
+        type='time'
+        step={{if @withSeconds '1'}}
+        value={{this.nativeValue}}
+        disabled={{@disabled}}
+        aria-label={{this.label}}
+        {{nameFromGroup this.label}}
+        {{on 'change' this.handleNativeChange}}
+        data-test-pretui-time-native
+      />
     </div>
     <style scoped>
       @layer PretComponent {
@@ -469,6 +541,41 @@ export class TimeInput extends Component<TimeInputSignature> {
         }
         .pretui-time-literal {
           color: var(--ink-3, var(--boxel-400));
+        }
+        .pretui-time-native {
+          display: none;
+        }
+        /* touch: the native control replaces the segments inside the same
+           field face, at the 44px (2.75rem) touch-target floor. Its type is
+           at least 16px, the size below which iOS Safari zooms the page when
+           an input takes focus — a CSS-px threshold, so not a rem. */
+        @media (any-pointer: coarse) {
+          .pretui-time {
+            height: auto;
+            min-height: 2.75rem;
+            padding: 0;
+          }
+          .pretui-time-seg,
+          .pretui-time-literal {
+            display: none;
+          }
+          .pretui-time-native {
+            display: block;
+            min-width: 6.5em;
+            min-height: 2.75rem;
+            margin: 0;
+            padding: 0 var(--boxel-sp-2xs);
+            border: 0;
+            border-radius: inherit;
+            background: transparent;
+            color: inherit;
+            font: inherit;
+            font-size: max(16px, 1em);
+          }
+          .pretui-time-native:focus-visible {
+            outline: 2px solid var(--ring);
+            outline-offset: 1px;
+          }
         }
       }
     </style>

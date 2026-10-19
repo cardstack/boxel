@@ -34,13 +34,13 @@ Gaps:
 - **No `@invalid` / `aria-invalid` / `aria-required`.** A required radio group cannot be marked as failing except by the surrounding `Field`'s visual dress, which announces nothing.
 - **`disabled` uses the native attribute**, removing disabled options from the tab order entirely. APG prefers `aria-disabled` so disabled choices remain discoverable — a user should be able to learn that an option exists but is unavailable.
 - **No visible focus ring is defined** on the `appearance: none` face; the UA outline is all there is, and it renders inconsistently over a custom-painted control. Likely WCAG 2.4.7 failure.
-- `opacity: 0.45` for disabled will fail text contrast in most seasons.
+- `opacity: 0.45` for disabled will fail text contrast in most themes.
 - The 15px dot is below WCAG 2.5.8's 24×24 target minimum, but the whole `<label>` row is clickable, which satisfies it in practice.
 
 ## Theming
 
 `--pretui-control-rest` (→ `--field`), `--pretui-control-border` (→ `--input`), `--primary` (checked fill), `--card` (the dot), `--border` (mixed into the checked hairline), `--pretui-edge-highlight`, `--text-ui-md`.
 
-The 15px circle, 6px dot and 7px row gap are fixed. A season that sets `--card` close to `--primary` erases the dot; define them as a contrasting pair, exactly as with Checkbox's `--primary` / `--primary-foreground`.
+The 15px circle, 6px dot and 7px row gap are fixed. A theme that sets `--card` close to `--primary` erases the dot; define them as a contrasting pair, exactly as with Checkbox's `--primary` / `--primary-foreground`.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

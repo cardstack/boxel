@@ -42,7 +42,7 @@ Naming an operation a card does not carry is refused with the list of the ones i
 
 Besides a type's declared operations, the plain "create" mints a new card of the type of the card at "cardId". It alone reads the other two inputs: "payload" as the new card's field values, "relationships" as the cards it is created linking to - JSON:API relationship objects such as {"author": {"links": {"self": "<card id>"}}} - and "realm" as where it lands, which defaults to the realm holding the card at "cardId". Every other operation acts on that card and runs in that card's own realm, so it takes neither "realm" nor "relationships".
 
-A write answers the card it wrote and the version that card now holds; a read answers the document.`;
+A write answers the card it wrote and the version that card now holds; a read answers the document. A write whose indexing is still pending says so with "indexPending", and a search may not show it until it lands; set "skipIndexWait" to have a write answer without waiting for that indexing at all.`;
 
   async getInputType() {
     let commandModule = await this.loadToolModule();
@@ -65,9 +65,11 @@ A write answers the card it wrote and the version that card now holds; a read an
     let operationsModule = await this.loadOperationsModule();
     let bucketFor = operationsModule.operations as (
       target: unknown,
+      opts?: { skipIndexWait?: boolean },
     ) => OperationsBucket;
+    let sending = input.skipIndexWait ? { skipIndexWait: true } : undefined;
     let declarations = operationsModule.getDeclaredOperations(card);
-    let onInstance = bucketFor(card);
+    let onInstance = bucketFor(card, sending);
     let name = input.operation;
 
     // The two scopes a name can be invocable in. An instance-scoped member
@@ -84,7 +86,7 @@ A write answers the card it wrote and the version that card now holds; a read an
     let bucket = onInstance;
     if (name === BATCH_MEMBER || typeof onInstance[name] !== 'function') {
       scope = 'type';
-      bucket = bucketFor(card.constructor);
+      bucket = bucketFor(card.constructor, sending);
       if (typeof bucket[name] !== 'function') {
         throw new Error(
           `"${name}" is not an operation ${defNameOf(card)} carries. It carries: ${invocableNames(
@@ -161,12 +163,13 @@ A write answers the card it wrote and the version that card now holds; a read an
         document: answer as Record<string, unknown>,
       });
     }
-    let { id, version, generation, lastModified } =
+    let { id, version, generation, indexPending, lastModified } =
       answer as OperationWriteResult;
     return new InvokeCardOperationResult({
       cardId: id,
       version,
       generation,
+      indexPending: indexPending === true,
       lastModified,
     });
   }

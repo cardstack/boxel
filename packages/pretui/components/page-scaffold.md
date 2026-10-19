@@ -29,7 +29,7 @@ The page frame: masthead, subhead, navigation rail, content column, aside rail a
 
 **The skip link is on by default.** It is the one affordance a page frame can supply that no component inside it can.
 
-**Rail widths are args rather than tokens** because a documentation page and a tool need different rails, and that is a per-page decision rather than a seasonal one.
+**Rail widths are args rather than tokens** because a documentation page and a tool need different rails, and that is a per-page decision rather than a theme-wide one.
 
 ## Prior art
 
@@ -52,6 +52,6 @@ Where it is thinner: no responsive rail collapse — a narrow viewport is the ca
 
 `@navWidth`, `@asideWidth` and `@maxWidth` are caller values; `@preset` selects a boxel-layout arrangement; `@divided` draws the band hairlines from the shared `--border` token.
 
-The measure cap is the one worth thinking about seasonally: 72rem is a reading measure, and a season with a larger base size effectively narrows it in characters — which is the right behaviour, and surprising if you expect a fixed pixel width.
+The measure cap is the one worth thinking about per theme: 72rem is a reading measure, and a theme with a larger base size effectively narrows it in characters — which is the right behavior, and surprising if you expect a fixed pixel width.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

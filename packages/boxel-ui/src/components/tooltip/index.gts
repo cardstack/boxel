@@ -123,6 +123,7 @@ export default class Tooltip extends Component<Signature> {
       '--boxel-tooltip-border-radius',
       '--boxel-tooltip-padding',
       '--boxel-tooltip-font',
+      '--boxel-tooltip-max-width',
     ];
 
     tooltipVars.forEach((varName) => {
@@ -265,6 +266,9 @@ export default class Tooltip extends Component<Signature> {
           var(--boxel-sp-xxxs) var(--boxel-sp-sm)
         );
         width: max-content;
+        /* Long content, like a URL, wraps instead of running off screen. */
+        max-width: var(--boxel-tooltip-max-width, min(28rem, 80vw));
+        overflow-wrap: anywhere;
         position: absolute;
         font: var(--boxel-tooltip-font, var(--boxel-font-xs));
         font-family: inherit;

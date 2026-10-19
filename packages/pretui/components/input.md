@@ -24,7 +24,7 @@ Two places the channel cannot reach, handled by a single inline `style`: the UA 
 
 Pretui sits deliberately between them. It does not own its label (Field/FormField does), which avoids the two-labels problem you hit when a form layout also wants to place labels. But unlike shadcn it _does_ carry `@helperText` and `@errorMessage`, because those are ARIA-wired by the layer below and re-implementing them at the wrapper would mean re-implementing the wiring.
 
-The genuine improvement over both: **invalid styling travels through the token channel.** Field sets `data-invalid` on itself, and its stylesheet repoints `--border` and `--background` on the wrapper — the inner control re-dresses itself. Compare the usual approach of a `.error` class threaded down through every layer. It also means a season can change what "invalid" looks like by changing one token.
+The genuine improvement over both: **invalid styling travels through the token channel.** Field sets `data-invalid` on itself, and its stylesheet repoints `--border` and `--background` on the wrapper — the inner control re-dresses itself. Compare the usual approach of a `.error` class threaded down through every layer. It also means a theme can change what "invalid" looks like by changing one token.
 
 ## Accessibility
 
@@ -36,7 +36,7 @@ Honest gaps:
 - **No accessible name of its own.** An `<Input>` used outside `Field`/`FormField`/`FormField`'s descendants and without an explicit `aria-label` is unlabelled. A placeholder is not a label.
 - `@required` sets the native attribute, which is correct, and suppresses the "Optional" indicator. `@optional` is a purely visual marker with no ARIA meaning — fine, but do not read it as the inverse of `@required`.
 - `@disabled` uses the native attribute, so the control leaves the tab order and its value is not submitted. If you need a read-only-but-focusable field, pass `readonly` through `...attributes` instead.
-- Focus ring is `--ring`, applied by BoxelInput. Verify it against WCAG 2.4.11 in dark seasons — the default is `--primary`, which on a `--field` background can be low-contrast.
+- Focus ring is `--ring`, applied by BoxelInput. Verify it against WCAG 2.4.11 in dark mode — the default is `--primary`, which on a `--field` background can be low-contrast.
 
 ## Theming
 
@@ -44,7 +44,7 @@ Consumed: `--field` (control face), `--input` (hairline), `--primary` (focus rin
 
 Forwarded into boxel-ui: `--boxel-form-control-height`, `--boxel-input-height`, `--boxel-form-control-border-radius`, `--boxel-font-size-sm`, `--boxel-font-size-xs`, `--boxel-sp-xs`, `--boxel-sp-sm`.
 
-A season must keep `--field` and `--card` visually distinct or inputs vanish into panels; and must not set `--input` equal to `--border` if it wants controls to read as inset rather than as bordered boxes. Note that this component _narrows_ `--muted-foreground` to `--ink-3` inside its wrapper — a season redefining `--ink-3` is changing placeholder colour kit-wide.
+A theme must keep `--field` and `--card` visually distinct or inputs vanish into panels; and must not set `--input` equal to `--border` if it wants controls to read as inset rather than as bordered boxes. Note that this component _narrows_ `--muted-foreground` to `--ink-3` inside its wrapper — a theme redefining `--ink-3` is changing placeholder color kit-wide.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

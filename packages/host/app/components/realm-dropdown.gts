@@ -23,6 +23,8 @@ import { RealmPaths, ri } from '@cardstack/runtime-common';
 
 import type { EnhancedRealmInfo } from '@cardstack/host/services/realm';
 
+import RealmURLTooltip from './realm-url-tooltip';
+
 import type RealmService from '../services/realm';
 
 export interface RealmDropdownItem extends EnhancedRealmInfo {
@@ -70,14 +72,19 @@ export default class RealmDropdown extends Component<Signature> {
           data-realm-dropdown-trigger
           data-test-realm-dropdown-trigger
           data-test-realm-name={{this.selectedRealm.name}}
-          title={{this.selectedItemText}}
           ...attributes
         >
           {{#if this.selectedRealm}}
-            <RealmIcon class='icon' @realmInfo={{this.selectedRealm}} />
-            <div class='selected-item' data-test-selected-realm>
-              {{this.selectedItemText}}
-            </div>
+            <RealmURLTooltip
+              class='selected-realm'
+              @realmURL={{this.selectedRealm.path}}
+              @label={{this.selectedRealm.name}}
+            >
+              <RealmIcon class='icon' @realmInfo={{this.selectedRealm}} />
+              <div class='selected-item' data-test-selected-realm>
+                {{this.selectedItemText}}
+              </div>
+            </RealmURLTooltip>
             {{#if (and @displayReadOnlyTag (not this.selectedRealm.canWrite))}}
               <span class='read-only-tag' data-test-realm-read-only>READ ONLY</span>
             {{/if}}
@@ -127,7 +134,7 @@ export default class RealmDropdown extends Component<Signature> {
         width: 100%;
         max-width: 100%;
         display: grid;
-        grid-template-columns: auto 1fr auto auto;
+        grid-template-columns: minmax(0, 1fr) auto auto;
         justify-items: flex-start;
         gap: var(--boxel-sp-xxs);
         padding: var(--boxel-sp-5xs) var(--boxel-sp-xxs);
@@ -141,6 +148,13 @@ export default class RealmDropdown extends Component<Signature> {
       }
       .realm-dropdown-trigger[aria-expanded='true'] .arrow-icon {
         transform: scaleY(-1);
+      }
+      .selected-realm {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-2xs);
+        min-width: 0;
+        max-width: 100%;
       }
       .selected-item {
         max-width: 100%;
@@ -283,7 +297,7 @@ export default class RealmDropdown extends Component<Signature> {
         new MenuItem({
           label: realm.name,
           action: () => this.args.onSelect(realm),
-          checked: realm.name === this.selectedRealm?.name,
+          checked: realm.path === this.selectedRealm?.path,
           iconURL: realm.iconURL ?? undefined,
           subtext: !realm.canWrite ? 'READ ONLY' : undefined,
         }),
