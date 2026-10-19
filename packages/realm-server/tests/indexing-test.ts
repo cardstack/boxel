@@ -704,79 +704,59 @@ module(basename(import.meta.filename), function () {
       }
     });
 
-    test('can store error doc in the index when atom view throws error', async function (assert) {
+    // A card whose format template throws is indexed, and only its render
+    // fails: its data read serves the card and reports the render's error,
+    // and the full error document — with the deps error repair fans out
+    // over — is stored on its prerendered_html row.
+    async function assertRenderFailed(
+      assert: Assert,
+      name: string,
+      message: RegExp,
+    ) {
       let entry = await realm.realmIndexQueryEngine.cardDocument(
-        new URL(`${testRealm}atom-boom`),
+        new URL(`${testRealm}${name}`),
       );
-      if (entry?.type === 'error') {
-        assert.strictEqual(
-          entry.error.errorDetail.message,
-          'intentional error',
-        );
+      if (entry?.type === 'doc') {
         assert.ok(
-          entry.error.errorDetail.deps?.includes(`${testRealm}atom-boom`),
-          'error deps include atom-boom',
+          message.test(entry.renderError?.message ?? ''),
+          `the data read reports the render error: ${entry.renderError?.message}`,
         );
       } else {
-        assert.ok(false, 'expected index entry to be an error');
+        assert.ok(
+          false,
+          `expected ${name} to read as its data, but it read as an error: ${entry?.error.errorDetail.message}`,
+        );
       }
+      let [row] = (await testDbAdapter.execute(
+        `SELECT error_doc FROM prerendered_html WHERE url = $1 AND type = 'instance'`,
+        {
+          bind: [`${testRealm}${name}.json`],
+          coerceTypes: { error_doc: 'JSON' },
+        },
+      )) as { error_doc: { deps?: string[] } | null }[];
+      assert.ok(
+        row?.error_doc?.deps?.includes(`${testRealm}${name}`),
+        `the stored render error's deps include ${name}`,
+      );
+    }
+
+    test('can store error doc in the index when atom view throws error', async function (assert) {
+      await assertRenderFailed(assert, 'atom-boom', /^intentional error$/);
     });
 
     test('can store error doc in the index when embedded view throws error', async function (assert) {
-      let entry = await realm.realmIndexQueryEngine.cardDocument(
-        new URL(`${testRealm}embedded-boom`),
-      );
-      if (entry?.type === 'error') {
-        assert.strictEqual(
-          entry.error.errorDetail.message,
-          'intentional error',
-        );
-        assert.ok(
-          entry.error.errorDetail.deps?.includes(`${testRealm}embedded-boom`),
-          'error deps include embedded-boom',
-        );
-      } else {
-        assert.ok(false, 'expected index entry to be an error');
-      }
+      await assertRenderFailed(assert, 'embedded-boom', /^intentional error$/);
     });
 
     test('can store error doc in the index when fitted view throws error', async function (assert) {
-      let entry = await realm.realmIndexQueryEngine.cardDocument(
-        new URL(`${testRealm}fitted-boom`),
-      );
-      if (entry?.type === 'error') {
-        assert.strictEqual(
-          entry.error.errorDetail.message,
-          'intentional error',
-        );
-        assert.ok(
-          entry.error.errorDetail.deps?.includes(`${testRealm}fitted-boom`),
-          'error deps include fitted-boom',
-        );
-      } else {
-        assert.ok(false, 'expected index entry to be an error');
-      }
+      await assertRenderFailed(assert, 'fitted-boom', /^intentional error$/);
     });
 
     test('rendering a card that has a template error does not affect indexing other instances', async function (assert) {
+      await assertRenderFailed(assert, 'boom', /^intentional error$/);
       {
-        let entry = await realm.realmIndexQueryEngine.cardDocument(
-          new URL(`${testRealm}boom`),
-        );
-        if (entry?.type === 'error') {
-          assert.strictEqual(
-            entry.error.errorDetail.message,
-            'intentional error',
-          );
-          assert.ok(
-            entry.error.errorDetail.deps?.includes(`${testRealm}boom`),
-            'error deps include boom',
-          );
-        } else {
-          assert.ok(false, 'expected search entry to be an error document');
-        }
-      }
-      {
+        // A template that does not compile fails the card's index visit too,
+        // so it reads as an index error rather than as a render error.
         let entry = await realm.realmIndexQueryEngine.cardDocument(
           new URL(`${testRealm}boom2`),
         );

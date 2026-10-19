@@ -556,6 +556,9 @@ module(basename(import.meta.filename), function () {
       const DELEGATOR = 'delegator_for_proxy_endpoints_test';
       const DELEGATED_MEMBER =
         'readonly_delegated_member_for_proxy_endpoints_test';
+      // Sorts ahead of the member that grants to it, so down() reaches its
+      // grant before the member holds the grant option again.
+      const RECIPIENT = 'a_recipient_for_proxy_endpoints_test';
       const DROPPED_MEMBER = 'readonly_dropped_member_for_proxy_endpoints_test';
 
       async function createRole(name: string) {
@@ -577,6 +580,13 @@ module(basename(import.meta.filename), function () {
         for (let statement of statements) {
           await dbAdapter.execute(statement);
         }
+      }
+
+      async function selectAs(role: string, sql: string) {
+        return await dbAdapter.withTransaction(async (query: any) => {
+          await query([`SET LOCAL ROLE ${role}`]);
+          return await query([sql]);
+        });
       }
 
       // Every grant on the table and on its columns, with who made it.
@@ -750,7 +760,7 @@ module(basename(import.meta.filename), function () {
         assert.deepEqual(await tableGrants(), before);
       });
 
-      test("leaves a member's grant from another role as it was", async function (assert) {
+      test('revokes a grant another role made to a member, and down restores it', async function (assert) {
         await createRole(DELEGATOR);
         await createRole(DELEGATED_MEMBER);
         await dbAdapter.execute(`GRANT readonly_role TO ${DELEGATED_MEMBER}`);
@@ -766,13 +776,251 @@ module(basename(import.meta.filename), function () {
         let before = await tableGrants();
 
         await runMigration('up');
+        await assert.rejects(
+          selectAs(DELEGATED_MEMBER, 'SELECT api_key FROM proxy_endpoints'),
+          /permission denied for table proxy_endpoints/,
+          'the member is denied',
+        );
+        assert.deepEqual(
+          (await tableGrants())
+            .filter(
+              ({ grantee }: { grantee: string }) =>
+                grantee === DELEGATOR || grantee === DELEGATED_MEMBER,
+            )
+            .map(({ grantee }: { grantee: string }) => grantee),
+          [DELEGATOR],
+          'the grantor outside the role keeps its own grant',
+        );
+
+        await runMigration('down');
+        assert.deepEqual(
+          await tableGrants(),
+          before,
+          'down restores the grant from the role that made it',
+        );
+      });
+
+      test('revokes a member grant that was passed on, and down restores both', async function (assert) {
+        await createRole(RECIPIENT);
+        await dbAdapter.execute(`REVOKE readonly_role FROM ${RECIPIENT}`);
+        // The member's grant carries the grant option, and it passes SELECT
+        // on to a role outside the read-only role.
+        await dbAdapter.withTransaction(async (query: any) => {
+          await query([`SET LOCAL ROLE ${DIRECT_MEMBER}`]);
+          await query([
+            `GRANT SELECT ON TABLE proxy_endpoints TO ${RECIPIENT}`,
+          ]);
+        });
+        let before = await tableGrants();
+
+        await runMigration('up');
+        await assert.rejects(
+          selectAs(DIRECT_MEMBER, 'SELECT api_key FROM proxy_endpoints'),
+          /permission denied for table proxy_endpoints/,
+          'the member is denied',
+        );
+        assert.notOk(
+          (await tableGrants()).some(
+            ({ grantee }: { grantee: string }) => grantee === RECIPIENT,
+          ),
+          'the grant passed on from the member goes with it',
+        );
+
+        await runMigration('down');
+        assert.deepEqual(
+          await tableGrants(),
+          before,
+          'down restores the member and the grant it passed on',
+        );
+      });
+
+      test('revokes a column grant a member passed on from its table grant, and down restores both', async function (assert) {
+        // Revoking a table grant with CASCADE leaves the column grants passed
+        // on from it, so up has to reach the column grant first.
+        const COLUMN_RECIPIENT =
+          'readonly_column_recipient_for_proxy_endpoints_test';
+        await createRole(COLUMN_RECIPIENT);
+        await dbAdapter.execute(`GRANT readonly_role TO ${COLUMN_RECIPIENT}`);
+        await dbAdapter.withTransaction(async (query: any) => {
+          await query([`SET LOCAL ROLE ${DIRECT_MEMBER}`]);
+          await query([
+            `GRANT SELECT (id) ON TABLE proxy_endpoints TO ${COLUMN_RECIPIENT}`,
+          ]);
+        });
+        let before = await tableGrants();
+
+        await runMigration('up');
+        assert.notOk(
+          (await tableGrants()).some(
+            ({ grantee }: { grantee: string }) =>
+              grantee === DIRECT_MEMBER || grantee === COLUMN_RECIPIENT,
+          ),
+          'up revokes the member and the column grant it passed on',
+        );
+
+        await runMigration('down');
+        assert.deepEqual(
+          await tableGrants(),
+          before,
+          'down restores the member and the column grant it passed on',
+        );
+      });
+
+      test('restores a grant passed on by a member that also inherits the grant option from the role', async function (assert) {
+        // Named to sort after the read-only role and the recipient, so down()
+        // reaches the recipient's grant once the role holds the grant option
+        // again but before the member does.
+        const MEMBER = 'zz_inheriting_grantor_for_proxy_endpoints_test';
+        const RECIPIENT_OF_MEMBER = 'x_recipient_for_proxy_endpoints_test';
+        await createRole(MEMBER);
+        await createRole(RECIPIENT_OF_MEMBER);
+        await dbAdapter.execute(`GRANT readonly_role TO ${MEMBER}`);
+        await dbAdapter.execute(
+          `REVOKE readonly_role FROM ${RECIPIENT_OF_MEMBER}`,
+        );
+        await dbAdapter.execute(
+          `GRANT SELECT ON TABLE proxy_endpoints TO readonly_role WITH GRANT OPTION`,
+        );
+        await dbAdapter.execute(
+          `GRANT SELECT ON TABLE proxy_endpoints TO ${MEMBER} WITH GRANT OPTION`,
+        );
+        await dbAdapter.withTransaction(async (query: any) => {
+          await query([`SET LOCAL ROLE ${MEMBER}`]);
+          await query([
+            `GRANT SELECT ON TABLE proxy_endpoints TO ${RECIPIENT_OF_MEMBER}`,
+          ]);
+        });
+        let before = await tableGrants();
+
+        await runMigration('up');
         await runMigration('down');
 
         assert.deepEqual(
           await tableGrants(),
           before,
-          'down adds no second grant from the owner',
+          "the recipient's grant comes back from the member, not the role",
         );
+      });
+
+      test("leaves the owner's own privileges when the owner administers the read-only role", async function (assert) {
+        // As Postgres 16 makes a role with CREATEROLE that creates the
+        // read-only role: a member with ADMIN alone, neither inheriting nor
+        // able to SET ROLE to it. Here that role owns the table.
+        const OWNER = 'admin_owner_for_proxy_endpoints_test';
+        await createRole(OWNER);
+        await dbAdapter.execute(
+          `ALTER TABLE proxy_endpoints OWNER TO ${OWNER}`,
+        );
+        await dbAdapter.execute(
+          `GRANT readonly_role TO ${OWNER} WITH ADMIN TRUE, INHERIT FALSE, SET FALSE`,
+        );
+        try {
+          let ownerGrants = async () =>
+            (await tableGrants()).filter(
+              ({ grantee }: { grantee: string }) => grantee === OWNER,
+            );
+          let before = await ownerGrants();
+          assert.ok(before.length > 0, 'the owner has its own ACL entry');
+
+          await runMigration('up');
+          assert.deepEqual(await ownerGrants(), before, 'up leaves them');
+
+          await runMigration('down');
+          assert.deepEqual(await ownerGrants(), before, 'down leaves them');
+        } finally {
+          await dbAdapter.execute(`REVOKE readonly_role FROM ${OWNER}`);
+        }
+      });
+
+      test("leaves the owner's own privileges when the owner also reads through the read-only role", async function (assert) {
+        const OWNER = 'reading_owner_for_proxy_endpoints_test';
+        await createRole(OWNER);
+        await dbAdapter.execute(
+          `ALTER TABLE proxy_endpoints OWNER TO ${OWNER}`,
+        );
+        await dbAdapter.execute(`GRANT readonly_role TO ${OWNER}`);
+        try {
+          let ownerGrants = async () =>
+            (await tableGrants()).filter(
+              ({ grantee }: { grantee: string }) => grantee === OWNER,
+            );
+          let before = await ownerGrants();
+          assert.ok(before.length > 0, 'the owner has its own ACL entry');
+
+          await runMigration('up');
+          assert.deepEqual(await ownerGrants(), before, 'up leaves them');
+
+          await runMigration('down');
+          assert.deepEqual(await ownerGrants(), before, 'down leaves them');
+        } finally {
+          await dbAdapter.execute(`REVOKE readonly_role FROM ${OWNER}`);
+        }
+      });
+
+      test('leaves the grant of a role that only administers the read-only role', async function (assert) {
+        const ADMINISTRATOR = 'administrator_for_proxy_endpoints_test';
+        await createRole(ADMINISTRATOR);
+        await dbAdapter.execute(
+          `GRANT readonly_role TO ${ADMINISTRATOR} WITH ADMIN TRUE, INHERIT FALSE, SET FALSE`,
+        );
+        try {
+          await dbAdapter.execute(
+            `GRANT SELECT ON TABLE proxy_endpoints TO ${ADMINISTRATOR}`,
+          );
+
+          await runMigration('up');
+
+          assert.deepEqual(
+            await selectAs(
+              ADMINISTRATOR,
+              'SELECT COUNT(*) >= 0 AS readable FROM proxy_endpoints',
+            ),
+            [{ readable: true }],
+            'the administrator keeps its own grant',
+          );
+        } finally {
+          await dbAdapter.execute(`REVOKE readonly_role FROM ${ADMINISTRATOR}`);
+        }
+      });
+
+      test('revokes a grant to a role that reaches the read-only role through another role, and down restores it', async function (assert) {
+        const GROUP = 'readonly_group_for_proxy_endpoints_test';
+        const GROUP_MEMBER = 'readonly_group_member_for_proxy_endpoints_test';
+        await createRole(GROUP);
+        await createRole(GROUP_MEMBER);
+        await dbAdapter.execute(`GRANT readonly_role TO ${GROUP}`);
+        await dbAdapter.execute(`GRANT ${GROUP} TO ${GROUP_MEMBER}`);
+        await dbAdapter.execute(
+          `GRANT SELECT ON TABLE proxy_endpoints TO ${GROUP_MEMBER}`,
+        );
+        let before = await tableGrants();
+
+        await runMigration('up');
+        await assert.rejects(
+          selectAs(GROUP_MEMBER, 'SELECT api_key FROM proxy_endpoints'),
+          /permission denied for table proxy_endpoints/,
+          'the role reading through the group is denied',
+        );
+
+        await runMigration('down');
+        assert.deepEqual(await tableGrants(), before);
+      });
+
+      test('restores a record that names no grantors as grants from the owner', async function (assert) {
+        let before = await tableGrants();
+
+        await runMigration('up');
+        await dbAdapter.execute(
+          `UPDATE readonly_role_revoked_select_grants
+             SET grants = (
+               SELECT jsonb_agg(revoked - 'grantor')
+               FROM jsonb_array_elements(grants) revoked
+             )
+           WHERE table_name = 'proxy_endpoints'`,
+        );
+        await runMigration('down');
+
+        assert.deepEqual(await tableGrants(), before);
       });
 
       test('skips a recorded role that was dropped before down', async function (assert) {

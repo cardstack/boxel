@@ -233,6 +233,7 @@ function stub(opts: StubOptions = {}): Stub {
           indexedAt: 1700,
           deps: [],
           captures: null,
+          renderError: null,
         } as any;
       },
       async instance(url) {
@@ -267,6 +268,7 @@ function stub(opts: StubOptions = {}): Stub {
           indexedAt: 1700,
           lastModified: 1699,
           captures: null,
+          renderError: null,
         } as any;
       },
       async file() {
@@ -277,6 +279,7 @@ function stub(opts: StubOptions = {}): Stub {
               lastModified: 1699,
               generation: 4,
               captures: null,
+              renderError: null,
               deps: null,
               indexedAt: 1700,
             } as any)
@@ -723,10 +726,10 @@ module(basename(import.meta.filename), function () {
       };
       let result = await runOperation(core, {
         ...invoke({ kind: 'type', codeRef: PERSON, realm: REALM }, 'lookup'),
-        params: { name: 'a/b' },
+        params: { name: 'a b' },
       });
       assert.deepEqual(sent, [
-        { url: 'https://api.example.com/items/a%2Fb', credentials: 0 },
+        { url: 'https://api.example.com/items/a%20b', credentials: 0 },
       ]);
       assert.deepEqual(result, {
         callApi: { status: 404, headers: {}, body: { error: 'Not found' } },
@@ -1219,6 +1222,7 @@ module(basename(import.meta.filename), function () {
         lastModified: 1699,
         generation: 4,
         captures: null,
+        renderError: null,
         deps: null,
       });
       assert.strictEqual(
@@ -1241,6 +1245,7 @@ module(basename(import.meta.filename), function () {
         lastModified: 42,
         generation: null,
         captures: null,
+        renderError: null,
         deps: null,
       });
     });

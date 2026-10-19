@@ -43,7 +43,11 @@ import type {
 } from './realm-identifiers.ts';
 import { rri } from './realm-identifiers.ts';
 import type { Filter, Query } from './query.ts';
-import { CardError, type SerializedError } from './error.ts';
+import {
+  CardError,
+  type RenderErrorSummary,
+  type SerializedError,
+} from './error.ts';
 import {
   isCodeRef,
   isResolvedCodeRef,
@@ -290,6 +294,13 @@ export interface SearchResultDoc {
   // assembled `doc` and joined into per-instance `meta.captures` only by
   // the realm's card+json GET handler.
   captures: CaptureManifest | null;
+  // The primary card's current render error (`prerendered_html.error_doc`),
+  // or null. A failed render leaves the card's data intact, so the document
+  // is still served, and the read that serves it reports the failure as the
+  // document's `meta.renderError`. Like `captures`, it lands on the render
+  // channel without moving `indexedAt`, so the response's validator carries
+  // it.
+  renderError: RenderErrorSummary | null;
   // Whether assembling this document applied any query-backed field — a
   // field whose targets are found by running a query now rather than by
   // following a stored link. Such a document is not a function of this
@@ -977,6 +988,7 @@ export class RealmIndexQueryEngine {
       indexedAt: instance.indexedAt,
       deps: instance.deps,
       captures: instance.captures,
+      renderError: instance.renderError,
       queryBacked,
     };
   }
@@ -995,9 +1007,10 @@ export class RealmIndexQueryEngine {
     return await this.#indexQueryEngine.getInstanceSource(url, opts);
   }
 
-  // Liveness probe matching `instance()`'s row predicate (including the
-  // effective-error channel) without hydrating the row — for gates that
-  // need only existence, not content.
+  // Liveness probe over `instance()`'s row match, without hydrating the row —
+  // for gates that need only existence, not content. Unlike `instance()`, it
+  // counts a current render error as errored, since its gates serve
+  // prerendered output.
   async hasLiveInstance(url: URL, opts?: QueryOptions): Promise<boolean> {
     return await this.#indexQueryEngine.hasLiveInstance(url, opts);
   }

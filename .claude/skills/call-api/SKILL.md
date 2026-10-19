@@ -156,7 +156,15 @@ refusal also writes a key-use line.
    _indexed_ document (`indexedInstance` in `read.ts`, so computed fields are
    readable). `instance()` on a type target is a 400. Each path value becomes
    exactly one segment via `encodeURIComponent`; `''`, `.` and `..` are
-   refused 400 because a URL would resolve them away. Query values are
+   refused 400 because a URL would resolve them away, and a value holding
+   `/` or `\` is refused 400 because a vendor that decodes `%2F` (or reads
+   `%5C` as a separator) before routing would split it into more segments.
+   That refusal is deliberate even though some APIs take an encoded `/`
+   inside one segment (GitLab's `group%2Fproject`, a storage object name):
+   a request can't tell such a vendor from one that routes on the decoded
+   path. A credential filled into the path at send time is held to the same
+   rule by the outbound client (`applySubstitutions`), which refuses it
+   `guard-refused` with `meta.reason: 'invalid-url'`. Query values are
    appended with `URLSearchParams`. A JSON body gets `content-type:
 application/json` unless the declaration set one.
 5. **`guard-refused`** (502, `meta.reason: 'destination'`) — the built URL

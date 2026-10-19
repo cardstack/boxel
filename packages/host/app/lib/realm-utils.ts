@@ -1,8 +1,10 @@
 import {
+  ensureTrailingSlash,
   isUrlLike,
   RealmPaths,
   ri,
   rri,
+  type RealmIdentifier,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 
@@ -78,6 +80,65 @@ export function resolvedRealmURLHref(
   return virtualNetwork.isRegisteredPrefix(realmIdentifier)
     ? virtualNetwork.toURL(realmIdentifier).href
     : realmIdentifier;
+}
+
+/**
+ * A realm in the form card ids carry: its registered prefix where it has one
+ * (`@cardstack/base/` for the base realm's alias, the URL it is served from
+ * and its prefix alike), otherwise the URL as given. For realm-membership
+ * comparisons against ids, which deserialization canonicalizes the same way,
+ * so the comparison itself is a same-form `RealmPaths` test with no
+ * VirtualNetwork. Realm event subscriptions are keyed the same way.
+ *
+ * The trailing slash goes on first: the fold is a prefix match against
+ * slash-terminated targets, so a slashless realm root would not fold. A realm
+ * reached only through a URL mapping, with no prefix registered for it, is
+ * returned as given; so is one whose spelling differs from its registered
+ * target only by percent-encoding.
+ */
+export function canonicalRealmIdentifier(
+  virtualNetwork: VirtualNetwork,
+  realm: string,
+): RealmIdentifier {
+  return ri(virtualNetwork.unresolveURL(ensureTrailingSlash(realm)));
+}
+
+/**
+ * A realm list in the form card ids carry: each entry folded by
+ * `canonicalRealmIdentifier`, duplicates dropped, first spelling first. For
+ * keys and comparisons that must treat every spelling of a realm as one.
+ */
+export function canonicalRealmIdentifiers(
+  virtualNetwork: VirtualNetwork,
+  realms: string[],
+): RealmIdentifier[] {
+  return [
+    ...new Set(
+      realms.map((realm) => canonicalRealmIdentifier(virtualNetwork, realm)),
+    ),
+  ];
+}
+
+/**
+ * A realm list kept in the caller's spellings, each with its trailing slash,
+ * with later spellings of a realm already listed dropped (two spellings are
+ * one realm when `canonicalRealmIdentifier` folds them together). For a list
+ * that is sent or reported as the caller named it.
+ */
+export function dedupeRealmsByIdentity(
+  virtualNetwork: VirtualNetwork,
+  realms: string[],
+): RealmIdentifier[] {
+  let seen = new Set<string>();
+  let deduped: RealmIdentifier[] = [];
+  for (let realm of normalizeRealms(realms)) {
+    let identity = canonicalRealmIdentifier(virtualNetwork, realm);
+    if (!seen.has(identity)) {
+      seen.add(identity);
+      deduped.push(ri(realm));
+    }
+  }
+  return deduped;
 }
 
 /**
