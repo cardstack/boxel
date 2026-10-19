@@ -1122,6 +1122,31 @@ module('Acceptance | workspace-chooser', function (hooks) {
       }
     });
 
+    test('a tile is named by its workspace and described by its realm URL', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      let button = document.querySelector(
+        '[data-test-workspace-list] [data-test-workspace-button="Workspace B"]',
+      );
+      assert.ok(button, 'the tile button renders');
+      // Text inside a button joins its accessible name, so the URL must not
+      // be in it: assistive tech, and anything that finds the tile by role
+      // and name, would no longer find it as "Workspace B".
+      assert.notOk(
+        button!.textContent?.includes('test-realm/testuser/workspace-b'),
+        'the realm URL is not part of the button',
+      );
+      assert
+        .dom('[role="img"]', button!)
+        .hasAttribute('aria-label', 'Workspace B');
+
+      let describedBy = button!.getAttribute('aria-describedby');
+      assert.ok(describedBy, 'the button is described');
+      assert
+        .dom(document.getElementById(describedBy!))
+        .hasText('test-realm/testuser/workspace-b');
+    });
+
     test('the delete and archive modals show the realm URL', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
 
