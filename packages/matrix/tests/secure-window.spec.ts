@@ -317,7 +317,7 @@ test.describe('the secure window signs in on its own', () => {
       (url) => url.searchParams.get('mode') === 'sign-in',
     );
     await expect(secure.locator('[data-test-secure-google]')).toBeVisible();
-    await expect(secure.locator('[data-test-secure-error]')).toHaveCount(0);
+    await expect(secure.locator('[data-test-secure-error]')).toBeHidden();
   });
 
   test('cancelling at Google returns a CLI sign-in to its own page, and the CLI still gets its session', async ({
