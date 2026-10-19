@@ -25,3 +25,17 @@ pnpm --filter @cardstack/deck lint
 
 The vendor lint recomputes the recorded tree hash, so accidental local edits
 fail rather than silently forking Deck Core.
+
+## Boxel integration
+
+A package's `importmap.json` is its lock: an import map whose targets are
+exact Version RRIs, with no URLs. Boxel holds it in `DeckPackageResolver`
+(`packages/runtime-common/deck-package-resolver.ts`), which resolves a bare
+specifier to an exact Version RRI using the importing module's scope.
+
+The resolver answers in RRIs and knows nothing about the network. The Loader
+consults it first, through `resolveImportThroughDeck`, and the network turns
+the resulting RRI into a URL as it would any other. An exact Version root such
+as `@acme/ui@3.4.2/` is an ordinary RRI prefix, so the network needs no
+Deck-specific code. A browser import map can be derived from the lock with
+Deck's `projectRRIImportMap`; projected URLs never go back into the lock.

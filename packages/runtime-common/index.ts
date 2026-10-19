@@ -1949,6 +1949,12 @@ export { getCreatedTime } from './file-meta.ts';
 export { mergeRelationships } from './merge-relationships.ts';
 export { makeLogDefinitions, logger, reapplyLogLevels } from './log.ts';
 export { Loader };
+export type { ResolutionChangeSubscribe } from './loader.ts';
+export {
+  DeckPackageResolver,
+  resolveImportThroughDeck,
+  type DeckResolutionChange,
+} from './deck-package-resolver.ts';
 export {
   fetchWithTransientRetry,
   isRetryableStatus,
