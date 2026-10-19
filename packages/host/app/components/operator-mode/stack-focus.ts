@@ -1,6 +1,10 @@
 import { modifier } from 'ember-modifier';
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
+import {
+  focusIfConnected,
+  focusStackItem,
+} from '@cardstack/host/utils/stack-item-focus';
 
 interface Placed {
   item: StackItem;
@@ -17,14 +21,6 @@ function place(stacks: StackItem[][]): Placed[] {
 function focusedElement(): Element | null {
   let active = document.activeElement;
   return active && active !== document.body ? active : null;
-}
-
-function focusIfConnected(element: Element | null | undefined): boolean {
-  if (element instanceof HTMLElement && element.isConnected) {
-    element.focus({ preventScroll: true });
-    return document.activeElement === element;
-  }
-  return false;
 }
 
 // Keeps keyboard focus with the operator-mode stacks as cards open and close.
@@ -163,9 +159,7 @@ export default class StackFocus {
         '[data-stack-item]',
       )[itemIndex];
     if (item) {
-      // focusable by script only, so it never becomes a Tab stop
-      item.tabIndex = -1;
-      item.focus({ preventScroll: true });
+      focusStackItem(item);
     }
   }
 }

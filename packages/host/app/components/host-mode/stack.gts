@@ -5,6 +5,11 @@ import Component from '@glimmer/component';
 
 import { modifier } from 'ember-modifier';
 
+import {
+  focusIfConnected,
+  focusStackItem,
+} from '@cardstack/host/utils/stack-item-focus';
+
 import HostModeStackItem from './stack-item';
 
 interface Signature {
@@ -29,14 +34,6 @@ function isTextEntry(target: EventTarget | null): boolean {
   );
 }
 
-function focusIfConnected(element: Element | null | undefined): boolean {
-  if (element instanceof HTMLElement && element.isConnected) {
-    element.focus({ preventScroll: true });
-    return document.activeElement === element;
-  }
-  return false;
-}
-
 export default class HostModeStack extends Component<Signature> {
   // What had focus as each card opened, by stack position: closing a card
   // hands focus back to whatever opened it.
@@ -53,9 +50,7 @@ export default class HostModeStack extends Component<Signature> {
   private focusTopItem() {
     let item = this.topItem;
     if (item) {
-      // focusable by script only, so it never becomes a Tab stop
-      item.tabIndex = -1;
-      item.focus({ preventScroll: true });
+      focusStackItem(item);
     }
   }
 
