@@ -10,10 +10,8 @@ import {
 } from '@cardstack/runtime-common';
 import QUnit from 'qunit';
 
-import {
-  deckCollaborationPolicyFromEnvironment,
-  handleDeckVersionRequest,
-} from '../handlers/serve-deck-version.ts';
+import { handleDeckVersionRequest } from '../handlers/serve-deck-version.ts';
+import { deckCollaborationPolicyFromEnvironment } from '../lib/deck-collaboration-policy.ts';
 
 const { module, test } = QUnit;
 

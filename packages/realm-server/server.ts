@@ -45,10 +45,8 @@ import { JobScopedSearchCache } from './job-scoped-search-cache.ts';
 import type { LiveSearchCache } from './live-search-cache.ts';
 import { createSendEvent } from '@cardstack/runtime-common/send-event';
 import { createServeFromRealm } from './handlers/serve-from-realm.ts';
-import {
-  createServeDeckVersion,
-  deckCollaborationPolicyFromEnvironment,
-} from './handlers/serve-deck-version.ts';
+import { createServeDeckVersion } from './handlers/serve-deck-version.ts';
+import { deckCollaborationPolicyFromEnvironment } from './lib/deck-collaboration-policy.ts';
 import { createServeIndex } from './handlers/serve-index.ts';
 import { findOrMountRealm } from './lib/realm-routing.ts';
 import type { GoogleSignInConfig } from './lib/google-sign-in.ts';

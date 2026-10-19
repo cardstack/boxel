@@ -4,12 +4,20 @@ import { dirname, extname, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
 import {
+  captureRepositoryCheckpoint,
+  hashBytes,
   pack,
   publishToStore,
+  readBranchHead,
+  readRepositoryConfig,
   readStoreMeta,
+  repositoryManifest,
   unpack,
+  writeRepositoryConfig,
 } from '@cardstack/deck/node';
 import { extractSpecifiers } from '@cardstack/deck/vendor';
+import { deckCollaborationPolicyFromEnvironment } from '../lib/deck-collaboration-policy.ts';
+import { openDeckRepositoryProtocol } from '../lib/deck-repository-protocol.ts';
 import { buildDeckVersionIndex } from '../lib/deck-version-index.ts';
 
 const execFileAsync = promisify(execFile);
@@ -399,6 +407,42 @@ let versionIndex = await buildDeckVersionIndex({
   packageName,
   version: manifest.version,
 });
+let packageRRI = `${manifest.packageName}/`;
+let policy = deckCollaborationPolicyFromEnvironment();
+let protocol = openDeckRepositoryProtocol({
+  realmDir,
+  realmRRI: packageRRI,
+  policy,
+});
+let config = repositoryManifest({
+  roots: [packageRRI],
+  members: { [packageRRI]: '.' },
+});
+if (!(await readRepositoryConfig(realmDir))) {
+  await writeRepositoryConfig(realmDir, config);
+}
+let main = await readBranchHead(realmDir, 'main');
+let checkpointHash = main?.latestCheckpointHash;
+if (!checkpointHash) {
+  checkpointHash = (
+    await captureRepositoryCheckpoint({
+      realmDir,
+      config,
+      branch: 'main',
+      historyHead: `history:${hashBytes(Buffer.from(`pretui-known-date:${manifest.version}`)).slice(0, 24)}`,
+      indexGenerationHash: versionIndex.indexHash,
+      message: `Publish ${manifest.packageName}@${manifest.version}`,
+      author: { id: '@fixture:boxel.test', name: 'PretUI Fixture' },
+      createdAt: '2026-08-23T00:00:00.000Z',
+    })
+  ).checkpointHash;
+}
+let origin = await protocol.recordVersionOrigin({
+  versionRRI: `${manifest.packageName}@${manifest.version}/`,
+  checkpointHash,
+  treeHash: versionRecord.treeHash,
+  indexHash: versionIndex.indexHash,
+});
 
 console.log(
   JSON.stringify(
@@ -406,6 +450,7 @@ console.log(
       packageRRI: `${manifest.packageName}@${manifest.version}/`,
       treeHash: versionRecord.treeHash,
       indexHash: versionIndex.indexHash,
+      checkpointHash: origin.checkpointHash,
       cards: versionIndex.cards.map((card) => card.rri),
       roots: manifest.sourceRoots,
       files: closure.files.length,
