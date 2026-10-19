@@ -225,11 +225,22 @@ export default class HostModeStackItem extends Component<Signature> {
       }
 
       .host-mode-stack-item:not(.buried) {
+        /* Keeps a gutter while the viewport is narrower than the 50rem card,
+           the same one the narrow layout uses. */
+        max-width: min(
+          var(--host-stack-item-max-width),
+          calc(100% - var(--boxel-sp-xs) * 2)
+        );
         padding-bottom: var(--boxel-sp-2xl);
         /* The top card fills its item; otherwise it keeps its 50rem default
-           and is clipped when the item is narrower. Buried cards keep 50rem,
-           so they don't reflow every time the stack changes. */
+           and is clipped when the item is narrower. */
         --host-mode-card-width: 100%;
+      }
+
+      /* Buried cards stay 50rem, even behind a wide primary card that sets
+         100%, so they don't reflow every time the stack changes. */
+      .host-mode-stack-item.buried {
+        --host-mode-card-width: 50rem;
       }
 
       .host-mode-stack-item.full-width {

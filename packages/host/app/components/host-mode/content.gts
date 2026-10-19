@@ -48,10 +48,11 @@ export default class HostModeContent extends Component<Signature> {
   @tracked private isNarrow = false;
 
   private observeWidth = modifier((element: HTMLElement) => {
+    // Layout width, not the bounding rect: a scaled ancestor (the test
+    // harness is one) would otherwise move the breakpoint.
     let measure = () => {
       let rem = parseFloat(getComputedStyle(document.documentElement).fontSize);
-      let isNarrow =
-        element.getBoundingClientRect().width <= NARROW_WIDTH_REM * rem;
+      let isNarrow = element.offsetWidth <= NARROW_WIDTH_REM * rem;
       if (isNarrow !== this.isNarrow) {
         this.isNarrow = isNarrow;
       }
