@@ -265,6 +265,37 @@ describe('ProfileManager', () => {
     expect(profile.realmServerToken).toBeUndefined();
   });
 
+  it('addProfileWithAuth keeps the key-management sign-in across a re-auth to the same servers, and drops it when they change', async () => {
+    let secureSession = {
+      token: 'secure-session-jwt',
+      userId: '@bob:stack.cards',
+      expiresAt: new Date(Date.now() + 3600_000).toISOString(),
+    };
+    await manager.addProfileWithAuth(
+      '@bob:stack.cards',
+      fakeAuth('@bob:stack.cards', 'https://matrix-staging.stack.cards'),
+    );
+    manager.setSecureSession(secureSession);
+
+    await manager.addProfileWithAuth(
+      '@bob:stack.cards',
+      fakeAuth('@bob:stack.cards', 'https://matrix-staging.stack.cards'),
+    );
+    expect(manager.getProfile('@bob:stack.cards')!.secureSession).toEqual(
+      secureSession,
+    );
+
+    await manager.addProfileWithAuth(
+      '@bob:stack.cards',
+      fakeAuth('@bob:stack.cards', 'https://matrix-staging.stack.cards'),
+      undefined,
+      'https://realms.new-host.example/',
+    );
+    expect(
+      manager.getProfile('@bob:stack.cards')!.secureSession,
+    ).toBeUndefined();
+  });
+
   it('addProfileWithAuth clears cached realm tokens when realmServerUrl changes', async () => {
     await manager.addProfileWithAuth(
       '@bob:stack.cards',

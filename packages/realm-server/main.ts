@@ -1,6 +1,7 @@
 import './instrument.ts';
 import './setup-logger.ts'; // This should be first
 import './lib/wtfnode-on-signal.ts';
+import { DEFAULT_GOOGLE_ISSUER } from './lib/google-sign-in.ts';
 import { writeSync } from 'node:fs';
 import {
   CardDocumentCache,
@@ -151,6 +152,20 @@ const AI_BOT_DELEGATION_SECRET = process.env.AI_BOT_DELEGATION_SECRET;
 // admin/password pair register-matrix-users.ts creates.
 const MATRIX_ADMIN_USERNAME = process.env.MATRIX_ADMIN_USERNAME;
 const MATRIX_ADMIN_PASSWORD = process.env.MATRIX_ADMIN_PASSWORD;
+
+// The Google client the secure window signs in with: the Matrix server's own,
+// so a user sees no new consent. Both unset, the secure window offers only a
+// password. GOOGLE_OAUTH_ISSUER points it at a stand-in provider in tests.
+const GOOGLE_OAUTH_CLIENT_ID = process.env.GOOGLE_OAUTH_CLIENT_ID;
+const GOOGLE_OAUTH_CLIENT_SECRET = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+const googleSignIn =
+  GOOGLE_OAUTH_CLIENT_ID && GOOGLE_OAUTH_CLIENT_SECRET
+    ? {
+        clientId: GOOGLE_OAUTH_CLIENT_ID,
+        clientSecret: GOOGLE_OAUTH_CLIENT_SECRET,
+        issuer: process.env.GOOGLE_OAUTH_ISSUER || DEFAULT_GOOGLE_ISSUER,
+      }
+    : undefined;
 
 if (process.env.DISABLE_MODULE_CACHING === 'true') {
   console.warn(
@@ -900,6 +915,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     linkShapePolicy,
     ...(secureOriginURL ? { secureOriginURL: new URL(secureOriginURL) } : {}),
     secureOriginAppOrigins: (secureOriginAppOrigin ?? []).map(String),
+    ...(googleSignIn ? { googleSignIn } : {}),
   });
 
   const secureHttpServer =
