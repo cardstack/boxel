@@ -798,6 +798,30 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           response.text.includes('data-test-isolated-html'),
           "the card's isolated HTML is injected",
         );
+
+        let headRows = (await dbAdapter.execute(
+          `SELECT type, head_html FROM prerendered_html WHERE url = '${testRealmURL.href}isolated-test.json'`,
+        )) as { type: string; head_html: string | null }[];
+        let titleOf = (html: string | null | undefined) =>
+          html?.match(/<title[^>]*>([^<]*)<\/title>/)?.[1];
+        let instanceTitle = titleOf(
+          headRows.find((row) => row.type === 'instance')?.head_html,
+        );
+        let fileTitle = titleOf(
+          headRows.find((row) => row.type === 'file')?.head_html,
+        );
+        assert.ok(instanceTitle, 'the instance row has a head title');
+        assert.ok(fileTitle, 'the file row has a head title');
+        assert.notStrictEqual(
+          instanceTitle,
+          fileTitle,
+          'the two rows title the page differently',
+        );
+        assert.strictEqual(
+          titleOf(response.text),
+          instanceTitle,
+          "the card's head HTML titles the page",
+        );
       });
 
       test('does not inject head or isolated HTML when realm is not public', async function (assert) {

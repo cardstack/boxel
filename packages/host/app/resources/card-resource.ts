@@ -55,10 +55,12 @@ export class CardResource extends Resource<Args> {
   }
 
   // An untyped read of a file URL is served as file-meta: the store's card
-  // load reroutes it and files the instance (or its error) in the file-meta
-  // bucket. So when no type was named and the card bucket holds nothing for
-  // the id, the file-meta bucket is where the read landed. A caller that
-  // names a type reads only that bucket.
+  // load reroutes it and files the instance in the file-meta bucket, while a
+  // failed reroute's error lands in the card bucket. So when no type was named
+  // and the card bucket holds nothing for the id, the file-meta bucket is
+  // where the read landed; its error is there only when a typed file-meta
+  // read already loaded the id. A caller that names a type reads only that
+  // bucket.
   private get readType(): StoreReadType {
     if (this.#type) {
       return this.#type;
