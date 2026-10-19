@@ -74,6 +74,7 @@ import NeighborStackTriggerButton, {
   type SearchSheetTrigger,
 } from './interact-submode/neighbor-stack-trigger';
 import OperatorModeStack from './stack';
+import StackFocus from './stack-focus';
 
 import SubmodeLayout from './submode-layout';
 
@@ -223,6 +224,13 @@ export default class InteractSubmode extends Component {
 
   get stacks() {
     return this.operatorModeStateService.state?.stacks ?? [];
+  }
+
+  private stackFocus = new StackFocus();
+
+  // Copies, so the focus modifier sees each change to any stack's items.
+  private get stackItemsByStack(): StackItem[][] {
+    return this.stacks.map((stack) => [...stack]);
   }
 
   private get allStackItems() {
@@ -854,7 +862,10 @@ export default class InteractSubmode extends Component {
             }}
           />
         {{/if}}
-        <div class={{cn 'stacks' is-multi-stack=(gt this.stacks.length 1)}}>
+        <div
+          class={{cn 'stacks' is-multi-stack=(gt this.stacks.length 1)}}
+          {{this.stackFocus.follow this.stackItemsByStack}}
+        >
           {{#each this.stacks as |stack stackIndex|}}
             {{#let
               (get

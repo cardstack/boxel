@@ -7,6 +7,7 @@ import {
   triggerKeyEvent,
   triggerEvent,
   settled,
+  waitUntil,
 } from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
@@ -835,6 +836,124 @@ module('Acceptance | interact submode | single stack tests', function (hooks) {
         .exists(
           'Ctrl+. on Dvorak (physical QWERTY-E keycap) does not toggle — still in edit mode',
         );
+    });
+
+    test('a card that opens takes focus, and closing it returns focus to what opened it', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      });
+      let opener = `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-view-pet]`;
+      let mango = `[data-test-stack-card="${testRealmURL}Pet/mango"]`;
+
+      await click(opener);
+
+      assert.dom(mango).isFocused('the opened card has focus');
+
+      await click(`${mango} [data-test-close-button]`);
+      await waitUntil(() => !find(mango));
+
+      assert.dom(opener).isFocused('focus is back on the opener');
+    });
+
+    test('Escape closes the card that has focus and returns focus to what opened it', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      });
+      let opener = `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-view-pet]`;
+      let mango = `[data-test-stack-card="${testRealmURL}Pet/mango"]`;
+
+      await click(opener);
+      assert.dom(mango).isFocused();
+
+      await triggerKeyEvent(mango, 'keydown', 'Escape');
+      await waitUntil(() => !find(mango));
+
+      assert.dom(opener).isFocused('focus is back on the opener');
+    });
+
+    test('closing a card opened from a cards grid returns focus to its grid item', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}index`, format: 'isolated' }]],
+      });
+      let gridItem = `[data-test-stack-card="${testRealmURL}index"] [data-test-cards-grid-item="${testRealmURL}Person/fadhlan"]`;
+      let fadhlan = `[data-test-stack-card="${testRealmURL}Person/fadhlan"]`;
+
+      await click('[data-test-boxel-filter-list-button="All Cards"]');
+      await click(`${gridItem} .field-component-card`);
+      assert.dom(fadhlan).isFocused('the opened card has focus');
+
+      await click(`${fadhlan} [data-test-close-button]`);
+      await waitUntil(() => !find(fadhlan));
+
+      assert.dom(gridItem).isFocused('focus is back on the grid item');
+    });
+
+    test('closing a card whose opener has left the page focuses the card now on top', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      });
+      let fadhlan = `[data-test-stack-card="${testRealmURL}Person/fadhlan"]`;
+      let mango = `[data-test-stack-card="${testRealmURL}Pet/mango"]`;
+
+      await click(`${fadhlan} [data-test-view-pet]`);
+      assert.dom(mango).isFocused();
+      find(`${fadhlan} [data-test-view-pet]`)?.remove();
+
+      await click(`${mango} [data-test-close-button]`);
+      await waitUntil(() => !find(mango));
+
+      assert.dom(fadhlan).isFocused('the card now on top has focus');
+    });
+
+    test('the cards a page loads with do not take focus', async function (assert) {
+      await visitOperatorMode({
+        stacks: [
+          [
+            { id: `${testRealmURL}Person/fadhlan`, format: 'isolated' },
+            { id: `${testRealmURL}Pet/mango`, format: 'isolated' },
+          ],
+        ],
+      });
+
+      assert.dom('[data-stack-card]:focus').doesNotExist();
+    });
+
+    test('a card opened into a new neighbor stack from the search sheet takes focus', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      });
+      getService('recent-cards-service').add(`${testRealmURL}Pet/mango`);
+
+      await click('[data-test-add-card-right-stack]');
+      await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
+
+      assert.dom('[data-test-operator-mode-stack="1"]').includesText('Mango');
+      assert
+        .dom(
+          `[data-test-operator-mode-stack="1"] [data-test-stack-card="${testRealmURL}Pet/mango"]`,
+        )
+        .isFocused('the card in the new stack has focus');
+    });
+
+    test('a card opened while focus is in the AI assistant panel leaves focus in the panel', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      });
+      await click('[data-test-open-ai-assistant]');
+      await focus('[data-test-close-ai-assistant]');
+
+      let operatorModeStateService = getService('operator-mode-state-service');
+      operatorModeStateService.addItemToStack(
+        operatorModeStateService.createStackItem(`${testRealmURL}Pet/mango`, 0),
+      );
+      await settled();
+
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Pet/mango"]`)
+        .exists('the card opened');
+      assert
+        .dom('[data-test-close-ai-assistant]')
+        .isFocused('focus stays in the panel');
     });
 
     test('duplicate card in a stack is not allowed', async function (assert) {

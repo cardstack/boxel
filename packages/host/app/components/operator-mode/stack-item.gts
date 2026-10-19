@@ -977,6 +977,10 @@ export default class OperatorModeStackItem extends Component<Signature> {
       {{! In order to support scrolling cards into view
       we use a selector that is not pruned out in production builds }}
       data-stack-card={{this.cardIdentifier}}
+      {{! present while the card loads too, so the item can take focus as it opens }}
+      data-stack-item
+      role='region'
+      aria-label={{this.headerTitle}}
       style={{this.styleForStackedCard}}
       {{ContentElement onSetup=this.setupItemEl}}
     >
@@ -1218,6 +1222,11 @@ export default class OperatorModeStackItem extends Component<Signature> {
         transition:
           margin-top var(--boxel-transition),
           width var(--boxel-transition);
+      }
+      /* the top card takes focus from script as it opens, to carry the
+         keyboard into it; it is no control, so it draws no ring */
+      .item:focus {
+        outline: none;
       }
       .item.opening-animation {
         animation: scaleIn 0.2s forwards;
