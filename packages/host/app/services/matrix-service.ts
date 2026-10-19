@@ -3461,8 +3461,9 @@ export default class MatrixService extends Service {
 
   // Whether `id` names the environment's default SystemCard. The default is
   // configured by its registered prefix while an id read from account data
-  // or a card may spell the same card by URL, so both sides are folded to
-  // the form card ids carry before they are compared.
+  // or a card may spell the same card by URL or by an alias, so both sides
+  // are folded to the key the store identifies cards by before they are
+  // compared.
   isDefaultSystemCardId(id: string | undefined): boolean {
     let defaultId = ENV.defaultSystemCardId;
     if (!id || !defaultId) {
@@ -3473,7 +3474,9 @@ export default class MatrixService extends Service {
 
   private isSameCardId(a: string, b: string): boolean {
     let { virtualNetwork } = this.network;
-    return virtualNetwork.unresolveURL(a) === virtualNetwork.unresolveURL(b);
+    return (
+      virtualNetwork.keyForIdentifier(a) === virtualNetwork.keyForIdentifier(b)
+    );
   }
 
   private async setSystemCard(userChoiceId: string | undefined) {
