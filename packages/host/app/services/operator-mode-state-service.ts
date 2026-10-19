@@ -1627,6 +1627,7 @@ export default class OperatorModeStateService extends Service {
         submode: 'workspace-chooser',
         debug: this.operatorModeController.debug,
         openCardIds: [],
+        realmPrefixes: this.realmPrefixes,
         workspaces: [...userWorkspaces, ...catalogWorkspaces],
       };
       let errorsDisplayed = this.errorDisplay.getDisplayedErrors();
@@ -1637,7 +1638,7 @@ export default class OperatorModeStateService extends Service {
     }
     if (this._state.submode === Submodes.Code) {
       codeMode = {
-        currentFile: this.codePathURL?.href,
+        currentFile: this._state.codePath ?? undefined,
       };
 
       // Add selection range information when in code mode
@@ -1691,6 +1692,7 @@ export default class OperatorModeStateService extends Service {
       submode: this._state.submode,
       debug: this.operatorModeController.debug,
       openCardIds,
+      realmPrefixes: this.realmPrefixes,
       realmUrl,
       realmPermissions,
       codeMode,
@@ -1700,6 +1702,17 @@ export default class OperatorModeStateService extends Service {
       result.errorsDisplayed = errorsDisplayed;
     }
     return result;
+  }
+
+  // The identifiers in the AI context are RRIs, so the context carries the
+  // URL each realm prefix stands for: the assistant reads files by URL.
+  private get realmPrefixes(): Record<string, string> {
+    let { virtualNetwork } = this.network;
+    return Object.fromEntries(
+      virtualNetwork
+        .knownRealms()
+        .map((prefix) => [prefix, virtualNetwork.toURLHref(prefix)]),
+    );
   }
 
   private makeRemoteIdsList(
