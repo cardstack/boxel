@@ -222,7 +222,6 @@ class EditTemplate extends Component<typeof DealEvent> {
         height: var(--boxel-form-control-height);
         border-radius: var(--boxel-form-control-border-radius);
         transition: border-color var(--boxel-transition);
-        --boxel-select-border-color: var(--boxel-form-control-border-color);
         padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) 0;
         background-color: white;
         display: flex;
