@@ -56,7 +56,9 @@ export const readRealmFileTool: Tool = {
           description:
             'Full URLs of the files to read, each exactly as it appears in ' +
             "the skill (a link there is already absolute — don't shorten " +
-            'or rewrite it). List each URL once, at most ' +
+            'or rewrite it). An identifier in a realm-prefix form ' +
+            '(`@cardstack/base/card-api.gts`) is read from the realm the ' +
+            'prefix stands for. List each URL once, at most ' +
             `${READ_REALM_FILE_MAX_URLS} per call. The realm each file ` +
             'lives in is worked out for you.',
         },

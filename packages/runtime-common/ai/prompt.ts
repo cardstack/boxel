@@ -2750,6 +2750,13 @@ export const buildContextMessage = async (
       });
       result += `\n`;
     }
+    let realmPrefixes = Object.entries(context?.realmPrefixes ?? {});
+    if (realmPrefixes.length > 0) {
+      result += `Realm prefixes (an identifier that starts with one names a file in that realm; replace the prefix with the realm's URL to get the file's URL):\n`;
+      for (let [prefix, url] of realmPrefixes) {
+        result += ` - ${prefix} = ${url}\n`;
+      }
+    }
     if (context?.openCardIds && context.openCardIds.length > 0) {
       result += `Open cards:\n${context.openCardIds.map((id) => ` - ${id}\n`)}`;
     } else {
