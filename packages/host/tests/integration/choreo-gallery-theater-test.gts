@@ -1,4 +1,4 @@
-import { click, waitFor } from '@ember/test-helpers';
+import { click, triggerKeyEvent, waitFor } from '@ember/test-helpers';
 
 import { setupChoreo } from '@cardstack/choreo/test-support';
 import { getService } from '@universal-ember/test-support';
@@ -206,6 +206,40 @@ module('Integration | Choreo gallery | theater', function (hooks) {
         'data-test-theater',
         'opened again without the door, the film opens on its page',
       );
+  });
+
+  test('the way in and the way out of theater hand focus to each other', async function (assert) {
+    await renderCard(loader, await film('towers', 'TowersDemo'), 'isolated');
+    await waitFor('[data-test-film="towers"] [data-test-theater-enter]');
+    await animationsSettled();
+
+    await click('[data-test-theater-enter]');
+    await waitFor('[data-test-theater-exit]');
+    assert
+      .dom('[data-test-theater-exit]')
+      .isFocused('entering theater puts focus on the way out');
+
+    await click('[data-test-theater-exit]');
+    await waitFor('[data-test-theater-enter]');
+    assert
+      .dom('[data-test-theater-enter]')
+      .isFocused('leaving puts it back on the way in');
+
+    await click('[data-test-theater-enter]');
+    await waitFor('[data-test-theater-exit]');
+    let escapes = 0;
+    let hear = () => escapes++;
+    document.addEventListener('keydown', hear);
+    await triggerKeyEvent('[data-test-theater-exit]', 'keydown', 'Escape');
+    document.removeEventListener('keydown', hear);
+    await waitFor('[data-test-theater-enter]');
+    assert
+      .dom('[data-test-choreo-site]')
+      .doesNotHaveAttribute('data-test-theater', 'Escape leaves theater');
+    assert.strictEqual(escapes, 0, 'and goes no further than the page');
+    assert
+      .dom('[data-test-theater-enter]')
+      .isFocused('with focus on the way back in');
   });
 
   test('switching theater on and off carries the stage between its two boxes', async function (assert) {
