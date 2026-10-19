@@ -91,8 +91,11 @@ export default {
     addon.declarations('declarations', `pnpm ember-tsc --project ${tsConfig}`),
 
     // Addons are allowed to contain imports of .css files, which we want
-    // rollup to leave alone and keep in the published output.
-    addon.keepAssets(['**/*.css']),
+    // rollup to leave alone and keep in the published output. The pattern is
+    // anchored to this package because keepAssets matches absolute ids with
+    // minimatch's `dot: false`, so a bare `**` misses checkouts under a
+    // dot-directory (e.g. `.superset/worktrees/…`).
+    addon.keepAssets([join(rootDirectory, 'src/**/*.css')]),
 
     // keepAssets only covers assets imported by the module graph. The
     // stylesheets under styles/ are consumed by apps through the `./*.css`
