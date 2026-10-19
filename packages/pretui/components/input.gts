@@ -46,9 +46,10 @@ export interface InputSignature {
 // line-height overshoots it, so an Input would sit taller than every other
 // control in the kit. The wrapper token channel cannot reach the UA
 // line-height; the inline constant can. Borders, padding-block and
-// line-height add up to the 1.75rem height.
+// line-height add up to the 1.75rem height. BoxelInput has no end padding,
+// so the end gets Select's inset too.
 const INPUT_FONT = htmlSafe(
-  'font: inherit; letter-spacing: inherit; line-height: calc(1.25rem - 2px); padding-block: 0.25rem;',
+  'font: inherit; letter-spacing: inherit; line-height: calc(1.25rem - 2px); padding-block: 0.25rem; padding-inline-end: calc(0.625rem - 1px);',
 );
 
 export class Input extends Component<InputSignature> {
