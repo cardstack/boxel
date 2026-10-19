@@ -6,7 +6,7 @@ import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { CURRENT_RELEASE, PretUISpec } from './pretui-component';
 import { loadDemo, siblingHref } from './demo-locations';
 import { PretuiNote } from './pretui-note';
-import { realmURL } from 'https://cardstack.com/base/card-api';
+import { realmURL } from '@cardstack/base/card-api';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const Isolated = PretUISpec.isolated as any;
