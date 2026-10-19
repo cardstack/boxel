@@ -877,7 +877,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
     async function insertIncomingWebhook(username: string, path: string) {
       let id = uuidv4();
       await query(context.dbAdapter, [
-        `INSERT INTO incoming_webhooks (id, username, webhook_path, verification_type, verification_config, signing_secret, created_at, updated_at) VALUES (`,
+        `INSERT INTO incoming_webhooks (id, username, webhook_path, verification_type, verification_config, created_at, updated_at) VALUES (`,
         param(id),
         `,`,
         param(username),
@@ -887,8 +887,6 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         param('HMAC_SHA256_HEADER'),
         `,`,
         `'{"header": "X-Hub-Signature-256", "encoding": "hex"}'::jsonb`,
-        `,`,
-        param('testsecret'),
         `,`,
         `CURRENT_TIMESTAMP`,
         `,`,
