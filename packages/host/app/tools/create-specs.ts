@@ -24,6 +24,7 @@ import {
   type CardOrFieldDeclaration,
   type ModuleDeclaration,
   isCardOrFieldDeclaration,
+  isComponentDeclaration,
   isReexportCardOrField,
 } from '../services/module-contents-service';
 
@@ -103,11 +104,8 @@ class SpecTypeGuesser {
       return false;
     }
     const superName = declaration.super.name;
-    const superModule = declaration.super.module;
     return (
-      superModule === '@glimmer/component' ||
-      (superName === 'Component' &&
-        superModule === 'https://cardstack.com/base/card-api') ||
+      isComponentDeclaration(declaration) ||
       superName === 'GlimmerComponent' ||
       superName?.includes('Component')
     );

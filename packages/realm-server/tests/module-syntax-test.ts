@@ -1375,6 +1375,82 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('removing a field removes its import when the import is relative', async function (assert) {
+      let src = `
+      import { contains, field, linksTo, CardDef } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
+      import { Pet } from "./pet";
+
+      export class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field pet = linksTo(Pet);
+      }
+    `;
+
+      let mod = new ModuleSyntax(
+        src,
+        new URL(`${testRealm}dir/person`),
+        virtualNetwork,
+      );
+      mod.removeField(
+        {
+          module: rri(`${testRealm}dir/person`),
+          name: 'Person',
+        },
+        'pet',
+      );
+
+      assert.codeEqual(
+        mod.code(),
+        `
+        import { contains, field, CardDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
+
+        export class Person extends CardDef {
+          @field firstName = contains(StringField);
+        }
+      `,
+      );
+    });
+
+    test('removing a field removes its import when the import uses the base realm URL', async function (assert) {
+      let src = `
+      import { contains, field, CardDef } from "@cardstack/base/card-api";
+      import StringField from "@cardstack/base/string";
+      import NumberField from "${baseRealm.url}number";
+
+      export class Person extends CardDef {
+        @field firstName = contains(StringField);
+        @field age = contains(NumberField);
+      }
+    `;
+
+      let mod = new ModuleSyntax(
+        src,
+        new URL(`${testRealm}dir/person`),
+        virtualNetwork,
+      );
+      mod.removeField(
+        {
+          module: rri(`${testRealm}dir/person`),
+          name: 'Person',
+        },
+        'age',
+      );
+
+      assert.codeEqual(
+        mod.code(),
+        `
+        import { contains, field, CardDef } from "@cardstack/base/card-api";
+        import StringField from "@cardstack/base/string";
+
+        export class Person extends CardDef {
+          @field firstName = contains(StringField);
+        }
+      `,
+      );
+    });
+
     test('can remove a linksTo field with the same type as its enclosing card', async function (assert) {
       let src = `
       import { contains, field, CardDef, linksTo } from "@cardstack/base/card-api";

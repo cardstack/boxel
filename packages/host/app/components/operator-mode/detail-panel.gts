@@ -39,7 +39,6 @@ import {
   isRealmIndexCard,
   type ResolvedCodeRef,
   type CardErrorJSONAPI,
-  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 
 import { getCardType } from '@cardstack/host/resources/card-type';
@@ -518,12 +517,21 @@ export default class DetailPanel extends Component<Signature> {
     if (!this.args.selectedDeclaration?.exportName) {
       throw new Error(`bug: only exported cards/fields can be inherited`);
     }
+    // Operator-mode state holds the code path as the served URL (a base
+    // module is `http://…/base/card-api.gts`, not `@cardstack/base/card-api`).
+    // Code refs compare by string, so the module is unresolved to its RRI
+    // here.
+    // TODO: operator-mode state should hold the code path as an RRI, converting
+    // to a URL only for readers that need one; this then becomes a plain
+    // extension trim with no virtual network.
     return {
       name: this.args.selectedDeclaration.exportName,
-      module: `${this.operatorModeStateService.state.codePath!.href.replace(
-        /\.[^.]+$/,
-        '',
-      )}` as RealmResourceIdentifier,
+      module: this.network.virtualNetwork.unresolveURL(
+        this.operatorModeStateService.state.codePath!.href.replace(
+          /\.[^.]+$/,
+          '',
+        ),
+      ),
     };
   }
 
