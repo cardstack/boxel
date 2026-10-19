@@ -1,7 +1,7 @@
 // Pretui — the picker record shape and the power-select engine record and value pickers ride; Combobox uses the value side.
 import Component from '@glimmer/component';
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
-import { BoxelMultiSelectBasic } from '@cardstack/boxel-ui/components';
+import { BoxelMultiSelect } from '@cardstack/boxel-ui/components';
 import type { ComboboxOption } from '../components/combobox';
 import { RecordFace } from '../components/record-face';
 
@@ -51,9 +51,9 @@ export function phraseFor(labels: string[]): string {
 // ── The power-select engine ──────────────────────────────────────────────
 // Type-only cast, mirroring Select's `PoweredSelect`: the CLI's
 // bundled boxel-ui types import PowerSelectArgs from ember-power-select,
-// which the realm type env cannot resolve, so BoxelMultiSelectBasic's
+// which the realm type env cannot resolve, so BoxelMultiSelect's
 // visible args collapse. Re-assert the surface we actually use; runtime is
-// the real BoxelMultiSelectBasic.
+// the real BoxelMultiSelect.
 //
 // `@triggerComponent` is deliberately NOT in this list and never passed —
 // leaving it unset is what makes power-select render its own multiple
@@ -92,12 +92,12 @@ interface PoweredPickerSignature<T> {
   Element: HTMLElement;
 }
 
-export const PoweredRecordPicker = BoxelMultiSelectBasic as unknown as new (
+export const PoweredRecordPicker = BoxelMultiSelect as unknown as new (
   owner: unknown,
   args: PoweredPickerSignature<PickerRecord>['Args'],
 ) => Component<PoweredPickerSignature<PickerRecord>>;
 
-export const PoweredValuePicker = BoxelMultiSelectBasic as unknown as new (
+export const PoweredValuePicker = BoxelMultiSelect as unknown as new (
   owner: unknown,
   args: PoweredPickerSignature<ComboboxOption>['Args'],
 ) => Component<PoweredPickerSignature<ComboboxOption>>;

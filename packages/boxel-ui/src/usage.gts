@@ -36,9 +36,7 @@ import KanbanUsage from './components/kanban/usage.gts';
 import LoadingIndicatorUsage from './components/loading-indicator/usage.gts';
 import MarkdownContentShellUsage from './components/markdown-content-shell/usage.gts';
 import MenuUsage from './components/menu/usage.gts';
-import MessageUsage from './components/message/usage.gts';
 import ModalUsage from './components/modal/usage.gts';
-import MultiSelectUsage from './components/multi-select/usage.gts';
 import PhoneInputUsage from './components/phone-input/usage.gts';
 import PickerUsage from './components/picker/usage.gts';
 import PillUsage from './components/pill/usage.gts';
@@ -54,7 +52,6 @@ import SortDropdownUsage from './components/sort-dropdown/usage.gts';
 import SwatchUsage from './components/swatch/usage.gts';
 import SwitchUsage from './components/switch/usage.gts';
 import TabbedHeaderUsage from './components/tabbed-header/usage.gts';
-import TagListUsage from './components/tag-list/usage.gts';
 import TagUsage from './components/tag/usage.gts';
 import TooltipUsage from './components/tooltip/usage.gts';
 import ViewSelectorUsage from './components/view-selector/usage.gts';
@@ -95,9 +92,7 @@ export const ALL_USAGE_COMPONENTS = [
   ['LoadingIndicator', LoadingIndicatorUsage],
   ['MarkdownContentShell', MarkdownContentShellUsage],
   ['Menu', MenuUsage],
-  ['Message', MessageUsage],
   ['Modal', ModalUsage],
-  ['MultiSelect', MultiSelectUsage],
   ['PhoneInput', PhoneInputUsage],
   ['Picker', PickerUsage],
   ['Pill', PillUsage],
@@ -113,7 +108,6 @@ export const ALL_USAGE_COMPONENTS = [
   ['Swatch', SwatchUsage],
   ['Switch', SwitchUsage],
   ['TabbedHeader', TabbedHeaderUsage],
-  ['TagList', TagListUsage],
   ['Tag', TagUsage],
   ['Tooltip', TooltipUsage],
   ['ViewSelector', ViewSelectorUsage],

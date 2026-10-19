@@ -1,5 +1,5 @@
 // Pretui — Lookup unit tests. Lookup wraps power-select through boxel-ui's
-// BoxelMultiSelectBasic; the engine's own behaviour (filtering, result count,
+// BoxelMultiSelect; the engine's own behaviour (filtering, result count,
 // dismissal) is that package's to prove. Asserted here is the WRAPPER's
 // contract: state reflection, the accessible name, the selection callback
 // speaking in records, and the polite announcement of selection changes.
