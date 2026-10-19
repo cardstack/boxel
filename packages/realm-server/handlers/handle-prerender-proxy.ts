@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/node';
 
 import {
   fetchEffectiveRealmPermissions,
+  readRealmLoaderEpoch,
   type DBAdapter,
   type RealmAction,
   type RealmPermissions,
@@ -144,13 +145,23 @@ export default function handlePrerenderProxy({
       : undefined;
     try {
       if (kind === 'module') {
+        // The module render lands on a warm tab of this realm's affinity,
+        // which keeps every module it has already evaluated. The realm's
+        // loader epoch changes whenever one of its modules is written or
+        // reindexed, and the module route resets the tab's loader when the
+        // epoch it is given differs from the one it last cleared for.
+        // Without the epoch, a module that was checked, then rewritten, keeps
+        // reporting its first evaluation for as long as the tab is reused.
+        // The epoch comes from the database, never from the caller, for the
+        // same reason `clearCache` is scrubbed above.
+        let loaderEpoch = await readRealmLoaderEpoch(dbAdapter, attrs.realm);
         prerenderResponse = await prerenderer.prerenderModule({
           affinityType: 'realm',
           affinityValue: attrs.realm,
           realm: attrs.realm,
           url: attrs.url,
           auth,
-          renderOptions: userRenderOptions,
+          renderOptions: { ...(userRenderOptions ?? {}), loaderEpoch },
         });
       } else {
         let passFlag =
