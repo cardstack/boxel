@@ -1,0 +1,11 @@
+{
+  "name": "@cardstack/deckd",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Deck History daemon (Rust / jj-lib). Build and run with cargo, not pnpm.",
+  "scripts": {
+    "build": "cargo build",
+    "start": "cargo run",
+    "smoke": "./scripts/smoke.sh"
+  }
+}
