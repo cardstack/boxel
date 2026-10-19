@@ -902,6 +902,18 @@ module(basename(import.meta.filename), function () {
         'readonly_member_for_user_keys_test',
         `GRANT SELECT ON TABLE user_keys, key_write_tickets TO recipient_for_user_keys_test`,
       );
+      // A user that inherits the role and was granted SELECT on a column of
+      // each table by that member, from its table grant.
+      await createRole('readonly_column_recipient_for_user_keys_test');
+      await dbAdapter.execute(
+        `GRANT readonly_role TO readonly_column_recipient_for_user_keys_test`,
+      );
+      for (let table of ['user_keys', 'key_write_tickets']) {
+        await grantAs(
+          'readonly_member_for_user_keys_test',
+          `GRANT SELECT (owner) ON TABLE ${table} TO readonly_column_recipient_for_user_keys_test`,
+        );
+      }
       // A user that inherits the role and was granted SELECT on the tables by
       // a role other than their owner.
       await createRole('readonly_delegated_member_for_user_keys_test');
@@ -952,6 +964,7 @@ module(basename(import.meta.filename), function () {
       for (let role of [
         'readonly_role',
         'readonly_member_for_user_keys_test',
+        'readonly_column_recipient_for_user_keys_test',
         'readonly_delegated_member_for_user_keys_test',
         'readonly_group_member_for_user_keys_test',
       ]) {

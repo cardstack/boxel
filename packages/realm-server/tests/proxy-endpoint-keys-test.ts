@@ -834,6 +834,38 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test('revokes a column grant a member passed on from its table grant, and down restores both', async function (assert) {
+        // Revoking a table grant with CASCADE leaves the column grants passed
+        // on from it, so up has to reach the column grant first.
+        const COLUMN_RECIPIENT =
+          'readonly_column_recipient_for_proxy_endpoints_test';
+        await createRole(COLUMN_RECIPIENT);
+        await dbAdapter.execute(`GRANT readonly_role TO ${COLUMN_RECIPIENT}`);
+        await dbAdapter.withTransaction(async (query: any) => {
+          await query([`SET LOCAL ROLE ${DIRECT_MEMBER}`]);
+          await query([
+            `GRANT SELECT (id) ON TABLE proxy_endpoints TO ${COLUMN_RECIPIENT}`,
+          ]);
+        });
+        let before = await tableGrants();
+
+        await runMigration('up');
+        assert.notOk(
+          (await tableGrants()).some(
+            ({ grantee }: { grantee: string }) =>
+              grantee === DIRECT_MEMBER || grantee === COLUMN_RECIPIENT,
+          ),
+          'up revokes the member and the column grant it passed on',
+        );
+
+        await runMigration('down');
+        assert.deepEqual(
+          await tableGrants(),
+          before,
+          'down restores the member and the column grant it passed on',
+        );
+      });
+
       test('restores a grant passed on by a member that also inherits the grant option from the role', async function (assert) {
         // Named to sort after the read-only role and the recipient, so down()
         // reaches the recipient's grant once the role holds the grant option

@@ -31,8 +31,10 @@
 // REVOKE removes only the grants its grantor made. So `up` revokes each SELECT
 // grant those roles hold on a table or its columns acting as the role that
 // made it, with CASCADE, which also removes every grant passed on from it.
-// Grants a table's owner made go first, so a grant one reader passed on to
-// another goes with the grant it came from. Acting as another role needs the migrating role to be a superuser or able
+// CASCADE on a table grant leaves the column grants passed on from it, so
+// column grants are revoked first. Within each, grants a table's owner made go
+// first, so a grant one reader passed on to another goes with the grant it
+// came from. Acting as another role needs the migrating role to be a superuser or able
 // to SET ROLE to it; where it isn't, `up` stops and names the grant rather
 // than leave the table readable. Only grants a reader holds itself are
 // revoked: a reader that can read a table through PUBLIC or through a role
@@ -99,12 +101,12 @@ exports.up = (pgm) => {
               held.grantee
             INTO grantor_name, grantee_name, revoked_grantor, revoked_grantee
             FROM (
-              SELECT tbl.relowner, acl.*
+              SELECT tbl.relowner, true AS on_table, acl.*
               FROM pg_class tbl
               CROSS JOIN LATERAL aclexplode(tbl.relacl) acl
               WHERE tbl.oid = table_name::regclass
               UNION ALL
-              SELECT tbl.relowner, acl.*
+              SELECT tbl.relowner, false AS on_table, acl.*
               FROM pg_class tbl
               JOIN pg_attribute col ON col.attrelid = tbl.oid
               CROSS JOIN LATERAL aclexplode(col.attacl) acl
@@ -127,9 +129,11 @@ exports.up = (pgm) => {
                 )
                 SELECT oid FROM reader
               )
-            -- Grants the owner made come first, so CASCADE takes what a
-            -- reader passed on from one without acting as that reader.
-            ORDER BY held.grantor <> held.relowner
+            -- Column grants come first, since revoking a table grant leaves
+            -- the column grants passed on from it. Then grants the owner
+            -- made, so CASCADE takes what a reader passed on from one without
+            -- acting as that reader.
+            ORDER BY held.on_table, held.grantor <> held.relowner
             LIMIT 1;
             EXIT WHEN NOT FOUND;
             IF grantor_name IS NOT NULL THEN
