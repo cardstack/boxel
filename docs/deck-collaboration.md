@@ -50,7 +50,8 @@ realm root (or its S3 prefix)
     ├── reviews/              immutable Reviews plus conditional refs
     ├── versions/             Version → Checkpoint origin records
     ├── history/              every-save History (see below)
-    └── prepared/             writer-owned, recoverable ref updates
+    ├── prepared/             writer-owned, recoverable ref updates
+    └── _writer-locks/        the realm-local branch writer lock
 ```
 
 The ordinary realm filesystem is the complete, normative backend. Desktop,
@@ -131,3 +132,62 @@ remote branch observation ─┘                              │
 - `.boxel-sync.json`, `.boxel-watch.lock`, `.claude/`, `.deck/`, `.jj/`,
   `.git/` and dependency directories are local machinery, never branch
   content.
+
+## Every-save History
+
+An accepted write is recoverable without anyone committing. `deckd`
+(`packages/deckd`, a Rust daemon over jj-lib, backported from Deck) keeps
+History inside the realm at `.deck/history/repo/`, with `.jj/repo` as a thin
+pointer to it. Neither is branch content. `@cardstack/deck-history` is its
+TypeScript client; Realm Server finds the daemon through `DECKD_URL`.
+
+```text
+exact expected branch head
+          │
+          ▼
+realm-local branch writer lock
+          │
+          ├── seal the state being left (first write only)
+          ├── materialize the accepted immutable tree into the realm
+          ├── seal one History Step
+          └── advance Repository + History head + pending index in one ref CAS
+```
+
+`packages/realm-server/lib/deck-branch-content-update.ts` owns that
+transition. Realm Server attaches deckd with `watch: false` and seals
+explicitly, so a large write is never sealed halfway, and a failure after
+materialization rolls the live tree back. A stale or losing writer changes
+neither the live source nor the ref.
+
+`packages/realm-server/lib/deck-branch-history.ts` serves
+`GET /.deck/history?branch=main`: the Steps reachable from the History head the
+ref records, newest first. A Step the daemon holds but the ref never reached is
+not branch History. `POST /.deck/history` restores forward only: it replays the
+exact bytes of a reachable Step through the same expected-head writer, which
+records a new `restore: …` Step. Nothing is rewound.
+
+`realm push`, `realm sync` and `realm watch` all reach the same branch update,
+so each accepted batch becomes one `save: …` Step. `boxel realm history`
+negotiates per realm: a Deck workspace or realm URL reads server History and
+restores by full or uniquely identifying Step prefix, refusing unless the
+workspace is clean and still at the exact remote head, then refreshing it by
+exact pull. A legacy workspace keeps its local `.boxel-history` behavior.
+
+```sh
+boxel realm pull <realm-url> ./pretui-main --branch main
+boxel realm watch ./pretui-main
+boxel realm history ./pretui-main --limit 20
+boxel realm history ./pretui-main --restore <step> --yes
+boxel realm history <realm-url> --branch main --limit 20
+```
+
+## Current limits
+
+- History, sync and restore support the `main` branch only. Named branches need
+  branch-qualified index projections first.
+- An accepted write moves the live source and History, but the branch head
+  records its index generation as pending. Branch-qualified index projections,
+  which Browse, Run and catalog results would read per branch, are later work.
+- The conditional-object and prepared-update adapters are complete and tested,
+  but the branch writer still moves refs through Deck core's realm-file CAS
+  directly.

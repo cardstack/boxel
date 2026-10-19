@@ -7,8 +7,15 @@ import {
   hashBytes,
   pack,
   publishToStore,
+  readTreeFromDir,
   repositoryManifest,
 } from '@cardstack/deck/node';
+import type {
+  HistoryActor,
+  HistoryBackend,
+  HistoryEntry,
+  RestorePlan,
+} from '@cardstack/deck-history/backend';
 import type { Realm, ResponseWithNodeStream } from '@cardstack/runtime-common';
 import {
   VirtualNetwork,
@@ -18,8 +25,72 @@ import QUnit from 'qunit';
 
 import { handleDeckVersionRequest } from '../handlers/serve-deck-version.ts';
 import { deckCollaborationPolicyFromEnvironment } from '../lib/deck-collaboration-policy.ts';
+import { createJWT } from '../utils/jwt.ts';
 
 const { module, test } = QUnit;
+const REALM_SECRET_SEED = 'deck-b2b-test-secret';
+
+class TestHistory implements HistoryBackend {
+  readonly kind = 'deckd' as const;
+  private entries: Array<{
+    id: string;
+    message: string;
+    files: Map<string, Buffer>;
+    actor?: HistoryActor;
+  }> = [];
+
+  noteMutation(): void {}
+  async flush(): Promise<string | undefined> {
+    return undefined;
+  }
+  async seal(
+    dir: string,
+    message: string,
+    actor?: HistoryActor,
+  ): Promise<string | undefined> {
+    let files = await readTreeFromDir(dir);
+    let prior = this.entries.at(-1)?.files;
+    if (
+      prior &&
+      prior.size === files.size &&
+      [...files].every(([path, bytes]) => prior.get(path)?.equals(bytes))
+    ) {
+      return undefined;
+    }
+    let id = `step${this.entries.length + 1}`;
+    this.entries.push({ id, message, files, actor });
+    return id;
+  }
+  async head(): Promise<string | undefined> {
+    return this.entries.length ? `step${this.entries.length}` : undefined;
+  }
+  async list(): Promise<HistoryEntry[]> {
+    return [...this.entries].reverse().map(({ id, message, files, actor }) => ({
+      changeId: id,
+      commitId: hashBytes(`commit:${id}`),
+      timestamp: '2026-08-23T08:00:00.000Z',
+      description: message,
+      filesSummary: [...files.keys()],
+      ...(actor ? { author: actor.name } : {}),
+    }));
+  }
+  async fileAt(
+    _dir: string,
+    revisionId: string,
+    path: string,
+  ): Promise<Buffer | undefined> {
+    return this.entries.find(({ id }) => id === revisionId)?.files.get(path);
+  }
+  async fileListAt(_dir: string, revisionId: string): Promise<string[]> {
+    let entry = this.entries.find(({ id }) => id === revisionId);
+    if (!entry) throw new Error(`missing History Step ${revisionId}`);
+    return [...entry.files.keys()];
+  }
+  async restorePlan(): Promise<RestorePlan> {
+    return { writes: [], deletes: [] };
+  }
+  close(): void {}
+}
 
 function packageBytes(version: string): Buffer {
   return pack([
@@ -70,6 +141,7 @@ module(basename(import.meta.filename), function (hooks) {
   let authorized = true;
   let writable = true;
   let publicReadable = true;
+  let deckHistory: TestHistory;
 
   test('normalizes the operator allowlist as canonical realm RRIs', function (assert) {
     let policy = deckCollaborationPolicyFromEnvironment({
@@ -98,6 +170,7 @@ module(basename(import.meta.filename), function (hooks) {
     authorized = true;
     writable = true;
     publicReadable = true;
+    deckHistory = new TestHistory();
     realmDir = await mkdtemp(join(tmpdir(), 'deck-version-serving-'));
     virtualNetwork = new VirtualNetwork();
     virtualNetwork.addRealmMapping(
@@ -163,12 +236,15 @@ module(basename(import.meta.filename), function (hooks) {
       virtualNetwork,
       realms: [],
       reconciler: {} as never,
-      dbAdapter: {} as never,
+      // No session of this test's users has been revoked.
+      dbAdapter: { kind: 'pg', execute: async () => [] } as never,
       resolveRealm: async () => realm,
       deckCollaboration: {
         enabled: true,
         realmRRIs: new Set(['@acme/theme/', '@user/theme/']),
       },
+      deckHistory,
+      realmSecretSeed: REALM_SECRET_SEED,
     });
   }
 
@@ -213,6 +289,7 @@ module(basename(import.meta.filename), function (hooks) {
           enabled: true,
           realmRRIs: new Set(['@cardstack/pretui/']),
         },
+        deckHistory,
       },
     );
 
@@ -226,6 +303,7 @@ module(basename(import.meta.filename), function (hooks) {
       realmRRI: '@acme/theme/',
       protocol: 'deck-r0',
       sync: 'content-addressed',
+      history: 'jj',
     });
     assert.strictEqual(wrongRealm?.status, 404);
 
@@ -294,7 +372,7 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
-  test('conditionally publishes branch bytes without mutating the live realm', async function (assert) {
+  test('conditionally publishes branch bytes and records exact main History', async function (assert) {
     let observedResponse = await serve(
       new Request('https://realms.example/acme/theme/.deck/branch?name=main'),
     );
@@ -306,7 +384,8 @@ module(basename(import.meta.filename), function (hooks) {
     };
     let nextBytes = 'export const accent = "indigo";\n';
     let update = {
-      schema: 'boxel-deck-branch-update-v1',
+      schema: 'boxel-deck-branch-update-v2',
+      message: 'save: index.js',
       expected: observed,
       operations: [
         {
@@ -319,7 +398,13 @@ module(basename(import.meta.filename), function (hooks) {
     let published = await serve(
       new Request('https://realms.example/acme/theme/.deck/branch?name=main', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          authorization: `Bearer ${createJWT(
+            { user: '@mina:boxel.test', sessionRoom: '!deck:test' },
+            REALM_SECRET_SEED,
+          )}`,
+          'content-type': 'application/json',
+        },
         body: JSON.stringify(update),
       }),
     );
@@ -340,7 +425,7 @@ module(basename(import.meta.filename), function (hooks) {
       await import('node:fs/promises').then(({ readFile }) =>
         readFile(join(realmDir, 'index.js'), 'utf8'),
       ),
-      'export const accent = "tomato";\n',
+      nextBytes,
     );
 
     let stale = await serve(
@@ -351,6 +436,108 @@ module(basename(import.meta.filename), function (hooks) {
       }),
     );
     assert.strictEqual(stale?.status, 409);
+    assert.strictEqual(
+      (await deckHistory.list())[0].author,
+      '@mina:boxel.test',
+      'the accepted writer is attributed from the verified realm token',
+    );
+  });
+
+  test('lists branch History and restores an old Step by moving forward', async function (assert) {
+    let observedResponse = await serve(
+      new Request('https://realms.example/acme/theme/.deck/branch?name=main'),
+    );
+    let observed = (await observedResponse?.json()) as {
+      repositoryHash: string;
+      treeHash: string;
+      lockHash: string;
+      refGeneration: number;
+    };
+    let indigo = 'export const accent = "indigo";\n';
+    await serve(
+      new Request('https://realms.example/acme/theme/.deck/branch?name=main', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          schema: 'boxel-deck-branch-update-v2',
+          message: 'save: index.js',
+          expected: observed,
+          operations: [
+            {
+              path: 'index.js',
+              sha256: hashBytes(indigo),
+              contentBase64: Buffer.from(indigo).toString('base64'),
+            },
+          ],
+        }),
+      }),
+    );
+    let historyResponse = await serve(
+      new Request(
+        'https://realms.example/acme/theme/.deck/history?branch=main',
+      ),
+    );
+    let history = (await historyResponse?.json()) as {
+      historyHead: string;
+      entries: HistoryEntry[];
+    };
+    assert.strictEqual(historyResponse?.status, 200);
+    assert.deepEqual(
+      history.entries.map(({ changeId, description }) => ({
+        changeId,
+        description,
+      })),
+      [
+        { changeId: 'step2', description: 'save: index.js' },
+        { changeId: 'step1', description: 'History baseline' },
+      ],
+    );
+
+    let currentResponse = await serve(
+      new Request('https://realms.example/acme/theme/.deck/branch?name=main'),
+    );
+    let current = (await currentResponse?.json()) as typeof observed;
+    let restoredResponse = await serve(
+      new Request(
+        'https://realms.example/acme/theme/.deck/history?branch=main',
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({
+            schema: 'boxel-deck-history-restore-v1',
+            revisionId: 'step1',
+            expected: current,
+          }),
+        },
+      ),
+    );
+    let restored = await restoredResponse?.json();
+    assert.strictEqual(restoredResponse?.status, 200);
+    assert.strictEqual(restored.refGeneration, 3);
+    assert.strictEqual(restored.historyHead, 'step3');
+    assert.strictEqual(
+      await import('node:fs/promises').then(({ readFile }) =>
+        readFile(join(realmDir, 'index.js'), 'utf8'),
+      ),
+      'export const accent = "tomato";\n',
+      'restore replays the target bytes into main',
+    );
+    let afterHistory = await serve(
+      new Request(
+        'https://realms.example/acme/theme/.deck/history?branch=main',
+      ),
+    );
+    assert.deepEqual(
+      ((await afterHistory?.json()) as { entries: HistoryEntry[] }).entries.map(
+        ({ changeId, description }) => ({ changeId, description }),
+      ),
+      [
+        { changeId: 'step3', description: 'restore: step1' },
+        { changeId: 'step2', description: 'save: index.js' },
+        { changeId: 'step1', description: 'History baseline' },
+      ],
+      'History grows; restore does not rewind it',
+    );
   });
 
   test('refuses a branch write from a caller the realm ACL lets only read', async function (assert) {
@@ -608,6 +795,7 @@ module(basename(import.meta.filename), function (hooks) {
       reconciler: {} as never,
       dbAdapter: {} as never,
       resolveRealm: async () => realm,
+      deckHistory,
     };
 
     assert.strictEqual(
