@@ -893,14 +893,16 @@ function segmentProblem(value: string): string | undefined {
   if (/[/\\]/.test(value)) {
     return 'holds a path separator (`/` or `\\`), which a vendor that decodes the segment reads as more than one segment';
   }
-  try {
-    encodeURIComponent(value);
-  } catch {
-    // A lone surrogate has no UTF-8 encoding.
+  if (LONE_SURROGATE.test(value)) {
     return 'holds text that is not valid Unicode';
   }
   return undefined;
 }
+
+// A surrogate without its pair has no UTF-8 encoding, so `encodeURIComponent`
+// throws on it.
+const LONE_SURROGATE =
+  /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
 
 function encodeSegment(name: string, segment: string, value: string): string {
   let why = segmentProblem(value);

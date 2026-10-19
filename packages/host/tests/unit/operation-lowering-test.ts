@@ -2633,6 +2633,12 @@ module('Unit | operation lowering', function (hooks) {
     assert.deepEqual(result.operations.fetch.callApi?.path, {
       model: 'gpt-4.1',
     });
+
+    let paired = await lowerRequest({
+      url: 'https://api.example.com/tags/{tag}',
+      path: { tag: 'party-🎉' },
+    });
+    assert.deepEqual(codes(paired), [], 'a surrogate pair is valid Unicode');
   });
 
   test('a slot outside a header value, a query value, a path value and the body is refused', async function (assert) {
