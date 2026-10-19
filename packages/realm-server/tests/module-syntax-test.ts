@@ -1625,6 +1625,31 @@ module(basename(import.meta.filename), function () {
       );
       assert.deepEqual([...deps], [moduleDependencyKey('pets/pet')]);
     });
+    test('keys imports of a realm served at the real side of a URL mapping', function (assert) {
+      let network = new VirtualNetwork();
+      network.addURLMapping(
+        new URL('https://example.test/virtual-realm/'),
+        new URL(testRealm),
+      );
+      network.addRealmMapping('@test/realm/', testRealm);
+      let paths = new RealmPaths(new URL(testRealm), network);
+      let deps = extractModuleDependencyKeys(
+        `
+          import sibling from './sibling';
+          import { Pet } from '@test/realm/pets/pet';
+        `,
+        'dir/main.gts',
+        paths,
+        network,
+      );
+      assert.deepEqual(
+        [...deps].sort(),
+        [
+          moduleDependencyKey('dir/sibling'),
+          moduleDependencyKey('pets/pet'),
+        ].sort(),
+      );
+    });
   });
   module('gjs-to-placeholder', function () {
     const examples = [

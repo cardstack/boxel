@@ -77,12 +77,18 @@ export function extractModuleDependencyKeys(
     }
     try {
       // Resolved to URL form so that an import of one of the realm's own
-      // modules by its prefix lands on the same key as a relative import. A
-      // prefix resolves to the realm's real URL, so a realm served under a
-      // virtual URL maps it back before the membership check.
-      let resolvedURL = virtualNetwork.resolveURL(specifier, moduleRRI);
-      let resolved =
-        virtualNetwork.mapURL(resolvedURL, 'real-to-virtual') ?? resolvedURL;
+      // modules by its prefix lands on the same key as a relative import.
+      // Relative and URL imports resolve in the realm's own URL space. A
+      // prefix resolves to the realm's real URL, so when the realm is served
+      // under a virtual URL that misses and is mapped back.
+      let resolved = virtualNetwork.resolveURL(specifier, moduleRRI);
+      if (
+        !paths.inRealm(resolved) &&
+        virtualNetwork.isRegisteredPrefix(specifier)
+      ) {
+        resolved =
+          virtualNetwork.mapURL(resolved, 'real-to-virtual') ?? resolved;
+      }
       if (!paths.inRealm(resolved)) {
         continue;
       }
