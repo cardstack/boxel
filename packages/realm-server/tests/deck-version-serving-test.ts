@@ -26,6 +26,7 @@ import QUnit from 'qunit';
 
 import { handleDeckVersionRequest } from '../handlers/serve-deck-version.ts';
 import { deckCollaborationPolicyFromEnvironment } from '../lib/deck-collaboration-policy.ts';
+import { openDeckRepositoryProtocol } from '../lib/deck-repository-protocol.ts';
 import { createJWT } from '../utils/jwt.ts';
 
 const { module, test } = QUnit;
@@ -575,6 +576,105 @@ module(basename(import.meta.filename), function (hooks) {
       )
     )?.json()) as { refGeneration: number };
     assert.strictEqual(after.refGeneration, observed.refGeneration);
+  });
+
+  test('cuts a Version from the branch head, once, as package.json declares it', async function (assert) {
+    let versions = 'https://realms.example/acme/theme/.deck/versions';
+    let cut = (body: Record<string, unknown>) =>
+      serve(
+        new Request(versions, {
+          method: 'POST',
+          headers: {
+            authorization: `Bearer ${createJWT(
+              { user: '@mina:boxel.test', sessionRoom: '!deck:test' },
+              REALM_SECRET_SEED,
+            )}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({
+            schema: 'boxel-deck-version-cut-v1',
+            ...body,
+          }),
+        }),
+      );
+
+    let existing = await cut({});
+    assert.strictEqual(
+      existing?.status,
+      409,
+      'the head declares 1.1.0, which the store already holds',
+    );
+
+    let observed = (await (
+      await serve(
+        new Request('https://realms.example/acme/theme/.deck/branch?name=main'),
+      )
+    )?.json()) as { repositoryHash: string };
+    let manifest = JSON.stringify({ name: '@acme/theme', version: '1.2.0' });
+    let saved = await serve(
+      new Request('https://realms.example/acme/theme/.deck/branch?name=main', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          schema: 'boxel-deck-branch-update-v2',
+          message: 'save: package.json',
+          expected: observed,
+          operations: [
+            {
+              path: 'package.json',
+              sha256: hashBytes(manifest),
+              contentBase64: Buffer.from(manifest).toString('base64'),
+            },
+          ],
+        }),
+      }),
+    );
+    assert.strictEqual(saved?.status, 200);
+    let head = (await saved?.json()) as { repositoryHash: string };
+
+    assert.strictEqual(
+      (await cut({ expectedRepositoryHash: observed.repositoryHash }))?.status,
+      409,
+      'a head that moved since the caller read it is refused',
+    );
+    assert.strictEqual(
+      (await cut({ version: '1.3.0' }))?.status,
+      400,
+      'a Version must agree with package.json',
+    );
+    writable = false;
+    assert.strictEqual((await cut({}))?.status, 403);
+    writable = true;
+
+    let created = await cut({ expectedRepositoryHash: head.repositoryHash });
+    assert.strictEqual(created?.status, 201);
+    let record = (await created?.json()) as {
+      versionRRI: string;
+      repositoryHash: string;
+      checkpointHash: string;
+    };
+    assert.strictEqual(record.versionRRI, '@acme/theme@1.2.0/');
+    assert.strictEqual(record.repositoryHash, head.repositoryHash);
+    assert.strictEqual(
+      created?.headers.get('location'),
+      'https://realms.example/acme/theme@1.2.0/',
+    );
+    let origin = await openDeckRepositoryProtocol({
+      realmDir,
+      realmRRI: '@acme/theme/',
+      policy: { enabled: true, realmRRIs: new Set(['@acme/theme/']) },
+    }).readVersionOrigin('@acme/theme@1.2.0/');
+    assert.strictEqual(origin?.checkpointHash, record.checkpointHash);
+
+    let served = await serve(
+      new Request('https://realms.example/acme/theme@1.2.0/package.json'),
+    );
+    assert.strictEqual(await served?.text(), manifest);
+    assert.strictEqual(
+      (await cut({}))?.status,
+      409,
+      'a Version number is written once',
+    );
   });
 
   test('resolves semver intent to one immutable Version index', async function (assert) {

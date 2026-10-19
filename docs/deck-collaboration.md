@@ -211,6 +211,46 @@ boxel realm history ./pretui-main --restore <step> --yes
 boxel realm history <realm-url> --branch main --limit 20
 ```
 
+## Cutting a Version
+
+A package's Version is its tree at the branch head, named with the semver its
+own `package.json` declares there. The realm cuts it:
+
+```http
+POST <package root>/.deck/versions?branch=main
+Content-Type: application/json
+
+{ "schema": "boxel-deck-version-cut-v1",
+  "version": "1.2.0",
+  "expectedRepositoryHash": "…" }
+```
+
+`version` defaults to the head's `package.json` version and must equal it.
+`expectedRepositoryHash`, when given, must still be the head. The call takes
+the realm ACL's write. `packages/realm-server/lib/deck-version-cut.ts` then:
+
+1. reads the package's tree from the head's Repository, which the branch
+   writer already stored, so no bytes are copied;
+2. publishes it to `.deck/store/<scope>/<name>/` through Deck core, which
+   refuses a number it already holds;
+3. builds the Version's index, stores a Checkpoint pinning the head's
+   Repository and History head, and writes the origin record once.
+
+It answers `201` with the origin record and a `Location` of the Version's
+root, `409` when the Version exists or the head moved, and `400` when the
+version disagrees with `package.json` or the package is not on the branch.
+
+```sh
+boxel realm version ./kit                        # the realm's own package
+boxel realm version ./kit --package @acme/button
+boxel realm version <realm-url> --semver 1.2.0 --json
+```
+
+From a workspace, the command requires a clean workspace still at the exact
+head it last observed and sends that head as `expectedRepositoryHash`, so the
+Version is exactly what the author has. A release is a commit-free act: bump
+`version` in `package.json`, save, then cut.
+
 ## Current limits
 
 - History, sync and restore support the `main` branch only. Named branches need
@@ -229,3 +269,8 @@ boxel realm history <realm-url> --branch main --limit 20
   lock in another realm that names a hosted package before anything from its
   realm has loaded still falls back to `/<scope>/<name>/` on the importing
   realm's origin.
+- Cutting a Version names no dist-tags and records no release notes; Deck
+  core's `releaseVersion` (a new number for an existing Version's tree) and
+  dist-tags are not exposed by the realm yet.
+- A cut publishes before it records its origin. If the origin write fails, the
+  Version exists without one and a retry answers `409`.
