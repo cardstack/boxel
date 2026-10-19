@@ -86,7 +86,11 @@ CLI never calls them: `boxel keys sign-in` opens
 `<secure origin>?mode=cli-sign-in&port=…&state=…`, and the window posts the
 session (`secure_session`, `user_id`, `expires_at`, `state`) to
 `http://127.0.0.1:<port>/callback` (after a Google round trip too; the CLI's
-port and state wait in session storage). The shell's CSP allows that form
+port and state wait in session storage). A Google sign-in the user cancels
+(`error=access_denied`) returns the window to the page it started from: the
+`cli-sign-in` page for the same listener, or the window's own sign-in. A
+Google sign-in that fails any other way shows the error, with Start again
+pointing at that same page. The shell's CSP allows that form
 target and `connect-src` to the realm server (ADR 005 §1.4). `DELETE /_secure-session` signs a secure session out.
 
 ## Refusals
