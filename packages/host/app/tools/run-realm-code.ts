@@ -1635,10 +1635,14 @@ function failureReport(session: RealmFsSession, error: unknown): string {
   log.debug(
     `run failed: saved=${saved.length} refusedAfterClose=${session.refusedAfterClose}: ${message}`,
   );
+  // A thrown message is often a full sentence already; end it with one
+  // period, not two.
+  let trimmed = message.trimEnd();
+  let sentence = /[.!?]$/.test(trimmed) ? trimmed : `${trimmed}.`;
   let report =
     saved.length > 0
-      ? `${message}. Files already saved by this run: ${saved.join(', ')}`
-      : `${message}. No file was saved.`;
+      ? `${sentence} Files already saved by this run: ${saved.join(', ')}`
+      : `${sentence} No file was saved.`;
   if (session.deleted.size > 0) {
     report += ` Files this run created and already deleted: ${[...session.deleted].join(', ')}`;
   }
