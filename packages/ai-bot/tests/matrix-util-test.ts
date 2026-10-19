@@ -77,6 +77,7 @@ function compactionEvent(
   id: string,
   upToEventId: string,
   toolSourceEventIds: string[] | null = [],
+  skillFileEventIds: string[] = [],
 ) {
   return {
     event_id: id,
@@ -87,7 +88,7 @@ function compactionEvent(
       upToEventId,
       summary: 'summary',
       ...(toolSourceEventIds
-        ? { toolSourceEventIds, usedToolCallIds: [] }
+        ? { toolSourceEventIds, usedToolCallIds: [], skillFileEventIds }
         : {}),
     },
     room_id: 'test-room-id',
@@ -344,6 +345,53 @@ test('getRoomEvents - fetches back the tool-source events a compaction lists fro
     eventRequests,
     ['event20', 'missing'],
     'only events paging did not already fetch are requested',
+  );
+});
+
+test('getRoomEvents - fetches back the skill-file reads a compaction lists from before its cut', async function (assert) {
+  const timeline = createRoomTimeline(3000);
+  placeAt(
+    timeline,
+    1700,
+    compactionEvent(
+      'compaction',
+      'event1500',
+      ['event20', 'event40'],
+      ['event40', 'event30'],
+    ),
+  );
+  const { client, eventRequests } = createMockedClient(timeline);
+
+  const result = await getRoomEvents('room123', client, 'event2999');
+
+  assert.deepEqual(
+    result.slice(0, 4).map((event) => event.event_id),
+    ['event20', 'event30', 'event40', 'event1500'],
+    'skill-file reads join the tool sources in time order, each once',
+  );
+  assert.deepEqual(eventRequests, ['event20', 'event40', 'event30']);
+});
+
+test('getRoomEvents - pages past a compaction that does not list skill-file reads', async function (assert) {
+  const timeline = createRoomTimeline(1500);
+  placeAt(timeline, 1200, {
+    ...compactionEvent('compaction', 'event1100'),
+    content: {
+      status: 'done',
+      upToEventId: 'event1100',
+      summary: 'summary',
+      toolSourceEventIds: [],
+      usedToolCallIds: [],
+    },
+  } as unknown as DiscreteMatrixEvent);
+  const { client } = createMockedClient(timeline);
+
+  const result = await getRoomEvents('room123', client, 'event1499');
+
+  assert.strictEqual(
+    result[0].event_id,
+    'event0',
+    'the whole room is loaded, so the reads before the cut can still be found',
   );
 });
 

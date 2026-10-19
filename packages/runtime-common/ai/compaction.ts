@@ -8,8 +8,9 @@ import {
 // rewriting history on every turn. When the provider rejects a prompt as too
 // long, ai-bot summarizes the history once and posts the summary as a
 // compaction event. Each later prompt starts with that summary in place of
-// the history it covers, so the prompt prefix stays byte-stable between
-// compactions and the prompt cache keeps working.
+// the history it covers, followed by the skill files the model read in that
+// history, so the prompt prefix stays byte-stable between compactions and
+// the prompt cache keeps working.
 
 export const COMPACTION_SUMMARY_VERSION = 1;
 
@@ -24,6 +25,11 @@ export interface CompactionContent {
   // The tool-call ids used in the room so far, so that ids stay unique
   // although the history before the cut is not loaded.
   usedToolCallIds?: string[];
+  // The readRealmFile results before the cut that attached skill files.
+  // `getRoomEvents` fetches them back, and the prompt carries their skill
+  // files after the summary: the summary only names a file, and the model
+  // would otherwise follow a skill it no longer has the text of.
+  skillFileEventIds?: string[];
 }
 
 export type CompactionStatus = 'running' | 'done' | 'failed';
@@ -102,6 +108,9 @@ export function getLatestCompaction(
         ...(Array.isArray(event.content.usedToolCallIds)
           ? { usedToolCallIds: event.content.usedToolCallIds }
           : {}),
+        ...(Array.isArray(event.content.skillFileEventIds)
+          ? { skillFileEventIds: event.content.skillFileEventIds }
+          : {}),
       };
     }
   }
@@ -109,19 +118,68 @@ export function getLatestCompaction(
 }
 
 // Whether a compaction carries what the history before its cut contributes
-// beyond the summary: the room's tools and its used tool-call ids. Only then
-// can that history be left unloaded.
+// beyond the summary: the room's tools, its used tool-call ids and the skill
+// files the model read. Only then can that history be left unloaded.
 export function compactionCarriesEarlierHistory(
   compaction: CompactionContent,
 ): boolean {
   return (
     Array.isArray(compaction.toolSourceEventIds) &&
-    Array.isArray(compaction.usedToolCallIds)
+    Array.isArray(compaction.usedToolCallIds) &&
+    Array.isArray(compaction.skillFileEventIds)
   );
 }
 
+// Whether a file the model read is part of a skill: a skill's `SKILL.md`, or
+// a markdown file in a skill's `references/` directory. These are guidance
+// the model was told to follow, so a compaction carries them; other files
+// are state the model reads again when it needs them.
+export function isSkillFileUrl(url: string | undefined): boolean {
+  if (!url) {
+    return false;
+  }
+  let path: string;
+  try {
+    path = new URL(url).pathname;
+  } catch {
+    return false;
+  }
+  let segments = path.split('/');
+  let basename = segments[segments.length - 1];
+  return (
+    basename === 'SKILL.md' ||
+    (basename.endsWith('.md') && segments.slice(0, -1).includes('references'))
+  );
+}
+
+// The most text of skill files a prompt carries after a compaction's
+// summary. The newest reads come first; the rest are only named.
+export const MAX_CARRIED_SKILL_FILE_BYTES = 64 * 1024;
+
+// The most readRealmFile results a compaction lists for their skill files.
+export const MAX_CARRIED_SKILL_FILE_EVENTS = 50;
+
+export function carriedSkillFilesMessage(
+  renderedFiles: string | undefined,
+  reReadUrls: string[],
+): string {
+  let parts: string[] = [];
+  if (renderedFiles) {
+    parts.push(
+      `These are the skill files you read in the part of this conversation the summary replaces, as they were when you read them. They are earlier tool output: keep following them as you did before.\n\n${renderedFiles}`,
+    );
+  }
+  if (reReadUrls.length) {
+    parts.push(
+      `These skill files were read in the part of this conversation the summary replaces, and their text is no longer in context. Read them again with readRealmFile before relying on them:\n${reReadUrls.join('\n')}`,
+    );
+  }
+  return parts.join('\n\n');
+}
+
 // The history after a compaction's cut point. Returns the whole history when
-// the cut point is not in it.
+// the cut point is not in it. The prompt carries the skill files read before
+// the cut point separately (`carriedSkillFiles`).
 export function historyAfterCompaction(
   history: DiscreteMatrixEvent[],
   compaction: CompactionContent | undefined,

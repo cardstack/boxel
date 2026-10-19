@@ -1,5 +1,6 @@
 import type { IContent, MatrixClient } from 'matrix-js-sdk';
 import { Method } from 'matrix-js-sdk';
+import { uniq } from 'lodash-es';
 import { uint8ArrayToBase64 } from '../base64.ts';
 import { logger } from '../log.ts';
 import { OpenAIError } from 'openai/error';
@@ -380,14 +381,15 @@ export async function fetchRoomEventsBackwards(
  *
  * The history starts at the latest compaction's cut point (the cut event
  * itself is kept), because the prompt never uses anything older. That
- * needs a compaction that carries the room's tools and used tool-call ids
- * (`compactionCarriesEarlierHistory`); with none, the history reaches back
+ * needs a compaction that carries the room's tools, used tool-call ids and
+ * read skill files (`compactionCarriesEarlierHistory`); with none, the history reaches back
  * to the start of the room, or `ROOM_EVENTS_MAX_PAGES` pages. When the
  * history does not start at the start of the room, the events older than it
  * that the prompt still needs are put ahead of it, in time order: the room
  * config events (`ROOM_CONFIG_EVENT_TYPES`), so the room's skills, model and
- * title are still known, and the events the compaction lists as having
- * contributed the room's tools (`toolSourceEventIds`).
+ * title are still known, the events the compaction lists as having
+ * contributed the room's tools (`toolSourceEventIds`), and the readRealmFile
+ * results whose skill files the prompt carries (`skillFileEventIds`).
  *
  * @param lastEventId - The event that triggered the response; events after
  *                      it are left out. When it is not among the fetched
@@ -469,7 +471,8 @@ export async function getRoomEvents(
     [...history, ...afterTrigger].map((event) => event.event_id),
   );
   let trigger = history[history.length - 1];
-  let [configEvents, toolSourceEvents] = await Promise.all([
+  let compaction = latestCompaction(history);
+  let [configEvents, carriedEvents] = await Promise.all([
     reachedStart
       ? // Paging reached the start of the room, so the config events older
         // than the cut are already in hand.
@@ -490,16 +493,17 @@ export async function getRoomEvents(
     fetchRoomEventsById(
       roomId,
       client,
-      (latestCompaction(history)?.toolSourceEventIds ?? []).filter(
-        (eventId) => !excludedIds.has(eventId),
-      ),
+      uniq([
+        ...(compaction?.toolSourceEventIds ?? []),
+        ...(compaction?.skillFileEventIds ?? []),
+      ]).filter((eventId) => !excludedIds.has(eventId)),
       // Paging may already have fetched some, before the cut.
       events,
     ),
   ]);
   // In time order, as `getTools` reads the room's tools in one
   // chronological pass, and their order is part of the cached prompt.
-  let olderEvents = [...configEvents, ...toolSourceEvents].sort(
+  let olderEvents = [...configEvents, ...carriedEvents].sort(
     (a, b) => a.origin_server_ts - b.origin_server_ts,
   );
   return [...olderEvents, ...history];
@@ -510,7 +514,8 @@ const EVENT_FETCH_CONCURRENCY = 10;
 
 // The events with these ids, in the same order. An event the server doesn't
 // have or won't show the bot is left out; any other failure throws, since
-// dropping an event that contributes tools would change the prompt's tools.
+// dropping an event that contributes tools or skill files would change the
+// prompt.
 async function fetchRoomEventsById(
   roomId: string,
   client: MatrixClient,

@@ -16,6 +16,7 @@ import {
   findCompactionCut,
   getLatestCompaction,
   getPromptParts,
+  skillFileEventIdsToCarry,
   toolSourceEventIdsToCarry,
   type CompactionEventContent,
   type PromptParts,
@@ -153,11 +154,8 @@ export async function compactRoomHistory(opts: {
   ) => Promise<void>;
 }): Promise<CompactionResult> {
   let { client, roomId, aiBotUserId, eventList, history } = opts;
-  let cut = findCompactionCut(
-    history,
-    aiBotUserId,
-    getLatestCompaction(eventList, aiBotUserId),
-  );
+  let currentCompaction = getLatestCompaction(eventList, aiBotUserId);
+  let cut = findCompactionCut(history, aiBotUserId, currentCompaction);
   let anchorIndex = cut
     ? eventList.findIndex((event) => event.event_id === cut.anchorEventId)
     : -1;
@@ -216,6 +214,12 @@ export async function compactRoomHistory(opts: {
       summaryVersion: COMPACTION_SUMMARY_VERSION,
       usedToolCallIds: toolCallIdsToCarry(collectUsedToolCallIds(eventList)),
       toolSourceEventIds: toolSourceEventIdsToCarry(eventList, aiBotUserId),
+      skillFileEventIds: skillFileEventIdsToCarry(
+        history,
+        aiBotUserId,
+        cut.upToEventId,
+        currentCompaction,
+      ),
     }),
   );
   return {
@@ -240,9 +244,10 @@ export const MAX_COMPACTION_CONTENT_BYTES = 60_000;
 
 // The content with what it carries trimmed until it fits
 // `MAX_COMPACTION_CONTENT_BYTES`: a tenth at a time from whichever list is
-// larger, the oldest used tool-call ids and the latest tool sources first
-// (`getTools` keeps the first definition of each tool). A summary too large
-// by itself is left for the server to reject.
+// largest, the oldest used tool-call ids, the latest tool sources
+// (`getTools` keeps the first definition of each tool) and the oldest skill
+// file reads first. A summary too large by itself is left for the server to
+// reject.
 export function fitCompactionContent(
   content: Omit<CompactionEventContent, 'responseEventId'>,
 ): Omit<CompactionEventContent, 'responseEventId'> {
@@ -250,27 +255,44 @@ export function fitCompactionContent(
     Buffer.byteLength(JSON.stringify(value), 'utf8');
   let usedToolCallIds = content.usedToolCallIds ?? [];
   let toolSourceEventIds = content.toolSourceEventIds ?? [];
+  let skillFileEventIds = content.skillFileEventIds ?? [];
   let fitted = content;
   while (
     bytes(fitted) > MAX_COMPACTION_CONTENT_BYTES &&
-    (usedToolCallIds.length || toolSourceEventIds.length)
+    (usedToolCallIds.length ||
+      toolSourceEventIds.length ||
+      skillFileEventIds.length)
   ) {
-    if (bytes(usedToolCallIds) >= bytes(toolSourceEventIds)) {
+    let largest = Math.max(
+      bytes(usedToolCallIds),
+      bytes(toolSourceEventIds),
+      bytes(skillFileEventIds),
+    );
+    if (bytes(usedToolCallIds) === largest) {
       usedToolCallIds = toolCallIdsToCarry(
         usedToolCallIds,
         Math.floor(usedToolCallIds.length * 0.9),
       );
-    } else {
+    } else if (bytes(toolSourceEventIds) === largest) {
       toolSourceEventIds = toolSourceEventIds.slice(
         0,
         Math.floor(toolSourceEventIds.length * 0.9),
       );
+    } else {
+      skillFileEventIds = skillFileEventIds.slice(
+        skillFileEventIds.length - Math.floor(skillFileEventIds.length * 0.9),
+      );
     }
-    fitted = { ...content, usedToolCallIds, toolSourceEventIds };
+    fitted = {
+      ...content,
+      usedToolCallIds,
+      toolSourceEventIds,
+      skillFileEventIds,
+    };
   }
   if (fitted !== content) {
     log.warn(
-      `Trimmed the compaction to ${usedToolCallIds.length} used tool-call ids and ${toolSourceEventIds.length} tool sources to fit the event size limit`,
+      `Trimmed the compaction to ${usedToolCallIds.length} used tool-call ids, ${toolSourceEventIds.length} tool sources and ${skillFileEventIds.length} skill file reads to fit the event size limit`,
     );
   }
   return fitted;
