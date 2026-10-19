@@ -131,7 +131,7 @@ export function compactionCarriesEarlierHistory(
 }
 
 // Whether a file the model read is part of a skill: a skill's `SKILL.md`, or
-// a markdown file in a skill's `references/` directory. These are guidance
+// a markdown file directly in a skill's `references/` directory. These are guidance
 // the model was told to follow, so a compaction carries them; other files
 // are state the model reads again when it needs them.
 export function isSkillFileUrl(url: string | undefined): boolean {
@@ -148,7 +148,7 @@ export function isSkillFileUrl(url: string | undefined): boolean {
   let basename = segments[segments.length - 1];
   return (
     basename === 'SKILL.md' ||
-    (basename.endsWith('.md') && segments.slice(0, -1).includes('references'))
+    (basename.endsWith('.md') && segments[segments.length - 2] === 'references')
   );
 }
 

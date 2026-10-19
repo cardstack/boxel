@@ -464,6 +464,26 @@ module('compaction', (hooks) => {
       );
     });
 
+    test('carries an older file that still fits after a newer one that does not', async () => {
+      let sized = (letter: string, share: number) =>
+        letter.repeat(Math.floor(MAX_CARRIED_SKILL_FILE_BYTES * share));
+      let eventList = room([
+        readResult('r1', 'b1', 'call-1', {
+          [catalogReuse]: sized('a', 0.3),
+          [catalogReuseRef]: sized('b', 0.5),
+          [sourceEditing]: sized('c', 0.6),
+        }),
+      ]);
+      let { messages } = await getPromptParts(eventList, aiBotUserId, client);
+      let carried = text(messages![2]);
+      assert.true(carried.includes(sized('c', 0.6)), 'the newest is carried');
+      assert.false(carried.includes(sized('b', 0.5)), 'the next does not fit');
+      assert.true(carried.includes(sized('a', 0.3)), 'the oldest still fits');
+      assert.true(
+        carried.includes(`before relying on them:\n${catalogReuseRef}`),
+      );
+    });
+
     test('names a file that cannot be downloaded for the model to read again', async () => {
       let eventList = room([
         readResult('r1', 'b1', 'call-1', {
@@ -627,6 +647,13 @@ module('compaction', (hooks) => {
       assert.false(isSkillFileUrl('http://localhost:4201/skills/a/notes.md'));
       assert.false(
         isSkillFileUrl('http://localhost:4201/skills/a/references/b.gts'),
+      );
+      assert.false(
+        isSkillFileUrl('http://localhost:4201/skills/a/references/c/b.md'),
+        'only a file directly in references/',
+      );
+      assert.false(
+        isSkillFileUrl('http://localhost:4201/user/references/notes/b.md'),
       );
       assert.false(isSkillFileUrl('SKILL.md'));
       assert.false(isSkillFileUrl(undefined));

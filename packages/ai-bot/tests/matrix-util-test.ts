@@ -11,6 +11,10 @@ import {
   APP_BOXEL_COMPACTION_EVENT_TYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
+  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+  APP_BOXEL_TOOL_RESULT_REL_TYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common';
 import {
   getPromptParts,
@@ -566,7 +570,7 @@ test('getRoomEvents - stops paging when the end token does not advance', async f
   assert.strictEqual(requests.length, 2);
 });
 
-test('getRoomEvents - a history cut by a compaction builds the same tools and model as the whole room', async function (assert) {
+test('getRoomEvents - a history cut by a compaction builds the same prompt as the whole room', async function (assert) {
   const timeline = createRoomTimeline(3000);
   placeAt(
     timeline,
@@ -592,26 +596,82 @@ test('getRoomEvents - a history cut by a compaction builds the same tools and mo
     } as any;
     placeAt(timeline, index, event);
   }
+  // A skill file the model read before the cut, which the prompt carries
+  // after the summary.
+  const skillMediaUrl =
+    'http://localhost:8008/_matrix/media/v3/download/localhost/windowed-skill';
+  placeAt(timeline, 60, {
+    event_id: 'read-request',
+    type: 'm.room.message',
+    sender: AI_BOT_USER_ID,
+    content: {
+      body: '',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      isStreamingFinished: true,
+      data: {},
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        { id: 'read-1', name: 'readRealmFile', arguments: '{"urls":[]}' },
+      ],
+    },
+    room_id: 'test-room-id',
+  } as unknown as DiscreteMatrixEvent);
+  placeAt(timeline, 61, {
+    event_id: 'read-result',
+    type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+    sender: AI_BOT_USER_ID,
+    content: {
+      msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+      commandRequestId: 'read-1',
+      'm.relates_to': {
+        rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+        key: 'applied',
+        event_id: 'read-request',
+      },
+      data: {
+        attachedFiles: [
+          {
+            sourceUrl: 'http://localhost:4201/skills/catalog-reuse/SKILL.md',
+            url: skillMediaUrl,
+            name: 'SKILL.md',
+            contentType: 'text/plain',
+          },
+        ],
+      },
+    },
+    room_id: 'test-room-id',
+  } as unknown as DiscreteMatrixEvent);
   placeAt(
     timeline,
     1700,
-    compactionEvent('compaction', 'event1500', [
-      'tools-first-tool',
-      'tools-second-tool',
-    ]),
+    compactionEvent(
+      'compaction',
+      'event1500',
+      ['tools-first-tool', 'tools-second-tool'],
+      ['read-result'],
+    ),
   );
   const { client } = createMockedClient(timeline);
+  const originalFetch = globalThis.fetch;
+  (globalThis as any).fetch = async (url: string) =>
+    url === skillMediaUrl
+      ? { ok: true, status: 200, text: async () => 'Search the catalog.' }
+      : { ok: false, status: 404, text: async () => '' };
 
-  const windowed = await getPromptParts(
-    await getRoomEvents('room123', client, 'event2999'),
-    AI_BOT_USER_ID,
-    client,
-  );
-  const whole = await getPromptParts(
-    await getRoomEvents('room123', client, 'event2999', { wholeRoom: true }),
-    AI_BOT_USER_ID,
-    client,
-  );
+  let windowed, whole;
+  try {
+    windowed = await getPromptParts(
+      await getRoomEvents('room123', client, 'event2999'),
+      AI_BOT_USER_ID,
+      client,
+    );
+    whole = await getPromptParts(
+      await getRoomEvents('room123', client, 'event2999', { wholeRoom: true }),
+      AI_BOT_USER_ID,
+      client,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 
   assert.strictEqual(windowed.model, 'anthropic/claude-sonnet-4.6');
   assert.deepEqual(
@@ -619,6 +679,10 @@ test('getRoomEvents - a history cut by a compaction builds the same tools and mo
     ['first-tool', 'second-tool'],
   );
   assert.deepEqual(windowed.tools, whole.tools);
+  assert.true(
+    JSON.stringify(windowed.messages?.[2]).includes('Search the catalog.'),
+    'the skill file read before the cut follows the summary',
+  );
   // Up to the context message, which carries the current time.
   assert.deepEqual(
     JSON.stringify(windowed.messages?.slice(0, -1)),

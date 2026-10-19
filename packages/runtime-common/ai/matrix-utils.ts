@@ -382,8 +382,9 @@ export async function fetchRoomEventsBackwards(
  * The history starts at the latest compaction's cut point (the cut event
  * itself is kept), because the prompt never uses anything older. That
  * needs a compaction that carries the room's tools, used tool-call ids and
- * read skill files (`compactionCarriesEarlierHistory`); with none, the history reaches back
- * to the start of the room, or `ROOM_EVENTS_MAX_PAGES` pages. When the
+ * read skill files (`compactionCarriesEarlierHistory`); with none, the
+ * history reaches back to the start of the room, or `ROOM_EVENTS_MAX_PAGES`
+ * pages. When the
  * history does not start at the start of the room, the events older than it
  * that the prompt still needs are put ahead of it, in time order: the room
  * config events (`ROOM_CONFIG_EVENT_TYPES`), so the room's skills, model and
@@ -453,7 +454,7 @@ export async function getRoomEvents(
   let cut = cutIndex(history);
   if (cut === -1 && !reachedStart) {
     getLog().warn(
-      `Room ${roomId}'s history stops after ${ROOM_EVENTS_MAX_PAGES} pages, short of the start of the room and of a compaction cut that carries the earlier tools and tool-call ids`,
+      `Room ${roomId}'s history stops after ${ROOM_EVENTS_MAX_PAGES} pages, short of the start of the room and of a compaction cut that carries the earlier tools, tool-call ids and skill file reads`,
     );
   }
   if (cut <= 0 && reachedStart) {

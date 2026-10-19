@@ -75,7 +75,11 @@ import { logger } from '../log.ts';
 
 import { parseFrontmatter } from '../frontmatter-parse.ts';
 import { isMarkdownFile } from '../paths.ts';
-import { SKILL_INSTRUCTIONS_MESSAGE, SYSTEM_MESSAGE } from './constants.ts';
+import {
+  READ_REALM_FILE_TOOL_NAME,
+  SKILL_INSTRUCTIONS_MESSAGE,
+  SYSTEM_MESSAGE,
+} from './constants.ts';
 import { MAX_CORRECTNESS_FIX_ATTEMPTS } from './correctness-constants.ts';
 import { humanReadable } from '../code-ref.ts';
 import { readStopState } from './stop.ts';
@@ -93,7 +97,6 @@ import {
 const CARD_PATCH_COMMAND_NAMES = new Set(['patchCardInstance', 'patchFields']);
 const SOURCE_CODE_TOOL_NAME_PREFIX = 'run-realm-code_';
 const CHECK_CORRECTNESS_TOOL_NAME = 'checkCorrectness';
-const READ_REALM_FILE_TOOL_NAME = 'readRealmFile';
 
 // Leads the trailing context message. That message is the last user message
 // of every prompt, so without this a model can take the context as the
@@ -1242,14 +1245,18 @@ function isDisabledSkillFile(url: string, disabledSkillIds: string[]) {
 
 // The message that follows a compaction's summary with the skill files the
 // model read in the history the summary replaces, or undefined when it read
-// none. Each file appears once, as its newest read; the newest reads are
-// carried in full up to `MAX_CARRIED_SKILL_FILE_BYTES`, and the rest, along
-// with any that cannot be downloaded, are named for the model to read again.
-// Files of a skill the user disabled are left out, as its tools are.
+// none. Each file appears once, as its newest read. Files are taken newest
+// first: each one that still fits in `MAX_CARRIED_SKILL_FILE_BYTES` is
+// carried in full, so an older, smaller file can be carried after a newer
+// one too large for what is left. The files that don't fit, and any that
+// cannot be downloaded, are named for the model to read again. Files of a
+// skill the user disabled are left out, as its tools are.
 //
-// The message depends only on the history up to the cut point, so its bytes
-// stay the same on every prompt until the next compaction, and a file read
-// again after the cut point does not change it.
+// The message depends on the history up to the cut point and on which
+// skills are disabled, nothing else. Its bytes stay the same on every prompt
+// until the next compaction or the next time the user disables or enables a
+// skill, which also changes the tools; a file read again after the cut point
+// does not change it.
 async function carriedSkillFiles(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
