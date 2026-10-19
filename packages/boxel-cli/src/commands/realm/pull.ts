@@ -10,6 +10,8 @@ import { resolveRealmAuthenticator } from '../../lib/auth-resolver.ts';
 import { resolveRealmIdentifier } from '../../lib/resolve-realm-identifier.ts';
 import { resolveRealmSecretSeed } from '../../lib/prompt.ts';
 import { reconcileSkillsMirror } from '../../lib/claude-skills-mirror.ts';
+import { pullDeckBranch } from '../../lib/deck-realm-pull.ts';
+import { detectRealmSyncMode } from '../../lib/realm-sync-mode.ts';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
@@ -178,6 +180,7 @@ class RealmPuller extends RealmSyncBase {
 }
 
 export interface PullCommandOptions {
+  branch?: string;
   delete?: boolean;
   dryRun?: boolean;
   /**
@@ -212,6 +215,7 @@ export function registerPullCommand(realm: Command): void {
       'The URL of the source realm (e.g., https://app.boxel.ai/demo/)',
     )
     .argument('<local-dir>', 'The local directory to sync files to')
+    .option('--branch <name>', 'Deck branch to pull (default: main)', 'main')
     .option('--delete', 'Delete local files that do not exist in the realm')
     .option('--dry-run', 'Show what would be done without making changes')
     .option(
@@ -229,6 +233,7 @@ export function registerPullCommand(realm: Command): void {
         options: {
           delete?: boolean;
           dryRun?: boolean;
+          branch?: string;
           claudeSkills?: boolean;
           realmSecretSeed?: boolean;
         },
@@ -239,6 +244,7 @@ export function registerPullCommand(realm: Command): void {
         const result = await pull(realmUrl, localDir, {
           delete: options.delete,
           dryRun: options.dryRun,
+          branch: options.branch,
           claudeSkills: options.claudeSkills,
           realmSecretSeed,
         });
@@ -275,6 +281,28 @@ export async function pull(
   const authenticator = resolution.authenticator;
 
   try {
+    let mode = await detectRealmSyncMode(realmUrl, authenticator);
+    if (mode.mode === 'deck') {
+      let result = await pullDeckBranch({
+        realmURL: realmUrl,
+        branchName: options.branch ?? 'main',
+        localDir,
+        authenticator,
+        dryRun: options.dryRun,
+      });
+      if (!result.error) {
+        await reconcileSkillsMirror({
+          realmUrl: new URL(realmUrl).href.replace(/\/+$/, '') + '/',
+          localDir,
+          dryRun: options.dryRun,
+          enabled: options.claudeSkills,
+        });
+      }
+      return {
+        files: [...result.files, ...result.deleted].sort(),
+        ...(result.error ? { error: `Pull failed: ${result.error}` } : {}),
+      };
+    }
     const puller = new RealmPuller(
       {
         realmUrl,
