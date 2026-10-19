@@ -2600,7 +2600,15 @@ module('Unit | operation lowering', function (hooks) {
     assert.deepEqual(codes(splicedValue), ['unencoded-path-parameter']);
   });
 
-  for (let value of ['org/name', 'org\\name', '{{apiKey}}/v2', '', '.', '..']) {
+  for (let value of [
+    'org/name',
+    'org\\name',
+    '{{apiKey}}/v2',
+    '',
+    '.',
+    '..',
+    'a\ud800',
+  ]) {
     test(`a path value written as ${JSON.stringify(value)}, which no request can send, is refused`, async function (assert) {
       let result = await lowerRequest({
         url: 'https://api.example.com/models/{model}',
