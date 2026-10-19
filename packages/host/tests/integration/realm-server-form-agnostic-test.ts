@@ -163,6 +163,42 @@ module('Integration | realm-server | identifier forms', function (hooks) {
       );
     });
 
+    test('an expired token under one spelling does not hide a live one under another', function (assert) {
+      let expired = sessionToken({ exp: Math.floor(Date.now() / 1000) - 60 });
+      let live = unexpired();
+      let realmServer = getService('realm-server');
+
+      window.localStorage.setItem(
+        SessionLocalStorageKey,
+        JSON.stringify({ [MAPPED_REALM_URL]: expired, [PREFIX]: live }),
+      );
+      assert.strictEqual(
+        realmServer.tokenForRealms([MAPPED_REALM_URL]),
+        live,
+        'the live prefix-filed token is used when the URL-filed one expired',
+      );
+
+      window.localStorage.setItem(
+        SessionLocalStorageKey,
+        JSON.stringify({ [MAPPED_REALM_URL]: live, [PREFIX]: expired }),
+      );
+      assert.strictEqual(
+        realmServer.tokenForRealms([PREFIX]),
+        live,
+        'the live URL-filed token is used when the prefix-filed one expired',
+      );
+
+      window.localStorage.setItem(
+        SessionLocalStorageKey,
+        JSON.stringify({ [MAPPED_REALM_URL]: expired, [PREFIX]: expired }),
+      );
+      assert.strictEqual(
+        realmServer.tokenForRealms([PREFIX]),
+        undefined,
+        'with every spelling expired there is no token to send',
+      );
+    });
+
     test('a realm named by its prefix finds a token filed under its URL', function (assert) {
       let token = unexpired();
       window.localStorage.setItem(

@@ -41,10 +41,7 @@ import {
 } from '@cardstack/runtime-common/realm-auth-client';
 
 import ENV from '@cardstack/host/config/environment';
-import {
-  resolvedRealmURLHref,
-  serverRealmURLHref,
-} from '@cardstack/host/lib/realm-utils';
+import { resolvedRealmURLHref } from '@cardstack/host/lib/realm-utils';
 import {
   RealmServerSessionLocalStorageKey,
   SessionLocalStorageKey,
@@ -568,7 +565,9 @@ export default class RealmServerService
       // Missing the token does not fail loudly: the loop would `continue`,
       // and a realm that is the only entry would leave the set empty and
       // answer with this realm server instead of the realm's.
-      let token = this.sessionTokenFor(sessionTokens, realmURL);
+      // An expired token still names the realm server that issued it, which
+      // is all this reads, so the first one found will do.
+      let [token] = this.sessionTokensFor(sessionTokens, realmURL);
       if (!token) {
         continue;
       }
@@ -1829,41 +1828,46 @@ export default class RealmServerService
     return this.token;
   }
 
-  // A token is filed under the realm resource's own url, which is whatever
-  // spelling created the resource: a registered prefix, the URL it resolves
-  // to, or the URL the realm server knows the realm by (the base realm's
-  // alias). So a realm's token is looked up under every spelling of it.
-  private sessionTokenFor(
+  // Every token filed for a realm, in the order its spellings are tried. A
+  // token is filed under the realm resource's own url, which is whatever
+  // spelling created the resource: a registered prefix, the URL it is served
+  // from, or its alias (`equivalentURLForms` yields all three). A realm
+  // reached under two spellings across visits can hold a token under each,
+  // and a refresh rewrites only one of them, so one may be stale.
+  private sessionTokensFor(
     sessionTokens: Record<string, string>,
     realm: string,
-  ): string | undefined {
+  ): string[] {
     let { virtualNetwork } = this.network;
     let normalized = ensureTrailingSlash(realm);
     let spellings = new Set([
       normalized,
       realm,
-      serverRealmURLHref(virtualNetwork, normalized),
       ...virtualNetwork.equivalentURLForms(
         resolvedRealmURLHref(virtualNetwork, normalized),
       ),
     ]);
-    for (let spelling of spellings) {
-      if (sessionTokens[spelling]) {
-        return sessionTokens[spelling];
-      }
-    }
-    return undefined;
+    return [
+      ...new Set(
+        [...spellings]
+          .map((spelling) => sessionTokens[spelling])
+          .filter((token): token is string => Boolean(token)),
+      ),
+    ];
   }
 
   private getRealmTokenForRealms(realms: string[]): string | undefined {
     let sessionTokens = this.readSessionTokens();
     for (let realmURL of realms) {
-      let token = this.sessionTokenFor(sessionTokens, realmURL);
       // An expired token buys nothing: the server rejects it, so sending it
       // spends a round trip to learn what its own `exp` claim already says.
       // Skipping it lets a publicly-readable realm answer the unauthenticated
-      // request, and leaves the 401 path to mint a realm-server session.
-      if (token && !isTokenExpired(token)) {
+      // request, and leaves the 401 path to mint a realm-server session. A
+      // stale token under one spelling does not hide a live one under another.
+      let token = this.sessionTokensFor(sessionTokens, realmURL).find(
+        (candidate) => !isTokenExpired(candidate),
+      );
+      if (token) {
         return token;
       }
     }
