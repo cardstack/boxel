@@ -1,9 +1,11 @@
 import {
+  ensureTrailingSlash,
   isUrlLike,
   PREFIX_REALMS,
   RealmPaths,
   ri,
   rri,
+  type RealmIdentifier,
   type VirtualNetwork,
 } from '@cardstack/runtime-common';
 
@@ -131,6 +133,29 @@ export function serverRealmURLs(
       ),
     ),
   ];
+}
+
+/**
+ * A realm in the form card ids carry: its registered prefix where it has one
+ * (`@cardstack/base/` for the base realm's alias, the URL it is served from
+ * and its prefix alike), otherwise the URL as given. For realm-membership
+ * comparisons against ids, which deserialization canonicalizes the same way,
+ * so the comparison itself is a same-form `RealmPaths` test with no
+ * VirtualNetwork. Contrast `serverRealmURLHref`, which names a realm the way
+ * the realm server keys it (the alias for base) and is for requests,
+ * subscriptions and token lookups.
+ *
+ * The trailing slash goes on first: the fold is a prefix match against
+ * slash-terminated targets, so a slashless realm root would not fold. A realm
+ * reached only through a URL mapping, with no prefix registered for it, is
+ * returned as given; so is one whose spelling differs from its registered
+ * target only by percent-encoding.
+ */
+export function canonicalRealmIdentifier(
+  virtualNetwork: VirtualNetwork,
+  realm: string,
+): RealmIdentifier {
+  return ri(virtualNetwork.unresolveURL(ensureTrailingSlash(realm)));
 }
 
 /**

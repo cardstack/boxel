@@ -37,6 +37,7 @@ import {
   canonicalQuerySignature,
   parseSearchURL,
   ri,
+  rri,
   searchEntryWireQueryFromQuery,
   wireFilterTypeAnchors,
   RealmPaths,
@@ -50,7 +51,7 @@ import type { Filter, Query } from '@cardstack/runtime-common/query';
 
 import { LiveSearchRefreshScheduler } from '../lib/live-search-refresh-scheduler';
 import { LiveSearchTypeGate } from '../lib/live-search-type-gate';
-import { serverRealmURLs } from '../lib/realm-utils';
+import { canonicalRealmIdentifier, serverRealmURLs } from '../lib/realm-utils';
 import { searchErrorEntry } from '../lib/search-error-entry';
 
 import type LoaderService from '../services/loader-service';
@@ -643,8 +644,9 @@ export class SearchResource<
         this.#log.info(`search-resource calling subscribeToRealm for ${realm}`);
         // Realm events arrive keyed by the URL the realm server knows the
         // realm by, which a realm named by a registered prefix is not. Only
-        // the subscription takes that form: the callback, the refresh floors
-        // and the membership checks all keep the caller's spelling.
+        // the subscription takes that form: the callback and the refresh
+        // floors keep the caller's spelling, and membership is checked in the
+        // form card ids carry (see `targetRealms`).
         let [href] = serverRealmURLs(this.network.virtualNetwork, [realm]);
         return {
           url: `${href}_message`,
@@ -970,14 +972,22 @@ export class SearchResource<
     //
     // Nor is any candidate of a realm the arm may not widen into (see
     // `mayWidenInto`).
-    let added = candidatePool.filter(
-      (instance) =>
-        instance.id != null &&
-        !serverIds.has(instance.id) &&
-        this.isInTargetRealm(instance.id) &&
-        this.mayWidenInto(instance.id) &&
-        localMatch(instance) === 'match',
-    );
+    let { virtualNetwork } = this.network;
+    let added = candidatePool.filter((instance) => {
+      if (instance.id == null || serverIds.has(instance.id)) {
+        return false;
+      }
+      // Card ids are canonical already, but a FileDef id stays in the form it
+      // was loaded by, which for a file read on its own is its URL. Folding
+      // it once here makes every candidate comparable to the canonical target
+      // realms.
+      let id = rri(virtualNetwork.unresolveURL(instance.id));
+      return (
+        this.isInTargetRealm(id) &&
+        this.mayWidenInto(id) &&
+        localMatch(instance) === 'match'
+      );
+    });
 
     // These candidates are displayed but absent from `_instances`, so the
     // server-result reference bookkeeping in `updateInstances` doesn't cover
@@ -1070,36 +1080,58 @@ export class SearchResource<
     if (this.answeredRealms.some((realm) => realm.inRealm(id))) {
       return !this.policyScopedRealms.some((realm) => realm.inRealm(id));
     }
-    let realm = this.realmsToSearch.find((realm) =>
-      new RealmPaths(realm, this.network.virtualNetwork).inRealm(id),
-    );
-    return realm !== undefined && this.realm.canRead(realm);
+    let target = this.targetRealms.find(({ paths }) => paths.inRealm(id));
+    return target !== undefined && this.realm.canRead(target.realm);
   }
 
-  // The realms the current result set marks policy-scoped. The server marks
-  // a realm by its URL, while the store's ids name a realm by its registered
-  // prefix where it has one, so each mark matches across the two forms.
+  // `realmsToSearch` in the form card ids carry (see
+  // `canonicalRealmIdentifier`), each paired with the caller's spelling so a
+  // hit can be reported, or passed to `realm.canRead`, as the caller named it.
+  // The fold happens here, once per realm list, so membership below is a
+  // same-form prefix test with no VirtualNetwork. Recomputed when the realm
+  // list changes, not when the network's mappings do: those are registered at
+  // boot.
+  @cached
+  private get targetRealms(): { realm: RealmIdentifier; paths: RealmPaths }[] {
+    let { virtualNetwork } = this.network;
+    return this.realmsToSearch.map((realm) => ({
+      realm,
+      paths: new RealmPaths(canonicalRealmIdentifier(virtualNetwork, realm)),
+    }));
+  }
+
+  // The realms the current result set marks policy-scoped. The server marks a
+  // realm by the URL it registered it under; each mark is folded to the form
+  // card ids carry so the comparison is same-form.
   @cached
   private get policyScopedRealms(): RealmPaths[] {
+    let { virtualNetwork } = this.network;
     return (this._meta?.policyScopedRealms ?? []).map(
-      (realm) => new RealmPaths(ri(realm), this.network.virtualNetwork),
+      (realm) =>
+        new RealmPaths(canonicalRealmIdentifier(virtualNetwork, realm)),
     );
   }
 
   private isInTargetRealm(id: RealmResourceIdentifier): boolean {
-    return this.realmsToSearch.some((realm) =>
-      new RealmPaths(realm, this.network.virtualNetwork).inRealm(id),
-    );
+    return this.targetRealms.some(({ paths }) => paths.inRealm(id));
   }
 
   @cached
   get instancesByRealm() {
-    return this.realmsToSearch
-      .map((realm) => {
-        let realmPath = new RealmPaths(realm, this.network.virtualNetwork);
-        let cards = this.instances.filter((card) => realmPath.inRealm(card.id));
-        return { realm, cards };
-      })
+    // A FileDef id may be in URL form (see the local merge in
+    // `displayedInstances`), so each id is folded before grouping.
+    let { virtualNetwork } = this.network;
+    let ids = this.instances.map((card) =>
+      card.id == null ? undefined : rri(virtualNetwork.unresolveURL(card.id)),
+    );
+    return this.targetRealms
+      .map(({ realm, paths }) => ({
+        realm,
+        cards: this.instances.filter((_card, i) => {
+          let id = ids[i];
+          return id !== undefined && paths.inRealm(id);
+        }),
+      }))
       .filter((r) => r.cards.length > 0);
   }
   @cached
@@ -1354,8 +1386,10 @@ export class SearchResource<
             this.#raiseResultGeneration(realm, generation);
           }
           this._meta = meta;
+          let { virtualNetwork } = this.network;
           this.answeredRealms = realms.map(
-            (realm) => new RealmPaths(realm, this.network.virtualNetwork),
+            (realm) =>
+              new RealmPaths(canonicalRealmIdentifier(virtualNetwork, realm)),
           );
           this._errors = undefined;
           await this.updateInstances(

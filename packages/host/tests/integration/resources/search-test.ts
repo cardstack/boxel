@@ -23,6 +23,7 @@ import {
 } from '@cardstack/runtime-common';
 import { buildQuerySearchURL } from '@cardstack/runtime-common/query-field-utils';
 
+import ENV from '@cardstack/host/config/environment';
 import type { Args as SearchResourceArgs } from '@cardstack/host/resources/search';
 import { SearchResource } from '@cardstack/host/resources/search';
 
@@ -772,6 +773,77 @@ module(`Integration | search resource`, function (hooks) {
       messageService.subscribe = originalSubscribe;
       storeService.searchWithMeta = originalSearchWithMeta;
       virtualNetwork.removeRealmMapping('@test/mapped/');
+    }
+  });
+
+  test(`a base realm card is merged and grouped whichever spelling names the base realm`, async function (assert) {
+    // The default all-realms list names base by its alias, while a base card's
+    // id is its prefix form; membership has to hold across all three spellings.
+    // Server rows are never filtered by membership, so the cards under test are
+    // local ones the server does not return.
+    let spellings = [
+      baseRealm.url,
+      new URL(ENV.resolvedBaseRealmURL).href,
+      '@cardstack/base/',
+    ];
+    for (let [index, spelling] of spellings.entries()) {
+      let title = `local-base-${index}-${Date.now()}`;
+      // One query object for the resource's life: the client-side merge keys
+      // its canonicalized filter on the filter object itself.
+      let query: Query = {
+        filter: {
+          on: { module: baseRRI('card-api'), name: 'CardDef' },
+          eq: { 'cardInfo.name': title },
+        },
+      };
+      let search = getSearchResourceForTest(loaderService, () => ({
+        named: {
+          query,
+          realms: [spelling],
+          isLive: true,
+          isAutoSaved: false,
+          storeService,
+          owner: this.owner,
+        },
+      }));
+      await search.loaded;
+      await settled();
+      assert.deepEqual(
+        search.instances,
+        [],
+        `${spelling}: the server returns nothing for the title`,
+      );
+
+      let local = await storeService.addWithoutPersisting({
+        data: {
+          type: 'card',
+          id: `${baseRealm.url}cards/${title}`,
+          attributes: { cardInfo: { name: title } },
+          meta: {
+            adoptsFrom: { module: baseRRI('card-api'), name: 'CardDef' },
+          },
+        },
+      } as LooseSingleCardDocument);
+      await settled();
+
+      assert.strictEqual(
+        String(local.id),
+        `@cardstack/base/cards/${title}`,
+        `${spelling}: the store names the card by prefix`,
+      );
+      assert.deepEqual(
+        search.instances.map((instance) => instance.id),
+        [local.id],
+        `${spelling}: the local base card is merged`,
+      );
+      assert.deepEqual(
+        search.instancesByRealm.map((group) => [
+          group.realm,
+          group.cards.map((card) => card.id),
+        ]),
+        [[spelling, [local.id]]],
+        `${spelling}: it is grouped under the realm as the caller named it`,
+      );
     }
   });
 

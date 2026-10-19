@@ -170,13 +170,20 @@ Practical consequences:
   compare two identifiers, compare them as strings, or use `RealmPaths`.
 - Don't thread a `VirtualNetwork` into rendering, serialization, or store code
   to resolve something. Reaching for VN at an in-memory site is a signal that
-  resolution is happening at the wrong layer. A list of realms is the
-  exception: a realm is keyed by the URL the realm server registered it under,
-  which is also what its realm events carry, so code that keys searches,
-  caches or subscriptions by realm converts the list once with
-  `serverRealmURLs` (`packages/host/app/lib/realm-utils.ts`). That URL is not
-  always the one the prefix resolves to: the base realm is registered under
-  its alias `https://cardstack.com/base/` and served elsewhere.
+  resolution is happening at the wrong layer.
+- A list of realms is folded once, where it enters, into the form the
+  question needs, and compared with plain `RealmPaths` after that (both
+  helpers live in `packages/host/app/lib/realm-utils.ts`):
+  - **Which realm holds this card?** `canonicalRealmIdentifier` folds a realm
+    with `unresolveURL` into the form card ids carry, so the base realm's
+    alias, the URL it is served from and `@cardstack/base/` are all
+    `@cardstack/base/`. `RealmService#knownRealm` and the search resource's
+    membership checks work this way.
+  - **What does the realm server call this realm?** `serverRealmURLs` gives the
+    URL the server registered the realm under, which search requests, realm
+    events and session tokens are keyed by. That is not always the URL the
+    prefix resolves to: the base realm is registered under its alias
+    `https://cardstack.com/base/` and served elsewhere.
 - Serialization writes RRI form. Deserialization canonicalizes to RRI on entry,
   which is what makes the rule hold for data arriving from the network.
 

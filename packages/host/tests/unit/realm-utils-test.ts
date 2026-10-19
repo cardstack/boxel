@@ -8,6 +8,7 @@ import {
 
 import ENV from '@cardstack/host/config/environment';
 import {
+  canonicalRealmIdentifier,
   realmIdentifierSegments,
   resolvedRealmURLHref,
   serverRealmURLs,
@@ -180,6 +181,79 @@ module('Unit | realm-utils', function (hooks) {
       assert.strictEqual(
         registeredRealmURL(virtualNetwork, '@unmapped/thing/'),
         '@unmapped/thing/',
+      );
+    });
+  });
+
+  // Membership compares a realm against card ids, which deserialization folds
+  // to their registered prefix, so a realm is folded the same way whichever
+  // spelling names it.
+  module('canonicalRealmIdentifier', function (hooks) {
+    hooks.beforeEach(function () {
+      virtualNetwork.addRealmMapping(
+        '@test/mapped/',
+        'https://realms.example.com/mapped/',
+      );
+    });
+
+    test('folds every spelling of the base realm to its prefix', function (assert) {
+      let served = new URL(resolvedBaseRealmURL).href;
+      for (let spelling of [
+        baseRealm.url,
+        served,
+        '@cardstack/base/',
+        '@cardstack/base',
+        baseRealm.url.replace(/\/$/, ''),
+        served.replace(/\/$/, ''),
+      ]) {
+        assert.strictEqual(
+          canonicalRealmIdentifier(virtualNetwork, spelling),
+          '@cardstack/base/',
+          spelling,
+        );
+      }
+      assert.strictEqual(
+        virtualNetwork.unresolveURL(baseRealm.url.replace(/\/$/, '')),
+        baseRealm.url.replace(/\/$/, ''),
+        'the fold itself needs the slash, which is why the helper adds it',
+      );
+    });
+
+    test('folds a prefixed realm and paths beneath it to the prefix', function (assert) {
+      assert.strictEqual(
+        canonicalRealmIdentifier(
+          virtualNetwork,
+          'https://realms.example.com/mapped/',
+        ),
+        '@test/mapped/',
+      );
+      assert.strictEqual(
+        canonicalRealmIdentifier(virtualNetwork, '@test/mapped/'),
+        '@test/mapped/',
+      );
+      assert.strictEqual(
+        canonicalRealmIdentifier(
+          virtualNetwork,
+          'https://realms.example.com/mapped/sub',
+        ),
+        '@test/mapped/sub/',
+      );
+    });
+
+    test('leaves a realm with no prefix as its URL', function (assert) {
+      assert.strictEqual(
+        canonicalRealmIdentifier(virtualNetwork, 'https://example.com/realm'),
+        'https://example.com/realm/',
+      );
+      // A URL mapping alone, with no prefix registered for its target, is
+      // not folded: there is no prefix for either side to become.
+      virtualNetwork.addURLMapping(
+        new URL('https://alias.example/r/'),
+        new URL('https://served.example/r/'),
+      );
+      assert.strictEqual(
+        canonicalRealmIdentifier(virtualNetwork, 'https://alias.example/r/'),
+        'https://alias.example/r/',
       );
     });
   });
