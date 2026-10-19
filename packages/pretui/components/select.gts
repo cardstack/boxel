@@ -457,6 +457,12 @@ export class Select extends Component<SelectSignature> {
           outline-offset: 1px;
           box-shadow: 0 0 0 1.5px var(--ring);
         }
+        /* iOS zooms into inputs under 16px on focus */
+        @media (pointer: coarse) {
+          .pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input {
+            font-size: var(--boxel-font-size);
+          }
+        }
       }
     </style>
     {{! template-lint-enable require-scoped-style }}
