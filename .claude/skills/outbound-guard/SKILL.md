@@ -14,7 +14,10 @@ them makes when a response carried a generation id but no inline cost
 card operation (`lib/outbound/call-api-sender.ts`; see the `call-api` skill).
 A `callApi` carries no `credential`: its credentials are `substitutions`,
 filled into the request after the destination check and never followed across
-a redirect to another origin. The guard is
+a redirect to another origin. A substitution may not change the URL's origin,
+and one filled into the path stays within its segment: a value holding `/` or
+`\`, or one the URL would resolve away as a dot segment, is refused
+`invalid-url` (502) before anything is sent. The guard is
 always on, in every environment; local development gets a short allowlist, never an off switch.
 
 ## What it refuses

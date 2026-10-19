@@ -723,10 +723,10 @@ module(basename(import.meta.filename), function () {
       };
       let result = await runOperation(core, {
         ...invoke({ kind: 'type', codeRef: PERSON, realm: REALM }, 'lookup'),
-        params: { name: 'a/b' },
+        params: { name: 'a b' },
       });
       assert.deepEqual(sent, [
-        { url: 'https://api.example.com/items/a%2Fb', credentials: 0 },
+        { url: 'https://api.example.com/items/a%20b', credentials: 0 },
       ]);
       assert.deepEqual(result, {
         callApi: { status: 404, headers: {}, body: { error: 'Not found' } },
