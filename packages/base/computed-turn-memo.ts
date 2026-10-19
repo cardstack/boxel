@@ -18,10 +18,15 @@ import { initSharedState } from './shared-state';
 // - a tracked write between two reads invalidates the entry, so the read after
 //   a setter assignment recomputes.
 //
-// Three things drop the whole memo, for state the tags do not see:
+// Four things drop the whole memo, for state the tags do not see:
 // - an assignment to an instance's realm meta (the `[meta]` accessor on
 //   `BaseDef`), which computeds read untracked and which is written outside
 //   `notifyCardTracking`;
+// - a change to the realm context of a field instance the memo holds entries
+//   for (`setRealmContextOnField`). A field's `[realmURL]` reads it untracked,
+//   and it is assigned when the field is attached to a card. The fields a
+//   computed constructs get theirs on every evaluation, so this drop is keyed
+//   on the instance (`dropComputedTurnMemoIfHeld`);
 // - a microtask queued when the memo opens. It runs after the microtasks
 //   already queued at that point, so continuations resuming in that same
 //   checkpoint share the memo, and none resuming later does. State a
@@ -87,4 +92,13 @@ export function readComputedThroughTurnMemo<T>(
 
 export function dropComputedTurnMemo(): void {
   turnMemo.caches = null;
+}
+
+// Drops the memo only when it holds an entry for `instance`. For a write that
+// lands on instances a computed has just constructed: those have no entries,
+// and dropping for them would empty the memo on every read of that computed.
+export function dropComputedTurnMemoIfHeld(instance: object): void {
+  if (turnMemo.caches?.has(instance)) {
+    turnMemo.caches = null;
+  }
 }

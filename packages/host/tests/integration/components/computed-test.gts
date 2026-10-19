@@ -986,6 +986,34 @@ module('Integration | computeds', function (hooks) {
     );
   });
 
+  test('a field computed that reads its realm sees the realm it is attached to in the same turn', async function (assert) {
+    class Place extends FieldDef {
+      @field home = contains(StringField, {
+        computeVia: function (this: Place) {
+          return this[realmURL]?.href ?? 'nowhere';
+        },
+      });
+    }
+    class Trip extends CardDef {
+      @field place = contains(Place);
+    }
+
+    let trip = new Trip();
+    trip[meta] = {
+      ...trip[meta],
+      realmURL: 'http://example.com/trips/',
+    } as (typeof trip)[typeof meta];
+
+    let place = new Place();
+    assert.strictEqual(place.home, 'nowhere');
+    trip.place = place;
+    assert.strictEqual(
+      trip.place.home,
+      'http://example.com/trips/',
+      'the read after the field is attached is not served the detached value',
+    );
+  });
+
   test('a computed whose computeVia throws throws on every read in the turn', async function (assert) {
     class Gauge extends CardDef {
       @field reading = contains(NumberField);

@@ -21,7 +21,10 @@ import {
   type JSONAPISingleResourceDocument,
   type SerializeOpts,
 } from './card-serialization';
-import { readComputedThroughTurnMemo } from './computed-turn-memo';
+import {
+  dropComputedTurnMemoIfHeld,
+  readComputedThroughTurnMemo,
+} from './computed-turn-memo';
 import { initSharedState } from './shared-state';
 import { rawArrayValues } from './watched-array';
 import { flatMap } from 'lodash-es';
@@ -1291,7 +1294,12 @@ export function setRealmContextOnField(
   instance: FieldDef,
   realmURLString: string,
 ) {
-  instance[realmContext] = realmURLString;
+  // Computeds read a field's realm context untracked, so a change drops the
+  // turn memo when it holds this instance's computeds.
+  if (instance[realmContext] !== realmURLString) {
+    instance[realmContext] = realmURLString;
+    dropComputedTurnMemoIfHeld(instance);
+  }
 }
 
 function getRealmURLString(realmOrInstance: string | BaseDef | undefined) {
