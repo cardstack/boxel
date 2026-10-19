@@ -3,12 +3,14 @@ most often when the identity provider sends the browser back to the OIDC
 callback with an `error` instead of a code. The client that started the sign-in
 is unknown at that point (Synapse holds its redirect URL in an HttpOnly session
 cookie it never reads on the error path), so every way out of this page leads to
-the Boxel login page below. `boxel_login_url` is the Boxel host for the
-environment this Synapse serves. The Synapse launcher in ../index.ts and the
-Synapse asset sync workflow rewrite the literal to the environment's host URL.
-#} {% set boxel_login_url = "https://localhost:4200/" %} {% extends "_base.html"
-%} {% block title %} {% if error == "access_denied" %} Sign-in cancelled {% else
-%} Sign-in failed {% endif %} {% endblock %} {% block body %} {% if error ==
+the Boxel login page below. That includes a sign-in the `boxel` CLI started from
+the host's `/cli-auth` page, whose user lands on the web login rather than back
+on `/cli-auth`. `boxel_login_url` is the Boxel host for the environment this
+Synapse serves. The Synapse launcher in ../index.ts and the Synapse asset sync
+workflow rewrite the literal to the environment's host URL. #} {% set
+boxel_login_url = "https://localhost:4200/" %} {% extends "_base.html" %} {%
+block title %} {% if error == "access_denied" %} Sign-in cancelled {% else %}
+Sign-in failed {% endif %} {% endblock %} {% block body %} {% if error ==
 "access_denied" %} {# `access_denied` is the provider reporting that the user
 declined, which for Google means they pressed Cancel. That is not a failure, so
 send them straight back to the login page to try again or choose another way to
