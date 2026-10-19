@@ -467,14 +467,21 @@ module(basename(import.meta.filename), function () {
       let { username, password, userId } =
         await registerPasswordUser(dbAdapter);
       let other = await registerPasswordUser(dbAdapter);
-      let statuses = [];
-      for (let attempt = 0; attempt < 3; attempt++) {
-        statuses.push(
-          (await passwordSignIn(username, `${password}-wrong-${attempt}`))
-            .status,
-        );
-      }
-      assert.deepEqual(statuses, [401, 401, 401]);
+      let email = `${randomBytes(6).toString('hex')}@secure-session.test`;
+      await updateAccount(userId, {
+        threepids: [{ medium: 'email', address: email }],
+      });
+      // Sent together, so all of them land well within the time one failure
+      // takes to drain, and naming the account each way it can be named.
+      let failures = await Promise.all(
+        [username, userId, email].map((name, attempt) =>
+          passwordSignIn(name, `${password}-wrong-${attempt}`),
+        ),
+      );
+      assert.deepEqual(
+        failures.map((failure) => failure.status),
+        [401, 401, 401],
+      );
 
       let limited = await passwordSignIn(username, password);
       assert.strictEqual(
@@ -497,12 +504,13 @@ module(basename(import.meta.filename), function () {
         'and says so in Retry-After',
       );
 
-      let byMatrixId = await passwordSignIn(userId, password);
-      assert.strictEqual(
-        byMatrixId.status,
-        429,
-        'the account is limited however it is named',
-      );
+      for (let name of [userId, email.toUpperCase()]) {
+        assert.strictEqual(
+          (await passwordSignIn(name, password)).status,
+          429,
+          `the account is limited however it is named (${name})`,
+        );
+      }
       let otherAccount = await passwordSignIn(other.username, other.password);
       assert.strictEqual(
         otherAccount.status,

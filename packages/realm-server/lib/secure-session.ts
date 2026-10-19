@@ -210,6 +210,21 @@ async function resolveMatrixUser(
 interface MatrixResult {
   status: number;
   body: Record<string, any>;
+  // For a 429, how long the Matrix server asks the caller to wait: the body's
+  // `retry_after_ms`, or else the standard `Retry-After` header, which a
+  // Matrix server may send on its own (the body field is deprecated).
+  retryAfterMs?: number;
+}
+
+function matrixRetryAfterMs(
+  response: Response,
+  body: Record<string, any>,
+): number | undefined {
+  if (typeof body.retry_after_ms === 'number') {
+    return body.retry_after_ms;
+  }
+  let seconds = Number(response.headers.get('Retry-After') ?? NaN);
+  return Number.isFinite(seconds) ? seconds * 1000 : undefined;
 }
 
 // The request whose UIA check confirms a password. It adds a third-party
@@ -242,7 +257,12 @@ async function attemptThreepidAdd(
   } catch {
     // A response that isn't JSON is judged by its status alone.
   }
-  return { status: response.status, body };
+  return {
+    status: response.status,
+    body,
+    retryAfterMs:
+      response.status === 429 ? matrixRetryAfterMs(response, body) : undefined,
+  };
 }
 
 // Runs `fn` with a Matrix access token for `user` minted through the admin
@@ -275,24 +295,12 @@ async function asUser<T>(
   }
 }
 
-// The account a password sign-in's failures count against, keyed as the
-// Matrix server keys failed logins: an email address by the address, anything
-// else by the Matrix user id it names.
-async function failureKey(
-  deps: SecureSessionDeps,
-  username: string,
-): Promise<string> {
-  let name = username.trim();
-  if (!name.startsWith('@') && name.includes('@')) {
-    return `email:${name.toLowerCase()}`;
-  }
-  return `user:${((await resolveMatrixUser(deps, name)) ?? name).toLowerCase()}`;
-}
-
 // Signs in with a password, checked by the Matrix server's UIA check as
 // described above. Only failures count against the account's limit (see
 // `sign-in-limiter.ts`), and an account over it is refused before its
-// password is checked.
+// password is checked. Failures are counted as the Matrix server counts failed
+// logins: against the Matrix user id the account resolves to, however it was
+// named, or against the name itself when it names no account.
 export async function signInWithPassword(
   deps: SecureSessionDeps,
   limiter: SignInLimiter,
@@ -301,30 +309,29 @@ export async function signInWithPassword(
   if (!attempt.username.trim() || !attempt.password) {
     throw invalidCredentials();
   }
-  let account = await failureKey(deps, attempt.username);
-  let check = limiter.check(account);
+  let user = await resolveMatrixUser(deps, attempt.username);
+  let account = (user ?? attempt.username.trim()).toLowerCase();
+  let check = limiter.start(account);
   if (!check.allowed) {
     throw rateLimited(check.retryAfterMs);
   }
+  let failed = false;
   try {
-    return await checkPassword(deps, attempt);
+    return await checkPassword(deps, user, attempt);
   } catch (e) {
-    if (e instanceof SecureSessionError && e.code === 'invalid-credentials') {
-      limiter.recordFailure(account);
-    }
+    failed =
+      e instanceof SecureSessionError && e.code === 'invalid-credentials';
     throw e;
+  } finally {
+    limiter.finish(account, { failed });
   }
 }
 
 async function checkPassword(
   deps: SecureSessionDeps,
-  {
-    username,
-    password,
-    client,
-  }: { username: string; password: string; client: SecureSessionClient },
+  user: string | undefined,
+  { password, client }: { password: string; client: SecureSessionClient },
 ): Promise<SignedInSession> {
-  let user = await resolveMatrixUser(deps, username);
   if (!user || !(await fetchSessionRoom(deps.dbAdapter, user))) {
     throw invalidCredentials();
   }
@@ -340,7 +347,7 @@ async function checkPassword(
     throw invalidCredentials();
   }
   if (started.status === 429) {
-    throw rateLimited(started.body.retry_after_ms);
+    throw rateLimited(started.retryAfterMs);
   }
   let uiaSession = started.body.session;
   if (started.status !== 401 || typeof uiaSession !== 'string') {
@@ -368,7 +375,7 @@ async function checkPassword(
     throw invalidCredentials();
   }
   if (completed.status === 429) {
-    throw rateLimited(completed.body.retry_after_ms);
+    throw rateLimited(completed.retryAfterMs);
   }
   if (completed.status === 401) {
     throw invalidCredentials();

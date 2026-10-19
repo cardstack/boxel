@@ -68,10 +68,16 @@ as the Matrix server limits failed logins to the app
 second): only failures count, a successful sign-in never does, and nothing is
 limited per address. The Matrix server's own failure limit doesn't cover these
 sign-ins, because it doesn't count a wrong password in a UIA check, so the
-realm server keeps the count itself, per process. An account over the limit is
-refused before its password is checked, with `429 rate-limited`, a
-`Retry-After` header, and the exact wait in `errors[0].meta.retryAfterMs`. A
-Matrix 429's `retry_after_ms` is passed through the same way. The window
+realm server keeps the count itself, per process. Failures count against the
+Matrix user id the account resolves to, however it was named (username, Matrix
+id or email), or against the name when it names no account, as the Matrix
+server counts failed logins. An account may also have at most 10 sign-ins in
+flight at once, so a batch of guesses sent together can't all be checked
+before any of them counts. An account over the limit is refused before its
+password is checked, with `429 rate-limited`, a `Retry-After` header, and the
+exact wait in `errors[0].meta.retryAfterMs` (none for too many in flight). A
+Matrix 429's wait (`retry_after_ms`, or its `Retry-After` header) is passed
+through the same way. The window
 shows it in the app's words: "Sign-in failed. Too many failed attempts, try
 again in N minutes." (`secure-origin/sign-in-copy.js`). Google sign-in has no
 limit of its own.

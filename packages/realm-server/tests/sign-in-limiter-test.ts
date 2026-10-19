@@ -14,61 +14,101 @@ module(basename(import.meta.filename), function () {
       return {
         clock,
         limiter: new SignInLimiter(
-          { burstCount: 3, perSecond: 0.17 },
+          { burstCount: 3, perSecond: 0.17, inFlight: 10 },
           { now: () => clock.now },
         ),
       };
     }
 
+    // A sign-in that runs to completion, failing or not.
+    function attempt(l: SignInLimiter, account: string, failed: boolean) {
+      let check = l.start(account);
+      if (check.allowed) {
+        l.finish(account, { failed });
+      }
+      return check;
+    }
+
+    function retryAfterMs(check: ReturnType<SignInLimiter['start']>) {
+      return check.allowed ? undefined : check.retryAfterMs;
+    }
+
     test('an account is refused only once its failures fill a burst', function (assert) {
       let { limiter: l } = limiter();
       for (let failure = 0; failure < 3; failure++) {
-        assert.true(l.check('user:@a:x').allowed, `attempt ${failure + 1}`);
-        l.recordFailure('user:@a:x');
+        assert.true(attempt(l, '@a:x', true).allowed, `attempt ${failure + 1}`);
       }
-      let refused = l.check('user:@a:x');
+      let refused = attempt(l, '@a:x', false);
       assert.false(refused.allowed, 'the fourth attempt waits');
       assert.strictEqual(
-        refused.allowed ? undefined : refused.retryAfterMs,
+        retryAfterMs(refused),
         Math.ceil(1000 / 0.17),
         'until one failure has drained',
       );
       assert.true(
-        l.check('user:@b:x').allowed,
+        attempt(l, '@b:x', false).allowed,
         'other accounts are unaffected',
       );
     });
 
-    test('checking counts nothing, so successful sign-ins never fill the limit', function (assert) {
+    test('successful sign-ins never fill the limit', function (assert) {
       let { limiter: l } = limiter();
-      for (let attempt = 0; attempt < 100; attempt++) {
-        assert.true(l.check('user:@a:x').allowed);
+      for (let signIn = 0; signIn < 100; signIn++) {
+        assert.true(attempt(l, '@a:x', false).allowed);
       }
+    });
+
+    test('failures that land together never fill more than a burst', function (assert) {
+      let { limiter: l } = limiter();
+      for (let started = 0; started < 10; started++) {
+        assert.true(l.start('@a:x').allowed, `start ${started + 1}`);
+      }
+      for (let finished = 0; finished < 10; finished++) {
+        l.finish('@a:x', { failed: true });
+      }
+      assert.strictEqual(
+        retryAfterMs(l.start('@a:x')),
+        Math.ceil(1000 / 0.17),
+        'the wait is what a single burst asks for',
+      );
+    });
+
+    test('an account may have only so many sign-ins in flight', function (assert) {
+      let { limiter: l } = limiter();
+      for (let started = 0; started < 10; started++) {
+        assert.true(l.start('@a:x').allowed, `start ${started + 1}`);
+      }
+      let refused = l.start('@a:x');
+      assert.false(refused.allowed, 'one more waits');
+      assert.strictEqual(retryAfterMs(refused), undefined, 'for no known time');
+      assert.true(l.start('@b:x').allowed, 'other accounts are unaffected');
+      l.finish('@a:x', { failed: false });
+      assert.true(
+        l.start('@a:x').allowed,
+        'one may start once another finishes',
+      );
     });
 
     test('failures drain at the configured rate', function (assert) {
       let { limiter: l, clock } = limiter();
       for (let failure = 0; failure < 3; failure++) {
-        l.recordFailure('user:@a:x');
+        attempt(l, '@a:x', true);
       }
-      let refused = l.check('user:@a:x');
-      let retryAfterMs = refused.allowed ? 0 : refused.retryAfterMs;
-      clock.now += retryAfterMs - 1;
-      assert.false(l.check('user:@a:x').allowed, 'just before the retry time');
+      let wait = retryAfterMs(l.start('@a:x')) ?? 0;
+      clock.now += wait - 1;
+      assert.false(l.start('@a:x').allowed, 'just before the retry time');
       clock.now += 1;
-      assert.true(l.check('user:@a:x').allowed, 'at the retry time');
-      l.recordFailure('user:@a:x');
-      assert.false(
-        l.check('user:@a:x').allowed,
-        'one more failure fills it again',
+      assert.true(
+        attempt(l, '@a:x', true).allowed,
+        'at the retry time, and that attempt fails too',
       );
+      assert.false(l.start('@a:x').allowed, 'one more failure fills it again');
       clock.now += Math.ceil((3 * 1000) / 0.17);
       for (let failure = 0; failure < 3; failure++) {
         assert.true(
-          l.check('user:@a:x').allowed,
+          attempt(l, '@a:x', true).allowed,
           `a full burst once drained (${failure + 1})`,
         );
-        l.recordFailure('user:@a:x');
       }
     });
   });

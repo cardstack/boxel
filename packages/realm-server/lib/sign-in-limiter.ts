@@ -2,13 +2,20 @@
 // failed logins to the app (`rc_login.failed_attempts`): a leaky bucket that
 // only failures fill. A successful sign-in never counts, and an attempt is
 // refused only once the account's failures fill the bucket, with how long
-// until the next one may be tried.
+// until the next one may be tried. The bucket never holds more than a burst,
+// so failures that land together can't push the wait past what the Matrix
+// server would ask for.
 //
 // The Matrix server's own failure limit doesn't cover these sign-ins: the
 // password is checked by a user-interactive auth check, and a wrong password
 // there is answered as an incomplete auth, which that limit doesn't count.
 // So the realm server keeps the count, and its limit is never lower than the
 // Matrix server's own failure limit for the app's logins.
+//
+// An account may also have only so many sign-ins in flight at once. Failures
+// are counted as each attempt finishes, so without this cap a batch of
+// guesses sent together would all be checked before any of them counted. No
+// one signing in by hand has that many in flight.
 //
 // Counts are kept per process; with several realm-server processes each allows
 // its own share.
@@ -18,6 +25,8 @@ export interface SignInLimits {
   burstCount: number;
   // How fast the bucket drains, in failures per second.
   perSecond: number;
+  // How many sign-ins an account may have in flight at once.
+  inFlight: number;
 }
 
 // The Matrix server's defaults for `rc_login.failed_attempts`, which apply
@@ -25,11 +34,14 @@ export interface SignInLimits {
 export const DEFAULT_SIGN_IN_LIMITS: SignInLimits = {
   burstCount: 3,
   perSecond: 0.17,
+  inFlight: 10,
 };
 
+// `retryAfterMs` is undefined when the wait isn't known, as for an account
+// with too many sign-ins in flight.
 export type SignInCheck =
   | { allowed: true }
-  | { allowed: false; retryAfterMs: number };
+  | { allowed: false; retryAfterMs?: number };
 
 interface Bucket {
   // Failures in the bucket as of `startedAt`.
@@ -39,6 +51,7 @@ interface Bucket {
 
 export class SignInLimiter {
   private buckets = new Map<string, Bucket>();
+  private inFlight = new Map<string, number>();
   private limits: SignInLimits;
   private now: () => number;
 
@@ -50,8 +63,9 @@ export class SignInLimiter {
     this.now = opts.now ?? Date.now;
   }
 
-  // Whether the account may try a sign-in now, counting nothing.
-  check(account: string): SignInCheck {
+  // Starts a sign-in for the account when its limits allow one. Every allowed
+  // start is matched by one `finish`.
+  start(account: string): SignInCheck {
     let now = this.now();
     this.sweep(now);
     let { count } = this.level(account, now);
@@ -64,14 +78,32 @@ export class SignInLimiter {
         ),
       };
     }
+    let inFlight = this.inFlight.get(account) ?? 0;
+    if (inFlight >= this.limits.inFlight) {
+      return { allowed: false };
+    }
+    this.inFlight.set(account, inFlight + 1);
     return { allowed: true };
   }
 
-  // Counts a failed sign-in for the account.
-  recordFailure(account: string): void {
+  // Ends a sign-in `start` allowed, counting it when it failed. A failure
+  // that would overfill the bucket isn't counted, as the Matrix server counts
+  // only what fits.
+  finish(account: string, { failed }: { failed: boolean }): void {
+    let inFlight = (this.inFlight.get(account) ?? 1) - 1;
+    if (inFlight > 0) {
+      this.inFlight.set(account, inFlight);
+    } else {
+      this.inFlight.delete(account);
+    }
+    if (!failed) {
+      return;
+    }
     let now = this.now();
     let { count } = this.level(account, now);
-    this.buckets.set(account, { count: count + 1, startedAt: now });
+    if (count + 1 <= this.limits.burstCount) {
+      this.buckets.set(account, { count: count + 1, startedAt: now });
+    }
   }
 
   // The account's failures as of `now`, after the bucket has drained.
