@@ -17,7 +17,7 @@ import { cloneDeep } from 'lodash-es';
 import { isEqual } from 'lodash-es';
 import { merge, mergeWith } from 'lodash-es';
 
-import { TrackedObject, TrackedMap } from 'tracked-built-ins';
+import { TrackedObject, TrackedMap, TrackedSet } from 'tracked-built-ins';
 
 import {
   baseFileRef,
@@ -366,6 +366,10 @@ export default class StoreService extends Service implements StoreInterface {
   private referenceCount: ReferenceCount = new Map();
   private newReferencePromises: Promise<void>[] = [];
   private autoSaveStates: TrackedMap<string, AutoSaveState> = new TrackedMap();
+  // Ids whose card read the realm answered with a file's metadata. The store
+  // files such a read's instance and error under file-meta, so an untyped read
+  // of one of these ids is served from that bucket (see `readTypeFor`).
+  private fileReadIds = new TrackedSet<string>();
   // Bumped whenever a hydrated card instance's fields change (edit / save).
   // Adds and deletes are already observable through the tracked identity map
   // (see `allCardInstances`); this signal covers the in-place mutations that
@@ -545,6 +549,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.referenceCount = new Map();
     this.newReferencePromises = [];
     this.autoSaveStates = new TrackedMap();
+    this.fileReadIds.clear();
     this.inflightGetCards = new Map();
     this.inflightGetFileMeta = new Map();
     this.inflightCardMutations = new Map();
@@ -633,6 +638,7 @@ export default class StoreService extends Service implements StoreInterface {
     }
     this.cardApiCache = undefined;
     this.autoSaveStates = new TrackedMap();
+    this.fileReadIds.clear();
     this.newReferencePromises = [];
     this.inflightGetCards = new Map();
     this.inflightGetFileMeta = new Map();
@@ -1178,6 +1184,13 @@ export default class StoreService extends Service implements StoreInterface {
       primitive: api.primitive,
       virtualNetwork: this.network.virtualNetwork,
     };
+  }
+
+  // The bucket an untyped read of `id` lands in: file-meta once a card read of
+  // it was answered with a file's metadata, card otherwise.
+  readTypeFor(id: string): StoreReadType {
+    let url = asURL(id, this.network.virtualNetwork);
+    return url && this.fileReadIds.has(url) ? 'file-meta' : 'card';
   }
 
   // peekError will always return the current server state regarding errors for this id
@@ -2277,9 +2290,8 @@ export default class StoreService extends Service implements StoreInterface {
             idOrDoc: url,
           });
           // The card read of a file URL reroutes to a file-meta load, which
-          // has already filed the FileDef under file-meta. Recording it as a
-          // card would land it in the card error bucket.
-          if (isFileDefInstance(instanceOrError)) {
+          // has already filed its instance or error under file-meta.
+          if (this.readTypeFor(url) === 'file-meta') {
             deferred.fulfill();
             return;
           }
@@ -3702,6 +3714,9 @@ export default class StoreService extends Service implements StoreInterface {
           // caller gets a FileDef instead of a hard failure.
           if (isSingleFileMetaDocument(json)) {
             // URL was a binary file; reroute to the file-meta bucket.
+            if (id) {
+              this.fileReadIds.add(id);
+            }
             let fileMeta = await this.getFileMetaInstance<FileDef>({
               idOrDoc: url,
               opts: {
@@ -3709,6 +3724,11 @@ export default class StoreService extends Service implements StoreInterface {
                 dependencyTrackingContext: opts?.dependencyTrackingContext,
               },
             });
+            // The file-meta load files only a loaded instance; its error is
+            // filed here so the read's error lives in the same bucket.
+            if (id && !isFileDefInstance(fileMeta)) {
+              this.store.addFileMetaInstanceOrError(id, fileMeta);
+            }
             // Resolve inflightGetCards so concurrent callers don't hang.
             deferred?.fulfill(fileMeta as unknown as T | CardErrorJSONAPI);
             return fileMeta as unknown as T;
