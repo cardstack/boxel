@@ -11,7 +11,10 @@ import { baseRealmRRI, realmURL } from './constants.ts';
 import { logger } from './log.ts';
 import type { LocalPath } from './paths.ts';
 import { ri, rri } from './realm-identifiers.ts';
-import type { RealmResourceIdentifier } from './realm-identifiers.ts';
+import type {
+  RealmIdentifier,
+  RealmResourceIdentifier,
+} from './realm-identifiers.ts';
 import { resolveRRIReference } from './url.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 
@@ -135,6 +138,8 @@ export function generateInstallFolderName(
   }
 }
 
+const URL_SCHEME_AND_AUTHORITY = /^[a-z][a-z\d+.-]*:\/\/[^/?#]*/i;
+
 export class ListingPathResolver {
   targetDirectoryName: string; //name of outer uuid  folder
   private targetRealmPath: RealmPaths;
@@ -144,13 +149,13 @@ export class ListingPathResolver {
   private virtualNetwork: VirtualNetwork;
 
   constructor(
-    targetRealm: string,
+    targetRealm: RealmIdentifier,
     listing: Listing,
     installDirId: string | undefined,
     virtualNetwork: VirtualNetwork,
   ) {
     this.virtualNetwork = virtualNetwork;
-    this.targetRealmPath = new RealmPaths(new URL(targetRealm), virtualNetwork);
+    this.targetRealmPath = new RealmPaths(targetRealm, virtualNetwork);
 
     const listingDirectoryName = kebabCase(listing.name);
 
@@ -166,7 +171,7 @@ export class ListingPathResolver {
 
     this.sourceRealmPath = this.canonicalRealmPath(sourceRealmURL);
     this.targetDirectoryPath = new RealmPaths(
-      new URL(join(this.targetRealmPath.url, this.targetDirectoryName)),
+      ri(this.targetRealmPath.directoryRRI(this.targetDirectoryName)),
       virtualNetwork,
     );
   }
@@ -215,21 +220,21 @@ export class ListingPathResolver {
   }
 
   // No known realm contains this id: strip just the realm-identifying prefix
-  // and keep the rest of the path. That prefix is the origin for a URL, and the
-  // `@scope/name` namespace for a prefix RRI.
+  // and keep the rest of the path. That prefix is `scheme://authority` for a
+  // URL, and the `@scope/name` namespace for a prefix RRI. An id from a realm
+  // the listing never registered through `addKnownRealmURL` lands here, which
+  // is the usual case for an install that registers no foreign realms.
   private localFallback(id: RealmResourceIdentifier): LocalPath {
     if (id.startsWith('@')) {
       return id.split('/').slice(2).join('/').replace(/\/+$/, '');
     }
+    let path = id.replace(URL_SCHEME_AND_AUTHORITY, '').replace(/[?#].*$/, '');
     try {
-      // Prefix forms return above, so only a URL-shaped id reaches here; the
-      // catch covers one that is neither.
-      // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
-      let { pathname } = new URL(id);
-      return decodeURI(pathname).replace(/^\//, '').replace(/\/+$/, '');
+      path = decodeURI(path);
     } catch {
-      return id.replace(/^\//, '').replace(/\/+$/, '');
+      // A malformed escape keeps the path as written.
     }
+    return path.replace(/^\//, '').replace(/\/+$/, '');
   }
 
   targetLid(id: RealmResourceIdentifier): string {
@@ -257,7 +262,7 @@ export class PlanBuilder {
     virtualNetwork: VirtualNetwork,
   ) {
     this.resolver = new ListingPathResolver(
-      realmUrl,
+      ri(realmUrl),
       listing,
       undefined,
       virtualNetwork,

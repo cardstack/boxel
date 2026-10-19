@@ -1,0 +1,40 @@
+# CS-14096: remove the last identifier parses outside the VirtualNetwork
+
+## Goal
+
+ADR 002 §1.2: only the VirtualNetwork turns a realm identifier into a URL. Remove the
+`no-url-from-realm-identifier` disables in `realm-server.ts` and `catalog.ts`
+(`create-file-modal.gts` and `validate-realm.ts` are handled separately).
+
+## Steps
+
+1. **Test-realm origin (host).** Export `testRealmOrigin = 'http://test-realm'` from
+   `packages/runtime-common/helpers/const.ts` beside `testRealmURL`, and use it in
+   `RealmServerService.getRealmServersForRealms` and `normalizeRealmServerURL`
+   (`packages/host/app/services/realm-server.ts`). Both parses and disables go.
+2. **ListingPathResolver (runtime-common `catalog.ts`).**
+   - Constructor takes `targetRealm: RealmIdentifier` and builds
+     `new RealmPaths(targetRealm, virtualNetwork)` directly.
+   - The install directory's `RealmPaths` is built from
+     `targetRealmPath.directoryRRI(targetDirectoryName)`; no `new URL`.
+   - `localFallback` strips a URL-form id's `scheme://authority` with a string
+     operation instead of `new URL(id).pathname`.
+   - `PlanBuilder` keeps its `realmUrl: string` parameter and brands it with `ri()`
+     when it builds the resolver: boxel-catalog's `listing-install` and
+     `collect-submission-files` commands pass a plain string, so narrowing the
+     public parameter would need a paired catalog change for no behaviour change.
+   - Host unit tests that construct `ListingPathResolver` pass `ri(...)`.
+
+## Decision: the fallback stays a fallback
+
+Reaching `localFallback` is the normal path for `listing-install`, which never
+registers foreign realms through `addKnownRealmURL`; a spec or example from a realm
+other than the listing's own lands there. Making it an error would break those
+installs, so it stays and is covered by tests.
+
+## Testing
+
+- `packages/host/tests/unit/plan-install-test.ts`: existing listing-install plan
+  tests, plus `local()` fallback tests for a prefix-form id and for a URL-form id
+  with a percent-encoded path.
+- `pnpm lint` in `packages/host` and `packages/runtime-common`.
