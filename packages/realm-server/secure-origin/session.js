@@ -17,6 +17,9 @@ const JSON_API = 'application/vnd.api+json';
 // A session this close to its end is treated as already ended, so a request
 // made with it doesn't fail partway through.
 const EXPIRY_MARGIN_MS = 60 * 1000;
+// How long the window waits to learn whether its session is still signed in
+// before it carries on with the session it has.
+const SESSION_CHECK_TIMEOUT_MS = 10 * 1000;
 
 export class SecureSessionError extends Error {
   constructor(status, code, message) {
@@ -33,7 +36,7 @@ export function readConfig() {
   return { realmServerURL: new URL(meta('boxel-realm-server-url')) };
 }
 
-async function request(url, { method = 'POST', body, token } = {}) {
+async function request(url, { method = 'POST', body, token, signal } = {}) {
   let headers = { Accept: JSON_API };
   if (body !== undefined) {
     headers['Content-Type'] = JSON_API;
@@ -49,6 +52,7 @@ async function request(url, { method = 'POST', body, token } = {}) {
       body: body === undefined ? undefined : JSON.stringify(body),
       credentials: 'omit',
       referrerPolicy: 'no-referrer',
+      signal,
     });
   } catch {
     throw new SecureSessionError(0, 'network', 'Boxel could not be reached.');
@@ -244,8 +248,8 @@ export async function signOut(config) {
 // The window's session, if the server still honours it. The server ends it
 // when the user signs out here, signs out of the app, or the session expires;
 // an ended session is forgotten, so the window shows its sign-in. When the
-// server can't be reached the stored session is kept, since nothing says it
-// has ended.
+// server can't be reached or doesn't answer in time, the stored session is
+// kept, since nothing says it has ended.
 export async function liveSession(config) {
   let session = storedSession();
   if (!session) {
@@ -255,6 +259,7 @@ export async function liveSession(config) {
     await request(new URL('_secure-session', config.realmServerURL), {
       method: 'GET',
       token: session.token,
+      signal: AbortSignal.timeout(SESSION_CHECK_TIMEOUT_MS),
     });
   } catch (e) {
     if (e.status === 401) {
