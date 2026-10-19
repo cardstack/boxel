@@ -1444,12 +1444,24 @@ export default class ToolService extends Service {
         data: { ...data, meta: { adoptsFrom } },
       });
     }
-    // An input class that is not exported from its module has no code ref for
-    // `meta.adoptsFrom` to name, so the call's arguments are deserialized into
-    // an instance of the class itself.
+    // An input class that is not exported from its module has no code ref, so
+    // the call's arguments are deserialized into an instance of the class
+    // itself. The document names the class's nearest identifiable ancestor,
+    // which keeps it a well-formed card document; the instance's own class
+    // decides how its fields deserialize.
+    let ancestor = Reflect.getPrototypeOf(InputType) as typeof CardDef | null;
+    let ancestorRef = undefined;
+    while (ancestor && !(ancestorRef = identifyCard(ancestor))) {
+      ancestor = Reflect.getPrototypeOf(ancestor) as typeof CardDef | null;
+    }
+    if (!ancestorRef) {
+      throw new Error(
+        `${command.constructor.name} has an input type that cannot be identified`,
+      );
+    }
     return await this.store.addWithoutPersistingFromSerialized(
       new InputType(),
-      { data },
+      { data: { ...data, meta: { adoptsFrom: ancestorRef } } },
     );
   }
 
