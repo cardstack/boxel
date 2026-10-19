@@ -308,7 +308,10 @@ test.describe('the secure window signs in on its own', () => {
     await secure.locator('[data-test-secure-google]').click();
     await signInAtGoogle(secure, identity);
     expect(await signedInUser(secure)).toBe(credentials.userId);
+    // Back on its sign-in page, the window's console function signs it out.
+    await secure.reload();
     await secure.evaluate(() => (window as any).boxelSignOut());
+    await expect(secure.locator('[data-test-secure-google]')).toBeVisible();
 
     await updateSynapseUser(credentials.userId, { deactivated: true });
     await secure.locator('[data-test-secure-google]').click();
