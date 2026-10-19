@@ -43,7 +43,10 @@ export default class StackFocus {
   follow = modifier((element: HTMLElement, [stacks]: [StackItem[][]]) => {
     let previous = this.previous;
     this.previous = stacks.map((stack) => [...stack]);
-    // The stacks present as interact mode renders were restored, not opened.
+    // The stacks present as interact mode first renders were restored, not
+    // opened, so they move no focus. A later restore from the URL (back and
+    // forward navigation) rebuilds every item, taking any focus inside them
+    // with it, so its items arrive as opens and the top card takes focus.
     if (!previous) {
       return;
     }

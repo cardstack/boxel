@@ -918,6 +918,24 @@ module('Acceptance | interact submode | single stack tests', function (hooks) {
       assert.dom('[data-stack-card]:focus').doesNotExist();
     });
 
+    test('restoring the stacks from a URL change focuses the card on top', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      });
+      await visitOperatorMode({
+        stacks: [
+          [
+            { id: `${testRealmURL}Person/fadhlan`, format: 'isolated' },
+            { id: `${testRealmURL}Pet/mango`, format: 'isolated' },
+          ],
+        ],
+      });
+
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Pet/mango"]`)
+        .isFocused('the card on top has focus');
+    });
+
     test('a card opened into a new neighbor stack from the search sheet takes focus', async function (assert) {
       await visitOperatorMode({
         stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
