@@ -1388,7 +1388,9 @@ export default class ToolService extends Service {
         await this.settleLinkedInputs(typedInput as CardDef, relationships);
       } else {
         // identifyCard can fail in some circumstances where the input type is not exported
-        // in that case, we'll fall back to this less reliable method of constructing the input type
+        // in that case, we'll fall back to this less reliable method of constructing the input type.
+        // Relationships passed this way are not deserialized into links, so
+        // linked inputs are neither loaded nor settled on this path.
         typedInput = new InputType({ ...attributes, ...relationships });
       }
     } else {
