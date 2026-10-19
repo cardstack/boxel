@@ -117,6 +117,133 @@ module('Acceptance | Tools tests', function (hooks) {
     createAndJoinRoom,
   } = mockMatrixUtils;
 
+  // Waits for a tool call the drain runs without a click to show as applied
+  // in the message at `messageIdx`.
+  //
+  // "applied" is the end of a chain that settled() does not track: the tool
+  // queue drains on a debounce, waits out any in-flight room processing,
+  // validates, runs the tool in an ember-concurrency task, refreshes the
+  // room's skills and the AI context, sends the result event through the mock
+  // homeserver's setTimeout delivery, and only then does room processing fold
+  // the result in. That takes 0.5-1.2s locally, at or past waitFor's 1s
+  // default, so the wait gets a budget sized for the whole chain. Each phase's
+  // first sighting is recorded so the log shows where the time went (or which
+  // phase never happened): "executed" is the tool body returning,
+  // "resultSent" is its result event reaching the room, "applied" is that
+  // result folded in and rendered. On a timeout the drain's view of every
+  // tool on the message is logged too, and the result event's status and
+  // failure reason when there is one.
+  async function waitForAutoAppliedTool({
+    label,
+    roomId,
+    toolCallId,
+    messageIdx,
+    dispatchedAt,
+  }: {
+    label: string;
+    roomId: string;
+    toolCallId: string;
+    messageIdx: number;
+    dispatchedAt: number;
+  }) {
+    let appliedSelector = `[data-test-message-idx="${messageIdx}"] [data-test-apply-state="applied"]`;
+    let toolService = getService('tool-service');
+    let resultEvent = () =>
+      getRoomEvents(roomId).find(
+        (event: any) => event.content?.commandRequestId === toolCallId,
+      );
+    let phaseReachedAt: Record<string, number> = {};
+    let notePhase = (phase: string, reached: boolean) => {
+      if (reached && phaseReachedAt[phase] === undefined) {
+        phaseReachedAt[phase] = Math.round(performance.now() - dispatchedAt);
+      }
+    };
+    try {
+      await waitUntil(
+        () => {
+          notePhase(
+            'claimed',
+            toolService.claimedToolRequestIds.has(toolCallId),
+          );
+          notePhase(
+            'executing',
+            toolService.currentlyExecutingToolRequestIds.has(toolCallId),
+          );
+          notePhase(
+            'executed',
+            toolService.executedToolRequestIds.has(toolCallId),
+          );
+          notePhase('resultSent', Boolean(resultEvent()));
+          let applied = Boolean(find(appliedSelector));
+          notePhase('applied', applied);
+          return applied;
+        },
+        { timeout: 10_000 },
+      );
+      console.log(
+        `[tools-test/${label}] phases reached (ms after the bot message): ${JSON.stringify(phaseReachedAt)}`,
+      );
+    } catch (err) {
+      let applyButtons = findAll('[data-test-tool-call-apply]').map((el) => ({
+        idx: el
+          .closest('[data-test-message-idx]')
+          ?.getAttribute('data-test-message-idx'),
+        state: el.getAttribute('data-test-tool-call-apply'),
+      }));
+      let applyStates = findAll('[data-test-apply-state]').map((el) =>
+        el.getAttribute('data-test-apply-state'),
+      );
+      let warnings = findAll('[data-test-boxel-alert="warning"]').map(
+        (el) => el.textContent?.trim() ?? '',
+      );
+      let roomData = getService('matrix-service').getRoomData(roomId);
+      let roomResource = getService('matrix-service').roomResources.get(roomId);
+      let message = roomResource?.messages[messageIdx];
+      let result = resultEvent();
+      console.error(
+        `[tools-test/${label}] timed out waiting for applied state. Diagnostic:`,
+        JSON.stringify(
+          {
+            roomId,
+            toolCallId,
+            renderedApplyButtonStates: applyButtons,
+            renderedApplyStates: applyStates,
+            warnings,
+            enabledSkillCards:
+              roomData?.skillsConfig?.enabledSkillCards?.map(
+                (f) => f.sourceUrl,
+              ) ?? null,
+            roomResourceCommandCount: roomResource?.tools?.length ?? null,
+            elapsedMs: Math.round(performance.now() - dispatchedAt),
+            phaseReachedAt,
+            resultEventStatus: result?.content?.['m.relates_to']?.key ?? null,
+            resultEventFailureReason: result?.content?.failureReason ?? null,
+            roomIsProcessing: roomResource?.isProcessing ?? null,
+            messageIsStreamingFinished: message?.isStreamingFinished ?? null,
+            messageAgentId: message?.agentId ?? null,
+            sessionAgentId: getService('matrix-service').agentId,
+            messageTools:
+              message?.tools.map((tool) => ({
+                id: tool.id,
+                name: tool.name,
+                status: tool.status,
+                hasCodeRef: Boolean(tool.codeRef),
+                requiresApproval: tool.requiresApproval,
+                claimed: toolService.claimedToolRequestIds.has(tool.id!),
+                executing: toolService.currentlyExecutingToolRequestIds.has(
+                  tool.id!,
+                ),
+                executed: toolService.executedToolRequestIds.has(tool.id!),
+              })) ?? null,
+          },
+          null,
+          2,
+        ),
+      );
+      throw err;
+    }
+  }
+
   hooks.beforeEach(async function () {
     savedMeetingCardId = undefined;
     matrixRoomId = await createAndJoinRoom({
@@ -1448,114 +1575,13 @@ module('Acceptance | Tools tests', function (hooks) {
 
     // Note: you don't have to click on apply button, because command on Skill
     // has requireApproval set to false.
-    //
-    // "applied" is the end of a chain that settled() does not track: the
-    // tool queue drains on a debounce, waits out any in-flight room
-    // processing, validates, runs the tool in an ember-concurrency task,
-    // refreshes the room's skills and the AI context, sends the result event
-    // through the mock homeserver's setTimeout delivery, and only then does
-    // room processing fold the result in. That takes 0.5-1.2s locally, at or
-    // past waitFor's 1s default, so the wait gets a budget sized for the
-    // whole chain. Each phase's first sighting is recorded so the log shows
-    // where the time went (or which phase never happened): "executed" is
-    // the tool body returning, "resultSent" is its result event reaching the
-    // room, "applied" is that result folded in and rendered.
-    let toolService = getService('tool-service');
-    let phaseReachedAt: Record<string, number> = {};
-    let notePhase = (phase: string, reached: boolean) => {
-      if (reached && phaseReachedAt[phase] === undefined) {
-        phaseReachedAt[phase] = Math.round(performance.now() - dispatchedAt);
-      }
-    };
-    try {
-      await waitUntil(
-        () => {
-          notePhase(
-            'claimed',
-            toolService.claimedToolRequestIds.has(toolCallId),
-          );
-          notePhase(
-            'executing',
-            toolService.currentlyExecutingToolRequestIds.has(toolCallId),
-          );
-          notePhase(
-            'executed',
-            toolService.executedToolRequestIds.has(toolCallId),
-          );
-          notePhase(
-            'resultSent',
-            getRoomEvents(roomId).some(
-              (event: any) => event.content?.commandRequestId === toolCallId,
-            ),
-          );
-          let applied = Boolean(
-            find(
-              '[data-test-message-idx="0"] [data-test-apply-state="applied"]',
-            ),
-          );
-          notePhase('applied', applied);
-          return applied;
-        },
-        { timeout: 10_000 },
-      );
-      console.log(
-        `[commands-test/show-card-auto-apply] phases reached (ms after the bot message): ${JSON.stringify(phaseReachedAt)}`,
-      );
-    } catch (err) {
-      let applyButtons = findAll('[data-test-tool-call-apply]').map((el) => ({
-        idx: el
-          .closest('[data-test-message-idx]')
-          ?.getAttribute('data-test-message-idx'),
-        state: el.getAttribute('data-test-tool-call-apply'),
-      }));
-      let applyStates = findAll('[data-test-apply-state]').map((el) =>
-        el.getAttribute('data-test-apply-state'),
-      );
-      let warnings = findAll('[data-test-boxel-alert="warning"]').map(
-        (el) => el.textContent?.trim() ?? '',
-      );
-      let roomData = getService('matrix-service').getRoomData(roomId);
-      let roomResource = getService('matrix-service').roomResources.get(roomId);
-      let message = roomResource?.messages[0];
-      console.error(
-        '[commands-test/show-card-auto-apply] timed out waiting for applied state. Diagnostic:',
-        JSON.stringify(
-          {
-            roomId,
-            renderedApplyButtonStates: applyButtons,
-            renderedApplyStates: applyStates,
-            warnings,
-            enabledSkillCards:
-              roomData?.skillsConfig?.enabledSkillCards?.map(
-                (f) => f.sourceUrl,
-              ) ?? null,
-            roomResourceCommandCount: roomResource?.tools?.length ?? null,
-            elapsedMs: Math.round(performance.now() - dispatchedAt),
-            phaseReachedAt,
-            roomIsProcessing: roomResource?.isProcessing ?? null,
-            messageIsStreamingFinished: message?.isStreamingFinished ?? null,
-            messageAgentId: message?.agentId ?? null,
-            sessionAgentId: getService('matrix-service').agentId,
-            messageTools:
-              message?.tools.map((tool) => ({
-                id: tool.id,
-                name: tool.name,
-                status: tool.status,
-                hasCodeRef: Boolean(tool.codeRef),
-                requiresApproval: tool.requiresApproval,
-                claimed: toolService.claimedToolRequestIds.has(tool.id!),
-                executing: toolService.currentlyExecutingToolRequestIds.has(
-                  tool.id!,
-                ),
-                executed: toolService.executedToolRequestIds.has(tool.id!),
-              })) ?? null,
-          },
-          null,
-          2,
-        ),
-      );
-      throw err;
-    }
+    await waitForAutoAppliedTool({
+      label: 'show-card-auto-apply',
+      roomId,
+      toolCallId,
+      messageIdx: 0,
+      dispatchedAt,
+    });
 
     assert.dom('[data-test-tool-call-id]').doesNotHaveClass('is-failed');
 
@@ -2118,6 +2144,8 @@ module('Acceptance | Tools tests', function (hooks) {
     await waitForNewRoomSkillsLoaded(roomId);
     // `description` is only the label the pill shows; a model that leaves it
     // out has still sent everything the command needs.
+    let toolCallId = 'no-description-request';
+    let dispatchedAt = performance.now();
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Show the card',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -2125,7 +2153,7 @@ module('Acceptance | Tools tests', function (hooks) {
       isStreamingFinished: true,
       [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
-          id: 'no-description-request',
+          id: toolCallId,
           name: showCardToolName,
           arguments: JSON.stringify({
             attributes: {
@@ -2141,9 +2169,13 @@ module('Acceptance | Tools tests', function (hooks) {
       },
     });
     await waitFor('[data-test-message-idx="0"]');
-    await waitFor(
-      '[data-test-message-idx="0"] [data-test-apply-state="applied"]',
-    );
+    await waitForAutoAppliedTool({
+      label: 'no-description-auto-apply',
+      roomId,
+      toolCallId,
+      messageIdx: 0,
+      dispatchedAt,
+    });
     assert.dom('[data-test-boxel-alert="warning"]').doesNotExist();
     assert
       .dom('[data-test-message-idx="0"] [data-test-tool-code-block]')
@@ -2151,10 +2183,7 @@ module('Acceptance | Tools tests', function (hooks) {
 
     let message = getRoomEvents(roomId).pop()!;
     assert.strictEqual(message.content['m.relates_to']?.key, 'applied');
-    assert.strictEqual(
-      message.content.commandRequestId,
-      'no-description-request',
-    );
+    assert.strictEqual(message.content.commandRequestId, toolCallId);
   });
 
   test('command request with arguments that do not match the json schema gets an "invalid" result', async function (assert) {
