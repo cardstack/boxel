@@ -81,7 +81,7 @@ Matrix server's Google client (`lib/google-sign-in.ts`):
    (`packages/matrix/support/synapse/modules/boxel_oidc_mapping_provider.py`):
    - **Linked by `sub`**: the account Synapse linked to the Google subject,
      `GET /_synapse/admin/v1/auth_providers/oidc-google/users/<sub>`. A
-     deactivated account is refused.
+     deactivated or locked account is refused.
    - **Not linked**: the email must be verified. The account holding it
      (`GET /_synapse/admin/v1/threepid/email/users/<email>`, lowercased, and
      as Google spells it) gets the Google link added to its `external_ids`
@@ -92,7 +92,8 @@ Matrix server's Google client (`lib/google-sign-in.ts`):
      `alice1`, `alice2`… past taken ones), Google's `name` as its display
      name, the email as a third-party id, and the Google link. An empty `PUT`
      makes the account, and only its `201` means this sign-in owns it, so a
-     taken localpart is never changed.
+     taken localpart is never changed. A sign-in that fails after making the
+     account unlinks and deactivates it, so the next one resolves again.
 
    The rules live in `lib/google-account.ts`; the two implementations share
    `test_google_sign_in_vectors.json`, which both
@@ -101,7 +102,8 @@ Matrix server's Google client (`lib/google-sign-in.ts`):
 
 5. An account with no session room gets the app's first-sign-in setup before
    the session is minted: the realm-server user and its first credit grant, a
-   personal realm when its account data lists none, and last the session
+   personal realm when its account data lists none (one already in
+   `realm_registry` is recorded, not made again), and last the session
    room, so a sign-in that fails part way sets up again.
 
 Both POSTs answer only a request whose `Origin` is the secure origin's. The
@@ -123,6 +125,7 @@ target and `connect-src` to the realm server (ADR 005 §1.4). `DELETE /_secure-s
 | 403 `unverified-email`    | An unlinked Google account whose email Google hasn't verified                  |
 | 403 `ambiguous-email`     | More than one account holds the unlinked Google account's email                |
 | 403 `deactivated`         | The Google account's account is deactivated                                    |
+| 403 `locked`              | The Google account's account is locked                                         |
 | 403 `no-boxel-account`    | A password sign-in's account has never signed in to Boxel (no session room)    |
 | 409 `used`                | The proof already signed in                                                    |
 | 503 `unavailable`         | No Synapse admin credentials, or Synapse didn't answer with a challenge        |
@@ -130,7 +133,7 @@ target and `connect-src` to the realm server (ADR 005 §1.4). `DELETE /_secure-s
 
 A Google refusal's message is the app's own copy: the mapping provider's
 words for an unverified or shared email, and the app's sign-in error for a
-deactivated account. Logged on `realm:secure-session` by error name and message only. The routes
+deactivated or locked account. Logged on `realm:secure-session` by error name and message only. The routes
 are key routes in `request-telemetry.ts`, so request logs and Sentry keep only
 their method and path, and no body is ever logged.
 

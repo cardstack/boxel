@@ -3,7 +3,11 @@
   "vectors": [
     {
       "name": "a missing email is refused",
-      "userinfo": { "sub": "g-1", "email_verified": true, "name": "Alice" },
+      "userinfo": {
+        "sub": "g-1",
+        "email_verified": true,
+        "name": "Alice"
+      },
       "usersByEmail": [],
       "existingLocalparts": [],
       "expected": {
@@ -139,6 +143,23 @@
         "localpart": "a.b_c=d-e/f+g",
         "displayName": "Pat",
         "email": "a.b_c=d-e/f+g@gmail.com"
+      }
+    },
+    {
+      "name": "a character outside the Basic Multilingual Plane becomes one -",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "a😀b@gmail.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "a-b",
+        "displayName": "Pat",
+        "email": "a😀b@gmail.com"
       }
     },
     {

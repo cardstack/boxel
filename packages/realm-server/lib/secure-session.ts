@@ -2,6 +2,8 @@ import { createHash, randomBytes, randomUUID } from 'crypto';
 import {
   fetchSessionRoom,
   logger,
+  param,
+  query,
   type DBAdapter,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -19,7 +21,11 @@ import {
   logoutMatrixAccessToken,
   resolveAdminCreds,
 } from '../synapse.ts';
-import { createRealm, type CreateRealmDeps } from '../handlers/create-realm.ts';
+import {
+  createRealm,
+  realmURLFor,
+  type CreateRealmDeps,
+} from '../handlers/create-realm.ts';
 import {
   createSecureSessionJWT,
   type RealmServerTokenClaim,
@@ -419,13 +425,23 @@ export async function googleSignInStart(deps: SecureSessionDeps): Promise<{
   };
 }
 
-// The answer the app's sign-in gives a deactivated account.
-function deactivated() {
+// The answer the app's sign-in gives an account that can't sign in.
+function cantSignIn(code: 'deactivated' | 'locked') {
   return new SecureSessionError(
     403,
-    'deactivated',
+    code,
     'Sign-in failed. Please check your credentials and try again.',
   );
+}
+
+// Refuses an account Synapse wouldn't sign in: a deactivated or locked one.
+function refuseUnusable(account: Record<string, any>) {
+  if (account.deactivated) {
+    throw cantSignIn('deactivated');
+  }
+  if (account.locked) {
+    throw cantSignIn('locked');
+  }
 }
 
 // Signs in with an authorization code Google sent to the secure origin's
@@ -466,9 +482,10 @@ export async function signInWithGoogle(
   let user = await userLinkedToGoogle(deps, config, identity.sub);
   if (user) {
     let account = await adminRequest(deps, userPath(user));
-    if (account.status !== 200 || account.body.deactivated) {
-      throw deactivated();
+    if (account.status !== 200) {
+      throw cantSignIn('deactivated');
     }
+    refuseUnusable(account.body);
   } else {
     try {
       user = await linkOrCreateForGoogle(deps, config, identity);
@@ -584,9 +601,7 @@ async function linkGoogle(
   if (account.status !== 200) {
     throw new Error(`account lookup failed: HTTP ${account.status}`);
   }
-  if (account.body.deactivated) {
-    throw deactivated();
-  }
+  refuseUnusable(account.body);
   let externalIds = (
     (account.body.external_ids ?? []) as {
       auth_provider: string;
@@ -639,36 +654,73 @@ async function createGoogleAccount(
       `creating an account failed: HTTP ${created.status} ${created.body.errcode ?? ''}`,
     );
   }
-  // The link comes first: it is unique, so a concurrent first sign-in with the
-  // same Google identity loses here, before it gives the new account the
-  // email address.
-  let linked = await adminRequest(deps, userPath(user), {
-    method: 'PUT',
-    body: {
-      external_ids: [{ auth_provider: synapseIdpId(config), external_id: sub }],
-    },
-  });
-  if (linked.status === 409) {
-    await adminRequest(deps, userPath(user), {
+  // The account is this sign-in's until it is complete. A failure part way
+  // leaves it unlinked and deactivated, so the next sign-in resolves the
+  // Google identity again rather than following a link into an account
+  // without its email or name.
+  try {
+    // The link comes first: it is unique, so a concurrent first sign-in with
+    // the same Google identity loses here, before it gives the new account
+    // the email address.
+    let linked = await adminRequest(deps, userPath(user), {
       method: 'PUT',
-      body: { deactivated: true },
+      body: {
+        external_ids: [
+          { auth_provider: synapseIdpId(config), external_id: sub },
+        ],
+      },
     });
-    return await userLinkedToGoogle(deps, config, sub);
-  }
-  if (linked.status !== 200) {
-    throw new Error(`linking Google failed: HTTP ${linked.status}`);
-  }
-  let profile = await adminRequest(deps, userPath(user), {
-    method: 'PUT',
-    body: {
-      ...(displayName ? { displayname: displayName } : {}),
-      threepids: [{ medium: 'email', address: email }],
-    },
-  });
-  if (profile.status !== 200) {
-    throw new Error(`setting up the account failed: HTTP ${profile.status}`);
+    if (linked.status === 409) {
+      await abandonAccount(deps, user);
+      return await userLinkedToGoogle(deps, config, sub);
+    }
+    if (linked.status !== 200) {
+      throw new Error(`linking Google failed: HTTP ${linked.status}`);
+    }
+    let profile = await adminRequest(deps, userPath(user), {
+      method: 'PUT',
+      body: {
+        ...(displayName ? { displayname: displayName } : {}),
+        threepids: [{ medium: 'email', address: email }],
+      },
+    });
+    if (profile.status !== 200) {
+      throw new Error(`setting up the account failed: HTTP ${profile.status}`);
+    }
+  } catch (e) {
+    await abandonAccount(deps, user).catch((abandonError: any) =>
+      log.error(
+        `could not abandon an incomplete Google account: ${abandonError?.message ?? abandonError}`,
+      ),
+    );
+    throw e;
   }
   return user;
+}
+
+// Unlinks and deactivates an account a sign-in made but couldn't finish.
+async function abandonAccount(
+  deps: SecureSessionDeps,
+  user: string,
+): Promise<void> {
+  let abandoned = await adminRequest(deps, userPath(user), {
+    method: 'PUT',
+    body: { external_ids: [], deactivated: true },
+  });
+  if (abandoned.status !== 200) {
+    throw new Error(`abandoning the account failed: HTTP ${abandoned.status}`);
+  }
+}
+
+async function realmRegistered(
+  dbAdapter: DBAdapter,
+  url: string,
+): Promise<boolean> {
+  let rows = await query(dbAdapter, [
+    `SELECT 1 FROM realm_registry WHERE url =`,
+    param(url),
+  ]);
+  return rows.length > 0;
 }
 
 // The setup the app runs on a user's first sign-in to Boxel: their
@@ -698,22 +750,27 @@ async function setUpFirstSignIn(
     if (Array.isArray(realms) && realms.length > 0) {
       return;
     }
-    let realmURL: string;
-    try {
-      ({ url: realmURL } = await createRealm(createRealmDeps, {
-        ownerUserId: user,
-        endpoint: PERSONAL_REALM_ENDPOINT,
-        name: `${displayName}'s Workspace`,
-        iconURL: iconURLFor(displayName),
-        backgroundURL: getRandomBackgroundURL(),
-      }));
-    } catch (e: any) {
-      // Made by a sign-in that failed before it recorded the realm.
-      let existing = /^realm '(.+)' already exists/.exec(e?.message ?? '');
-      if (!existing) {
-        throw e;
+    // A realm an earlier, unfinished sign-in made is recorded rather than
+    // made again.
+    let realmURL = realmURLFor(
+      createRealmDeps.serverURL,
+      user,
+      PERSONAL_REALM_ENDPOINT,
+    );
+    if (!(await realmRegistered(deps.dbAdapter, realmURL))) {
+      try {
+        await createRealm(createRealmDeps, {
+          ownerUserId: user,
+          endpoint: PERSONAL_REALM_ENDPOINT,
+          name: `${displayName}'s Workspace`,
+          iconURL: iconURLFor(displayName),
+          backgroundURL: getRandomBackgroundURL(),
+        });
+      } catch (e) {
+        if (!(await realmRegistered(deps.dbAdapter, realmURL))) {
+          throw e;
+        }
       }
-      realmURL = existing[1];
     }
     await appendRealmToUserAccountData({
       matrixURL: deps.matrixClient.matrixURL,

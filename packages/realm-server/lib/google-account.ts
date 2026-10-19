@@ -51,8 +51,10 @@ export interface GoogleAccountLookups {
 }
 
 // Characters Matrix forbids in a user id's localpart. An email address's
-// local part allows plenty Matrix doesn't (`'`, `!`, `#`…).
-const DISALLOWED_LOCALPART_CHARS = /[^a-z0-9._=\-/+]/g;
+// local part allows plenty Matrix doesn't (`'`, `!`, `#`…). Matched by code
+// point, as Python's `re` does, so a character outside the Basic Multilingual
+// Plane becomes one `-`, not two.
+const DISALLOWED_LOCALPART_CHARS = /[^a-z0-9._=\-/+]/gu;
 
 // The localpart a new account takes from its email address: the address's
 // local part, lowercased, with each character Matrix forbids replaced by `-`,
