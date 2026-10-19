@@ -279,6 +279,7 @@ export function lowerCallApi(
           );
         }
         checkScalar(value, `path.${name}`, fail);
+        checkLiteralSegment(value, `path.${name}`, fail);
         path[name] = lowerValue(value, `path.${name}`, 'path');
       }
     }
@@ -636,6 +637,40 @@ function checkScalar(
       'invalid-request',
       path,
       `\`${path}\` is sent as text, so it is a string, a number, a boolean or a typed reference to one`,
+    );
+  }
+}
+
+// A path value written as text is sent as that text on every invocation, so a
+// value `encodeSegment` refuses would refuse every call. It is refused here
+// instead, where the declaration is what is wrong. A slot in the text is
+// filled with a token that holds neither `/` nor `\`, so text around it is
+// read as written.
+function checkLiteralSegment(
+  value: unknown,
+  path: string,
+  fail: (
+    code: OperationLoweringIssueCode,
+    path: string,
+    message: string,
+  ) => void,
+) {
+  if (typeof value !== 'string') {
+    return;
+  }
+  let why =
+    value === ''
+      ? 'is empty, and fills no segment'
+      : value === '.' || value === '..'
+        ? `is "${value}", which a URL resolves as a step through the path rather than a segment`
+        : /[/\\]/.test(value)
+          ? 'holds a path separator (`/` or `\\`), which a vendor that decodes the segment reads as more than one segment'
+          : undefined;
+  if (why) {
+    fail(
+      'invalid-request',
+      path,
+      `\`${path}\` ${why}, so no request can send it — write a fixed part of the path into \`url\` as it is sent`,
     );
   }
 }
