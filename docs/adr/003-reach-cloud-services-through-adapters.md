@@ -13,16 +13,19 @@ scope:
 
 # 003. Reach proprietary cloud services only through adapters
 
-Boxel is deployed on AWS. This is a deployment choice, so the runtime code must
-not depend on it. Each proprietary cloud service the runtime uses sits behind an
+Our organization deploys Boxel on AWS, but Boxel is designed as a federation
+of realm servers that other people host
+([ADR 004](004-federate-realm-servers-each-paired-with-its-own-homeserver.md)),
+and they may not use AWS. So the runtime code must not depend on any one
+provider. Each proprietary cloud service the runtime uses sits behind an
 interface. The interface is named for the capability that Boxel needs. An
 adapter implements the interface for one provider, and a local adapter
 implements it for development and tests. Services that speak an open protocol
 (Postgres, a POSIX filesystem, HTTP, the S3 API) need no interface, but the
 code must use only what that protocol defines. The runtime must not detect
-which platform hosts it. To move to a different provider, a team writes
-adapters and changes configuration. It does not rewrite the code that calls the
-adapters.
+which platform hosts it. To run a realm server on a different provider, a host
+writes adapters and changes configuration. It does not rewrite the code that
+calls the adapters.
 
 ## 1. Decision
 
@@ -105,13 +108,23 @@ deployment needs one.
 
 ## 2. Rationale
 
-Boxel will not necessarily stay on its current provider. Cost, a customer's
-data-residency or self-hosting requirement, or a service that another provider
-offers better can each make a move worthwhile. Each piece of code that is
-coupled to one provider makes a move more expensive. Coupling also spreads,
-because new code copies the code around it. Today only a few runtime modules
-touch AWS. This makes the rule cheap to adopt now, and the cost of adopting it
-will only increase.
+Boxel is designed as a federation of realm servers (ADR 004). People and
+organizations other than ours will host their own realm servers, which work
+with ours and with the rest of Boxel. They will pick their own hosting: another
+cloud provider, their own data center, or a single machine. The realm server
+they run is the same code we run, so every AWS assumption in it becomes a
+barrier to joining the federation. A host that has to fork the code to replace
+one service falls behind our releases, and out of step with the servers it
+federates with.
+
+The same rule keeps our own options open. Cost, a customer's data-residency
+requirement, or a service that another provider offers better can each make a
+move worthwhile for us too.
+
+Each piece of code that is coupled to one provider raises the cost of hosting
+anywhere else. Coupling also spreads, because new code copies the code around
+it. Today only a few runtime modules touch AWS. This makes the rule cheap to
+adopt now, and the cost of adopting it will only increase.
 
 The two existing seams show the shape of the rule. `MediaCacheAdapter` and
 `SecretsKeyProvider` each have a cloud adapter and a local one. A factory
@@ -136,7 +149,7 @@ it.
   (chosen).** Portability work goes only where it is needed, and code stays
   direct where a standard already makes it portable.
 - **Call the provider directly, and port when needed.** This costs nothing
-  now, but coupling spreads. Assumptions about the platform, such as which
+  now, but the port would fall to each outside host, and coupling spreads. Assumptions about the platform, such as which
   environment variables exist, stay invisible until the code runs somewhere
   else.
 - **A generic multi-cloud library.** Its lowest-common-denominator API is
