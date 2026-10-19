@@ -401,7 +401,7 @@ URL from SSM.
 | `--env`                    | (required) | `local`, `staging`, `production`                                                                    |
 | `--service`                | (required) | `realm-server`, `worker`, `prerender`, `prerender-manager`, `synapse` (or any local container name) |
 | `--realm`                  | unset      | Restrict to a single realm.                                                                         |
-| `--worker-id`              | unset      | Per-Fargate-task id; workers only.                                                                  |
+| `--worker-id`              | unset      | One worker process, `<instance-id>-pid-<pid>`; workers only.                                        |
 | `--filter`                 | unset      | LogQL line-filter (`\|=`); literal substring.                                                       |
 | `--regex`                  | unset      | LogQL line-regex (`\|~`). Mutually exclusive with `--filter`.                                       |
 | `--since`                  | `15m`      | `30s`, `15m`, `1h`, `2d` — pattern `^\d+[smhd]$`.                                                   |
