@@ -17,7 +17,12 @@ const CAPABILITIES = '.deck/capabilities';
 
 type Fixture = Record<
   string,
-  { body: string; realmURL?: string; contentType?: string }
+  {
+    body: string;
+    realmURL?: string;
+    contentType?: string;
+    headers?: Record<string, string>;
+  }
 >;
 
 function json(value: unknown): string {
@@ -95,6 +100,7 @@ function makeRuntime() {
       headers: {
         'content-type': entry.contentType ?? 'text/javascript',
         ...(entry.realmURL ? { 'X-Boxel-Realm-Url': entry.realmURL } : {}),
+        ...entry.headers,
         ...(url.endsWith(CAPABILITIES)
           ? { 'X-Boxel-Deck-Collaboration': 'true' }
           : {}),
@@ -222,6 +228,63 @@ module('Unit | Loader | dynamic RRI resolution', function () {
     assert.strictEqual(legacy.render(), 'legacy / v1');
     assert.true(loader.isModuleLoaded(`${PALETTE_V1_URL}index.js`));
     assert.true(loader.isModuleLoaded(`${PALETTE_V2_URL}index.js`));
+    loader.dispose();
+  });
+
+  test('resolves a package hosted inside another package realm', async function (assert) {
+    let { fixture, loader } = makeRuntime();
+    let kit = 'https://realms.example/acme/kit/';
+    let button = `${kit}button/`;
+    let buttonV2 = `${kit}button@2.0.0/`;
+    Object.assign(fixture, {
+      [`${kit}scene.js`]: {
+        body: `
+          import { size } from 'button';
+          export function render() { return 'kit / ' + size; }
+        `,
+        realmURL: kit,
+      },
+      [`${kit}package.json`]: {
+        body: json({ name: '@acme/kit', version: '1.0.0' }),
+      },
+      [`${kit}${CAPABILITIES}`]: {
+        body: json({
+          deckCollaboration: true,
+          realmRRI: '@acme/kit/',
+          packageRRI: '@acme/kit/',
+          packages: { '@acme/kit/': kit, '@acme/button/': button },
+        }),
+        contentType: 'application/json',
+      },
+      [`${kit}importmap.json`]: {
+        body: json({ imports: { button: '@acme/button@2.0.0/index.js' } }),
+      },
+      // The Version's URL segments say `kit/button`; its identity is the
+      // package the realm hosts there, which the server names.
+      [`${buttonV2}index.js`]: {
+        body: `export const size = 'large';`,
+        realmURL: button,
+        headers: { 'X-Boxel-Version-RRI': '@acme/button@2.0.0/index.js' },
+      },
+      [`${buttonV2}package.json`]: {
+        body: json({ name: '@acme/button', version: '2.0.0' }),
+      },
+      [`${buttonV2}importmap.json`]: { body: json({ imports: {} }) },
+      [`${button}${CAPABILITIES}`]: {
+        body: json({
+          deckCollaboration: true,
+          realmRRI: '@acme/kit/',
+          packageRRI: '@acme/button/',
+          packages: { '@acme/kit/': kit, '@acme/button/': button },
+        }),
+        contentType: 'application/json',
+      },
+    });
+
+    let scene = await loader.import<{ render(): string }>(`${kit}scene.js`);
+
+    assert.strictEqual(scene.render(), 'kit / large');
+    assert.true(loader.isModuleLoaded(`${buttonV2}index.js`));
     loader.dispose();
   });
 
