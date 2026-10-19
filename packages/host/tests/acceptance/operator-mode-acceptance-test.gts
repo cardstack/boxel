@@ -1798,7 +1798,11 @@ module('Acceptance | operator mode tests', function (hooks) {
         stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
       });
       await click('[data-test-profile-icon-button]');
-      await click('[data-test-signout-button]');
+      // Not awaited: `click` waits for every test waiter to settle, and the
+      // request to the realm server is one of them until it is answered.
+      let signedOut = click('[data-test-signout-button]');
+      await waitFor('[data-test-login-btn]');
+      return signedOut;
     }
 
     test("signing out signs the user's secure windows out", async function (assert) {
@@ -1822,11 +1826,13 @@ module('Acceptance | operator mode tests', function (hooks) {
     });
 
     test("a realm server that doesn't answer doesn't hold sign-out up", async function (assert) {
-      await signOut();
+      let signedOut = signOut();
+      await waitFor('[data-test-login-btn]');
 
       assert.dom('[data-test-login-btn]').exists('signed out');
       assert.strictEqual(signOuts.length, 1, 'still waiting on the server');
       answerSignOut(new Response(null, { status: 204 }));
+      await signedOut;
     });
 
     test("a realm server that refuses doesn't stop sign-out", async function (assert) {
