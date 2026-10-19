@@ -1,5 +1,32 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { resolveRealmSecretSeed } from '../../src/lib/prompt.ts';
+import { PassThrough } from 'stream';
+import {
+  prompt,
+  PromptInputClosedError,
+  resolveRealmSecretSeed,
+} from '../../src/lib/prompt.ts';
+
+describe('prompt', () => {
+  it('resolves with the trimmed answer', async () => {
+    let input = new PassThrough();
+    let answer = prompt('Name: ', { input, output: new PassThrough() });
+    input.end('  example answer  \n');
+    await expect(answer).resolves.toBe('example answer');
+  });
+
+  it('rejects when the input ends before an answer arrives', async () => {
+    let input = new PassThrough();
+    let answer = prompt('Save this profile? [Y/n]: ', {
+      input,
+      output: new PassThrough(),
+    });
+    input.end();
+    await expect(answer).rejects.toBeInstanceOf(PromptInputClosedError);
+    await expect(answer).rejects.toThrow(
+      /No answer to "Save this profile\? \[Y\/n\]:"/,
+    );
+  });
+});
 
 describe('resolveRealmSecretSeed', () => {
   let originalEnv: string | undefined;

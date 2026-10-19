@@ -32,6 +32,14 @@ Profiles use the Matrix ID format: `@username:domain`.
 
 With `-u`, the Matrix ID's own domain decides — `boxel.ai`, `stack.cards`, and `localhost` are recognized, and any other domain needs `--matrix-url` and `--realm-server-url`.
 
+## Signing in through the browser
+
+`boxel profile add` opens the browser, waits for the user to sign in there (password or Google), and then saves the profile. Run it once and wait for it: it keeps running until the browser hands it the sign-in or its wait runs out, and the user may take a few minutes in the browser.
+
+- Don't re-run it while it's waiting, and don't re-run it after the user reports "You're signed in" in the browser. Each run opens another sign-in. When it exits, read its output: `Profile created` means it is done.
+- With no terminal attached, as when an agent runs it, it asks nothing after the sign-in. It saves the account the user signed in as, replaces a profile already stored for that account (keeping its display name), and makes it the active profile.
+- If the browser wait runs out with no terminal attached, it exits with an error rather than falling back to asking for a username and password. `--no-browser` does the same. Those sign-ins need `BOXEL_PASSWORD` and `-u`, below.
+
 ## Adding profiles non-interactively
 
 For automation, set `BOXEL_PASSWORD` in the environment instead of passing `-p`:
