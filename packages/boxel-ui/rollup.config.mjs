@@ -15,6 +15,12 @@ const rootDirectory = dirname(fileURLToPath(import.meta.url));
 const babelConfig = resolve(rootDirectory, './babel.publish.config.cjs');
 const tsConfig = resolve(rootDirectory, './tsconfig.publish.json');
 
+// The minimatch keepAssets uses (3.x) has no escape(). Escaping `(` alone
+// disarms extglobs; also escaping an `@` prefix breaks the match in 3.x.
+function escapeGlob(path) {
+  return path.replace(/[*?[\]{}()\\]/g, '\\$&');
+}
+
 function emitStyles() {
   const stylesDir = resolve(rootDirectory, 'src/styles');
   return {
@@ -91,11 +97,10 @@ export default {
     addon.declarations('declarations', `pnpm ember-tsc --project ${tsConfig}`),
 
     // Addons are allowed to contain imports of .css files, which we want
-    // rollup to leave alone and keep in the published output. The pattern is
-    // anchored to this package because keepAssets matches absolute ids with
-    // minimatch's `dot: false`, so a bare `**` misses checkouts under a
-    // dot-directory (e.g. `.superset/worktrees/…`).
-    addon.keepAssets([join(rootDirectory, 'src/**/*.css')]),
+    // rollup to leave alone and keep in the published output. Anchored to this
+    // package: keepAssets matches absolute ids with minimatch dot:false, so a
+    // bare ** misses checkouts under a dot-directory (e.g. `.claude/worktrees/…`).
+    addon.keepAssets([join(escapeGlob(rootDirectory), 'src/**/*.css')]),
 
     // keepAssets only covers assets imported by the module graph. The
     // stylesheets under styles/ are consumed by apps through the `./*.css`
