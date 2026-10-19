@@ -725,6 +725,8 @@ aws --profile $P cloudtrail lookup-events \
 - `date -d` is GNU. On macOS use `date -u -v-1d +%Y-%m-%dT%H:%M:%SZ`.
 - The history covers the whole account's management events, not just KMS. Use it to answer a question about the key, not to browse.
 
+The `secrets-at-rest` skill's post-deploy audit puts these lookups together with the realm server's boot lines and the database grants into one procedure, with what each should show.
+
 `kms decrypt`, `encrypt` and `generate-data-key` are denied to the role, and so is reading `/<env>/boxel/SECRETS_WRAPPED_DATA_KEY`.
 
 A denied call on the key is a CloudTrail event too, but it carries no resource and no key id, so the lookup by the key's ARN above never returns it. Look denied cryptographic calls up by event name instead, one call per action. The record's `errorCode` is `AccessDenied`, its caller is the session ARN of whoever tried (`assumed-role/boxel-claude-readonly/...` for this role), and its `errorMessage` names the key (`... not authorized to perform: kms:Encrypt on resource: arn:aws:kms:...:key/<id> because ...`). Keep the records that match both:
