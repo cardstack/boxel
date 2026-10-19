@@ -65,6 +65,16 @@ import { setupMockMatrix } from '../../../helpers/mock-matrix';
 import { renderComponent } from '../../../helpers/render-component';
 import { setupRenderingTest } from '../../../helpers/setup';
 
+// Each registered realm prefix, mapped to the URL its realm is served from.
+function registeredRealmPrefixes() {
+  let { virtualNetwork } = getService('network');
+  return Object.fromEntries(
+    virtualNetwork
+      .knownRealms()
+      .map((prefix) => [prefix, virtualNetwork.toURLHref(prefix)]),
+  );
+}
+
 module('Integration | ai-assistant-panel | tools', function (hooks) {
   const realmName = 'Operator Mode Workspace';
   const readOnlyRealmName = 'Read Only Workspace';
@@ -760,6 +770,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         submode: 'interact',
         debug: false,
         openCardIds: ['http://test-realm/test/Person/fadhlan'],
+        realmPrefixes: registeredRealmPrefixes(),
         realmUrl: 'http://test-realm/test/',
         realmPermissions: {
           canRead: true,
@@ -836,6 +847,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         submode: 'interact',
         debug: false,
         openCardIds: ['http://test-realm/test/Person/fadhlan'],
+        realmPrefixes: registeredRealmPrefixes(),
         realmUrl: 'http://test-realm/test/',
         realmPermissions: {
           canRead: true,

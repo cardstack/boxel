@@ -560,6 +560,22 @@ in-flight runs count toward glimmer-motion's settle checks through a busy probe,
 `setupChoreo(hooks)` is glimmer-motion's `setupMotion(hooks)` with Choreo's document-wide state
 (beacons, the far-match barrier, gesture samples) added to the resets it runs.
 
+### Reduced motion
+
+A region follows the `MotionConfig` it sits in, as each run begins. Under glimmer-motion's default,
+`'user'`, a viewer whose system asks for reduced motion gets the score at its usual timing with
+nothing travelling: positional values (transforms, size, position) land at their step's start
+whether the engine, an ambient loop, a text delivery, a `@path` flight or the camera drives them,
+and a `c.Scroll` lands its container at the offset rather than gliding there, while opacity and
+colour still animate. `'always'` reduces motion regardless of the setting, and
+`'never'` plays the score as written:
+
+```gts
+<MotionConfig @reducedMotion='never'>
+  <Choreo as |c|>…</Choreo>
+</MotionConfig>
+```
+
 ## Architecture
 
 ```

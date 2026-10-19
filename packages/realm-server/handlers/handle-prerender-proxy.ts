@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/node';
 
 import {
   fetchEffectiveRealmPermissions,
+  readRealmLoaderEpoch,
   type DBAdapter,
   type RealmAction,
   type RealmPermissions,
@@ -138,19 +139,36 @@ export default function handlePrerenderProxy({
     // server-side batch-ownership gate also strips this, but scrubbing at
     // the HTTP boundary means no path from user traffic can reach a
     // warm-loader wipe regardless of whether a batch currently owns the
-    // affinity.
+    // affinity. A caller's `loaderEpoch` is scrubbed for the same reason: the
+    // render and module routes reset the warm loader whenever the epoch they
+    // are given differs from the one they hold, so alternating epochs would
+    // wipe it on every request.
     let userRenderOptions: typeof attrs.renderOptions = attrs.renderOptions
-      ? { ...attrs.renderOptions, clearCache: undefined }
+      ? {
+          ...attrs.renderOptions,
+          clearCache: undefined,
+          loaderEpoch: undefined,
+        }
       : undefined;
     try {
       if (kind === 'module') {
+        // The module render lands on a warm tab of this realm's affinity,
+        // which keeps every module it has already evaluated. The realm's
+        // loader epoch changes whenever one of its modules is written or
+        // reindexed, and the module route resets the tab's loader when the
+        // epoch it is given differs from the one it last cleared for.
+        // Without the epoch, a module that was checked, then rewritten, keeps
+        // reporting its first evaluation for as long as the tab is reused.
+        // The epoch comes from the database, never from the caller (see the
+        // scrub above).
+        let loaderEpoch = await readRealmLoaderEpoch(dbAdapter, attrs.realm);
         prerenderResponse = await prerenderer.prerenderModule({
           affinityType: 'realm',
           affinityValue: attrs.realm,
           realm: attrs.realm,
           url: attrs.url,
           auth,
-          renderOptions: userRenderOptions,
+          renderOptions: { ...(userRenderOptions ?? {}), loaderEpoch },
         });
       } else {
         let passFlag =

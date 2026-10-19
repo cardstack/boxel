@@ -92,8 +92,10 @@ import {
   runtimeNonQueryDependencyContext,
   runtimeQueryDependencyContext,
   type RuntimeDependencyTrackingContext,
+  ri,
   rri,
   resolveRRIReference,
+  type RealmIdentifier,
   type RealmResourceIdentifier,
   type VirtualNetwork,
   isDirectIndexedFieldKey,
@@ -126,6 +128,7 @@ import {
 import { isSavedInstance } from './-private';
 import { untitledCardTitle } from './untitled-card-title';
 import type { ComponentLike } from '@glint/template';
+import { dropComputedTurnMemo } from './computed-turn-memo';
 import { initSharedState } from './shared-state';
 import DefaultFittedTemplate from './default-templates/fitted';
 import DefaultEmbeddedTemplate from './default-templates/embedded';
@@ -811,26 +814,28 @@ function cardTypeFor(
   boxedElement?: Box<BaseDef>,
   overrides?: () => Map<string, typeof BaseDef> | undefined,
 ): typeof BaseDef {
+  // Reading a box's value walks back up to the containing field, which
+  // re-evaluates it when it is computed, so it is read once.
+  let value = boxedElement?.value;
   let override: typeof BaseDef | undefined;
   if (overrides) {
     let valueKey = `${field.name}${
       boxedElement ? '.' + boxedElement.name : ''
     }`;
-    override = boxedElement?.value ? overrides()?.get(valueKey) : undefined;
+    override = value ? overrides()?.get(valueKey) : undefined;
   } else {
     override =
-      boxedElement?.value && typeof boxedElement.value === 'object'
-        ? getFieldOverrides(boxedElement.value)?.get(field.name)
+      value && typeof value === 'object'
+        ? getFieldOverrides(value)?.get(field.name)
         : undefined;
   }
   if (primitive in field.card) {
     return override ?? field.card;
   }
-  if (boxedElement === undefined || boxedElement.value == null) {
+  if (value == null) {
     return field.card;
   }
-  return Reflect.getPrototypeOf(boxedElement.value)!
-    .constructor as typeof BaseDef;
+  return Reflect.getPrototypeOf(value)!.constructor as typeof BaseDef;
 }
 
 function assertNoDeserializeOverride(cardClass: typeof BaseDef) {
@@ -2748,6 +2753,8 @@ export function linksToMany<CardT extends LinkableDefConstructor>(
 
 // (moved below BaseDef & FieldDef declarations)
 
+const instanceMeta = new WeakMap<BaseDef, CardResourceMeta | undefined>();
+
 // TODO: consider making this abstract
 export class BaseDef {
   // this is here because CardBase has no public instance methods, so without it
@@ -2758,7 +2765,18 @@ export class BaseDef {
   // So we need a [relativeTo] property that derives from the root document ID in order to
   // resolve relative links at the FieldDef level.
   [relativeTo]: RealmResourceIdentifier | URL | undefined = undefined;
-  [meta]: CardResourceMeta | undefined = undefined;
+  // An accessor rather than a field so that a write drops the computed turn
+  // memo: computeds read realm meta (realm URL, captures, modification times)
+  // without tracking, and meta is assigned outside `notifyCardTracking` (the
+  // store stamps the version and realm onto a held instance), so a computed
+  // read in the same turn as the write would otherwise see the old meta.
+  get [meta](): CardResourceMeta | undefined {
+    return instanceMeta.get(this);
+  }
+  set [meta](value: CardResourceMeta | undefined) {
+    instanceMeta.set(this, value);
+    dropComputedTurnMemo();
+  }
   declare ['constructor']: BaseDefConstructor;
   static baseDef: undefined;
   static data?: Record<string, any>; // TODO probably refactor this away all together
@@ -6262,6 +6280,26 @@ export function resolveInstanceURL(
     );
   } catch {
     return undefined;
+  }
+}
+
+// The instance's realm, in the same form as its id. A card id is canonical
+// RRI, so for a realm registered under a prefix it reads `@scope/name/...`
+// while the realm meta is the realm's URL. Folding the realm through the
+// instance's own store puts the two in one form, so card code can test
+// membership and in-realm paths with a same-form `RealmPaths` without holding
+// the realm mappings. An unmapped realm stays a URL, matching its URL ids.
+export function instanceRealmId(
+  instance: CardDef,
+): RealmIdentifier | undefined {
+  let realm = instance[realmURL];
+  if (!realm) {
+    return undefined;
+  }
+  try {
+    return ri(getStore(instance).canonicalizeId(realm.href));
+  } catch {
+    return ri(realm.href);
   }
 }
 

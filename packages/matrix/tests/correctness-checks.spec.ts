@@ -32,9 +32,10 @@ function uniqueRealmName(prefix: string) {
 // hash of its code ref.
 const RUN_REALM_CODE_TOOL_NAME = 'run-realm-code_6b92';
 
-// A room's default skill declares no tools, so run-realm-code has to come from
-// a skill attached to the room. The skill does not require approval, so the
-// host runs the tool as soon as the request arrives.
+// Attaches a skill that declares run-realm-code without requiring approval.
+// The room's default skill (the skills index) may declare the same tool, and
+// the host resolves a tool request against the first skill that declares it,
+// so `runRealmCode` still approves the call when it waits for a click.
 async function attachRunRealmCodeSkill(page: Page, realmURL: string) {
   let skillId = await postNewCard(page, realmURL, {
     data: {
@@ -126,11 +127,14 @@ async function runRealmCode({
     ],
   });
 
-  await page
-    .locator(
-      `[data-test-tool-call-id="${toolCallId}"] [data-test-apply-state="applied"]`,
-    )
-    .waitFor();
+  let toolCall = page.locator(`[data-test-tool-call-id="${toolCallId}"]`);
+  let ready = toolCall.locator('[data-test-apply-state="ready"]');
+  let applied = toolCall.locator('[data-test-apply-state="applied"]');
+  await ready.or(applied).first().waitFor();
+  if (await ready.isVisible()) {
+    await ready.locator('button').click();
+  }
+  await applied.waitFor();
 
   let toolResultEvent: any;
   await expect(async () => {
@@ -686,7 +690,10 @@ export class ImportCheck extends CardDef {
       expectCorrect: boolean,
     ) {
       let resultJson: any;
+      let attempt = 0;
+      let startedAt = Date.now();
       await expect(async () => {
+        attempt++;
         let commandRequestId = `check-module-${Date.now()}-${Math.random()
           .toString(36)
           .slice(2, 6)}`;
@@ -764,6 +771,18 @@ export class ImportCheck extends CardDef {
         }).toPass();
 
         resultJson = await response!.json();
+        // One line per attempt. When the check keeps returning the wrong
+        // answer, these show whether each attempt saw the same errors (a
+        // stale module render) or different ones, and how long it took.
+        console.log(
+          `[correctness-check] "${description}" attempt=${attempt} elapsedMs=${
+            Date.now() - startedAt
+          } request=${commandRequestId} expectCorrect=${expectCorrect} correct=${
+            resultJson.data.attributes.correct
+          } errors=${JSON.stringify(
+            resultJson.data.attributes.errors ?? [],
+          ).slice(0, 1_000)}`,
+        );
         expect(resultJson.data.attributes.correct).toBe(expectCorrect);
         await expect(
           commandContainer.locator(

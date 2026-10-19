@@ -1,3 +1,5 @@
+import { dropComputedTurnMemo } from './computed-turn-memo';
+
 // Reading `proxy[rawValues]` returns the underlying backing array with every
 // slot intact — including any values the index getter hides from userland.
 // `WatchedArray` is generic: when a `hideSlot` predicate is supplied the masked
@@ -70,6 +72,10 @@ class WatchedArray<T> {
       set(target, prop, value /*, _receiver */) {
         let prevValues = [...target];
         (target as any)[prop] = value;
+        // The subscriber below runs a microtask from now, so nothing tracked
+        // changes yet. Drop the computed memo now, so a computed read later in
+        // this turn sees the mutated array.
+        dropComputedTurnMemo();
 
         // It seems the setter is called twice when adding or removing items from the array.
         // The first call is to add the item, and the second call is to update the length value.

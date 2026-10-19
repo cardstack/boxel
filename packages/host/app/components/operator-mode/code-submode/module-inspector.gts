@@ -299,7 +299,8 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     }
     if (
       this.selectedDeclarationAsCodeRef.name !== spec.ref.name ||
-      this.selectedDeclarationAsCodeRef.module !== spec.moduleHref // absolute url
+      this.selectedDeclarationAsCodeRef.module !==
+        this.network.virtualNetwork.unresolveURL(spec.moduleHref)
     ) {
       return; // not the right field spec
     }
@@ -316,10 +317,7 @@ export default class ModuleInspector extends Component<ModuleInspectorSignature>
     return {
       name: this.args.selectedDeclaration.exportName,
       module: rri(
-        `${this.operatorModeStateService.state.codePath!.href.replace(
-          /\.[^.]+$/,
-          '',
-        )}`,
+        this.operatorModeStateService.state.codePath!.replace(/\.[^.]+$/, ''),
       ),
     };
   }

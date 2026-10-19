@@ -258,6 +258,57 @@ Current date and time: 2025-06-11T11:43:00.533Z
     );
   });
 
+  test('the context states the realm prefixes its identifiers use', async () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1234567890,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Hey',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              submode: 'code',
+              realmPrefixes: {
+                '@cardstack/base/': 'http://localhost:4201/base/',
+              },
+              codeMode: { currentFile: '@cardstack/base/card-api.gts' },
+            },
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '1' },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const result = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    let contextText = result[2].content as string;
+    assert.true(
+      contextText.includes(
+        ' - @cardstack/base/ = http://localhost:4201/base/\n',
+      ),
+      'the prefix is mapped to its realm URL',
+    );
+    assert.true(
+      contextText.includes(
+        'File open in code editor: @cardstack/base/card-api.gts\n',
+      ),
+      'the open file keeps its prefix form',
+    );
+  });
+
   test('should generate a prompt from the user (viewing CardDef in code mode)', async () => {
     const history: DiscreteMatrixEvent[] = [
       {

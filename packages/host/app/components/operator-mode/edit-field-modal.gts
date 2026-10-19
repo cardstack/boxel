@@ -242,7 +242,7 @@ export default class EditFieldModal extends Component<Signature> {
         fieldType,
         fieldDefinitionType: this.isFieldDef ? 'field' : 'card',
         incomingRelativeTo,
-        outgoingRelativeTo: new URL(
+        outgoingRelativeTo: this.network.virtualNetwork.toURL(
           this.operatorModeStateService.state.codePath!,
         ),
         outgoingRealmURL: new URL(this.args.file.realmURL),

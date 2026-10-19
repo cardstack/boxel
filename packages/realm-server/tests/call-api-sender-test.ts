@@ -86,14 +86,14 @@ module(basename(import.meta.filename), function (hooks) {
     let lines = await logLinesDuring(['outbound'], async () => {
       let response = await callApiSender.send(
         request({ url: `${vendor.url}/hooks/${TOKEN}` }),
-        [{ token: TOKEN, value: 'a/b c' }],
+        [{ token: TOKEN, value: 'a b?#' }],
       );
       assert.strictEqual(response.status, 404, "the vendor's 404 is an answer");
     });
 
     assert.strictEqual(
       vendor.requests[0].path,
-      '/hooks/a%2Fb%20c',
+      '/hooks/a%20b%3F%23',
       'the value is encoded as a single segment',
     );
     let sizeLine = lines.find((line) =>
@@ -104,7 +104,29 @@ module(basename(import.meta.filename), function (hooks) {
       sizeLine!.message.includes(`/hooks/${TOKEN}`),
       'the recorded destination is the path as declared',
     );
-    assert.false(sizeLine!.message.includes('a%2Fb'));
+    assert.false(sizeLine!.message.includes('a%20b'));
+  });
+
+  for (let value of ['a/b', '..\\admin', '..', '.']) {
+    test(`a credential that would leave its path segment (${JSON.stringify(value)}) is refused, and nothing is sent`, async function (assert) {
+      let refusal = await refusalOf(
+        callApiSender.send(request({ url: `${vendor.url}/hooks/${TOKEN}` }), [
+          { token: TOKEN, value },
+        ]),
+      );
+      assert.strictEqual(refusal.error.code, 'guard-refused');
+      assert.strictEqual(refusal.error.meta?.reason, 'invalid-url');
+      assert.strictEqual(vendor.requests.length, 0);
+    });
+  }
+
+  test('a credential in a query value may hold a path separator', async function (assert) {
+    let response = await callApiSender.send(
+      request({ url: `${vendor.url}/hooks?key=${TOKEN}` }),
+      [{ token: TOKEN, value: 'a/b' }],
+    );
+    assert.strictEqual(response.status, 404, "the vendor's 404 is an answer");
+    assert.strictEqual(vendor.requests[0].path, '/hooks?key=a%2Fb');
   });
 
   test('a filled request is not followed across a redirect to another origin', async function (assert) {

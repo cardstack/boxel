@@ -21,6 +21,7 @@ interface Signature {
     cardId: string;
     index: number;
     stackItemCardIds: string[];
+    isNarrow?: boolean;
     close?: (cardId: string) => void;
   };
 }
@@ -73,15 +74,17 @@ export default class HostModeStackItem extends Component<Signature> {
 
     let maxWidthPercent = 100 - invertedIndex * maxWidthReductionPercent;
     let width = this.isItemFullWidth
-      ? 'calc(100% - var(--boxel-sp-xxl) * 2)'
+      ? 'calc(100% - var(--boxel-sp-2xl) * 2)'
       : `${stackItemMaxWidth / Math.pow(RATIO, invertedIndex)}rem`;
 
+    // Width and offset go through custom properties so the phone-width rule
+    // below can override them without !important.
     let styles = `
       height: calc(100% - ${marginTopPx}px);
-      width: ${width};
-      max-width: ${maxWidthPercent}%;
+      --host-stack-item-width: ${width};
+      --host-stack-item-max-width: ${maxWidthPercent}%;
+      --host-stack-item-margin-top: ${marginTopPx}px;
       z-index: calc(${this.args.index} + 1);
-      margin-top: ${marginTopPx}px;
     `; // using margin-top instead of padding-top to hide scrolled content from view
 
     if (this.isTopCard) {
@@ -148,6 +151,7 @@ export default class HostModeStackItem extends Component<Signature> {
         {{if this.doClosingAnimation "closing-animation"}}
         {{if this.doMovingForwardAnimation "move-forward-animation"}}
         {{if this.isItemFullWidth "full-width"}}
+        {{if @isNarrow "narrow"}}
         {{if this.isTesting "testing"}}'
       style={{this.styleForStackedCard}}
       data-host-mode-stack-item
@@ -211,19 +215,48 @@ export default class HostModeStackItem extends Component<Signature> {
       .host-mode-stack-item {
         justify-self: center;
         position: absolute;
-        width: 89%;
+        width: var(--host-stack-item-width);
+        max-width: var(--host-stack-item-max-width);
         height: inherit;
+        margin-top: var(--host-stack-item-margin-top);
         padding-top: var(--boxel-sp-2xl);
         z-index: 0;
         pointer-events: none;
       }
 
       .host-mode-stack-item:not(.buried) {
-        padding-bottom: var(--boxel-sp-xxl);
+        /* Keeps a gutter while the viewport is narrower than the 50rem card,
+           the same one the narrow layout uses. */
+        max-width: min(
+          var(--host-stack-item-max-width),
+          calc(100% - var(--boxel-sp-xs) * 2)
+        );
+        padding-bottom: var(--boxel-sp-2xl);
+        /* The top card fills its item; otherwise it keeps its 50rem default
+           and is clipped when the item is narrower. */
+        --host-mode-card-width: 100%;
+      }
+
+      /* Buried cards stay 50rem, even behind a wide primary card that sets
+         100%, so they don't reflow every time the stack changes. */
+      .host-mode-stack-item.buried {
+        --host-mode-card-width: 50rem;
       }
 
       .host-mode-stack-item.full-width {
         max-width: 100%;
+      }
+
+      /* When host mode is narrow, only the top card shows, wide-format or
+         not, with a small gutter. */
+      .host-mode-stack-item.narrow:not(.buried) {
+        width: calc(100% - var(--boxel-sp-xs) * 2);
+        margin-top: 0;
+        padding-block: var(--boxel-sp-xs);
+      }
+
+      .host-mode-stack-item.narrow.buried {
+        display: none;
       }
 
       .host-mode-stack-item.opening-animation {
@@ -249,6 +282,39 @@ export default class HostModeStackItem extends Component<Signature> {
 
       .host-mode-stack-item.move-forward-animation.testing {
         animation-duration: 0s;
+      }
+
+      /* reduced motion: a card fades in and out where it stands, and the
+         cards under it keep their places rather than sliding */
+      @keyframes stackItemFadeIn {
+        from {
+          opacity: 0;
+        }
+      }
+
+      @keyframes stackItemFadeOut {
+        to {
+          opacity: 0;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .host-mode-stack-item {
+          transition: none;
+        }
+
+        .host-mode-stack-item.opening-animation {
+          animation-name: stackItemFadeIn;
+          transition: none;
+        }
+
+        .host-mode-stack-item.closing-animation {
+          animation-name: stackItemFadeOut;
+        }
+
+        .host-mode-stack-item.move-forward-animation {
+          animation: none;
+        }
       }
 
       .host-mode-stack-item.buried {

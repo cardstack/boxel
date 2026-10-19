@@ -22,7 +22,7 @@ export const OPERATOR_TOKEN_MAX_LIFETIME_SEC = 15 * 60;
 // How far ahead of the server's clock a signer's clock may run.
 export const OPERATOR_TOKEN_CLOCK_SKEW_SEC = 60;
 
-export type OperatorScope = 'data-keys' | 'system-keys';
+export type OperatorScope = 'data-keys' | 'system-keys' | 'diagnostic-render';
 
 export interface OperatorTokenClaim {
   operator: OperatorScope;

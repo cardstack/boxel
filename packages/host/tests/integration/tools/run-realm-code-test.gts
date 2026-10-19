@@ -416,7 +416,7 @@ return { show: 'Pet/biscuit' };`,
     assert.notOk(result.showError);
     assert.strictEqual(operatorModeStateService.state.submode, 'code');
     assert.strictEqual(
-      operatorModeStateService.state.codePath?.href,
+      operatorModeStateService.state.codePath,
       `${testRealmURL}notes/first.md`,
     );
   });
@@ -1861,6 +1861,108 @@ return { count: entries.length, kind: entries[0].kind, more: total > 1, truncate
     });
   });
 
+  test('realm.entries.search finds the entries of a realm named by a registered prefix', async function (assert) {
+    let { virtualNetwork } = getService('network');
+    virtualNetwork.addRealmMapping('@test/mapped/', otherRealmURL);
+    try {
+      let toolService = getService('tool-service');
+      let command = new RunRealmCodeTool(toolService.toolContext);
+
+      let result = await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `const { entries, total, incomplete } = await realm.entries.search(
+  {
+    filter: {
+      on: { module: ${JSON.stringify(`${testRealmURL}recipe`)}, name: 'Recipe' },
+      eq: { name: 'Elsewhere' },
+    },
+  },
+  { realms: ['@test/mapped'], scope: 'cards' },
+);
+return { total, incomplete, urls: entries.map((entry) => entry.url) };`,
+      });
+
+      assert.deepEqual(JSON.parse(result.scriptResult!), {
+        total: 1,
+        incomplete: false,
+        urls: [`${otherRealmURL}Recipe/elsewhere`],
+      });
+    } finally {
+      virtualNetwork.removeRealmMapping('@test/mapped/');
+    }
+  });
+
+  test('realm.entries.search sends a realm as the identifier given, once per realm', async function (assert) {
+    let { virtualNetwork } = getService('network');
+    let sentRealms: string[][] = [];
+    let spy = async (request: Request) => {
+      if (new URL(request.url).pathname.endsWith('/_federated-search')) {
+        sentRealms.push(JSON.parse(await request.clone().text()).realms);
+      }
+      return null;
+    };
+    virtualNetwork.mount(spy, { prepend: true });
+    try {
+      let toolService = getService('tool-service');
+      let command = new RunRealmCodeTool(toolService.toolContext);
+
+      await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.entries.search({}, { realms: ['@cardstack/catalog/', ${JSON.stringify(
+          virtualNetwork.toURL('@cardstack/catalog/').href,
+        )}] });`,
+      });
+
+      assert.deepEqual(
+        sentRealms,
+        [['@cardstack/catalog/']],
+        'the prefix goes out as given, and its URL, naming the same realm, is dropped',
+      );
+
+      // The realm server reads any spelling of a realm, so the host never
+      // has to name base by its deprecated alias.
+      await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.entries.search({}, { realms: ['@cardstack/base/'] });`,
+      });
+      assert.deepEqual(
+        sentRealms[1],
+        ['@cardstack/base/'],
+        'the base prefix goes out as given',
+      );
+    } finally {
+      virtualNetwork.unmount(spy);
+    }
+  });
+
+  test('realm.entries.search refuses a scoped identifier no realm is registered under', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.entries.search({}, { realms: ['@nope/realm/'] });`,
+      }),
+      (error: Error) =>
+        error.message.includes('Unknown realm identifier "@nope/realm/"') &&
+        error.message.includes('@cardstack/catalog/'),
+    );
+    // A package namespace resolves, but names no realm.
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.entries.search({}, { realms: ['@cardstack/boxel-ui/'] });`,
+      }),
+      /Unknown realm identifier "@cardstack\/boxel-ui\/"/,
+    );
+  });
+
   test('realm.entries.search refuses a page and an unknown scope', async function (assert) {
     let toolService = getService('tool-service');
     let command = new RunRealmCodeTool(toolService.toolContext);
@@ -2444,7 +2546,7 @@ return queued;`,
     );
     assert.strictEqual(operatorModeStateService.state.submode, 'code');
     assert.strictEqual(
-      operatorModeStateService.state.codePath?.href,
+      operatorModeStateService.state.codePath,
       `${testRealmURL}pet.gts`,
     );
     assert.strictEqual(
@@ -2506,7 +2608,7 @@ await realm.ui.openFile('notes/second.md');`,
 
     assert.strictEqual(result.uiActions[0]?.status, 'done');
     assert.strictEqual(
-      operatorModeStateService.state.codePath?.href,
+      operatorModeStateService.state.codePath,
       `${testRealmURL}notes/second.md`,
     );
   });

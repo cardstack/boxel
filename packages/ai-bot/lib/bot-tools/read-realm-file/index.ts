@@ -1,5 +1,6 @@
 import type { BotTool } from '../types.ts';
 import { fulfillReadRealmFileCall } from './fulfillment.ts';
+import { realmPrefixesFromHistory } from '../realm-prefixes.ts';
 import {
   READ_REALM_FILE_TOOL_NAME,
   readFilesLabel,
@@ -24,6 +25,10 @@ export const readRealmFileBotTool: BotTool = {
   },
 
   async startTurn(room) {
+    let realmPrefixes = realmPrefixesFromHistory(
+      room.history,
+      room.aiBotUserId,
+    );
     return {
       needsApproval() {
         return false;
@@ -35,6 +40,7 @@ export const readRealmFileBotTool: BotTool = {
             ...target,
             onBehalfOf: room.onBehalfOf,
             delegatedUserRealmSessions: room.delegatedUserRealmSessions,
+            realmPrefixes,
           },
         );
         return { commandRequestId, published };

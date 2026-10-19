@@ -21,6 +21,10 @@ import {
   type JSONAPISingleResourceDocument,
   type SerializeOpts,
 } from './card-serialization';
+import {
+  dropComputedTurnMemoIfHeld,
+  readComputedThroughTurnMemo,
+} from './computed-turn-memo';
 import { initSharedState } from './shared-state';
 import { rawArrayValues } from './watched-array';
 import { flatMap } from 'lodash-es';
@@ -113,9 +117,8 @@ export function bumpFieldLoadingSignal(
 // Pass-scoped computed-field memo. When non-null, `getter` consults a
 // per-instance Map before invoking `computeVia` and stores the result for
 // the duration of the synchronous traversal that opened the pass (see
-// `beginComputePass`). Off-pass reads pay only a single null check on this
-// module local and follow the original path — the JIT branch-predicts the
-// off-pass case in the host-UI hot loop.
+// `beginComputePass`). Off-pass reads go through the turn-scoped memo in
+// `computed-turn-memo.ts` instead.
 let passComputeMemo: WeakMap<BaseDef, Map<string, any>> | null = null;
 // Counters snapshotted by the render/meta route to populate
 // `boxel_index.diagnostics`. They are unconditional integer
@@ -260,12 +263,21 @@ export function getter<CardT extends BaseDefConstructor>(
   cardTracking.get(instance);
 
   if (field.computeVia) {
-    // Fast path when no pass is open: skip the counter + memo entirely
-    // so production reads pay only one branch on the module-local null
-    // check. JIT branch-predicts this and the original behaviour is
-    // unchanged.
+    // No pass open (a format render, or any other read in the host): the
+    // turn memo collapses repeated reads until the next microtask checkpoint
+    // into a single `computeVia`, and leaves the pass counters alone.
     if (passComputeMemo === null) {
-      return computeWithTaintFrame(instance, field) as BaseInstanceType<CardT>;
+      let value = readComputedThroughTurnMemo(instance, field.name, () =>
+        computeWithTaintFrame(instance, field),
+      );
+      // A memo hit skips `computeWithTaintFrame`, and with it the replay of a
+      // recorded query taint, so replay it here for the compute reading this
+      // one. On a miss the replay has already run; raising it twice is
+      // harmless.
+      if (isQueryTaintedField(instance, field.name)) {
+        markQueryFieldRead();
+      }
+      return value as BaseInstanceType<CardT>;
     }
     let perInstance = passComputeMemo.get(instance);
     if (perInstance && perInstance.has(field.name)) {
@@ -1282,7 +1294,12 @@ export function setRealmContextOnField(
   instance: FieldDef,
   realmURLString: string,
 ) {
-  instance[realmContext] = realmURLString;
+  // Computeds read a field's realm context untracked, so a change drops the
+  // turn memo when it holds this instance's computeds.
+  if (instance[realmContext] !== realmURLString) {
+    instance[realmContext] = realmURLString;
+    dropComputedTurnMemoIfHeld(instance);
+  }
 }
 
 function getRealmURLString(realmOrInstance: string | BaseDef | undefined) {

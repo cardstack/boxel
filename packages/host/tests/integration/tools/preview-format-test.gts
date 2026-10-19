@@ -125,7 +125,7 @@ module('Integration | Command | preview-format', function (hooks) {
 
     // Verify that code path was updated
     assert.strictEqual(
-      operatorModeStateService.state.codePath?.href,
+      operatorModeStateService.state.codePath,
       `${testRealmURL}rental-item.gts`,
       'Code path points to rental-item.gts module',
     );

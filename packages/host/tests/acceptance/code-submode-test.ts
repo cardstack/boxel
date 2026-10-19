@@ -1,6 +1,5 @@
 import {
   click,
-  find,
   waitFor,
   fillIn,
   triggerEvent,
@@ -20,6 +19,7 @@ import stringify from 'safe-stable-stringify';
 
 import {
   baseRealmRRI,
+  baseRRI,
   type LooseSingleCardDocument,
   rri,
   fileDefFormats,
@@ -1956,13 +1956,11 @@ module('Acceptance | code submode tests', function (_hooks) {
       await click(`[data-test-card="${testRealmURL}Friend/bob"]`);
 
       await waitUntil(() =>
-        operatorModeStateService.state?.codePath?.href?.endsWith(
-          'Friend/bob.json',
-        ),
+        operatorModeStateService.state?.codePath?.endsWith('Friend/bob.json'),
       );
 
       assert.strictEqual(
-        operatorModeStateService.state?.codePath?.href,
+        operatorModeStateService.state?.codePath,
         `${testRealmURL}Friend/bob.json`,
       );
       assert.deepEqual(JSON.parse(getMonacoContent()), {
@@ -2008,13 +2006,11 @@ module('Acceptance | code submode tests', function (_hooks) {
       await click(`[data-test-card="${testRealmURL}Friend/bob"]`);
 
       await waitUntil(() =>
-        operatorModeStateService.state?.codePath?.href?.endsWith(
-          'Friend/bob.json',
-        ),
+        operatorModeStateService.state?.codePath?.endsWith('Friend/bob.json'),
       );
 
       assert.strictEqual(
-        operatorModeStateService.state?.codePath?.href,
+        operatorModeStateService.state?.codePath,
         `${testRealmURL}Friend/bob.json`,
       );
       assert.deepEqual(JSON.parse(getMonacoContent()), {
@@ -2055,13 +2051,11 @@ module('Acceptance | code submode tests', function (_hooks) {
       await click(`[data-test-card="${testRealmURL}Friend/bob"]`);
 
       await waitUntil(() =>
-        operatorModeStateService.state?.codePath?.href?.endsWith(
-          'Friend/bob.json',
-        ),
+        operatorModeStateService.state?.codePath?.endsWith('Friend/bob.json'),
       );
 
       assert.strictEqual(
-        operatorModeStateService.state?.codePath?.href,
+        operatorModeStateService.state?.codePath,
         `${testRealmURL}Friend/bob.json`,
       );
       assert.deepEqual(JSON.parse(getMonacoContent()), {
@@ -2113,13 +2107,11 @@ module('Acceptance | code submode tests', function (_hooks) {
       await click(`[data-test-card="${testRealmURL}Friend/amy"]`);
 
       await waitUntil(() =>
-        operatorModeStateService.state?.codePath?.href?.endsWith(
-          'Friend/amy.json',
-        ),
+        operatorModeStateService.state?.codePath?.endsWith('Friend/amy.json'),
       );
 
       assert.strictEqual(
-        operatorModeStateService.state?.codePath?.href,
+        operatorModeStateService.state?.codePath,
         `${testRealmURL}Friend/amy.json`,
       );
       assert.deepEqual(JSON.parse(getMonacoContent()), {
@@ -2962,9 +2954,8 @@ module('Acceptance | code submode tests', function (_hooks) {
 
     test('Edit Template opens the source of a card whose type lives in a mapped realm', async function (assert) {
       // `person-entry` is a Spec, so its type resolves to the base realm — a
-      // prefix identifier rather than a URL. The button used to parse that
-      // module as a URL, which throws for any mapped realm, so the source
-      // never opened.
+      // prefix identifier rather than a URL — and the button opens that
+      // module without parsing it as a URL.
       await visitOperatorMode({
         stacks: [
           [
@@ -2982,17 +2973,12 @@ module('Acceptance | code submode tests', function (_hooks) {
       await click('[data-test-edit-template-button]');
 
       await waitFor('[data-test-card-url-bar-input]');
-      let codePath = (
-        find('[data-test-card-url-bar-input]') as HTMLInputElement
-      ).value;
-      assert.true(
-        codePath.endsWith('spec.gts'),
-        `the base realm's spec source opened (got ${codePath})`,
-      );
-      assert.false(
-        codePath.startsWith('@'),
-        'the identifier was resolved to a URL rather than passed through raw',
-      );
+      assert
+        .dom('[data-test-card-url-bar-input]')
+        .hasValue(
+          baseRRI('spec.gts'),
+          "the base realm's spec source opened, shown in its prefix form",
+        );
     });
   });
 });
