@@ -1,5 +1,7 @@
 import window from 'ember-window-mock';
 
+import { CLI_AUTH_TIMEOUT_MS } from '@cardstack/runtime-common/cli-auth';
+
 // A Google sign-in leaves the host for Synapse and Google. When the user
 // cancels at Google, Synapse's SSO error page can't tell which page started
 // the sign-in, so it sends the browser to the host's root with
@@ -13,9 +15,9 @@ import window from 'ember-window-mock';
 
 export const SSO_CANCELLED_PARAM = 'ssoCancelled';
 const STORAGE_KEY = 'boxel-sso-return';
-// Long enough for the user to decide at Google; past that, a cancel lands on
-// the root page instead.
-export const SSO_RETURN_TTL_MS = 15 * 60 * 1000;
+// As long as the longest wait on a sign-in, the CLI's on its loopback listener;
+// past that, a cancel lands on the root page instead.
+export const SSO_RETURN_TTL_MS = CLI_AUTH_TIMEOUT_MS;
 
 interface SsoReturn {
   url: string;
@@ -48,8 +50,9 @@ export function forgetSsoReturn() {
 
 // On a cancelled sign-in's landing, strips the param from the URL and returns
 // the page the sign-in started from, when it is on this origin, unexpired, and
-// not the page the browser is already on. Returns undefined otherwise, and on
-// any other page.
+// not the page the browser is already on (ignoring the fragment, which a
+// replace wouldn't reload for). Returns undefined otherwise, and on any other
+// page.
 export function takeCancelledSsoReturn(): string | undefined {
   let current = new URL(window.location.href);
   if (!current.searchParams.has(SSO_CANCELLED_PARAM)) {
@@ -83,7 +86,11 @@ export function takeCancelledSsoReturn(): string | undefined {
   } catch {
     return undefined;
   }
-  if (target.origin !== current.origin || target.href === current.href) {
+  let withoutFragment = (url: URL) => url.href.split('#')[0];
+  if (
+    target.origin !== current.origin ||
+    withoutFragment(target) === withoutFragment(current)
+  ) {
     return undefined;
   }
   return target.href;

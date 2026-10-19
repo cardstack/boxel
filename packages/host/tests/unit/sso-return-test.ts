@@ -2,6 +2,8 @@ import window from 'ember-window-mock';
 import { setupWindowMock } from 'ember-window-mock/test-support';
 import { module, test } from 'qunit';
 
+import { CLI_AUTH_TIMEOUT_MS } from '@cardstack/runtime-common/cli-auth';
+
 import { consumeLoginTokenFromUrl } from '@cardstack/host/utils/login-token';
 import {
   SSO_RETURN_TTL_MS,
@@ -82,6 +84,27 @@ module('Unit | sso-return', function (hooks) {
     rememberSsoReturn();
     window.location.href = '/?ssoCancelled=1';
     assert.strictEqual(takeCancelledSsoReturn(), undefined);
+  });
+
+  test('a sign-in started on the landing page with another fragment stays put', function (assert) {
+    window.location.href = '/#somewhere';
+    rememberSsoReturn();
+    window.location.href = '/?ssoCancelled=1';
+    assert.strictEqual(takeCancelledSsoReturn(), undefined);
+  });
+
+  test('an entry lasts as long as the CLI waits for its sign-in', function (assert) {
+    let realNow = Date.now;
+    try {
+      window.location.href = '/cli-auth?port=53412&state=abc123def456';
+      rememberSsoReturn();
+      let startedFrom = window.location.href;
+      Date.now = () => realNow() + CLI_AUTH_TIMEOUT_MS - 1000;
+      window.location.href = '/?ssoCancelled=1';
+      assert.strictEqual(takeCancelledSsoReturn(), startedFrom);
+    } finally {
+      Date.now = realNow;
+    }
   });
 
   test('an entry for another origin is refused', function (assert) {
