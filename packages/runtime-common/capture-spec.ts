@@ -1222,9 +1222,11 @@ export const CAPTURE_DEFAULT_BACKGROUND = 'white';
 //
 // `filename` is the name a pdf entry's document is saved under, resolved
 // against the instance being captured (the declared string, the declared
-// function's result, or the card's title). It is present only on a roster
-// read with an instance in hand — the `render.captures` route — and absent on
-// the class-only reads that derive declaration meta.
+// function's result, or the card's title). `title` is the pdf document's
+// title metadata, resolved the same way (defaulting to the card's title). Both
+// are present only on a roster read with an instance in hand — the
+// `render.captures` route — and absent on the class-only reads that derive
+// declaration meta.
 export interface DeclaredCaptureSpecPayload {
   width?: number;
   height?: number;
@@ -1236,6 +1238,7 @@ export interface DeclaredCaptureSpecPayload {
   format?: DeclaredCaptureFormat;
   render?: true;
   filename?: string;
+  title?: string;
 }
 
 export type DeclaredCaptureRoster = Record<string, DeclaredCaptureSpecPayload>;
@@ -1272,15 +1275,18 @@ export function canonicalDeclaredCaptureString(
     useAsThumbnail: _useAsThumbnail,
     keyBy: _keyBy,
     filename: _filename,
+    title,
     ...rest
   } = payload;
   rest satisfies Record<string, never>;
 
   // A pdf entry has no raster geometry — no capture box, no device scale, no
-  // painted background — so its identity is the slot name, its source, and
-  // the `print` media it paginates under. `type: 'pdf'` alone already keeps it
-  // distinct from any raster spelling; `media` is folded in explicitly so the
-  // identity states the axis rather than leaving it implied by `type`.
+  // painted background — so its identity is the slot name, its source, the
+  // `print` media it paginates under, and the title written into its
+  // metadata (part of the document's bytes, unlike its filename). `type:
+  // 'pdf'` alone already keeps it distinct from any raster spelling; `media`
+  // is folded in explicitly so the identity states the axis rather than
+  // leaving it implied by `type`.
   let canonical: Record<string, unknown> =
     type === 'pdf'
       ? {
@@ -1288,6 +1294,7 @@ export function canonicalDeclaredCaptureString(
           media: 'print',
           source: render ? 'render' : format,
           type: 'pdf',
+          ...(title !== undefined ? { title } : {}),
         }
       : {
           background: background ?? CAPTURE_DEFAULT_BACKGROUND,
