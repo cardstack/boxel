@@ -43,6 +43,7 @@ import type ToolService from '@cardstack/host/services/tool-service';
 
 import { Message } from './message';
 import MessageTool, {
+  type ClickReasonsFor,
   type NeverAutoExecutesFor,
   type ToolResolution,
 } from './message-tool';
@@ -458,9 +459,7 @@ export default class MessageBuilder {
         : undefined,
       getOwner(this)!,
       toolResultEvent?.content.failureReason,
-      false,
-      undefined,
-      (request) => this.resolveTool(request),
+      { resolver: (request) => this.resolveTool(request) },
     );
   }
 
@@ -531,6 +530,7 @@ export default class MessageBuilder {
     let actionVerb = 'Apply';
     let neverAutoExecutes = false;
     let neverAutoExecutesFor: NeverAutoExecutesFor | undefined;
+    let clickReasonsFor: ClickReasonsFor | undefined;
     if (skillTool?.codeRef) {
       let CommandKlass = (await getClass(
         skillTool?.codeRef,
@@ -539,6 +539,7 @@ export default class MessageBuilder {
         actionVerb?: string;
         neverAutoExecutes?: boolean;
         neverAutoExecutesFor?: NeverAutoExecutesFor;
+        clickReasonsFor?: ClickReasonsFor;
       };
       if (CommandKlass?.actionVerb) {
         actionVerb = CommandKlass.actionVerb;
@@ -548,6 +549,9 @@ export default class MessageBuilder {
         neverAutoExecutesFor =
           CommandKlass.neverAutoExecutesFor.bind(CommandKlass);
       }
+      if (typeof CommandKlass?.clickReasonsFor === 'function') {
+        clickReasonsFor = CommandKlass.clickReasonsFor.bind(CommandKlass);
+      }
     }
 
     return {
@@ -556,6 +560,7 @@ export default class MessageBuilder {
       actionVerb,
       neverAutoExecutes,
       neverAutoExecutesFor,
+      clickReasonsFor,
     };
   }
 }

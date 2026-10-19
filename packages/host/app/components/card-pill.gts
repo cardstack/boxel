@@ -18,6 +18,8 @@ import { FailureBordered, IconX } from '@cardstack/boxel-ui/icons';
 
 import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
 
+import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
+
 import AttachedFileDropdownMenu from './ai-assistant/attached-file-dropdown-menu';
 
 import type RealmService from '../services/realm';
@@ -116,7 +118,9 @@ export default class CardPill extends Component<CardPillSignature> {
               aria-hidden='true'
             />
           {{else}}
-            <RealmIcon @realmInfo={{this.realm.info @urlForRealmLookup}} />
+            <RealmURLTooltip @urlInRealm={{@urlForRealmLookup}}>
+              <RealmIcon @realmInfo={{this.realm.info @urlForRealmLookup}} />
+            </RealmURLTooltip>
           {{/if}}
         </:iconLeft>
         <:default>

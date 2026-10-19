@@ -54,6 +54,6 @@ Where it is thinner: no indeterminate state, no long-press or hold behaviour, an
 
 The tone, appearance and size args resolve through the kit's shared recipe system rather than through component-local tokens, which is why a Toggle sits at exactly the same weight as a **Button** of the same size and tone beside it.
 
-That shared resolution is the reason `@pressedAppearance` is an appearance name rather than a colour: a season defines what `accent` looks like once, and every pressed toggle in the product follows it — including in a season that expresses accent through border weight rather than fill.
+That shared resolution is the reason `@pressedAppearance` is an appearance name rather than a color: a theme defines what `accent` looks like once, and every pressed toggle in the product follows it — including in a theme that expresses accent through border weight rather than fill.
 
 The styles sit in `@layer PretComposite`, above Button's `PretComponent` layer, so what this component sets on Button wins by layer order. A caller's unlayered CSS overrides both without a more specific selector.

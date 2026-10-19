@@ -50,6 +50,7 @@ export default class CardHeaderUsage extends Component {
   @tracked isSaving: boolean = false;
   @tracked isTopCard: boolean = false;
   @tracked lastSavedMessage = 'Saved one minute ago';
+  @tracked realmURLText = 'app.boxel.ai/user/quarterly-reviews';
   @tracked realmInfo = {
     iconURL: 'https://boxel-images.boxel.ai/icons/Letter-j.png',
     name: "John's Workspace",
@@ -152,6 +153,7 @@ export default class CardHeaderUsage extends Component {
               @lastSavedMessage={{this.lastSavedMessage}}
               @moreOptionsMenuItems={{this.moreOptionsMenuItems}}
               @realmInfo={{this.realmInfo}}
+              @realmURLText={{this.realmURLText}}
               @onEdit={{unless this.isEditing this.onEdit}}
               @onExpand={{this.onExpand}}
               @onFinishEditing={{if this.isEditing this.onFinishEditing}}
@@ -219,6 +221,12 @@ export default class CardHeaderUsage extends Component {
             @name='realmInfo'
             @description='realm information'
             @value={{this.realmInfo}}
+          />
+          <Args.String
+            @name='realmURLText'
+            @description='shown under the realm name in the realm icon tooltip'
+            @value={{this.realmURLText}}
+            @onInput={{fn (mut this.realmURLText)}}
           />
           <Args.Object
             @name='utilityMenu'

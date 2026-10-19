@@ -40,13 +40,13 @@ Gaps — all of them at the composition level, which is where they belong:
 - **`aria-busy="true"`** on the region being replaced is the other half, and nothing here sets or suggests it.
 - **The animation runs indefinitely.** WCAG 2.2.2 governs motion that starts automatically, lasts more than five seconds and runs in parallel with other content. A slow load with a screenful of skeletons qualifies, and there is no pause control — only the reduced-motion branch, which covers users who have set the preference and no one else.
 - **`role="presentation"` semantics via `aria-hidden` also hide any real content** placed inside a Skeleton. Do not nest content in one; it is meant to be empty.
-- The grey-on-grey gradient (`--inset` → `--hover` → `--inset`) is intentionally low contrast and carries no information, so **1.4.11** does not apply — but a season that raises the contrast turns skeletons into visual noise.
+- The gray-on-gray gradient (`--inset` → `--hover` → `--inset`) is intentionally low contrast and carries no information, so **1.4.11** does not apply — but a theme that raises the contrast turns skeletons into visual noise.
 
 ## Theming
 
 `--inset` (base) and `--hover` (the sheen's bright stop). That is the entire palette, and the two are adjacent by design — the shimmer should be barely perceptible.
 
-The 6px radius, 1.6s duration, `linear` easing and 200% gradient width are fixed. A season cannot slow the shimmer or change its shape; retuning `--inset` and `--hover` closer together or further apart is the only available adjustment, and a season that makes them very different will produce a distractingly strobing page. If a season needs circular skeletons for avatars, pass `style="border-radius: 50%"` through `...attributes` at the call site.
+The 6px radius, 1.6s duration, `linear` easing and 200% gradient width are fixed. A theme cannot slow the shimmer or change its shape; retuning `--inset` and `--hover` closer together or further apart is the only available adjustment, and a theme that makes them very different will produce a distractingly strobing page. If you need circular skeletons for avatars, pass `style="border-radius: 50%"` through `...attributes` at the call site.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

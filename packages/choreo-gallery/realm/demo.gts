@@ -20,6 +20,7 @@ import { modifier } from 'ember-modifier';
 
 import type { ChoreoGallery } from './gallery';
 import type { FilmLink } from './lib/film-link';
+import { pointerOnly } from './lib/focus';
 import { labSlug, LabState } from './lib/lab';
 import { restWhenOff } from './lib/onstage';
 import { openThroughHost, ownClicks, ownControlClicks } from './lib/pointer';
@@ -349,7 +350,15 @@ class Fitted extends Component<typeof GalleryDemo> {
       {{this.measure}}
     >
       {{#if this.roomy}}
-        <div class='tile-stage' {{restWhenOff}} {{ownControlClicks}}>
+        {{! the stage is the pointer's: the keyboard and a screen reader go
+          from the title link to the guide link, and use the stage on the
+          demo's page }}
+        <div
+          class='tile-stage'
+          {{restWhenOff}}
+          {{ownControlClicks}}
+          {{pointerOnly}}
+        >
           <DemoStage @demo={{this.demo}} @face='tile' @open={{this.open}} />
         </div>
       {{/if}}
@@ -507,6 +516,8 @@ class Fitted extends Component<typeof GalleryDemo> {
       .tile:has(.tile-title:focus-visible) {
         outline: 2px solid var(--ring);
         outline-offset: -2px;
+        /* rounded as the box that clips it, so the ring's corners show */
+        border-radius: var(--tile-radius, 0);
       }
 
       .tile-lede {

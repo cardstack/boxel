@@ -49,17 +49,17 @@ Kit tokens, each named once on the root: `--space-3` (the gap between legend, de
 
 Fixed: the legend is body-size at the strong weight — the **Panel** header voice — with no uppercase treatment, so a stack of fieldsets reads as sections rather than eyebrows. The fieldset itself has no border, padding or background; the surface it sits on supplies those.
 
-A season retunes the legend voice through `--weight-strong` and `--text-ui-md`, and the rhythm through `--space-3`, in step with **FormSection**.
+A theme retunes the legend voice through `--weight-strong` and `--text-ui-md`, and the rhythm through `--space-3`, in step with **FormSection**.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 
 ## React ecosystem
 
-| React | Pretui |
-| --- | --- |
-| legend (Mantine) / `FieldLegend` (shadcn) / `Fieldset.Legend` (Base UI, Chakra) | `@legend` / `<:legend>` |
-| `Fieldset.HelperText` (Chakra) / description | `@description` |
-| disabled / isDisabled | `@disabled` / `@isDisabled` — the native attribute |
-| `FieldGroup` (shadcn) / `Fieldset.Content` (Chakra) | the default block |
-| invalid / `ErrorText` (Chakra) | **FormSection** |
-| variant / radius (Mantine) | none; put the fieldset in a **Card** |
+| React                                                                           | Pretui                                             |
+| ------------------------------------------------------------------------------- | -------------------------------------------------- |
+| legend (Mantine) / `FieldLegend` (shadcn) / `Fieldset.Legend` (Base UI, Chakra) | `@legend` / `<:legend>`                            |
+| `Fieldset.HelperText` (Chakra) / description                                    | `@description`                                     |
+| disabled / isDisabled                                                           | `@disabled` / `@isDisabled` — the native attribute |
+| `FieldGroup` (shadcn) / `Fieldset.Content` (Chakra)                             | the default block                                  |
+| invalid / `ErrorText` (Chakra)                                                  | **FormSection**                                    |
+| variant / radius (Mantine)                                                      | none; put the fieldset in a **Card**               |

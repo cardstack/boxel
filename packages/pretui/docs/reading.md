@@ -2,7 +2,7 @@
 
 Design notes shared by **DataGrid**, **KeyValue**, **Stat**, **Prose**, **StreamingText**, **Table**.
 
-reading territory: data display.
+Data display.
 Translated from pretui-design-system (components/reading + css/structure.css).
 Realm adaptation: StreamingText is timer-free — words reveal via CSS
 animation-delay stagger (the prerenderer blocks timers; reduced-motion

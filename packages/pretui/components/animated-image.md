@@ -44,6 +44,6 @@ Where it is thinner: no scrubbing, no frame count, no loop count or "play once" 
 
 The control rides the kit's shared surface and shadow tokens — `--pretui-shadow-control` for the button, `--pretui-shadow-hairline` for the frame — rather than carrying a token surface of its own.
 
-That is deliberate: an animated image should look like an image with a button on it, not like a media player. A season retunes the button everywhere and this follows, so the pause control here matches the controls on every other overlay in the product.
+That is deliberate: an animated image should look like an image with a button on it, not like a media player. A theme retunes the button everywhere and this follows, so the pause control here matches the controls on every other overlay in the product.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

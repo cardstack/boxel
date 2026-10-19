@@ -498,6 +498,9 @@ module(basename(import.meta.filename), function () {
           );
           assert.strictEqual(pool.currentMaxPages, 2, 'starts at MIN');
 
+          // With the refill disabled, standbys are made only while the pool
+          // has no tabs, so make one per affinity up front.
+          await pool.warmStandbys();
           // Warm two distinct affinities up to the live cap, releasing
           // each so its tab stays resident but holds no render-semaphore
           // slot. Tabs are now exhausted (one per affinity, count ===
@@ -553,6 +556,9 @@ module(basename(import.meta.filename), function () {
           );
 
           // Warm the cap with two affinities (released → semaphore idle).
+          // With the refill disabled, standbys are made only while the pool
+          // has no tabs, so make one per affinity up front.
+          await pool.warmStandbys();
           for (let key of ['realm-a', 'realm-b']) {
             let held = await pool.getPage(key);
             held.release();

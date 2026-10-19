@@ -412,7 +412,7 @@ export class Reorder<T = unknown> extends Component<ReorderSignature<T>> {
 
   /** Row centre lines, in the list's own coordinate space. Measured at the
    * start of every gesture rather than cached, because a row's height can
-   * change between drags (a wrapped label, a season with taller rows). */
+   * change between drags (a wrapped label, a theme with taller rows). */
   private centres(): number[] {
     let list = this.listEl;
     if (!list) {

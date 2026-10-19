@@ -130,7 +130,7 @@ class CollapsibleUsage extends Component {
         <Css.Basic
           @name='pretui-dur-morph'
           @type='time'
-          @description='The expand duration. A season retunes it for the whole kit.'
+          @description='The expand duration. A theme retunes it for the whole kit.'
           @defaultValue='300ms'
         />
       </:cssVars>

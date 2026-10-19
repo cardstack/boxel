@@ -1010,7 +1010,7 @@ export class EmojiPicker extends Component<EmojiPickerSignature> {
       @layer PretComponent {
         /* Zero dark branches: every value is a token with a light-value
            fallback, so the theme frame re-dresses the picker without this file
-           knowing a season exists. Upstream forks on prefers-color-scheme
+           knowing a theme exists. Upstream forks on prefers-color-scheme
            inside its shadow root, which is why a dark Pretui frame on a light
            OS gave you a light picker. */
         .pretui-emoji {

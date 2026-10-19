@@ -49,7 +49,7 @@ Gaps:
 
 - **Entering and leaving edit mode is not announced.** Clicking a pencil replaces a read view with a control; nothing says "editing Total". For a screen-reader user the field simply becomes something else. A `role="status"` announcement on `editingPath` change would close it, and it is the highest-value fix here.
 - **The pending-value state is announced per field.** A field with a committed-but-unsaved edit adds "Unsaved change." to the hint its trigger's `aria-describedby` points at, beside the footer's total.
-- **The optimistic draft clear** (above) means a failed save is silent unless the host re-supplies values *and* surfaces an error.
+- **The optimistic draft clear** (above) means a failed save is silent unless the host re-supplies values _and_ surfaces an error.
 - **The pencil triggers need names that identify their field** — "Edit Total", not eight buttons called "Edit".
 - **`@readOnly` turns every field read-only**, which is right, but there is no per-field permission, so a partially-editable record must be composed field by field.
 - Everything **FormField**, **CompoundField** and **FormFooter** flag applies — notably that FormFooter's Save uses the native `disabled` attribute, so the explanation it points at is unreachable by tab.
@@ -58,6 +58,6 @@ Gaps:
 
 **FormField**, **CompoundField**, **FormLayout**, **ErrorSummary** and **FormFooter** tokens throughout; RecordDetail itself paints the grid and the read/edit affordances. `--muted-foreground` for the `'—'` placeholder, `--hover` for the pencil, and the pending-edit dress.
 
-The pending-edit dress is the one thing a season must design deliberately: a field with an uncommitted change must be visibly different from both its resting and its editing state, in a page that may show thirty fields. It is the only visual answer to "what have I changed", and neither `--destructive` (wrong meaning) nor `--hover` (transient) is the right token — a season should define one for it.
+The pending-edit dress is the one thing a theme must design deliberately: a field with an uncommitted change must be visibly different from both its resting and its editing state, in a page that may show thirty fields. It is the only visual answer to "what have I changed", and neither `--destructive` (wrong meaning) nor `--hover` (transient) is the right token — a theme should define one for it.
 
 The styles sit in `@layer PretComposite`, above IconButton's `PretComponent` layer, so what this component sets on IconButton wins by layer order. A caller's unlayered CSS overrides both without a more specific selector.

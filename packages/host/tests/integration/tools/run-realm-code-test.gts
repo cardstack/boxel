@@ -870,46 +870,6 @@ return {
     }
   });
 
-  test('realm.fs.delete refuses a file the run did not create', async function (assert) {
-    let toolService = getService('tool-service');
-    let cardService = getService('card-service');
-    let command = new RunRealmCodeTool(toolService.toolContext);
-
-    let result = await command.execute({
-      realm: testRealmURL,
-      roomId: '!room:example.com',
-      code: `let refused = [];
-try { await realm.fs.delete('notes/first.md'); } catch (e) { refused.push(e.message); }
-await realm.fs.replace('task.json', '"Old title"', '"New title"');
-try { await realm.fs.delete('task.json'); } catch (e) { refused.push(e.message); }
-await realm.fs.writeText('scratch.md', 'x');
-await realm.fs.delete('scratch.md');
-try { await realm.fs.delete('scratch.md'); } catch (e) { refused.push(e.message); }
-return refused;`,
-    });
-
-    let refused: string[] = JSON.parse(result.scriptResult!);
-    assert.strictEqual(refused.length, 3, 'each delete is refused');
-    assert.true(
-      /deletes only a file this run created: .*notes\/first\.md/.test(
-        refused[0]!,
-      ),
-      `a file the run did not touch: ${refused[0]}`,
-    );
-    assert.true(
-      /deletes only a file this run created: .*task\.json/.test(refused[1]!),
-      `a file the run edited but did not create: ${refused[1]}`,
-    );
-    assert.true(
-      /this run already deleted it/.test(refused[2]!),
-      `a file the run already deleted: ${refused[2]}`,
-    );
-    for (let path of ['notes/first.md', 'task.json']) {
-      let source = await cardService.getSource(new URL(path, testRealmURL));
-      assert.strictEqual(source.status, 200, `${path} is still in the realm`);
-    }
-  });
-
   test('realm.fs.delete refuses a binary file the run created when someone replaced it', async function (assert) {
     let toolService = getService('tool-service');
     let network = getService('network');
@@ -962,6 +922,190 @@ try {
       Array.from(new Uint8Array(await response.arrayBuffer())),
       Array.from(replacement),
       "the collaborator's bytes are kept",
+    );
+  });
+
+  test('a script that deletes a file always waits for the user', function (assert) {
+    assert.true(
+      RunRealmCodeTool.neverAutoExecutesFor({
+        code: `await realm.fs.delete('notes/first.md');`,
+      }),
+      'a run that names realm.fs.delete waits for a click',
+    );
+    assert.true(
+      RunRealmCodeTool.neverAutoExecutesFor({
+        code: `await realm.fs.writeText('a.md', 'x'); await realm.fs.delete('a.md');`,
+      }),
+      'a run that deletes only its own file also waits for a click',
+    );
+    assert.false(
+      RunRealmCodeTool.neverAutoExecutesFor({
+        code: `await realm.fs.writeText('a.md', 'x');`,
+      }),
+      'a run that deletes nothing keeps the room mode',
+    );
+  });
+
+  test('realm.fs.delete deletes files that were there before the run, and the result reports them', async function (assert) {
+    let toolService = getService('tool-service');
+    let cardService = getService('card-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.readText('notes/first.md');
+await realm.fs.replace('task.json', '"Old title"', '"New title"');
+await realm.fs.writeText('plan.md', '# Plan\\n');
+let deleted = [
+  await realm.fs.delete('notes/first.md'),
+  await realm.fs.delete('task.json'),
+  await realm.fs.delete('images/existing.png'),
+  await realm.fs.delete('plan.md'),
+];
+let refused = [];
+try { await realm.fs.delete('notes/first.md'); } catch (e) { refused.push(e.message); }
+try { await realm.fs.delete('missing.md'); } catch (e) { refused.push(e.message); }
+try { await realm.fs.delete('notes/'); } catch (e) { refused.push(e.message); }
+return { deleted, refused };`,
+    });
+
+    let { deleted, refused } = JSON.parse(result.scriptResult!);
+    assert.deepEqual(deleted, [
+      { path: 'notes/first.md', deleted: true },
+      { path: 'task.json', deleted: true },
+      { path: 'images/existing.png', deleted: true },
+      { path: 'plan.md', deleted: true },
+    ]);
+    assert.true(
+      /this run already deleted it: .*notes\/first\.md/.test(refused[0]),
+      `a file the run already deleted: ${refused[0]}`,
+    );
+    assert.true(
+      /File not found: .*missing\.md/.test(refused[1]),
+      `a file that does not exist: ${refused[1]}`,
+    );
+    assert.true(
+      /Path must be relative to the realm root: notes\//.test(refused[2]),
+      `a folder: ${refused[2]}`,
+    );
+    assert.deepEqual(
+      result.files.map((file) => [file.fileUrl, file.status, file.detail]),
+      [
+        [
+          `${testRealmURL}plan.md`,
+          'deleted',
+          'Created by this run and then deleted.',
+        ],
+        [
+          `${testRealmURL}notes/first.md`,
+          'deleted',
+          'Existed before this run; deleted.',
+        ],
+        [
+          `${testRealmURL}task.json`,
+          'deleted',
+          'Existed before this run; deleted.',
+        ],
+        [
+          `${testRealmURL}images/existing.png`,
+          'deleted',
+          'Existed before this run; deleted.',
+        ],
+      ],
+    );
+    for (let path of ['notes/first.md', 'task.json', 'images/existing.png']) {
+      let source = await cardService.getSource(new URL(path, testRealmURL));
+      assert.strictEqual(source.status, 404, `${path} is not in the realm`);
+    }
+  });
+
+  test('realm.fs.delete refuses a file someone changed after the script read it', async function (assert) {
+    let toolService = getService('tool-service');
+    let cardService = getService('card-service');
+    let network = getService('network');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+    let noteURL = `${testRealmURL}notes/first.md`;
+
+    // A collaborator saves other text to the file right after the script
+    // reads it.
+    let real = network.authedFetch;
+    let changed = false;
+    Object.defineProperty(network, 'authedFetch', {
+      configurable: true,
+      value: async (url: string, init?: RequestInit) => {
+        let response = await real(url, init);
+        if (url === noteURL && !init?.method && !changed) {
+          changed = true;
+          let replaced = await real(noteURL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/octet-stream' },
+            body: new Blob(['# Changed\n']),
+          });
+          assert.true(replaced.ok, 'the collaborator changed the file');
+        }
+        return response;
+      },
+    });
+
+    let result = await command.execute({
+      realm: testRealmURL,
+      roomId: '!room:example.com',
+      code: `await realm.fs.readText('notes/first.md');
+try {
+  await realm.fs.delete('notes/first.md');
+  return 'deleted';
+} catch (e) {
+  return e.message;
+}`,
+    });
+
+    assert.true(
+      /File changed while the script ran: .*notes\/first\.md/.test(
+        JSON.parse(result.scriptResult!),
+      ),
+      `the delete is refused: ${result.scriptResult}`,
+    );
+    let source = await cardService.getSource(new URL(noteURL));
+    assert.strictEqual(source.status, 200, 'the file is still in the realm');
+    assert.strictEqual(source.content, '# Changed\n', 'the change is kept');
+  });
+
+  test('a script that reaches realm.fs.delete another way is refused', async function (assert) {
+    let cardService = getService('card-service');
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+    let code = `await realm.fs['de' + 'lete']('notes/first.md');`;
+
+    assert.false(
+      RunRealmCodeTool.neverAutoExecutesFor({ code }),
+      'this run would not wait for a click',
+    );
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code,
+      }),
+      /must be called by that name/,
+    );
+    let source = await cardService.getSource(
+      new URL('notes/first.md', testRealmURL),
+    );
+    assert.strictEqual(source.status, 200, 'the file is still in the realm');
+  });
+
+  test('a failed run names the files from before the run that it deleted', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new RunRealmCodeTool(toolService.toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `await realm.fs.delete('notes/first.md');
+await realm.fs.readText('missing.md');`,
+      }),
+      /Files that existed before this run and that it already deleted: .*notes\/first\.md/,
     );
   });
 
@@ -2415,6 +2559,172 @@ throw new Error('stop here');`,
       /stop here\. No file was saved\. The UI actions it asked for were not done\./,
     );
     assert.strictEqual(operatorModeStateService.state.submode, submodeBefore);
+  });
+
+  module('realm.cards.update', function () {
+    async function run(code: string) {
+      let toolService = getService('tool-service');
+      let command = new RunRealmCodeTool(toolService.toolContext);
+      return await command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code,
+      });
+    }
+
+    async function cardJSON(path: string) {
+      let source = await getService('card-service').getSource(
+        new URL(`${testRealmURL}${path}`),
+      );
+      return JSON.parse(source.content);
+    }
+
+    test('changes the fields it is given and keeps the others', async function (assert) {
+      let result = await run(`
+const updated = await realm.cards.update('Recipe/pancakes', { cuisine: 'French' });
+return updated;`);
+
+      assert.deepEqual(JSON.parse(result.scriptResult!), {
+        path: 'Recipe/pancakes.json',
+        fields: ['cuisine'],
+        saves: 'after the script finishes',
+      });
+      assert.deepEqual(
+        result.files.map((file) => [file.fileUrl, file.status]),
+        [[`${testRealmURL}Recipe/pancakes.json`, 'saved']],
+      );
+      let { data } = await cardJSON('Recipe/pancakes.json');
+      assert.strictEqual(data.attributes.cuisine, 'French');
+      assert.strictEqual(data.attributes.name, 'Pancakes');
+      assert.strictEqual(
+        data.relationships.chef.links.self,
+        '../Chef/ana',
+        'links are kept',
+      );
+    });
+
+    test('edits a long text field in the script without cutting it', async function (assert) {
+      let long = Array.from(
+        { length: 40 },
+        (_, n) => `Line ${n}: a \`code\` span, a \${placeholder} and "quotes".`,
+      ).join('\n');
+      assert.true(long.length > 500);
+      await run(
+        `await realm.cards.update('Pet/mango', { name: ${JSON.stringify(long)} });`,
+      );
+
+      let result = await run(`
+const card = await realm.cards.get('Pet/mango');
+const name = card.attributes.name.replace('Line 0:', 'First line:');
+await realm.cards.update('Pet/mango', { name });
+return name.length;`);
+
+      let expected = long.replace('Line 0:', 'First line:');
+      assert.strictEqual(JSON.parse(result.scriptResult!), expected.length);
+      let { data } = await cardJSON('Pet/mango.json');
+      assert.strictEqual(data.attributes.name, expected);
+    });
+
+    test('updates more cards than the file limit in one run, and saves them all', async function (assert) {
+      let cardService = getService('card-service');
+      for (let n = 0; n < 25; n++) {
+        await cardService.saveSource(
+          new URL(`${testRealmURL}Recipe/batch/r${n}.json`),
+          recipeJSON(
+            'Recipe',
+            { name: `R${n}`, cuisine: 'batch' },
+            undefined,
+            '../../recipe',
+          ),
+          'editor',
+        );
+      }
+
+      // The cards are named by path: a search would depend on the index
+      // having caught up with the saves above.
+      let result = await run(`
+for (let n = 0; n < 25; n++) {
+  await realm.cards.update('Recipe/batch/r' + n, { cuisine: 'done' });
+}`);
+
+      assert.strictEqual(result.files.length, 25, 'the result names each card');
+      for (let n of [0, 24]) {
+        let { data } = await cardJSON(`Recipe/batch/r${n}.json`);
+        assert.strictEqual(data.attributes.cuisine, 'done');
+        assert.strictEqual(data.attributes.name, `R${n}`);
+      }
+    });
+
+    test('refuses an update that makes a card larger than the card size limit, counted in bytes', async function (assert) {
+      // Each emoji is 2 UTF-16 code units but 4 bytes in UTF-8.
+      let result = await run(`
+try {
+  await realm.cards.update('Pet/mango', { name: '\u{1F600}'.repeat(200000) });
+} catch (error) {
+  return error.message;
+}`);
+
+      assert.true(
+        /Card is too large after this update: .*Pet\/mango\.json/.test(
+          JSON.parse(result.scriptResult!),
+        ),
+        result.scriptResult,
+      );
+      assert.deepEqual(result.files, [], 'nothing is saved');
+    });
+
+    test('two updates to the same card in one run both apply', async function (assert) {
+      let result = await run(`
+await realm.cards.update('Recipe/ramen', { cuisine: 'Japanese street food' });
+await realm.cards.update('Recipe/ramen.json', { name: 'Shoyu ramen' });`);
+
+      assert.strictEqual(result.files.length, 1);
+      let { data } = await cardJSON('Recipe/ramen.json');
+      assert.strictEqual(data.attributes.cuisine, 'Japanese street food');
+      assert.strictEqual(data.attributes.name, 'Shoyu ramen');
+    });
+
+    test('a run that fails saves no card update, and says so', async function (assert) {
+      await assert.rejects(
+        run(`
+await realm.cards.update('Recipe/pancakes', { cuisine: 'French' });
+throw new Error('stop');`),
+        /stop.*The card updates it asked for were not saved/,
+      );
+      let { data } = await cardJSON('Recipe/pancakes.json');
+      assert.strictEqual(data.attributes.cuisine, 'unknown');
+    });
+
+    test('refuses a file that is not a card, attributes that are not an object, and realm.fs on an updated card', async function (assert) {
+      let result = await run(`
+const errors = [];
+for (const call of [
+  () => realm.cards.update('task.json', { title: 'x' }),
+  () => realm.cards.update('Recipe/missing', { name: 'x' }),
+  () => realm.cards.update('Recipe/pancakes', ['x']),
+  () => realm.cards.update('Recipe/pancakes', 'x'),
+]) {
+  try { await call(); } catch (error) { errors.push(error.message); }
+}
+await realm.cards.update('Recipe/ramen', { cuisine: 'Ramen-ya' });
+try { await realm.fs.readText('Recipe/ramen.json'); } catch (error) { errors.push(error.message); }
+return errors;`);
+
+      let errors = JSON.parse(result.scriptResult!) as string[];
+      assert.true(
+        /Not a card instance: .*task\.json/.test(errors[0]!),
+        errors[0],
+      );
+      assert.true(/Card not found/.test(errors[1]!), errors[1]);
+      assert.true(/attributes object/.test(errors[2]!), errors[2]);
+      assert.true(/attributes object/.test(errors[3]!), errors[3]);
+      assert.true(
+        /realm\.fs cannot read or change it in the same run/.test(errors[4]!),
+        errors[4],
+      );
+      let { data } = await cardJSON('Recipe/ramen.json');
+      assert.strictEqual(data.attributes.cuisine, 'Ramen-ya');
+    });
   });
 
   module('realm.cards.search', function () {

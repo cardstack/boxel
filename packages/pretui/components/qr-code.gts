@@ -34,7 +34,7 @@
 //     declarative markup. Zero timers, zero observers, zero engine to dispose.
 //
 // THE THEMING TENSION, AND HOW IT IS RESOLVED. Pretui law says every colour
-// flows through tokens so a season recompile re-dresses everything, with zero
+// flows through tokens so a theme change re-dresses everything, with zero
 // dark branches. Scanners require dark-on-light at high contrast, or the
 // symbol does not decode. These cannot both win, so the boundary is drawn
 // explicitly:
@@ -50,8 +50,8 @@
 //   an unthemed one.
 //
 //   Everything AROUND the symbol — plaque, hairline, caption, value, link,
-//   error state — is fully tokenised and re-tints with the season. In a dark
-//   theme the symbol therefore sits on a white plaque inside season-coloured
+//   error state — is fully tokenized and re-tints with the theme. In a dark
+//   theme the symbol therefore sits on a white plaque inside theme-colored
 //   chrome, which is what every ticketing and banking app already does. There
 //   are no dark branches in this file.
 //
@@ -552,7 +552,7 @@ export class QrCode extends Component<QrCodeSignature> {
 
     <style scoped>
       @layer PretComponent {
-        /* Chrome is fully tokenised and re-tints with the season. The symbol
+        /* Chrome is fully tokenized and re-tints with the theme. The symbol
            inside the plaque deliberately is not — see the file header. */
         .pretui-qr {
           --pretui-qr-size: 180px;

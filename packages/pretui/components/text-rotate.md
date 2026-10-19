@@ -2,7 +2,7 @@
 
 A slot of phrases rotating through one line: a clipped one-line window over a vertical reel of words, advanced discretely on an interval.
 
-Use it for a headline whose subject changes — "built for *designers* / *engineers* / *teams*". For revealing a single string, that is **Typewriter**; for text that arrives live, **StreamingText**.
+Use it for a headline whose subject changes — "built for _designers_ / _engineers_ / _teams_". For revealing a single string, that is **Typewriter**; for text that arrives live, **StreamingText**.
 
 ## The contract
 
@@ -39,6 +39,6 @@ Where it is thinner: no per-word timing — every word holds for the same `@inte
 
 `--pretui-rotate-count` (the number of words, which sets the keyframe stepping) and `--pretui-rotate-line` (the slot's line height, which is what the window clips to).
 
-Both are derived rather than seasonal — the rotation's geometry follows its content. Colour and typeface come entirely from context, so the slot matches the heading it sits in without a token of its own.
+Both are derived rather than themed — the rotation's geometry follows its content. Color and typeface come entirely from context, so the slot matches the heading it sits in without a token of its own.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

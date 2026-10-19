@@ -13,7 +13,7 @@ The kit's headless anchored-positioning primitive: render an anchor inline, and 
 
 Two decisions worth understanding.
 
-**`position: fixed`, and the panel is inside the anchor wrapper.** Anchored overlays have to escape scroll clipping, so the panel is `position: fixed` with computed `top`/`left`. The kit's lint warns about fixed positioning; it is accepted here for the same reason it is accepted on the Select backdrop. Crucially the panel still lives _inside_ the component's DOM subtree rather than being portalled — which keeps it inside the theme island, so scoped CSS and season tokens apply without a portal-aware provider.
+**`position: fixed`, and the panel is inside the anchor wrapper.** Anchored overlays have to escape scroll clipping, so the panel is `position: fixed` with computed `top`/`left`. The kit's lint warns about fixed positioning; it is accepted here for the same reason it is accepted on the Select backdrop. Crucially the panel still lives _inside_ the component's DOM subtree rather than being portaled — which keeps it inside the theme island, so scoped CSS and theme tokens apply without a portal-aware provider.
 
 **Positioning is a ~50-line modifier, not a library.** `anchorTo` measures the anchor's `DOMRect` and the panel's real box, flips to the opposite side when the preferred side lacks room and the opposite side has it, then clamps the cross-axis to an 8px viewport gutter. It re-runs on capture-phase `scroll` and on `resize`, and its teardown removes both listeners. Because it only ever runs while `@open` is true, it never executes during prerender — which is the constraint that ruled out the alternatives.
 
@@ -21,7 +21,7 @@ Two decisions worth understanding.
 
 **floating-ui** is the reference implementation and what Radix, Web Awesome (`wa-popup`) and most of the ecosystem use: composable middleware (`offset`, `flip`, `shift`, `arrow`, `size`, `autoPlacement`, `hide`) with `autoUpdate` wiring `ResizeObserver` and ancestor scroll. **`wa-popup`** exposes `placement`, `distance`, `skidding`, `strategy`, `flip`, `shift`, `arrow`, `sync`, `auto-size`. **boxel-ui** uses ember-velcro, which portals to the application root.
 
-Pretui reimplements rather than adopts, for two hard reasons: floating-ui is not realm-importable, and boxel-ui's velcro path portals _outside_ the theme island, which breaks season theming (the `renderInPlace` decision). Given that, the question is what to keep. Kept: offset (`@distance`), flip, shift, and `size`-style width matching. Dropped: `skidding` (cross-axis nudge), arrows, `autoPlacement`, `hide`, and `strategy` selection.
+Pretui reimplements rather than adopts, for two hard reasons: floating-ui is not realm-importable, and boxel-ui's velcro path portals _outside_ the theme island, which breaks theming (the `renderInPlace` decision). Given that, the question is what to keep. Kept: offset (`@distance`), flip, shift, and `size`-style width matching. Dropped: `skidding` (cross-axis nudge), arrows, `autoPlacement`, `hide`, and `strategy` selection.
 
 The improvement over a naive reimplementation is that flip measures **the real panel box**, not an estimate — `apply()` reads `getBoundingClientRect()` after the panel is in the DOM, so a panel whose height depends on its content flips correctly on first paint rather than one frame late.
 
@@ -37,6 +37,6 @@ One structural note: because the panel is a descendant of the anchor wrapper rat
 
 ## Theming
 
-Almost nothing: `z-index: 60` and layout only. Every visual token belongs to the consumer's panel. Seasons that need to re-layer overlays should note the kit's convention — 49/50 for Menu's backdrop and panel, 60 for `Popup` and `Tooltip`, and the native top layer (above everything) for `Dialog` and `Drawer`.
+Almost nothing: `z-index: 60` and layout only. Every visual token belongs to the consumer's panel. Callers that need to re-layer overlays should note the kit's convention — 49/50 for Menu's backdrop and panel, 60 for `Popup` and `Tooltip`, and the native top layer (above everything) for `Dialog` and `Drawer`.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

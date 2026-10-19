@@ -3,7 +3,7 @@ import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 
 import { waitForPromise } from '@ember/test-waiters';
-import { tracked } from '@glimmer/tracking';
+import { cached, tracked } from '@glimmer/tracking';
 
 import {
   isCardInstance,
@@ -19,6 +19,8 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type StoreService from '@cardstack/host/services/store';
 import type ToolService from '@cardstack/host/services/tool-service';
 
+import type { ClickReason } from '../host-base-tool';
+
 import type { Message } from './message';
 import type { CardDef } from '@cardstack/base/card-api';
 import type { SerializedFile } from '@cardstack/base/file-api';
@@ -27,6 +29,11 @@ import type { SerializedFile } from '@cardstack/base/file-api';
 export type NeverAutoExecutesFor = (
   attributes: Record<string, unknown> | undefined,
 ) => boolean;
+
+// Why a call waits for the user's click (HostBaseTool.clickReasonsFor).
+export type ClickReasonsFor = (
+  attributes: Record<string, unknown> | undefined,
+) => ClickReason[];
 
 // 'approved' is the user's approval of a call ai-bot holds for approval; the
 // call is then running (see `status`) until ai-bot's result lands.
@@ -68,8 +75,13 @@ export interface ToolResolution {
   codeRef: ResolvedCodeRef | undefined;
   requiresApproval: boolean;
   actionVerb: string;
+  // The tool class declares that it must always wait for the user's click,
+  // whatever the room's mode (see HostBaseTool.neverAutoExecutes).
   neverAutoExecutes: boolean;
+  // The same, for one call's input (see HostBaseTool.neverAutoExecutesFor).
   neverAutoExecutesFor?: NeverAutoExecutesFor;
+  // Why a call waits for the click (see HostBaseTool.clickReasonsFor).
+  clickReasonsFor?: ClickReasonsFor;
 }
 
 export type ToolResolver = (
@@ -95,15 +107,22 @@ export default class MessageTool {
     toolResultFileDef: SerializedFile | undefined,
     owner: Owner,
     public failureReason?: string | undefined,
-    // The tool class declares that it must always wait for the user's
-    // click, whatever the room's mode (see HostBaseTool.neverAutoExecutes).
-    neverAutoExecutes: boolean = false,
-    // The same, for this call's input (see
-    // HostBaseTool.neverAutoExecutesFor).
-    neverAutoExecutesFor?: NeverAutoExecutesFor,
-    // Resolves the tool from its name. Without one, the values above are the
-    // tool's fixed resolution (a call ai-bot runs has nothing to resolve).
-    resolver?: ToolResolver,
+    {
+      neverAutoExecutes = false,
+      neverAutoExecutesFor,
+      clickReasonsFor,
+      resolver,
+    }: Partial<
+      Pick<
+        ToolResolution,
+        'neverAutoExecutes' | 'neverAutoExecutesFor' | 'clickReasonsFor'
+      >
+    > & {
+      // Resolves the tool from its name. Without one, the values given here
+      // are the tool's fixed resolution (a call ai-bot runs has nothing to
+      // resolve).
+      resolver?: ToolResolver;
+    } = {},
   ) {
     setOwner(this, owner);
 
@@ -116,6 +135,7 @@ export default class MessageTool {
       actionVerb,
       neverAutoExecutes,
       neverAutoExecutesFor,
+      clickReasonsFor,
     };
     this.#resolver = resolver;
     if (resolver) {
@@ -243,14 +263,23 @@ export default class MessageTool {
     if (resolution?.neverAutoExecutes) {
       return true;
     }
+    return resolution?.neverAutoExecutesFor?.(this.#callAttributes) === true;
+  }
+
+  // Why this call waits for the user's click, read from the current
+  // arguments like `neverAutoExecutes`. Empty for a call that needs no click.
+  // Cached, as a tool may scan a long input to find them.
+  @cached
+  get clickReasons(): ClickReason[] {
+    return this.resolution?.clickReasonsFor?.(this.#callAttributes) ?? [];
+  }
+
+  // The call's input attributes as the click rules read them.
+  get #callAttributes(): Record<string, unknown> | undefined {
     let attributes = this.arguments?.attributes;
-    return (
-      resolution?.neverAutoExecutesFor?.(
-        attributes && typeof attributes === 'object'
-          ? (attributes as Record<string, unknown>)
-          : undefined,
-      ) === true
-    );
+    return attributes && typeof attributes === 'object'
+      ? (attributes as Record<string, unknown>)
+      : undefined;
   }
 
   get argumentsError() {

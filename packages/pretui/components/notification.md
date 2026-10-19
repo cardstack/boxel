@@ -54,7 +54,7 @@ No APG pattern. A notification is text, one or two buttons and an optional live 
 
 `--pretui-notification-tone` (set from the tone: `--pretui-info`, `--success`, `--warning`, `--destructive` or `--muted-foreground`), `--pretui-notification-width` (the maximum width, default 26rem), `--popover`, `--popover-foreground`, `--muted-foreground`, `--foreground`, `--primary` (a neutral item's action), `--radius-surface`, `--radius-control`, `--pretui-shadow-raised`, `--ring`, `--hover`, `--font-sans`, `--text-ui-md`, `--text-ui-sm`, `--space-3` and `--space-4`.
 
-These are the tokens a **Toaster** item reads, so a season that retunes toasts retunes notifications the same way. The 3px stripe and the 1.25rem dismiss button are fixed.
+These are the tokens a **Toaster** item reads, so a theme that retunes toasts retunes notifications the same way. The 3px stripe and the 1.25rem dismiss button are fixed.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

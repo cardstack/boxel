@@ -149,7 +149,9 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
             <div class='picker-option-row__label'>{{@option.label}}</div>
           </:trigger>
           <:content>
-            {{@option.tooltip}}
+            <span class='picker-option-row__tooltip-text'>
+              {{@option.tooltip}}
+            </span>
           </:content>
         </Tooltip>
       {{else}}
@@ -254,6 +256,11 @@ export default class PickerOptionRow extends Component<OptionRowSignature> {
 
       .picker-option-row__tooltip-trigger :deep(.trigger) {
         width: 100%;
+      }
+
+      .picker-option-row__tooltip-text {
+        display: block;
+        text-align: start;
       }
 
       .picker-option-row__label {

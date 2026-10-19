@@ -44,4 +44,4 @@ Gaps, and the first is inherited and significant in this context:
 
 **Switch**'s tokens for the control (`--pretui-control-border` / `--line-strong` for the off track, `--primary` for on, `--card` for the thumb, `--shadow-ink-mid`, and the snap duration/easing), **Table**'s for the doc row, plus the property rail's label voice.
 
-Nothing of its own. The one thing to check per season is Switch's on/off distinction at this size: a property list shows many switches at once, most of them off, and if `--primary` and `--line-strong` are close in luminance the on ones do not stand out — which is exactly the reading task this surface exists for.
+Nothing of its own. The one thing to check per theme is Switch's on/off distinction at this size: a property list shows many switches at once, most of them off, and if `--primary` and `--line-strong` are close in luminance the on ones do not stand out — which is exactly the reading task this surface exists for.

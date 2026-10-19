@@ -14,6 +14,7 @@ import {
   type CarriedQueryDeclaration,
   type CodeRef,
   type InvokeOptions,
+  type OperationsOptions,
   type OperationDocument,
   type OperationHandle,
   type OperationResultTree,
@@ -2393,6 +2394,7 @@ function quoteList(values: readonly string[]): string {
 // wire that a caller reads back.
 export type {
   InvokeOptions,
+  OperationsOptions,
   OperationDocument,
   OperationResultTree,
   OperationValueResult,
@@ -2846,24 +2848,35 @@ export type OperationFilter = Record<string, unknown>;
 // The entry point
 // ---------------------------------------------------------------------------
 
+// The second argument says how the bucket's writes are sent, and covers every
+// write it makes — a single call and an `atomic` batch alike. Its one member,
+// `skipIndexWait`, trades reading a write back through the index for an
+// answer that does not wait on indexing: `operations(card, { skipIndexWait:
+// true }).delete()` answers once the removal is durable. See
+// `OperationsOptions` for what a caller gives up.
 export function operations<Type extends CardDefConstructor>(
   instance: InstanceType<Type>,
+  opts?: OperationsOptions,
 ): CardInstanceOperations<Type>;
 export function operations<Type extends FileDefConstructor>(
   instance: InstanceType<Type>,
+  opts?: OperationsOptions,
 ): FileInstanceOperations<Type>;
 export function operations<Type extends BaseDefConstructor>(
   instance: InstanceType<Type>,
+  opts?: OperationsOptions,
 ): BaseInstanceOperations;
 export function operations<Type extends CardDefConstructor>(
   type: Type,
+  opts?: OperationsOptions,
 ): CardTypeOperations<Type>;
 // The implementation answers a bucket whose shape the overloads above pin: the
 // members it carries are decided at run time from what the def carries, so
 // there is no one return type the four scopes share.
-export function operations(target: unknown): any {
+export function operations(target: unknown, opts?: OperationsOptions): any {
   return buildOperations(subjectFor(target), {
     transport: getOperationsTransport(),
+    ...(opts ? { options: opts } : {}),
     subject: (other: unknown) => subjectFor(other),
     codeRef: (value: unknown) => identifyDef(value),
     resourceFor: (instance: unknown) => adoptedResource(instance),

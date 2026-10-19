@@ -54,6 +54,7 @@ import {
 } from '@cardstack/runtime-common';
 import { codeRefWithAbsoluteIdentifier } from '@cardstack/runtime-common/code-ref';
 
+import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
 import config from '@cardstack/host/config/environment';
 
 import type RealmService from '@cardstack/host/services/realm';
@@ -1229,7 +1230,9 @@ export class SelectedTypePill extends Component<SelectedTypePillSignature> {
   <template>
     <Pill class='selected-type' data-test-selected-type={{@title}}>
       <:iconLeft>
-        <RealmIcon @realmInfo={{this.realm.info @id}} />
+        <RealmURLTooltip @urlInRealm={{@id}}>
+          <RealmIcon @realmInfo={{this.realm.info @id}} />
+        </RealmURLTooltip>
       </:iconLeft>
       <:default>
         <span class='boxel-contents-only' data-test-selected-type-display-name>

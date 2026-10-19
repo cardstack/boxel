@@ -224,6 +224,21 @@ export const ChoreoRoot: TOC<Signature> = <template>
       outline-color: var(--ring);
     }
 
+    /* Text for a screen reader alone: a live region's announcement, a
+       control's full name, "(opens in a new tab)". Any component in the
+       gallery can use the class. */
+    .choreo-site :deep(.sr-only) {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      margin: -1px;
+      padding: 0;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+      border: 0;
+    }
+
     /* glimmer-motion marks the document while a drag is held, so nothing in
        the gallery selects under the pointer mid-drag */
     html[data-gm-dragging] .choreo-site,

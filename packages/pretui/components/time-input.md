@@ -2,6 +2,8 @@
 
 Segmented time entry — the Calendar family's clock. Hours, minutes, optionally seconds, optionally an AM/PM segment, each stepped with the arrow keys.
 
+On a device with a touch screen (`any-pointer: coarse`, which includes a touchscreen laptop) the segments give way to a native `<input type='time'>` over the same value, so a tap opens the platform's own time picker — the iOS wheel, Android's clock dial.
+
 ## The contract
 
 ```
@@ -20,6 +22,8 @@ Segmented time entry — the Calendar family's clock. Hours, minutes, optionally
 
 **An incomplete time reports `''`, not a partial string.** A caller never receives `'14:'`.
 
+**On touch, the platform picker owns the display.** The native control shows 12- or 24-hour time by the device locale, not `@hourCycle`, and seeds itself rather than from `@now`. What it reports goes through the same path as a keystroke, so `@onValueChange` receives the same wire string either way — and `''` when the platform's Reset clears it. A picker with no seconds column (iOS has none) changes only the hour and minute; with `@withSeconds`, the seconds the field already holds are kept.
+
 ## Prior art
 
 **`wa-time-input`.**
@@ -34,12 +38,14 @@ Where it is thinner: no timezone handling of any kind — this is a wall-clock t
 - **Each segment is stepped by the arrow keys**, which is the platform behaviour a reader expects from a time field and the reason a segmented control beats a free-text one here.
 - **The AM/PM segment only exists in 12-hour mode**, so a 24-hour field has no dead segment to travel through.
 - **Seeding is deterministic without `@now`.** A screen-reader user pressing Up on an empty hour segment gets 00, every time, rather than whatever the clock happened to say.
+- **Touch gets a control it can operate.** The segments answer only the keyboard; on a coarse pointer the native time input takes their place, which VoiceOver and TalkBack already know how to drive. Only one of the two is ever displayed, so neither assistive tech nor the tab order meets the field twice. The native input takes the group's name, including an `aria-label` or `aria-labelledby` set on the field itself, so two fields labelled "Start" and "End" don't both announce as "Time". It reads those attributes when it renders, so change `@label` rather than the attribute if the name changes later. The input sits inside the named group, so a screen reader can hear that name twice: once for the group, once for the input.
+- **The touch control meets the 44px target floor** (2.75rem), and its type is at least 16px so iOS Safari doesn't zoom the page when it takes focus.
 - **Incomplete state is reported as empty rather than as a partial value**, which means a form's validation never sees a half-typed string it has to interpret.
 
 ## Theming
 
 The segment sizing and gaps come from the shared `--pretui-otp-size` and `--pretui-otp-gap` tokens this module defines, over `--pretui-shadow-control` and `--pretui-shadow-inset` for the segment surfaces.
 
-Sharing those tokens with **OtpInput** is deliberate: both are segmented character entry, and a season that tightens one should tighten the other — a time field and a code field that disagree on slot rhythm look like two different products on the same form.
+Sharing those tokens with **OtpInput** is deliberate: both are segmented character entry, and a theme that tightens one should tighten the other — a time field and a code field that disagree on slot rhythm look like two different products on the same form.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

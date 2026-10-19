@@ -53,7 +53,7 @@ Where it is thinner: one authored arrangement re-flowed by column count rather t
 
 ## Theming
 
-`@columns`, `@cellHeight` and `@gap` are caller values rather than tokens, because a dashboard's grid is a property of that dashboard rather than of the season.
+`@columns`, `@cellHeight` and `@gap` are caller values rather than tokens, because a dashboard's grid is a property of that dashboard rather than of the theme.
 
 The tiles take whatever surface they are given, which is what lets a dashboard be built from ordinary cards.
 

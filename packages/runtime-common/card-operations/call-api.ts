@@ -239,6 +239,7 @@ export function lowerCallApi(
   // The URL, and the `{name}` segments in it.
   let url = clauses.url;
   let segmentNames = new Set<string>();
+  let lowered: LoweredUrl | undefined;
   if (typeof url !== 'string' || url.length === 0) {
     fail(
       'invalid-request',
@@ -254,7 +255,8 @@ export function lowerCallApi(
       );
     }
     readSlots(url, 'url', undefined);
-    segmentNames = lowerUrlTemplate(url, fail);
+    lowered = lowerUrlTemplate(url, fail);
+    segmentNames = lowered.names;
   }
 
   // `path`: one encoded segment per `{name}`.
@@ -379,12 +381,13 @@ export function lowerCallApi(
     }
   }
 
-  if (!ok || typeof url !== 'string') {
+  if (!ok || !lowered?.url || !lowered.destination) {
     return undefined;
   }
   return {
     method,
-    url,
+    url: lowered.url,
+    destination: lowered.destination,
     ...(path ? { path } : {}),
     ...(headers ? { headers } : {}),
     ...(query ? { query } : {}),
@@ -393,8 +396,23 @@ export function lowerCallApi(
   };
 }
 
+interface LoweredUrl {
+  // The `{name}` segments the URL declares.
+  names: Set<string>;
+  // The URL as the parser serializes it, each `{name}` segment kept as
+  // written. Absent when the URL is refused.
+  url?: string;
+  // Where the request goes: the origin and the path up to and including the
+  // last `/` before the first `{name}` segment, or the path's last `/` when it
+  // has none. Absent when the URL is refused.
+  destination?: string;
+}
+
 // Reads the `{name}` segments out of a URL, refusing every other way of
-// putting a value in one. Returns the names.
+// putting a value in one, and lowers the URL to the parser's serialization of
+// it and to its destination. Two spellings of one place —
+// `https://API.example.com:443/v1/../x/` and `https://api.example.com/x/` —
+// lower to the same URL and the same destination.
 function lowerUrlTemplate(
   url: string,
   fail: (
@@ -402,55 +420,132 @@ function lowerUrlTemplate(
     path: string,
     message: string,
   ) => void,
-): Set<string> {
+): LoweredUrl {
   let names = new Set<string>();
+  let ok = true;
+  let refuse = (code: OperationLoweringIssueCode, message: string) => {
+    ok = false;
+    fail(code, 'url', message);
+  };
   // Parsed with each segment stood in for by a plain one, so the URL's own
-  // structure is judged as the request will have it.
+  // structure is judged as the request will have it. Each stand-in carries a
+  // random part, so a URL's own text doesn't hold it (and one that does is
+  // refused below), and the trailing `-` keeps one stand-in from being the
+  // start of another's text.
   let parameters = [...url.matchAll(PATH_PARAMETER)];
+  let nonce = Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) =>
+    b.toString(16).padStart(2, '0'),
+  ).join('');
+  let standInFor = (index: number) => `boxel-path-parameter-${nonce}-${index}-`;
   let standIn = url;
   for (let [index, match] of parameters.entries()) {
-    standIn = standIn.replace(match[0], `boxel-path-parameter-${index}`);
+    standIn = standIn.replace(match[0], standInFor(index));
   }
   let parsed: URL;
   try {
     parsed = new URL(standIn);
   } catch {
-    fail('invalid-request', 'url', `\`url\` must be an absolute URL`);
-    return names;
+    refuse('invalid-request', `\`url\` must be an absolute URL`);
+    return { names };
   }
   if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
-    fail('invalid-request', 'url', `\`url\` must be an http or https URL`);
+    refuse('invalid-request', `\`url\` must be an http or https URL`);
   }
   if (parsed.username || parsed.password) {
-    fail(
+    refuse(
       'invalid-request',
-      'url',
       `\`url\` carries a user name or password, which are recorded wherever the URL is — send a credential as a slot in a header instead`,
     );
   }
+  // A `*` survives in a host name: Node's parser keeps it (and decodes `%2A`
+  // to it), a browser's keeps it percent-encoded, so both spellings are read.
+  if (/\*|%2a/i.test(parsed.hostname)) {
+    refuse(
+      'invalid-request',
+      `\`url\` names its host with a wildcard — a request goes to one host, written out in full`,
+    );
+  }
+  // A trailing dot names the same host as none, so one place would have two
+  // destinations.
+  if (parsed.hostname.endsWith('.')) {
+    refuse(
+      'invalid-request',
+      `\`url\` names its host with a trailing dot — write the host without it`,
+    );
+  }
   let segments = parsed.pathname.split('/');
+  let firstParameterSegment: number | undefined;
   for (let [index, match] of parameters.entries()) {
-    let standInText = `boxel-path-parameter-${index}`;
+    let standInText = standInFor(index);
     let name = match[1];
     if (!PARAMETER_NAME.test(name)) {
-      fail(
+      refuse(
         'unencoded-path-parameter',
-        'url',
         `\`${match[0]}\` in \`url\` is not a path segment the request can fill — write \`{name}\` and give its value in \`path\``,
       );
       continue;
     }
-    if (!segments.includes(standInText)) {
-      fail(
+    let segment = segments.indexOf(standInText);
+    // Each stand-in is put back where it stands, so it has to stand in exactly
+    // one place in what the parser made of the URL.
+    if (segment === -1 || parsed.href.split(standInText).length !== 2) {
+      refuse(
         'unencoded-path-parameter',
-        'url',
         `\`${match[0]}\` in \`url\` is not a whole path segment — a value fills one segment entirely, so it is encoded as one; the host, the query string and part of a segment are written as they are sent`,
       );
       continue;
     }
     names.add(name);
+    firstParameterSegment = Math.min(firstParameterSegment ?? segment, segment);
   }
-  return names;
+  if (!ok) {
+    return { names };
+  }
+
+  let normalized = parsed.href;
+  for (let [index, match] of parameters.entries()) {
+    normalized = normalized.replace(standInFor(index), match[0]);
+  }
+  // The pathname always opens with `/`, so the prefix always ends with one.
+  let prefix =
+    firstParameterSegment === undefined
+      ? parsed.pathname.slice(0, parsed.pathname.lastIndexOf('/') + 1)
+      : `${segments.slice(0, firstParameterSegment).join('/')}/`;
+  // Set on a copy rather than resolved against the origin: a prefix that
+  // opens with `//` would resolve as another host.
+  let destination = new URL(parsed.href);
+  destination.pathname = prefix;
+  destination.search = '';
+  destination.hash = '';
+  return { names, url: normalized, destination: destination.href };
+}
+
+// Whether a request to `url` goes where `destination` says. Both are compared
+// as the URL parser serializes them, and a destination's path ends with `/`, so
+// a match always ends at a `/`: `https://api.example.com/` does not cover
+// `https://api.example.com.evil.net/`, and `https://api.example.com/v1/` does
+// not cover `https://api.example.com/v1beta`. This is the one rule for that
+// question: the send-time check asks it of every request, and an approval of a
+// key for a destination is judged by it too.
+export function destinationCovers(destination: string, url: string): boolean {
+  let parsedDestination: URL;
+  let parsedURL: URL;
+  try {
+    parsedDestination = new URL(destination);
+    parsedURL = new URL(url);
+  } catch {
+    return false;
+  }
+  if (
+    parsedDestination.username ||
+    parsedDestination.password ||
+    parsedDestination.search ||
+    parsedDestination.hash ||
+    !parsedDestination.pathname.endsWith('/')
+  ) {
+    return false;
+  }
+  return parsedURL.href.startsWith(parsedDestination.href);
 }
 
 function lowerGraphql(
@@ -999,6 +1094,21 @@ export async function callApiOperation(
       return refuse(error.error);
     }
     throw error;
+  }
+  // Every value is encoded into a segment or the query string of the lowered
+  // URL, so the built request stays under its destination; a request that
+  // didn't would go somewhere nobody declared, and is not sent.
+  if (!destinationCovers(declared.destination, built.url)) {
+    return refuse(
+      {
+        status: 502,
+        code: 'guard-refused',
+        title: 'Destination refused',
+        detail: `operation "${request.name}" built a request outside its declared destination ${declared.destination}`,
+        meta: { reason: 'destination' },
+      },
+      built.url,
+    );
   }
   let response: CallApiResponse;
   try {

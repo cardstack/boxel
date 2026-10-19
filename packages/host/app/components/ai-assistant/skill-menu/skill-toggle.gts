@@ -19,6 +19,7 @@ import { MenuItem } from '@cardstack/boxel-ui/helpers';
 
 import { type getCard, GetCardContextName } from '@cardstack/runtime-common';
 
+import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
 import consumeContext from '@cardstack/host/helpers/consume-context';
 import { isMarkdownSkillId } from '@cardstack/host/lib/skill-tools';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -170,7 +171,9 @@ export default class SkillToggle extends Component<SkillToggleSignature> {
         <LoadingIndicator />
       {{else}}
         <div class='toggle-and-realm-icon'>
-          <RealmIcon @realmInfo={{this.realm.info @urlForRealmLookup}} />
+          <RealmURLTooltip @urlInRealm={{@urlForRealmLookup}}>
+            <RealmIcon @realmInfo={{this.realm.info @urlForRealmLookup}} />
+          </RealmURLTooltip>
           <Pill
             class='skill-toggle'
             data-test-attached-card={{@cardId}}

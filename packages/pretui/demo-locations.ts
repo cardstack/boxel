@@ -10,7 +10,8 @@ import type { ExampleSpec } from './examples-kit';
 
 export interface DemoSubject {
   name: string;
-  stage?: string;
+  implementationStatus?: string;
+  ownership?: string;
   tier?: string;
 }
 
@@ -20,18 +21,19 @@ function kebabName(name: string): string {
 
 /**
  * The module holding `subject`'s usage page, relative to the realm root. Every
- * entry is looked up by its name, whatever its stage or tier: a planned,
- * host or Runtime entry that has a page shows it.
+ * entry is looked up by its name, whatever its status, ownership or tier: a
+ * planned, host or Runtime entry that has a page shows it.
  */
 export function demoModuleFor(subject: DemoSubject): string {
   return `./components/${kebabName(subject.name)}.usage`;
 }
 
-/** Planned, host and Runtime entries often have no page; that is not worth a warning. */
+/** Unbuilt, host and Runtime entries often have no page; that is not worth a warning. */
 function pageExpected(subject: DemoSubject): boolean {
   return !(
-    subject.stage === 'planned' ||
-    subject.stage === 'host' ||
+    subject.implementationStatus === 'planned' ||
+    subject.implementationStatus === 'designed' ||
+    subject.ownership === 'host' ||
     subject.tier === 'Runtime'
   );
 }

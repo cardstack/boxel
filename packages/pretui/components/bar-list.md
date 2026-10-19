@@ -44,6 +44,6 @@ Where it is thinner: no drill-down or row selection, no negative values, no stac
 
 `--pretui-barlist-fill` and `--pretui-barlist-hue` (the bars), `--pretui-barlist-row-height` and `--pretui-barlist-gap` (density), plus `--pretui-chart-key` shared with **Chart**'s legend.
 
-Sharing the chart key token matters when a BarList sits beside a Chart showing the same series: the two should agree on what a given series looks like, and pulling from one token is how that stays true through a season change.
+Sharing the chart key token matters when a BarList sits beside a Chart showing the same series: the two should agree on what a given series looks like, and pulling from one token is how that stays true through a theme change.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

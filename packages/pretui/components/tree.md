@@ -1,6 +1,6 @@
 ## What it is
 
-A hierarchical list you expand, collapse and navigate — a file explorer, a taxonomy, a nested outline. Reach for it when the nesting is the point and a node's position in the hierarchy carries meaning. If the levels are just visual grouping, **Accordion** or **FormSection** is lighter. If the hierarchy is a path you are *in* rather than one you are browsing, **Breadcrumb**. If the data is tabular with a nesting column, that is a treegrid and this is not it.
+A hierarchical list you expand, collapse and navigate — a file explorer, a taxonomy, a nested outline. Reach for it when the nesting is the point and a node's position in the hierarchy carries meaning. If the levels are just visual grouping, **Accordion** or **FormSection** is lighter. If the hierarchy is a path you are _in_ rather than one you are browsing, **Breadcrumb**. If the data is tabular with a nesting column, that is a treegrid and this is not it.
 
 ## The contract
 
@@ -45,7 +45,7 @@ Remaining gaps, small but real:
 
 - **`aria-expanded` must be absent on leaves, not `false`** — a leaf with `aria-expanded="false"` is announced as a collapsed parent. The component sets it only on rows with children, so a leaf carries no `aria-expanded` at all.
 - **`@label` defaults to the literal `'Tree'`.** Two trees on a page are both announced "Tree". The source calls this "required in spirit, defaulted so nothing is required in practice" — a reasonable Law 7 stance, and one that still produces bad output when ignored. Always pass it.
-- **Single-character type-ahead** (above) diverges from APG's "next item whose label *begins with* the typed string". For trees with many similarly-prefixed nodes, cycling is materially worse than buffering.
+- **Single-character type-ahead** (above) diverges from APG's "next item whose label _begins with_ the typed string". For trees with many similarly-prefixed nodes, cycling is materially worse than buffering.
 - **`*` to expand all siblings at the current level** is an optional APG key and is not implemented.
 - **No `aria-activedescendant` alternative** — roving tabindex only, which APG blesses equally.
 - **Selection changes are not announced** beyond `aria-selected` being re-read on focus.
@@ -57,12 +57,12 @@ Remaining gaps, small but real:
 
 `aria-disabled` is styled directly (`.pretui-tree-item[aria-disabled='true']`), which is a nice detail — the visual disabled state and the announced one cannot drift, because they are the same attribute.
 
-A season must keep `--pretui-selected` distinct from `--hover`: a tree shows both simultaneously (the selected row, and whichever row the pointer is over), and if they collapse the user loses track of the selection while browsing.
+A theme must keep `--pretui-selected` distinct from `--hover`: a tree shows both simultaneously (the selected row, and whichever row the pointer is over), and if they collapse the user loses track of the selection while browsing.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 
 ## React ecosystem
 
-Browse-only tree. A tree *as a select value* is **TreeSelect**. A
-single *path* is **Cascader**. Accept `expanded` / `onExpandedChange`
+Browse-only tree. A tree _as a select value_ is **TreeSelect**. A
+single _path_ is **Cascader**. Accept `expanded` / `onExpandedChange`
 and `selected` / `onSelectionChange` names from Aria / Ant / Mantine.

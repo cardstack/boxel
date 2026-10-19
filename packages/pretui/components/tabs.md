@@ -42,7 +42,7 @@ Practically: it is clickable and Tab-reachable, and it is not a conformant tab l
 
 `--muted-foreground` (rest ink), `--foreground` (hover and active ink), `--border` (the 1px rail), `--text-ui-md`, `--pretui-ease-snap`, `--space-4` (panel top padding), plus whatever **SlidingHighlight** consumes for the 2px accent bar. Tab height (34px) and the 22px gap are fixed.
 
-A season must keep `--muted-foreground` and `--foreground` separable, since inactive-versus-active is carried entirely by ink weight plus the underline — there is no background change to fall back on.
+A theme must keep `--muted-foreground` and `--foreground` separable, since inactive-versus-active is carried entirely by ink weight plus the underline — there is no background change to fall back on.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

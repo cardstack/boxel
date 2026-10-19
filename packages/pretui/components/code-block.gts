@@ -13,10 +13,10 @@
 //
 //     color: color-mix(in oklch, var(--foreground) 18%, var(--hue));
 //
-// so the ink is derived from the same hue the season supplies, contrast holds
-// in light and dark without a single dark branch, and a card recompiled into a
-// season this component has never seen re-tints its code along with everything
-// else. There are six hues, all `--pretui-code-*` knobs.
+// so the ink is derived from the same hue the theme supplies, contrast holds
+// in light and dark without a single dark branch, and a theme this component
+// has never seen re-tints its code along with everything else. There are six
+// hues, all `--pretui-code-*` knobs.
 //
 // ── Better than the inspiration ─────────────────────────────────────────
 //
@@ -791,7 +791,7 @@ export class CodeBlock extends Component<CodeBlockSignature> {
           overflow-wrap: anywhere;
         }
         /* Law 2 applied to syntax: one hue in, ink derived from it, so contrast
-           holds in light and dark with zero dark branches and a season this
+           holds in light and dark with zero dark branches and a theme this
            component has never seen re-tints the code with everything else. */
         .pretui-code-t {
           color: inherit;

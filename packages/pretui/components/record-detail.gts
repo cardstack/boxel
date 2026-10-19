@@ -40,7 +40,7 @@ import type { ContextualComponent, RecordBatchApi, RecordEditContext, RecordLayo
 //     mousedown is prevented, so it cannot be commit-on-blur'd out from
 //     under the click.
 //   • `slds-is-edited` is a hardcoded `$color-background-highlight` yellow
-//     with no token chain and no story for a re-themed season; its undo
+//     with no token chain and no story for theming; its undo
 //     button is positioned with a negative magic number
 //     (`top: -$square-icon-utility-medium`). Ours tints with `color-mix()`
 //     off the theme's own `--warning` and puts undo in flow.
@@ -461,7 +461,7 @@ class RecordField extends Component<RecordFieldSignature> {
         }
         /* SLDS: a flat `background: $color-background-highlight` yellow with
            no token chain. Here the dirty tint is mixed from the theme's own
-           warning hue against the card, so it survives a re-themed season. */
+           warning hue against the card, so it survives a theme change. */
         /* Two field states, two DIFFERENT channels — not one channel in two
            hues. Before this, edited and invalid were both a 2px inset rule
            plus a tint and were told apart by hue alone, so in greyscale (and
@@ -476,7 +476,7 @@ class RecordField extends Component<RecordFieldSignature> {
              are true.
 
            The wash keeps the warning hue mixed against the card so it still
-           re-tints with a season; the hue is confirmation, not the signal. */
+           re-tints with the theme; the hue is confirmation, not the signal. */
         .pretui-rd-field[data-state='edited'] {
           background: color-mix(
             in oklch,
@@ -689,7 +689,7 @@ class RecordField extends Component<RecordFieldSignature> {
         }
         /* The hue is anchored in ink, never used raw — mixing toward
            --foreground is what makes one declaration correct in both modes
-           and every season, and it is what keeps a bold 11px mark above AA
+           and every theme, and it is what keeps a bold 11px mark above AA
            when the raw --warning token is about 2:1 on --card. */
         .pretui-rd-msg[data-severity='error'] .pretui-rd-mark {
           color: color-mix(

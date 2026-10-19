@@ -48,6 +48,6 @@ Where it is thinner: no zoom into the timeline, no frame extraction — the fram
 
 `--pretui-strip-w` (tile width, from `@thumbWidth`) and `--pretui-strip-ratio` (tile aspect, from `@ratio`), both written through the kit's CSS guard so a bad ratio drops its declaration rather than landing half-formed. Plus `--pretui-primary-ink` for the playhead and `--pretui-shadow-hairline` for tile edges.
 
-The two geometry tokens are per-instance rather than seasonal because a strip's density is a function of the footage and the space, not of the theme. The playhead colour is the season's primary, which is what makes a strip read as part of the same product as the player above it.
+The two geometry tokens are per-instance rather than theme tokens because a strip's density is a function of the footage and the space, not of the theme. The playhead color is the theme's primary, which is what makes a strip read as part of the same product as the player above it.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

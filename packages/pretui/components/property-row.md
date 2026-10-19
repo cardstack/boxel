@@ -48,7 +48,7 @@ Where it is thinner: no inline validation state, no per-row units switching (tha
 
 ## Theming
 
-`@labelWidth` is a caller value rather than a token, because inspector density is a property of the panel rather than the season; everything else takes the kit's shared control and text tokens.
+`@labelWidth` is a caller value rather than a token, because inspector density is a property of the panel rather than the theme; everything else takes the kit's shared control and text tokens.
 
 The three layouts exist so one component serves a dense left-column inspector, a stacked mobile form and an equal-halves settings row without any of them inventing their own row.
 

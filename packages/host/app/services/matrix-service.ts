@@ -100,6 +100,7 @@ import {
 } from '@cardstack/host/utils/local-storage-keys';
 
 import { isSkillCard } from '../lib/file-def-manager';
+import { pickableModelIds, usedLLMsFromEvents } from '../lib/pickable-models';
 import { getSkillSourceTools, loadSkillSource } from '../lib/skill-tools';
 import { getUniqueValidToolDefinitions } from '../lib/tool-definitions';
 import { skillsIndexId } from '../lib/utils';
@@ -296,6 +297,8 @@ export default class MatrixService extends Service {
   private roomsWaitingForSync: Map<string, Deferred<void>> = new Map();
   @tracked private _systemCard: SystemCard | undefined;
   @tracked private _systemCardLoadFailed = false;
+  // The latest system card load, for checks that must wait for it.
+  #systemCardLoading: Promise<void> | undefined;
   private _userChoiceId: string | undefined;
   private _systemCardInvalidationUnsub: (() => void) | undefined;
   // Sticky "the active SystemCard was deleted in-session" signal. Bridges the
@@ -2448,6 +2451,17 @@ export default class MatrixService extends Service {
     return this.roomDataMap.get(roomId);
   }
 
+  // The model ids the room may switch to: the ones its model picker offers.
+  // `roomId` is undefined for a room that does not exist yet. Waits for a
+  // system card that is still loading, so that its models are not refused in
+  // the meantime. The used models come from the room's events, which exist
+  // whether or not the room is rendered.
+  async pickableModelIds(roomId: string | undefined): Promise<string[]> {
+    await this.#systemCardLoading?.catch(() => undefined);
+    let events = roomId ? (this.getRoomData(roomId)?.events ?? []) : [];
+    return pickableModelIds(this.systemCard, usedLLMsFromEvents(events));
+  }
+
   private setRoomData(roomId: string, roomData: Room) {
     this.roomDataMap.set(roomId, roomData);
     if (!this.roomResourcesCache.has(roomId)) {
@@ -3446,6 +3460,12 @@ export default class MatrixService extends Service {
   }
 
   private async setSystemCard(userChoiceId: string | undefined) {
+    let loading = this.loadSystemCard(userChoiceId);
+    this.#systemCardLoading = loading;
+    await loading;
+  }
+
+  private async loadSystemCard(userChoiceId: string | undefined) {
     this._userChoiceId = userChoiceId;
     let envDefaultId = ENV.defaultSystemCardId;
 

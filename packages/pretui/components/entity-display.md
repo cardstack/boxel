@@ -39,12 +39,12 @@ Gaps, and the first two matter most because of where this component is used:
 - **Title, tag and subtitle are three sibling elements with no grouping.** A screen-reader user hears "Q3 Report Draft 3 days ago" as one run with no indication of which part is a status and which is a timestamp. **Chip**'s own note applies: a chip has no relationship to the property it is the value of.
 - **The title is not a heading.** In a card header (`@center`) that is often what it should be, and there is no `@headingLevel` — the same gap **Panel**, **Toolbar** and **EmptyState** have.
 - **Truncation behaviour is unstated** — check whether a long title ellipsizes without a full-text fallback, which is the **Toolbar** problem again.
-- The subtitle's `--muted-foreground` at small size is the usual **1.4.3** thing to verify per season.
+- The subtitle's `--muted-foreground` at small size is the usual **1.4.3** thing to verify per theme.
 
 ## Theming
 
-`--foreground` (title), `--muted-foreground` (subtitle and meta), plus **Chip**'s full token set for the tag and whatever the visual brings. `data-variant` and `data-center` are reflected on the root, so a season can dress icon rows and thumbnail rows differently without the component exposing more args.
+`--foreground` (title), `--muted-foreground` (subtitle and meta), plus **Chip**'s full token set for the tag and whatever the visual brings. `data-variant` and `data-center` are reflected on the root, so a stylesheet can dress icon rows and thumbnail rows differently without the component exposing more args.
 
-The visual slot's icon and thumbnail sizes are fixed per variant. Because the tag is a real **Chip**, a season that retunes `--pretui-chip-mix` moves entity tags along with every other chip — which is the intent, and worth knowing if you were about to tune chips for a status list and forgot they also appear here.
+The visual slot's icon and thumbnail sizes are fixed per variant. Because the tag is a real **Chip**, a theme that retunes `--pretui-chip-mix` moves entity tags along with every other chip — which is the intent, and worth knowing if you were about to tune chips for a status list and forgot they also appear here.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
