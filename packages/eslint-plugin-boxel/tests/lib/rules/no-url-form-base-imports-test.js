@@ -35,6 +35,17 @@ ruleTester.run('no-url-form-base-imports', rule, {
     "fetch('https://cardstack.com/base/file-api');",
     // Unrelated URL-form imports
     "import x from 'https://example.com/module';",
+    // A template literal whose leading spelling is not the alias
+    'let mod = await import(`@cardstack/base/${name}`);',
+    'let mod = await loader.import(`${realm}https://cardstack.com/base/x`);',
+    // A template literal outside an import position
+    'let url = `https://cardstack.com/base/${name}`;',
+    // `importResource` with a canonical specifier, or one it cannot read
+    "let mod = importResource(this, () => '@cardstack/base/card-api');",
+    'let mod = importResource(this, () => this.args.url);',
+    "let mod = importResource(this, () => { return 'https://cardstack.com/base/card-api'; });",
+    // Any other function's thunk is not a specifier
+    "let mod = somethingElse(this, () => 'https://cardstack.com/base/card-api');",
   ],
 
   invalid: [
@@ -67,6 +78,40 @@ ruleTester.run('no-url-form-base-imports', rule, {
       code: "let api = await this.loaderService.loader.import('https://cardstack.com/base/command');",
       output:
         "let api = await this.loaderService.loader.import('@cardstack/base/command');",
+      errors: [{ messageId: 'no-url-form-base-imports' }],
+    },
+    // Template literals
+    {
+      code: 'let mod = await import(`https://cardstack.com/base/${name}`);',
+      output: 'let mod = await import(`@cardstack/base/${name}`);',
+      errors: [{ messageId: 'no-url-form-base-imports' }],
+    },
+    {
+      code: 'let api = await loader.import(`https://cardstack.com/base/${name}.gts`);',
+      output: 'let api = await loader.import(`@cardstack/base/${name}.gts`);',
+      errors: [{ messageId: 'no-url-form-base-imports' }],
+    },
+    {
+      code: 'let api = await loader.import(`https://cardstack.com/base/card-api`);',
+      output: 'let api = await loader.import(`@cardstack/base/card-api`);',
+      errors: [{ messageId: 'no-url-form-base-imports' }],
+    },
+    {
+      code: "let api = await loader.import(`${'https://cardstack.com/base/'}card-api`);",
+      output: "let api = await loader.import(`${'@cardstack/base/'}card-api`);",
+      errors: [{ messageId: 'no-url-form-base-imports' }],
+    },
+    // `importResource` thunks
+    {
+      code: "let mod = importResource(this, () => 'https://cardstack.com/base/card-api');",
+      output:
+        "let mod = importResource(this, () => '@cardstack/base/card-api');",
+      errors: [{ messageId: 'no-url-form-base-imports' }],
+    },
+    {
+      code: 'let mod = importResource(this, () => `https://cardstack.com/base/${name}`);',
+      output:
+        'let mod = importResource(this, () => `@cardstack/base/${name}`);',
       errors: [{ messageId: 'no-url-form-base-imports' }],
     },
   ],
