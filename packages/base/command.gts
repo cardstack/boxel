@@ -75,7 +75,10 @@ export class SaveCardInput extends CardDef {
 // with a generated name. The descriptions below spell that out because models
 // otherwise pass the path they want the new file to have as `localDir`.
 export class CopyCardToRealmInput extends CardDef {
-  @field sourceCard = linksTo(CardDef);
+  @field sourceCard = linksTo(CardDef, {
+    description:
+      'The card to copy, as relationships.sourceCard.links.self: its id as a full URL or a realm identifier such as @cardstack/catalog/…; either works.',
+  });
   @field targetRealm = contains(StringField, {
     description:
       'URL of the realm to copy the card into, ending in a slash, e.g. "https://example.com/my-realm/". The copy is written to <targetRealm><localDir>/<CardTypeName>/<generated-id>.json — see localDir.',
@@ -87,7 +90,10 @@ export class CopyCardToRealmInput extends CardDef {
 }
 
 export class CopyCardToStackInput extends CardDef {
-  @field sourceCard = linksTo(CardDef);
+  @field sourceCard = linksTo(CardDef, {
+    description:
+      'The card to copy, as relationships.sourceCard.links.self: its id as a full URL or a realm identifier such as @cardstack/catalog/…; either works.',
+  });
   @field targetStackIndex = contains(NumberField);
   @field localDir = contains(StringField, {
     description:

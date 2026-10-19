@@ -86,6 +86,7 @@ import type { Skill } from '@cardstack/base/skill';
 
 let matrixRoomId = '';
 let maybeBoomShouldBoom = true;
+let linkEchoMessages: string[] = [];
 let savedMeetingCardId: string | undefined;
 
 module('Acceptance | Tools tests', function (hooks) {
@@ -119,6 +120,7 @@ module('Acceptance | Tools tests', function (hooks) {
 
   hooks.beforeEach(async function () {
     savedMeetingCardId = undefined;
+    linkEchoMessages = [];
     matrixRoomId = await createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
@@ -435,9 +437,9 @@ module('Acceptance | Tools tests', function (hooks) {
         let friendNames = (input.friends ?? [])
           .map((friend) => friend.name)
           .join(', ');
-        return new GreetingCard({
-          message: `pet=${petName}; friends=${friendNames}`,
-        });
+        let message = `pet=${petName}; friends=${friendNames}`;
+        linkEchoMessages.push(message);
+        return new GreetingCard({ message });
       }
     }
 
@@ -527,6 +529,29 @@ module('Acceptance | Tools tests', function (hooks) {
                 },
               ],
               cardTitle: 'Useful Commands',
+              cardDescription: null,
+              cardThumbnailURL: null,
+            },
+            meta: {
+              adoptsFrom: skillCardRef,
+            },
+          },
+        },
+        'Skill/link-echo.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              instructions: 'Use link-echo to name the pets you are given.',
+              commands: [
+                {
+                  codeRef: {
+                    name: 'default',
+                    module: '../link-echo-command',
+                  },
+                  requiresApproval: true,
+                },
+              ],
+              cardTitle: 'Link echo',
               cardDescription: null,
               cardThumbnailURL: null,
             },
@@ -2269,6 +2294,90 @@ module('Acceptance | Tools tests', function (hooks) {
     );
   });
 
+  // A tool call names its linked inputs as bare links. The pets it links to are
+  // not opened anywhere in the session, so the store does not hold them when
+  // the call's input is built.
+  async function requestLinkEcho(
+    relationships: Record<string, unknown>,
+  ): Promise<string> {
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}Skill/link-echo`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      aiAssistantOpen: true,
+    });
+    await waitFor('[data-room-settled]');
+    await addSkillToAiAssistant(`${testRealmURL}Skill/link-echo`);
+    let roomId = getRoomIds().pop()!;
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: '',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        {
+          id: 'link-echo-request',
+          name: buildCommandFunctionName(
+            { module: testRRI('link-echo-command'), name: 'default' },
+            undefined,
+            getService('network').virtualNetwork,
+          ),
+          arguments: JSON.stringify({
+            description: 'Naming the pets',
+            attributes: {},
+            relationships,
+          }),
+        },
+      ],
+    });
+    await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await settled();
+    return roomId;
+  }
+
+  function linkEchoResult(roomId: string) {
+    return getRoomEvents(roomId).find(
+      (event) =>
+        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+        event.content.commandRequestId === 'link-echo-request',
+    );
+  }
+
+  test('a tool runs with the linked inputs it was given once they load', async function (assert) {
+    let roomId = await requestLinkEcho({
+      pet: { links: { self: `${testRealmURL}Pet/ringo` } },
+      friends: [
+        { links: { self: `${testRealmURL}Pet/mango` } },
+        { links: { self: `${testRealmURL}Pet/vangogh` } },
+      ],
+    });
+    let store = getService('store');
+    for (let name of ['ringo', 'mango', 'vangogh']) {
+      assert.strictEqual(
+        store.peek(`${testRealmURL}Pet/${name}`),
+        undefined,
+        `Pet/${name} is not in the store before the tool runs`,
+      );
+    }
+
+    await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await waitUntil(() => linkEchoResult(roomId), {
+      timeout: 5000,
+      timeoutMessage: 'timed out waiting for the link-echo result',
+    });
+
+    assert.deepEqual(linkEchoMessages, ['pet=Ringo; friends=Mango, Van Gogh']);
+    assert.strictEqual(
+      linkEchoResult(roomId)!.content['m.relates_to']?.key,
+      'applied',
+    );
+  });
+
   module('suspending global error hook', (hooks) => {
     suspendGlobalErrorHook(hooks);
 
@@ -2348,6 +2457,28 @@ module('Acceptance | Tools tests', function (hooks) {
         'applied command result event was dispatched after retry',
       );
       assert.dom('[data-test-apply-state="applied"]').exists();
+    });
+    test('a tool whose linked input cannot be loaded fails naming the field and the card', async function (assert) {
+      let missing = `${testRealmURL}Pet/does-not-exist`;
+      let roomId = await requestLinkEcho({
+        pet: { links: { self: missing } },
+      });
+
+      await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+      await waitUntil(() => linkEchoResult(roomId), {
+        timeout: 5000,
+        timeoutMessage: 'timed out waiting for the link-echo result',
+      });
+
+      let result = linkEchoResult(roomId)!;
+      assert.strictEqual(result.content['m.relates_to']?.key, 'failed');
+      assert.true(
+        result.content.failureReason.startsWith(
+          `Could not load pet "${missing}" (not-found`,
+        ),
+        `failure names the field and the card, got: ${result.content.failureReason}`,
+      );
+      assert.deepEqual(linkEchoMessages, [], 'the tool did not run');
     });
   });
 });

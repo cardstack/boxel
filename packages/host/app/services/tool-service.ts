@@ -54,6 +54,7 @@ import type SessionService from './session';
 import type StoreService from './store';
 import type MessageTool from '../lib/matrix-classes/message-tool';
 import type { RoomResource } from '../resources/room';
+import type * as CardAPI from '@cardstack/base/card-api';
 import type { CardDef } from '@cardstack/base/card-api';
 import type { FileDef } from '@cardstack/base/file-api';
 import type { IEvent } from 'matrix-js-sdk';
@@ -1384,6 +1385,7 @@ export default class ToolService extends Service {
           },
         };
         typedInput = await this.store.addWithoutPersisting(inputDoc);
+        await this.settleLinkedInputs(typedInput as CardDef, relationships);
       } else {
         // identifyCard can fail in some circumstances where the input type is not exported
         // in that case, we'll fall back to this less reliable method of constructing the input type
@@ -1393,6 +1395,76 @@ export default class ToolService extends Service {
       typedInput = undefined;
     }
     return typedInput;
+  }
+
+  // A tool call's linked inputs arrive as bare links, and a link to a card the
+  // store doesn't hold yet reads as `undefined` while it loads. Reading each
+  // linked field starts its load; waiting for the store to settle lets the tool
+  // see the loaded cards. A link that still isn't present afterwards will never
+  // load, so the call fails with an error naming the field and the reference
+  // rather than handing the tool `undefined`. A link the call didn't set is
+  // left to the tool, which decides whether it is required.
+  //
+  // `loaded()` waits on every load the store has in flight, not only this
+  // input's; the tool timeout bounds the wait.
+  private async settleLinkedInputs(
+    input: CardDef,
+    relationships: Record<string, any> | undefined,
+  ) {
+    if (!relationships || Object.keys(relationships).length === 0) {
+      return;
+    }
+    let api = await this.loaderService.loader.import<typeof CardAPI>(
+      '@cardstack/base/card-api',
+    );
+    let fields: Record<string, CardAPI.Field | undefined> = api.getFields(
+      input,
+      { includeComputeds: false },
+    );
+    // Relationship keys name the field, or a slot or nested path inside it
+    // (`skills.0`, `cardInfo.theme`); only top-level link fields are settled.
+    let linkFieldNames = new Set(
+      Object.keys(relationships)
+        .map((key) => key.split('.')[0])
+        .filter((name) => {
+          let field = fields[name];
+          return (
+            (field?.fieldType === 'linksTo' ||
+              field?.fieldType === 'linksToMany') &&
+            !field.queryDefinition
+          );
+        }),
+    );
+    if (linkFieldNames.size === 0) {
+      return;
+    }
+    for (let name of linkFieldNames) {
+      void (input as unknown as Record<string, unknown>)[name];
+    }
+    await this.store.loaded();
+
+    let store = api.getStore(input);
+    let failures: string[] = [];
+    for (let name of linkFieldNames) {
+      let { membership } = api.getRelationshipMembershipState(input, name);
+      for (let slot of membership ?? []) {
+        if (slot.kind === 'present' || slot.kind === 'not-set') {
+          continue;
+        }
+        let reference =
+          store.resolveURL(slot.reference, input.id)?.href ?? slot.reference;
+        let detail =
+          slot.kind === 'not-loaded'
+            ? slot.kind
+            : `${slot.kind}: ${[slot.errorDoc?.status, slot.errorDoc?.message]
+                .filter(Boolean)
+                .join(' ')}`;
+        failures.push(`Could not load ${name} "${reference}" (${detail})`);
+      }
+    }
+    if (failures.length > 0) {
+      throw new Error(failures.join('\n'));
+    }
   }
 
   isPerformingAcceptAllForRoom(roomId: string): boolean {

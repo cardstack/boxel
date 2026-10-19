@@ -215,6 +215,17 @@ module('Integration | tools | copy-card', function (hooks) {
       }
     });
 
+    test('refuses to run without a sourceCard, saying how to pass one', async function (assert) {
+      let copyCardCommand = new CopyCardToRealmTool(
+        getService('tool-service').toolContext,
+      );
+
+      await assert.rejects(
+        copyCardCommand.execute({ targetRealm: testRealm2URL } as any),
+        /No sourceCard to copy: pass the card as relationships\.sourceCard\.links\.self/,
+      );
+    });
+
     test('the tool schema describes how targetRealm and localDir make up the path of the copy', async function (assert) {
       let loader = getService('loader-service').loader;
       let cardAPI = await loader.import<typeof CardAPI>(
