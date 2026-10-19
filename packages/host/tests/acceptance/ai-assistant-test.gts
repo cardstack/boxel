@@ -33,6 +33,7 @@ import {
   baseRRI,
   skillCardRef,
   rri,
+  SupportedMimeType,
 } from '@cardstack/runtime-common';
 
 import {
@@ -1192,6 +1193,42 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-autoattached-card]').exists();
     await click(`[data-test-autoattached-card] [data-test-remove-card-btn]`);
     assert.dom('[data-test-autoattached-card]').doesNotExist();
+  });
+
+  test('auto-attaches the module of a card whose adoptsFrom is prefix-form', async function (assert) {
+    await visitOperatorMode({
+      submode: 'code',
+      codePath: `${testRealmURL}index.json`,
+      stacks: [[]],
+    });
+    await click('[data-test-open-ai-assistant]');
+    await waitFor(`[data-room-settled]`);
+
+    let indexJSON = await (
+      await getService('network').authedFetch(`${testRealmURL}index.json`, {
+        headers: { Accept: SupportedMimeType.CardSource },
+      })
+    ).json();
+    assert.strictEqual(
+      indexJSON.data.meta.adoptsFrom.module,
+      '@cardstack/base/cards-grid',
+      'the fixture adopts from a prefix-form module',
+    );
+
+    let cardsGridModuleURL = getService('network').virtualNetwork.toURL(
+      rri('@cardstack/base/cards-grid.gts'),
+    ).href;
+    assert.dom('[data-test-autoattached-file]').exists({ count: 2 });
+    assert
+      .dom(
+        `[data-test-attached-file="${testRealmURL}index.json"][data-test-autoattached-file]`,
+      )
+      .exists();
+    assert
+      .dom(
+        `[data-test-attached-file="${cardsGridModuleURL}"][data-test-autoattached-file]`,
+      )
+      .exists('the prefix-form module resolves to the base realm');
   });
 
   test('errored card instance is not auto-attached in code mode', async function (assert) {
