@@ -705,10 +705,11 @@ module(`Integration | search resource`, function (hooks) {
   });
 
   test(`a live search of a realm named by a registered prefix re-runs on that realm's events`, async function (assert) {
-    // The realm's events are keyed by its URL, so the search must listen
-    // there while it keeps searching by the caller's spelling. A remapped
-    // live realm canonicalizes its module refs differently, so the query is
-    // left untyped: only the subscription and the re-run are under test.
+    // The realm's events are keyed by its URL while the search subscribes by
+    // the caller's spelling; the message service delivers across the two. A
+    // remapped live realm canonicalizes its module refs differently, so the
+    // query is left untyped: only the subscription and the re-run are under
+    // test.
     let { virtualNetwork } = getService('network');
     virtualNetwork.addRealmMapping('@test/mapped/', testRealmURL);
     let messageService = getService('message-service');
@@ -737,14 +738,9 @@ module(`Integration | search resource`, function (hooks) {
         },
       }));
       await search.loaded;
-      // Other services subscribe to the realm too, so only the forms matter.
       assert.true(
-        subscribedTo.includes(testRealmURL),
-        'the search listens on the URL the realm is known by',
-      );
-      assert.false(
         subscribedTo.includes('@test/mapped/'),
-        'nothing listens on the prefix, which no event carries',
+        'the search subscribes by the spelling the caller used',
       );
       let runsBefore = searchedRealms.length;
       assert.deepEqual(
@@ -1942,6 +1938,20 @@ module(`Integration | search resource`, function (hooks) {
       } finally {
         virtualNetwork.removeRealmMapping('@test/mapped/');
       }
+    });
+
+    test(`base named by its prefix hits the same-realm cache when the consuming realm is its alias`, async function (assert) {
+      // The realm registry keys base by its alias, which is what a render
+      // stamps as the consuming realm; a search names base by its prefix.
+      enterPrerender('job-1', baseRealm.url);
+      releaseFetch.fulfill();
+      await storeService.search(bookQuery, ['@cardstack/base/']);
+      await storeService.search(bookQuery, ['@cardstack/base/']);
+      assert.strictEqual(
+        fetchCalls,
+        1,
+        "the second search is served from the first one's cache entry",
+      );
     });
 
     test(`cache bypasses outside a prerender (live SPA path)`, async function (assert) {

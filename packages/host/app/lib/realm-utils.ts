@@ -83,84 +83,12 @@ export function resolvedRealmURLHref(
 }
 
 /**
- * The URL a realm calls itself, for any spelling of it: the real URL it is
- * served from, mapped back through any registered URL alias, as
- * `VirtualNetwork.realmForReference` does. For most realms that is the URL
- * they are served from; for an aliased realm like base it is the alias
- * (`https://cardstack.com/base/`), which is also the URL its card ids use and
- * the realm server registers it under. An identifier no mapping covers comes
- * back as given.
- *
- * @example
- * realmOwnURLHref(vn, '@cardstack/base/')  // 'https://cardstack.com/base/'
- * realmOwnURLHref(vn, '@unmapped/thing/')  // '@unmapped/thing/'
- */
-export function realmOwnURLHref(
-  virtualNetwork: VirtualNetwork,
-  realmIdentifier: string,
-): string {
-  let real = virtualNetwork.keyForIdentifier(realmIdentifier);
-  try {
-    return virtualNetwork.mapURL(real, 'real-to-virtual')?.href ?? real;
-  } catch {
-    return real;
-  }
-}
-
-/**
- * The URL the realm server knows a realm by, for a realm named by a
- * registered prefix: `realmOwnURLHref`, so the alias for base and the URL the
- * prefix resolves to for every other prefixed realm. The server registers each
- * realm under the `--fromUrl` it was started with, and that is the URL search
- * requests, realm events and session tokens all carry.
- *
- * Anything other than a registered prefix — a URL, an unregistered prefix —
- * comes back untouched: a host URL mapping does not say which of its two sides
- * the server registered (the test realm's mapping runs the other way from
- * base's), so a URL is never rewritten.
- *
- * @example
- * // with '@cardstack/catalog/' mapped to 'https://realms.example.com/catalog/'
- * serverRealmURLHref(vn, '@cardstack/catalog/') // 'https://realms.example.com/catalog/'
- * serverRealmURLHref(vn, '@cardstack/base/')    // 'https://cardstack.com/base/'
- * serverRealmURLHref(vn, 'https://x.test/r/')   // 'https://x.test/r/'
- */
-export function serverRealmURLHref(
-  virtualNetwork: VirtualNetwork,
-  realmIdentifier: string,
-): string {
-  return virtualNetwork.isRegisteredPrefix(realmIdentifier)
-    ? realmOwnURLHref(virtualNetwork, realmIdentifier)
-    : realmIdentifier;
-}
-
-/**
- * A realm list in the form the realm server knows realms by: each entry with
- * its trailing slash, a registered prefix replaced by `serverRealmURLHref`,
- * and duplicates dropped, first spelling first.
- */
-export function serverRealmURLs(
-  virtualNetwork: VirtualNetwork,
-  realms: string[],
-): string[] {
-  return [
-    ...new Set(
-      normalizeRealms(realms).map((realm) =>
-        serverRealmURLHref(virtualNetwork, realm),
-      ),
-    ),
-  ];
-}
-
-/**
  * A realm in the form card ids carry: its registered prefix where it has one
  * (`@cardstack/base/` for the base realm's alias, the URL it is served from
  * and its prefix alike), otherwise the URL as given. For realm-membership
  * comparisons against ids, which deserialization canonicalizes the same way,
  * so the comparison itself is a same-form `RealmPaths` test with no
- * VirtualNetwork. Contrast `serverRealmURLHref`, which names a realm the way
- * the realm server keys it (the alias for base) and is for requests,
- * subscriptions and token lookups.
+ * VirtualNetwork. Realm event subscriptions are keyed the same way.
  *
  * The trailing slash goes on first: the fold is a prefix match against
  * slash-terminated targets, so a slashless realm root would not fold. A realm
@@ -176,12 +104,51 @@ export function canonicalRealmIdentifier(
 }
 
 /**
+ * A realm list in the form card ids carry: each entry folded by
+ * `canonicalRealmIdentifier`, duplicates dropped, first spelling first. For
+ * keys and comparisons that must treat every spelling of a realm as one.
+ */
+export function canonicalRealmIdentifiers(
+  virtualNetwork: VirtualNetwork,
+  realms: string[],
+): RealmIdentifier[] {
+  return [
+    ...new Set(
+      realms.map((realm) => canonicalRealmIdentifier(virtualNetwork, realm)),
+    ),
+  ];
+}
+
+/**
+ * A realm list kept in the caller's spellings, each with its trailing slash,
+ * with later spellings of a realm already listed dropped (two spellings are
+ * one realm when `canonicalRealmIdentifier` folds them together). For a list
+ * that is sent or reported as the caller named it.
+ */
+export function dedupeRealmsByIdentity(
+  virtualNetwork: VirtualNetwork,
+  realms: string[],
+): RealmIdentifier[] {
+  let seen = new Set<string>();
+  let deduped: RealmIdentifier[] = [];
+  for (let realm of normalizeRealms(realms)) {
+    let identity = canonicalRealmIdentifier(virtualNetwork, realm);
+    if (!seen.has(identity)) {
+      seen.add(identity);
+      deduped.push(ri(realm));
+    }
+  }
+  return deduped;
+}
+
+/**
  * A realm's URL as shown beside its name, so realms that share a name can be
  * told apart: host and path, without the scheme or trailing slash.
  *
- * Every spelling (registered prefix, virtual alias, real URL) names the realm
- * by `realmOwnURLHref`: for an aliased realm like base, that is the URL its
- * card ids use rather than the host serving it.
+ * Every spelling (registered prefix, virtual alias, real URL) is folded onto
+ * the real served URL, then back through any registered URL alias, as
+ * `VirtualNetwork.realmForReference` does. For an aliased realm like base,
+ * that is the URL its card ids use rather than the host serving it.
  *
  * @example
  * realmURLDisplayText(vn, '@cardstack/base/')                   // 'cardstack.com/base'
@@ -192,12 +159,12 @@ export function realmURLDisplayText(
   virtualNetwork: VirtualNetwork,
   realmIdentifier: string,
 ): string {
-  let own = realmOwnURLHref(virtualNetwork, realmIdentifier);
+  let real = virtualNetwork.keyForIdentifier(realmIdentifier);
   let url: URL;
   try {
-    url = new URL(own);
+    url = virtualNetwork.mapURL(real, 'real-to-virtual') ?? new URL(real);
   } catch {
-    return own;
+    return real;
   }
   return url.host + url.pathname.replace(/\/$/, '');
 }

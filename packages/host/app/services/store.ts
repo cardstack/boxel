@@ -115,7 +115,11 @@ import {
   jobIdHeader,
   loggingCorrelationIdHeader,
 } from '../lib/prerender-fetch-headers';
-import { serverRealmURLs } from '../lib/realm-utils';
+import {
+  canonicalRealmIdentifier,
+  canonicalRealmIdentifiers,
+  dedupeRealmsByIdentity,
+} from '../lib/realm-utils';
 import { searchCacheKey } from '../lib/search-cache-key';
 import { searchInFlightKey } from '../lib/search-in-flight-key';
 import { errorJsonApiToErrorEntry } from '../lib/window-error-handler';
@@ -1536,17 +1540,15 @@ export default class StoreService extends Service implements StoreInterface {
     await this.addResourceFromSearchData(resource);
   }
 
-  // Canonicalize a realm list to the URLs the realm server knows realms by
-  // (see `serverRealmURLs`), so a registered prefix such as
-  // `@cardstack/catalog/` names the realm `_federated-search` will find.
-  // Everything downstream reads this one list — the prerender same-realm
-  // cache gate, the in-flight key, the realm-server and token lookups and the
-  // request body — so it is canonicalized here rather than at the fetch.
-  // Anything else passes through, so the server still answers an unknown
-  // realm. No fallback: an empty input yields an empty list (the card path
-  // relies on this to mean "search nothing" rather than "search everything").
+  // A realm list as the caller spelled it, each entry with its trailing
+  // slash, a later spelling of a realm already listed dropped. It is sent as
+  // is: the realm server reads any spelling of a realm (a registered prefix
+  // such as `@cardstack/catalog/`, the URL it is served from, or base's
+  // alias). Keys and comparisons below fold it to the form card ids carry.
+  // No fallback: an empty input yields an empty list (the card path relies on
+  // this to mean "search nothing" rather than "search everything").
   private normalizeRealmPaths(realms: string[] | undefined): string[] {
-    return serverRealmURLs(this.network.virtualNetwork, realms ?? []);
+    return dedupeRealmsByIdentity(this.network.virtualNetwork, realms ?? []);
   }
 
   // The host default: an absent/empty realm list means every realm the user can
@@ -1777,6 +1779,10 @@ export default class StoreService extends Service implements StoreInterface {
   //      that don't hit layer 1 still pay the round-trip; layer 1 is
   //      what closes the sequential-repeat window.
   //
+  // Both compare realms in the form card ids carry, so every spelling of a
+  // realm is one realm: the consuming realm is the realm registry's key (the
+  // alias for base) while `realms` keeps the caller's spelling.
+  //
   // Outside a prerender both layers are bypassed so live-SPA
   // write-then-read flows keep their current freshness semantics.
   private async fetchSearchDoc(
@@ -1818,7 +1824,8 @@ export default class StoreService extends Service implements StoreInterface {
       typeof renderScope === 'string' &&
       typeof consumingRealm === 'string' &&
       realms.length === 1 &&
-      realms[0] === consumingRealm
+      canonicalRealmIdentifier(this.network.virtualNetwork, realms[0]) ===
+        canonicalRealmIdentifier(this.network.virtualNetwork, consumingRealm)
     ) {
       cacheKey = searchCacheKey(renderScope, consumingRealm, query, wireScope);
       if (cacheKey !== undefined) {
@@ -1835,7 +1842,11 @@ export default class StoreService extends Service implements StoreInterface {
     let captureGeneration = this.searchCacheGeneration;
 
     let inflightKey = inPrerender
-      ? searchInFlightKey(realms, query, wireScope)
+      ? searchInFlightKey(
+          canonicalRealmIdentifiers(this.network.virtualNetwork, realms),
+          query,
+          wireScope,
+        )
       : undefined;
     let doc: SearchEntryResults;
     if (inflightKey !== undefined) {

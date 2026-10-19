@@ -171,19 +171,15 @@ Practical consequences:
 - Don't thread a `VirtualNetwork` into rendering, serialization, or store code
   to resolve something. Reaching for VN at an in-memory site is a signal that
   resolution is happening at the wrong layer.
-- A list of realms is folded once, where it enters, into the form the
-  question needs, and compared with plain `RealmPaths` after that (both
-  helpers live in `packages/host/app/lib/realm-utils.ts`):
-  - **Which realm holds this card?** `canonicalRealmIdentifier` folds a realm
-    with `unresolveURL` into the form card ids carry, so the base realm's
-    alias, the URL it is served from and `@cardstack/base/` are all
-    `@cardstack/base/`. `RealmService#knownRealm` and the search resource's
-    membership checks work this way.
-  - **What does the realm server call this realm?** `serverRealmURLs` gives the
-    URL the server registered the realm under, which search requests, realm
-    events and session tokens are keyed by. That is not always the URL the
-    prefix resolves to: the base realm is registered under its alias
-    `https://cardstack.com/base/` and served elsewhere.
+- A realm list, and any realm the server names (a search row's realm,
+  `realmTotals`, `policyScopedRealms`, a seed's realm, a realm event's
+  `realmURL`), is canonicalized with `unresolveURL` like every other
+  identifier (`canonicalRealmIdentifier` / `canonicalRealmIdentifiers` in
+  `packages/host/app/lib/realm-utils.ts`), and compared with plain
+  `RealmPaths` or string tests after that. The base realm's alias, the URL it
+  is served from and `@cardstack/base/` are all `@cardstack/base/`.
+  `MessageService` keys realm subscriptions the same way, so a subscriber may
+  name a realm by any spelling.
 - Serialization writes RRI form. Deserialization canonicalizes to RRI on entry,
   which is what makes the rule hold for data arriving from the network.
 
@@ -203,7 +199,9 @@ endpoints (`_federated-search`, `_federated-info`, `_federated-types`,
 `_federated-index-counts`) do the same for the realms a request names: each
 may be a registered prefix, the URL the realm is registered under, or the URL
 it is served from, and `registeredRealmURL` (`packages/runtime-common/search-utils.ts`)
-reads all three as the registered URL.
+reads all three as the registered URL. The host sends a realm list as its
+caller spelled it and canonicalizes what the server sends back, so it never
+has to know the URL a realm is registered under.
 
 ## RealmPaths
 

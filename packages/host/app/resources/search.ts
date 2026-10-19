@@ -51,7 +51,7 @@ import type { Filter, Query } from '@cardstack/runtime-common/query';
 
 import { LiveSearchRefreshScheduler } from '../lib/live-search-refresh-scheduler';
 import { LiveSearchTypeGate } from '../lib/live-search-type-gate';
-import { canonicalRealmIdentifier, serverRealmURLs } from '../lib/realm-utils';
+import { canonicalRealmIdentifier } from '../lib/realm-utils';
 import { searchErrorEntry } from '../lib/search-error-entry';
 
 import type LoaderService from '../services/loader-service';
@@ -642,15 +642,9 @@ export class SearchResource<
       }
       this.subscriptions = this.realmsToSearch.map((realm) => {
         this.#log.info(`search-resource calling subscribeToRealm for ${realm}`);
-        // Realm events arrive keyed by the URL the realm server knows the
-        // realm by, which a realm named by a registered prefix is not. Only
-        // the subscription takes that form: the callback and the refresh
-        // floors keep the caller's spelling, and membership is checked in the
-        // form card ids carry (see `targetRealms`).
-        let [href] = serverRealmURLs(this.network.virtualNetwork, [realm]);
         return {
-          url: `${href}_message`,
-          unsubscribe: subscribeToRealm(href, (event: RealmEventContent) => {
+          url: `${realm}_message`,
+          unsubscribe: subscribeToRealm(realm, (event: RealmEventContent) => {
             this.#log.info(
               `search-resource received realm event on ${realm}: ${JSON.stringify(event)}`,
             );
@@ -879,11 +873,10 @@ export class SearchResource<
 
   // A seed names its realm as the realm server does, and a refresh floor as
   // the caller spelled it; a realm named by a registered prefix is spelled
-  // differently by the two. Generations are kept under the server's form so
-  // the two compare.
+  // differently by the two. Generations are kept under the form card ids
+  // carry so the two compare.
   #generationKey(realm: string): string {
-    let [key] = serverRealmURLs(this.network.virtualNetwork, [realm]);
-    return key;
+    return canonicalRealmIdentifier(this.network.virtualNetwork, realm);
   }
 
   // Both routes to a result set count as loading. A seeded resource commonly

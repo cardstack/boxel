@@ -9,11 +9,11 @@ import {
 import ENV from '@cardstack/host/config/environment';
 import {
   canonicalRealmIdentifier,
+  canonicalRealmIdentifiers,
+  dedupeRealmsByIdentity,
   realmIdentifierSegments,
-  realmOwnURLHref,
   realmURLDisplayText,
   resolvedRealmURLHref,
-  serverRealmURLs,
 } from '@cardstack/host/lib/realm-utils';
 
 let { resolvedBaseRealmURL } = ENV;
@@ -117,42 +117,6 @@ module('Unit | realm-utils', function (hooks) {
     });
   });
 
-  // The URL a realm calls itself, which display, requests and subscriptions
-  // all name it by.
-  module('realmOwnURLHref', function () {
-    test('names base by its alias whichever spelling is given', function (assert) {
-      for (let identifier of [
-        baseRealm.url,
-        '@cardstack/base/',
-        new URL(resolvedBaseRealmURL).href,
-      ]) {
-        assert.strictEqual(
-          realmOwnURLHref(virtualNetwork, identifier),
-          baseRealm.url,
-          identifier,
-        );
-      }
-    });
-
-    test('names a prefixed realm with no alias by the URL it is served from', function (assert) {
-      virtualNetwork.addRealmMapping(
-        '@test/mapped/',
-        'https://realms.example.com/mapped/',
-      );
-      assert.strictEqual(
-        realmOwnURLHref(virtualNetwork, '@test/mapped/'),
-        'https://realms.example.com/mapped/',
-      );
-    });
-
-    test('returns an identifier no mapping covers as given', function (assert) {
-      assert.strictEqual(
-        realmOwnURLHref(virtualNetwork, '@unmapped/thing/'),
-        '@unmapped/thing/',
-      );
-    });
-  });
-
   module('realmURLDisplayText', function () {
     test('every spelling of a realm displays the URL the realm calls itself', function (assert) {
       for (let identifier of [
@@ -172,46 +136,6 @@ module('Unit | realm-utils', function (hooks) {
       assert.strictEqual(
         realmURLDisplayText(virtualNetwork, '@unmapped/thing/'),
         '@unmapped/thing/',
-      );
-    });
-  });
-
-  // The realm server registers base under its alias and serves it elsewhere,
-  // while every other prefixed realm is registered at the URL its prefix
-  // resolves to. Federated requests name realms by the registered URL.
-  module('serverRealmURLs', function (hooks) {
-    hooks.beforeEach(function () {
-      virtualNetwork.addRealmMapping(
-        '@test/mapped/',
-        'https://realms.example.com/mapped/',
-      );
-    });
-
-    test('names a prefixed realm by the URL its prefix resolves to', function (assert) {
-      assert.deepEqual(serverRealmURLs(virtualNetwork, ['@test/mapped']), [
-        'https://realms.example.com/mapped/',
-      ]);
-    });
-
-    test('names the base realm by its alias', function (assert) {
-      assert.deepEqual(serverRealmURLs(virtualNetwork, ['@cardstack/base/']), [
-        baseRealm.url,
-      ]);
-    });
-
-    test('leaves URLs alone, even one a URL mapping covers, and dedupes', function (assert) {
-      assert.deepEqual(
-        serverRealmURLs(virtualNetwork, [
-          '@test/mapped/',
-          'https://realms.example.com/mapped/',
-          resolvedBaseRealmURL,
-          '@unmapped/thing/',
-        ]),
-        [
-          'https://realms.example.com/mapped/',
-          new URL(resolvedBaseRealmURL).href,
-          '@unmapped/thing/',
-        ],
       );
     });
   });
@@ -315,6 +239,36 @@ module('Unit | realm-utils', function (hooks) {
       assert.strictEqual(
         canonicalRealmIdentifier(virtualNetwork, 'https://alias.example/r/'),
         'https://alias.example/r/',
+      );
+    });
+  });
+
+  // A realm list is keyed in the form card ids carry, and sent in the
+  // spellings the caller used: either way, every spelling of one realm counts
+  // once.
+  module('realm lists', function () {
+    test('canonicalRealmIdentifiers folds and dedupes, first spelling first', function (assert) {
+      assert.deepEqual(
+        canonicalRealmIdentifiers(virtualNetwork, [
+          baseRealm.url,
+          'https://example.com/realm',
+          '@cardstack/base/',
+          new URL(resolvedBaseRealmURL).href,
+          '@unmapped/thing/',
+        ]),
+        ['@cardstack/base/', 'https://example.com/realm/', '@unmapped/thing/'],
+      );
+    });
+
+    test('dedupeRealmsByIdentity keeps the caller spellings, one per realm', function (assert) {
+      assert.deepEqual(
+        dedupeRealmsByIdentity(virtualNetwork, [
+          baseRealm.url,
+          'https://example.com/realm',
+          '@cardstack/base/',
+          new URL(resolvedBaseRealmURL).href,
+        ]),
+        [baseRealm.url, 'https://example.com/realm/'],
       );
     });
   });

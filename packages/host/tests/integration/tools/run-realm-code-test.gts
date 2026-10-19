@@ -4,7 +4,7 @@ import { getService } from '@universal-ember/test-support';
 
 import { module, test } from 'qunit';
 
-import { baseRealm, SupportedMimeType } from '@cardstack/runtime-common';
+import { SupportedMimeType } from '@cardstack/runtime-common';
 import {
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
@@ -1893,7 +1893,7 @@ return { total, incomplete, urls: entries.map((entry) => entry.url) };`,
     }
   });
 
-  test('realm.entries.search sends a realm named by a registered prefix as its URL', async function (assert) {
+  test('realm.entries.search sends a realm as the identifier given, once per realm', async function (assert) {
     let { virtualNetwork } = getService('network');
     let sentRealms: string[][] = [];
     let spy = async (request: Request) => {
@@ -1917,12 +1917,12 @@ return { total, incomplete, urls: entries.map((entry) => entry.url) };`,
 
       assert.deepEqual(
         sentRealms,
-        [[virtualNetwork.toURL('@cardstack/catalog/').href]],
-        'the prefix goes out as its URL, once',
+        [['@cardstack/catalog/']],
+        'the prefix goes out as given, and its URL, naming the same realm, is dropped',
       );
 
-      // The realm server registers the base realm under its alias, not the
-      // URL it is served from, so that is the URL its prefix goes out as.
+      // The realm server reads any spelling of a realm, so the host never
+      // has to name base by its deprecated alias.
       await command.execute({
         realm: testRealmURL,
         roomId: '!room:example.com',
@@ -1930,8 +1930,8 @@ return { total, incomplete, urls: entries.map((entry) => entry.url) };`,
       });
       assert.deepEqual(
         sentRealms[1],
-        [baseRealm.url],
-        'the base prefix goes out as the alias the server knows it by',
+        ['@cardstack/base/'],
+        'the base prefix goes out as given',
       );
     } finally {
       virtualNetwork.unmount(spy);

@@ -2019,7 +2019,7 @@ module('Integration | search-entries resource', function (hooks) {
     }
   });
 
-  test('a realm named by a registered prefix is searched, tagged and refreshed by its URL', async function (assert) {
+  test('a realm named by a registered prefix is searched, tagged and refreshed by the spelling the caller used', async function (assert) {
     let { virtualNetwork } = getService('network');
     virtualNetwork.addRealmMapping('@test/mapped/', testRealm2URL);
     let fetchedRealms: string[][] = [];
@@ -2047,10 +2047,10 @@ module('Integration | search-entries resource', function (hooks) {
       assert.strictEqual(realm1EntriesBefore.length, 2);
       assert.deepEqual(
         search.entries
-          .filter((entry) => entry.realmUrl === testRealm2URL)
+          .filter((entry) => entry.realmUrl === '@test/mapped/')
           .map((entry) => entry.id),
         [`${testRealm2URL}books/other`],
-        "the prefixed realm's row carries the realm's URL",
+        "the prefixed realm's row carries the realm as the caller named it",
       );
 
       await realm2.write('books/another.json', bookDoc('Hassan'));
@@ -2058,7 +2058,7 @@ module('Integration | search-entries resource', function (hooks) {
 
       assert.deepEqual(
         fetchedRealms[fetchedRealms.length - 1],
-        [testRealm2URL],
+        ['@test/mapped/'],
         'the event on the backing realm refreshes that realm alone',
       );
       for (let entryBefore of realm1EntriesBefore) {
