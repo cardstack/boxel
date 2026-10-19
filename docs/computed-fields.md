@@ -2,9 +2,9 @@
 
 When any field consumed by the computed field changes, the value will [rerender](./card-rendering.md#re-rendering-process).
 
-Computed fields are evaluated on demand when they are accessed. Within one synchronous turn, repeated reads share a single evaluation, so a template that reads a computed in several places runs its `computeVia` once:
+Computed fields are evaluated on demand when they are accessed. Until the next microtask checkpoint, repeated reads share a single evaluation, so a template that reads a computed in several places runs its `computeVia` once:
 
-- A computed re-evaluates when a tracked input changes. This includes a read in the same turn as the write (`card.firstName = 'Ada'` followed by `card.fullName`).
+- A computed re-evaluates when a tracked input changes. This includes a read right after the write (`card.firstName = 'Ada'` followed by `card.fullName`).
 - An input read without tracking, such as the clock or a plain object property, can be served from the first read until the next microtask checkpoint.
 - Every reader in that window gets the same value. Copy it before mutating it in place, for example `[...this.args.model.days].sort(...)` rather than `this.args.model.days.sort(...)`.
 

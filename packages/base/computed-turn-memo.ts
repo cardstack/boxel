@@ -6,9 +6,9 @@ import { initSharedState } from './shared-state';
 // Turn-scoped memo for computed fields read outside a compute pass.
 //
 // A template that reads a computed k times, directly or through the computeds
-// derived from it, would run its `computeVia` k times per render. Within one
-// synchronous turn this memo serves every read after the first, so a render
-// pays one evaluation per computed per data change.
+// derived from it, would run its `computeVia` k times per render. Until the
+// next microtask checkpoint this memo serves every read after the first, so a
+// render pays one evaluation per computed per data change.
 //
 // Each entry is a Glimmer cache rather than a bare value:
 // - a hit consumes the tags the evaluation consumed, so a template that reads

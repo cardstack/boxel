@@ -264,8 +264,8 @@ export function getter<CardT extends BaseDefConstructor>(
 
   if (field.computeVia) {
     // No pass open (a format render, or any other read in the host): the
-    // turn memo collapses repeated reads within one synchronous turn into a
-    // single `computeVia`, and leaves the pass counters alone.
+    // turn memo collapses repeated reads until the next microtask checkpoint
+    // into a single `computeVia`, and leaves the pass counters alone.
     if (passComputeMemo === null) {
       let value = readComputedThroughTurnMemo(instance, field.name, () =>
         computeWithTaintFrame(instance, field),
