@@ -47,14 +47,22 @@ function directoryNameFromModule(
   );
 }
 
+const URL_SCHEME_AUTHORITY = /^[a-z][a-z0-9+.-]*:\/\//i;
+
 function lastMeaningfulSegment(pathname: string): string | undefined {
   let normalized = pathname.replace(/\\/g, '/').replace(/\/+$/, '');
+  // An absolute identifier's root (`scheme://host` or `@scope/name`) is not
+  // part of its path, so `..` stops there rather than climbing into it.
+  let rootLength =
+    URL_SCHEME_AUTHORITY.test(normalized) || normalized.startsWith('@') ? 2 : 0;
   // A relative module's `.` and `..` name no directory of their own: `..`
   // removes the segment before it.
   let segments: string[] = [];
   for (let segment of normalized.split('/')) {
     if (segment === '..') {
-      segments.pop();
+      if (segments.length > rootLength) {
+        segments.pop();
+      }
     } else if (segment && segment !== '.') {
       segments.push(segment);
     }

@@ -38,6 +38,23 @@ module('Unit | runtime-common | card directory names', function () {
       assert.strictEqual(getCardDirectoryName(ref), 'Index');
     });
 
+    test('does not climb past the root of an absolute module', function (assert) {
+      assert.strictEqual(
+        getCardDirectoryName({
+          module: rri('http://example.com/pets/../..'),
+          name: 'default',
+        }),
+        'Example',
+      );
+      assert.strictEqual(
+        getCardDirectoryName({
+          module: rri('@cardstack/catalog/../../pet-card'),
+          name: 'default',
+        }),
+        'PetCard',
+      );
+    });
+
     test('strips executable extensions before inferring name', function (assert) {
       let ref: CodeRef = {
         module: rri('../cards/preview-card.gts'),
