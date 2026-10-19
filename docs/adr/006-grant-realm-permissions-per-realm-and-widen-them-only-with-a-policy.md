@@ -10,6 +10,11 @@ scope:
   - packages/runtime-common/card-operations/gate.ts
   - packages/runtime-common/card-operations/policy*.ts
   - packages/realm-server/handlers/handle-upsert-realm-user-permission.ts
+  - packages/realm-server/handlers/handle-delete-realm.ts
+  - packages/realm-server/handlers/handle-publish-realm.ts
+  - packages/realm-server/handlers/handle-unpublish-realm.ts
+  - packages/realm-server/handlers/handle-unlisted-realm-path.ts
+  - packages/realm-server/handlers/archive-realm-utils.ts
   - packages/realm-server/middleware/multi-realm-authorization.ts
 ---
 
@@ -45,9 +50,9 @@ A permission's subject MUST be one user, `users` (any signed-in user), or `*`
 
 The grantable levels MUST be exactly `read`, `write`, and `realm-owner`.
 `read` admits reading the realm. `write` admits changing its contents.
-`realm-owner` admits administering the realm: changing its permissions,
-deleting it, and publishing or unpublishing it. Each level is its own grant,
-and holding one MUST NOT imply another.
+`realm-owner` admits administering the realm, such as changing its
+permissions, archiving or deleting it, and publishing or unpublishing it. Each
+level is its own grant, and holding one MUST NOT imply another.
 
 `assume-user` is not a grantable level. Only the realm's own Matrix user
 holds it, and it MUST NOT be stored or granted.
@@ -99,8 +104,9 @@ may read a realm, nothing elsewhere takes that away.
 
 - **Realm-wide permissions, widened by policy grants (chosen).**
 - **Per-folder permissions.** Search and prerendered HTML would differ for
-  each viewer, the session token could no longer settle a request, and who can
-  reach a realm would no longer be one list [8].
+  each viewer, the permission check would no longer be one in-memory match
+  against the token's claim for the realm, and who can reach a realm would no
+  longer be one list [8].
 - **Per-file or per-card permissions.** These fail for the same reasons as
   per-folder permissions [8]. A policy can already grant access to a single
   card by a predicate on its id.
