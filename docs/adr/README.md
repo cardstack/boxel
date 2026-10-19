@@ -12,7 +12,8 @@ or backfill one.
 
 ## Index
 
-| ADR                                                                          | Title                                                                             | Status   |
-| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------- |
-| [001](001-record-architecture-decisions.md)                                  | Record architecture decisions as short, normative ADRs                            | proposed |
-| [005](005-authorize-key-changes-only-with-a-session-card-code-cant-reach.md) | Authorize changes to a user's keys only with a session that card code can't reach | proposed |
+| ADR                                                                               | Title                                                                             | Status   |
+| --------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------- |
+| [001](001-record-architecture-decisions.md)                                       | Record architecture decisions as short, normative ADRs                            | proposed |
+| [005](005-authorize-key-changes-only-with-a-session-card-code-cant-reach.md)      | Authorize changes to a user's keys only with a session that card code can't reach | proposed |
+| [006](006-grant-realm-permissions-per-realm-and-widen-them-only-with-a-policy.md) | Grant realm permissions per realm, and widen them only with a realm policy        | proposed |
