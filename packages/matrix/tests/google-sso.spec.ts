@@ -5,6 +5,7 @@ import { appURL } from '../support/isolated-realm-server.ts';
 import {
   createSubscribedUser,
   getExternalIdsForIdp,
+  oauthErrorResponseURL,
   setupPermissions,
   subjectFor,
   updateSynapseUser,
@@ -39,9 +40,7 @@ async function signInWithGoogle(
 
 // Starts a Google sign-in from the host and, from the identity provider's login
 // page, sends the browser back to Synapse's OIDC callback with an OAuth error
-// response — the redirect Google makes when the user presses Cancel. The mock
-// IdP's form has no cancel control, so the redirect is built from the
-// authorization request it was handed.
+// response, the redirect Google makes when the user presses Cancel.
 async function returnFromGoogleWithError(
   page: Page,
   error: string,
@@ -50,17 +49,7 @@ async function returnFromGoogleWithError(
   await page.goto(appURL);
   await page.locator('[data-test-google-login-btn]').click();
   await expect(page.locator('input[name="username"]')).toBeVisible();
-  let authorizeRequest = new URL(page.url());
-  let callback = new URL(authorizeRequest.searchParams.get('redirect_uri')!);
-  callback.searchParams.set('error', error);
-  if (errorDescription) {
-    callback.searchParams.set('error_description', errorDescription);
-  }
-  callback.searchParams.set(
-    'state',
-    authorizeRequest.searchParams.get('state')!,
-  );
-  await page.goto(callback.href);
+  await page.goto(oauthErrorResponseURL(page.url(), error, errorDescription));
 }
 
 async function expectSignedInAs(page: Page, userId: string) {
