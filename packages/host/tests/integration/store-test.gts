@@ -210,6 +210,46 @@ module('Integration | Store', function (hooks) {
     };
   }
 
+  // Wait for a resource's card to load and render. The resource's read is a
+  // realm round trip whose length has no bound on a loaded runner, and it holds
+  // a store test waiter for its whole length, so `settled()` covers it where a
+  // selector poll with a fixed timeout does not. When the card is still not in
+  // the DOM after the store settles, log what the store holds for it, so a
+  // failure tells a read that ended as an error or never landed in the
+  // identity map apart from a slow one.
+  async function settleCardRender(
+    assert: Assert,
+    id: string,
+    selector: string,
+  ) {
+    let start = performance.now();
+    await settled();
+    let elapsedMs = Math.round(performance.now() - start);
+    if (!find(selector)) {
+      let held = storeService.peek(id);
+      let error = storeService.peekError(id);
+      console.error(
+        [
+          `[card-render-diag] ${selector} is not rendered after settled() (${elapsedMs}ms)`,
+          `reference count: ${storeService.getReferenceCount(id)}`,
+          `peek: ${
+            held === undefined
+              ? '<nothing>'
+              : isCardInstance(held)
+                ? `card instance ${held.id}`
+                : `error ${JSON.stringify(held)}`
+          }`,
+          `peekError: ${error ? JSON.stringify(error) : '<none>'}`,
+        ].join('\n'),
+      );
+    } else if (elapsedMs > 1000) {
+      console.warn(
+        `[card-render-diag] ${selector} took ${elapsedMs}ms to load and render`,
+      );
+    }
+    assert.dom(selector).exists(`${id} is rendered`);
+  }
+
   hooks.beforeEach(async function (this: RenderingTestContext) {
     class Person extends CardDef {
       @field name = contains(StringField);
@@ -4801,7 +4841,11 @@ module('Integration | Store', function (hooks) {
     let hassan = `${testRealmURL}Person/hassan`;
 
     driver.id = hassan;
-    await waitFor(`[data-test-rendered-card="${hassan}"]`);
+    await settleCardRender(
+      assert,
+      hassan,
+      `[data-test-rendered-card="${hassan}"]`,
+    );
     assert.strictEqual(
       storeService.getReferenceCount(jade),
       0,
@@ -4814,7 +4858,7 @@ module('Integration | Store', function (hooks) {
     );
 
     driver.id = jade;
-    await waitFor(`[data-test-rendered-card="${jade}"]`);
+    await settleCardRender(assert, jade, `[data-test-rendered-card="${jade}"]`);
     assert.strictEqual(
       storeService.getReferenceCount(jade),
       1,
@@ -4985,7 +5029,11 @@ module('Integration | Store', function (hooks) {
     let hassan = `${testRealmURL}Person/hassan`;
 
     driver.id = hassan;
-    await waitFor(`[data-test-rendered-card="${hassan}"]`);
+    await settleCardRender(
+      assert,
+      hassan,
+      `[data-test-rendered-card="${hassan}"]`,
+    );
     assert.strictEqual(
       storeService.getReferenceCount(jade),
       0,
@@ -4998,7 +5046,7 @@ module('Integration | Store', function (hooks) {
     );
 
     driver.id = jade;
-    await waitFor(`[data-test-rendered-card="${jade}"]`);
+    await settleCardRender(assert, jade, `[data-test-rendered-card="${jade}"]`);
     assert.strictEqual(
       storeService.getReferenceCount(jade),
       1,
