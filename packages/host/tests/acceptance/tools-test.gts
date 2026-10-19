@@ -1653,6 +1653,7 @@ module('Acceptance | Tools tests', function (hooks) {
       await addSkillToAiAssistant(`${testRealmURL}Skill/seeing`);
       await waitForNewRoomSkillsLoaded(roomId);
 
+      let dispatchedAt = performance.now();
       simulateRemoteMessage(roomId, '@aibot:localhost', {
         body: 'Looking at the card',
         msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -1672,9 +1673,13 @@ module('Acceptance | Tools tests', function (hooks) {
           context: { agentId: getService('matrix-service').agentId },
         },
       });
-      await waitFor(
-        '[data-test-message-idx="0"] [data-test-apply-state="applied"]',
-      );
+      await waitForAutoAppliedTool({
+        label: 'view-visually-auto-apply',
+        roomId,
+        toolCallId: 'view-visually-handoff',
+        messageIdx: 0,
+        dispatchedAt,
+      });
 
       let result = getRoomEvents(roomId)
         .filter(
@@ -1712,6 +1717,7 @@ module('Acceptance | Tools tests', function (hooks) {
     await addSkillToAiAssistant(`${testRealmURL}Skill/realm-seeing`);
     await waitForNewRoomSkillsLoaded(roomId);
 
+    let dispatchedAt = performance.now();
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Looking at the card',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -1735,9 +1741,13 @@ module('Acceptance | Tools tests', function (hooks) {
         context: { agentId: getService('matrix-service').agentId },
       },
     });
-    await waitFor(
-      '[data-test-message-idx="0"] [data-test-apply-state="applied"]',
-    );
+    await waitForAutoAppliedTool({
+      label: 'realm-command-auto-apply',
+      roomId,
+      toolCallId: 'realm-viewer-request',
+      messageIdx: 0,
+      dispatchedAt,
+    });
 
     let result = getRoomEvents(roomId)
       .filter(
@@ -1923,6 +1933,7 @@ module('Acceptance | Tools tests', function (hooks) {
 
     // Simulate another switch-submode command message from the bot
     let commandId2 = 'switch-submode-cmd-2';
+    let dispatchedAt2 = performance.now();
     simulateRemoteMessage(matrixRoomId, '@aibot:localhost', {
       body: 'Switch to interact mode',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -1946,9 +1957,13 @@ module('Acceptance | Tools tests', function (hooks) {
     });
 
     // Wait for the new message to appear and be auto-applied
-    await waitFor(
-      '[data-test-message-idx="1"] [data-test-apply-state="applied"]',
-    );
+    await waitForAutoAppliedTool({
+      label: 'llm-mode-act-auto-apply-2',
+      roomId: matrixRoomId,
+      toolCallId: commandId2,
+      messageIdx: 1,
+      dispatchedAt: dispatchedAt2,
+    });
     assert
       .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
       .exists('Command is auto-applied in act mode');
@@ -2008,6 +2023,7 @@ module('Acceptance | Tools tests', function (hooks) {
 
     // Simulate a new command message from the bot AFTER switching to act mode
     let commandId4 = 'switch-submode-cmd-4';
+    let dispatchedAt4 = performance.now();
     simulateRemoteMessage(matrixRoomId, '@aibot:localhost', {
       body: 'Switch to interact mode again',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -2031,9 +2047,13 @@ module('Acceptance | Tools tests', function (hooks) {
     });
 
     // Wait for the new message to appear and be auto-applied
-    await waitFor(
-      '[data-test-message-idx="3"] [data-test-apply-state="applied"]',
-    );
+    await waitForAutoAppliedTool({
+      label: 'llm-mode-act-auto-apply-4',
+      roomId: matrixRoomId,
+      toolCallId: commandId4,
+      messageIdx: 3,
+      dispatchedAt: dispatchedAt4,
+    });
     assert
       .dom('[data-test-message-idx="3"] [data-test-apply-state="applied"]')
       .exists('New command sent after act mode is auto-applied');
