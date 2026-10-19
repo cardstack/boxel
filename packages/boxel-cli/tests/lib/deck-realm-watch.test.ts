@@ -75,6 +75,7 @@ class TeamRealm implements RealmAuthenticator {
               realmRRI: '@cardstack/pretui/',
               protocol: 'deck-r0',
               sync: 'content-addressed',
+              history: 'jj',
             }),
           )
         : new Response('not found', { status: 404 });

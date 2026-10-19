@@ -58,6 +58,7 @@ function realm(
             realmRRI: '@cardstack/pretui/',
             protocol: 'deck-r0',
             sync: 'content-addressed',
+            history: 'jj',
           }),
         );
       }
