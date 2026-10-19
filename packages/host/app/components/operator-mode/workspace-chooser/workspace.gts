@@ -1,6 +1,7 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { guidFor } from '@ember/object/internals';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { cached, tracked } from '@glimmer/tracking';
@@ -118,7 +119,15 @@ export default class Workspace extends Component<Signature> {
             </button>
           </div>
         {{/if}}
+        {{! The URL describes the tile rather than naming it, so it sits
+            outside the button: text inside a button joins its accessible
+            name, and the tile's name is the workspace's. }}
+        <span
+          id={{this.realmURLDescriptionId}}
+          class='boxel-sr-only'
+        >{{this.realmURLText}}</span>
         <ItemContainer
+          aria-describedby={{this.realmURLDescriptionId}}
           data-test-workspace-button={{this.name}}
           data-nav-index={{@navIndex}}
           {{on 'click' this.openWorkspace}}
@@ -133,10 +142,7 @@ export default class Workspace extends Component<Signature> {
             {{#if @isFavoritesSection}}
               <div class='tile-scrim'></div>
               <div class='tile-content'>
-                <RealmURLTooltip
-                  @realmURL={{@realmIdentifier}}
-                  @announce={{true}}
-                >
+                <RealmURLTooltip @realmURL={{@realmIdentifier}}>
                   <div class='realm-icon-wrapper'>
                     <RealmIcon
                       class='workspace-realm-icon'
@@ -174,10 +180,7 @@ export default class Workspace extends Component<Signature> {
                 </div>
               </div>
             {{else}}
-              <RealmURLTooltip
-                @realmURL={{@realmIdentifier}}
-                @announce={{true}}
-              >
+              <RealmURLTooltip @realmURL={{@realmIdentifier}}>
                 <div class='realm-icon-wrapper'>
                   <RealmIcon
                     class='workspace-realm-icon'
@@ -1747,6 +1750,10 @@ export default class Workspace extends Component<Signature> {
 
   private get name() {
     return this.realmInfo.name;
+  }
+
+  private get realmURLDescriptionId() {
+    return `${guidFor(this)}-realm-url`;
   }
 
   private get realmURLText() {

@@ -80,7 +80,7 @@ module('Integration | Choreo gallery | site', function (hooks) {
     let site = () => document.querySelector<HTMLElement>('.choreo-site')!;
     let appearance = () =>
       document.querySelector<HTMLElement>(
-        '.header-picker:has(summary[aria-label="Appearance"])',
+        '.header-picker:has([role="radiogroup"][aria-label="Appearance"])',
       )!;
     let option = (label: string) =>
       [...appearance().querySelectorAll<HTMLButtonElement>('button')].find(
@@ -97,7 +97,7 @@ module('Integration | Choreo gallery | site', function (hooks) {
     await click(option('Light'));
     assert.strictEqual(site().dataset['theme'], 'light', 'light, on request');
     assert.strictEqual(
-      option('Light').getAttribute('aria-pressed'),
+      option('Light').getAttribute('aria-checked'),
       'true',
       'and the picker says so',
     );

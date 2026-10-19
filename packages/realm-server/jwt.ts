@@ -1,12 +1,14 @@
 import jwt from 'jsonwebtoken';
 import type { TokenClaims } from '@cardstack/runtime-common';
 import { isOperatorToken } from './utils/operator-token.ts';
+import { assertNoSecureSessionClaim } from './utils/jwt.ts';
 
 export function createJWT(
   claims: TokenClaims,
   expiration: jwt.SignOptions['expiresIn'],
   secret: string,
 ): string {
+  assertNoSecureSessionClaim(claims);
   let token = jwt.sign(claims, secret, { expiresIn: expiration });
   return token;
 }

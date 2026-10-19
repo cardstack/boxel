@@ -2,6 +2,7 @@ import { getOwner } from '@ember/owner';
 import {
   click,
   currentURL,
+  triggerKeyEvent,
   visit,
   waitFor,
   waitUntil,
@@ -975,6 +976,72 @@ module('Acceptance | host mode tests', function (hooks) {
         .dom('[data-test-host-mode-stack-item]')
         .doesNotExist(`${value}: with no stack`);
     }
+  });
+
+  test('a card that opens takes focus, and closing it returns focus to what opened it', async function (assert) {
+    let targetStackId = `${testHostModeRealmURL}ViewCardDemo/secondary`;
+    let stackSelector = `[data-test-host-mode-stack-item="${targetStackId}"]`;
+    let openerSelector = '[data-test-view-card-demo-button]';
+
+    await visit('/test/ViewCardDemo/index.json');
+    await waitFor(openerSelector);
+    await click(openerSelector);
+    await waitFor(stackSelector);
+
+    assert.dom(stackSelector).isFocused('the opened card has focus');
+
+    await click(`${stackSelector} [data-test-host-stack-item-close-button]`);
+    await waitUntil(() => !document.querySelector(stackSelector));
+
+    assert.dom(openerSelector).isFocused('focus is back on the opener');
+  });
+
+  test('closing a card opened from a stacked card returns focus inside that card', async function (assert) {
+    let firstStackSelector = `[data-test-host-mode-stack-item="${testHostModeRealmURL}ViewCardDemo/secondary"]`;
+    let secondStackSelector = `[data-test-host-mode-stack-item="${testHostModeRealmURL}ViewCardDemo/tertiary"]`;
+    let innerOpener = `${firstStackSelector} [data-test-view-card-demo-button]`;
+
+    await visit('/test/ViewCardDemo/index.json');
+    await waitFor('[data-test-view-card-demo-button]');
+    await click('[data-test-view-card-demo-button]');
+    await waitFor(innerOpener);
+    await click(innerOpener);
+    await waitFor(secondStackSelector);
+
+    assert.dom(secondStackSelector).isFocused('the card on top has focus');
+
+    await click(
+      `${secondStackSelector} [data-test-host-stack-item-close-button]`,
+    );
+    await waitUntil(() => !document.querySelector(secondStackSelector));
+
+    assert
+      .dom(innerOpener)
+      .isFocused('focus is back on the control that opened it');
+  });
+
+  test('Escape closes the top card of the trail', async function (assert) {
+    let firstStackCardId = `${testHostModeRealmURL}ViewCardDemo/secondary`;
+    let secondStackCardId = `${testHostModeRealmURL}ViewCardDemo/tertiary`;
+    let hostModeStackValue = encodeURIComponent(
+      JSON.stringify([firstStackCardId, secondStackCardId]),
+    );
+
+    await visit(
+      `/test/ViewCardDemo/index.json?hostModeStack=${hostModeStackValue}`,
+    );
+
+    let secondStackSelector = `[data-test-host-mode-stack-item="${secondStackCardId}"]`;
+    let firstStackSelector = `[data-test-host-mode-stack-item="${firstStackCardId}"]`;
+    await waitFor(secondStackSelector);
+
+    await triggerKeyEvent(secondStackSelector, 'keydown', 'Escape');
+    await waitUntil(() => !document.querySelector(secondStackSelector));
+
+    assert.dom(firstStackSelector).exists('only the top card closes');
+    assert
+      .dom(firstStackSelector)
+      .isFocused('focus moves to the card now on top');
   });
 
   test('clicking on a stack card does not close it', async function (assert) {

@@ -13,6 +13,7 @@ import {
   realmSecretSeed,
 } from './helpers/index.ts';
 import { logLinesDuring, withLogDefinition } from './helpers/log-capture.ts';
+import { secureSessionAuth } from './helpers/secure-session.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
@@ -137,10 +138,12 @@ module(basename(import.meta.filename), function () {
       )}`;
     }
 
-    function mint(attributes: Record<string, unknown>, user = OWNER) {
-      return request
+    // Key write tickets are minted only for a session signed in on the secure
+    // origin.
+    async function mint(attributes: Record<string, unknown>, user = OWNER) {
+      return await request
         .post('/_key-write-tickets')
-        .set('Authorization', auth(user))
+        .set('Authorization', await secureSessionAuth(dbAdapter, user))
         .set('Content-Type', 'application/json')
         .send({ data: { type: 'key-write-ticket', attributes } });
     }
@@ -569,9 +572,12 @@ module(basename(import.meta.filename), function () {
     });
 
     test('tickets are minted for the secure origin and the CLI, never the app page', async function (assert) {
+      // A session signed in on the secure origin, so only where the request
+      // comes from decides.
+      let secureAuth = await secureSessionAuth(dbAdapter, OWNER);
       let fromApp = await request
         .post('/_key-write-tickets')
-        .set('Authorization', auth())
+        .set('Authorization', secureAuth)
         .set('Origin', 'https://app.keys.test')
         .set('Content-Type', 'application/json')
         .send(ADD_TICKET);
@@ -584,7 +590,7 @@ module(basename(import.meta.filename), function () {
 
       let opaque = await request
         .post('/_key-write-tickets')
-        .set('Authorization', auth())
+        .set('Authorization', secureAuth)
         .set('Origin', 'null')
         .set('Content-Type', 'application/json')
         .send(ADD_TICKET);
@@ -592,7 +598,7 @@ module(basename(import.meta.filename), function () {
 
       let fromSecureOrigin = await request
         .post('/_key-write-tickets')
-        .set('Authorization', auth())
+        .set('Authorization', secureAuth)
         .set('Origin', secureOriginURL.origin)
         .set('Content-Type', 'application/json')
         .send(ADD_TICKET);
