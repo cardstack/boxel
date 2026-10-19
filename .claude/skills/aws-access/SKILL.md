@@ -673,6 +673,8 @@ The secure origin, where credentials are typed, has no service of its own. It is
 
 The realm server seals the secrets it stores for users (API keys, OAuth tokens, webhook signing secrets) under a data key that one customer-managed KMS key wraps, `alias/<env>-boxel-secrets`. Its key policy names the realm-server and worker task roles as the only principals that can `Decrypt`, and nobody can `Encrypt`. Key administration and minting a new wrapped data key (`GenerateDataKeyWithoutPlaintext`) are delegated to IAM through the account root, so an admin-capable operator can make those calls. The role can read that key's metadata and the account's CloudTrail event history, so those claims can be checked in a deployed environment. It can't use the key, and it can't read the wrapped data key's SSM parameter.
 
+The `secrets-at-rest` skill's **post-deploy audit** is the procedure for checking those claims: the key's metadata and policy, who used the key according to CloudTrail, and `ExecuteCommand` into the tasks, each with what it should show and what is alarming. The audit also covers the realm server's boot lines and the database grants. What follows here is what the role can and can't do with the key, and how CloudTrail event history answers.
+
 ```sh
 P=claude-staging ENV=staging   # claude-prod / production for prod
 
@@ -680,44 +682,11 @@ P=claude-staging ENV=staging   # claude-prod / production for prod
 KEY_ARN=$(aws --profile $P kms describe-key --key-id alias/$ENV-boxel-secrets \
   --query KeyMetadata.Arn --output text)
 
-# State, usage and origin.
-aws --profile $P kms describe-key --key-id "$KEY_ARN" \
-  --query 'KeyMetadata.{state:KeyState,usage:KeyUsage,spec:KeySpec,origin:Origin,created:CreationDate}'
-
-# Which principals each statement allows to do what. The policy is a JSON string inside the response.
-aws --profile $P kms get-key-policy --key-id "$KEY_ARN" --policy-name default \
-  --query Policy --output text | jq '.Statement[] | {Sid, Principal, Action, Condition}'
-
-aws --profile $P kms get-key-rotation-status --key-id "$KEY_ARN"
-
 # Which alias points at a key id seen in a CloudTrail event.
 aws --profile $P kms list-aliases --query "Aliases[?TargetKeyId=='<key-id>'].AliasName"
 ```
 
-Every use of the key is a CloudTrail management event, kept in event history for 90 days. Look them up by the key's ARN and summarise who called what. Each record names the caller (a task role's session name is the task id; events KMS makes itself, such as scheduled rotation, show `kms.amazonaws.com`) and the encryption context, never key material or a plaintext:
-
-```sh
-aws --profile $P cloudtrail lookup-events \
-  --lookup-attributes AttributeKey=ResourceName,AttributeValue="$KEY_ARN" \
-  --start-time "$(date -u -d '-1 day' +%Y-%m-%dT%H:%M:%SZ)" \
-  --query 'Events[].CloudTrailEvent' --output json \
-  | jq -r '.[] | fromjson | [.eventTime, .eventName, (.userIdentity.arn // .userIdentity.invokedBy), (.requestParameters.encryptionContext // {} | tojson), (.errorCode // "ok")] | @tsv'
-```
-
-What to expect, and what to treat as alarming:
-
-- **Expected:** a task-role `Decrypt` when a realm-server or worker task starts (the app unwraps the data key once, at startup); an operator's `GenerateDataKeyWithoutPlaintext` when a wrapped data key is minted; KMS's own scheduled `RotateKey`; and the reads this role makes.
-- **Alarming:** `PutKeyPolicy`, which can undo every claim above; alias changes (`CreateAlias`, `UpdateAlias`, `DeleteAlias`); `DisableKey` or `ScheduleKeyDeletion`; any `Decrypt` by a principal other than the two task roles; and a task-role `Decrypt` that isn't at task start.
-
-Both services run with ECS Exec enabled, so a shell in a task has the task role's credentials, and a `Decrypt` made from it looks the same as the startup unwrap: same role, same session name. What tells them apart is timing, and an `ExecuteCommand` event under a person's identity on that task:
-
-```sh
-aws --profile $P cloudtrail lookup-events \
-  --lookup-attributes AttributeKey=EventName,AttributeValue=ExecuteCommand \
-  --start-time "$(date -u -d '-1 day' +%Y-%m-%dT%H:%M:%SZ)" \
-  --query 'Events[].CloudTrailEvent' --output json \
-  | jq -r '.[] | fromjson | [.eventTime, .userIdentity.arn, .requestParameters.task] | @tsv'
-```
+Every use of the key is a CloudTrail management event, kept in event history for 90 days. Each record names the caller (a task role's session name is the task id; events KMS makes itself, such as scheduled rotation, show `kms.amazonaws.com`) and the encryption context, never key material or a plaintext. Lookups by the key's ARN and by event name both go through `cloudtrail lookup-events`:
 
 - Events take a few minutes, sometimes up to fifteen, to appear after the call.
 - The CLI follows every page. Narrow `--start-time` to limit the output rather than passing `--max-items`: that caps the number of events (newest first), and the `--query` drops the `NextToken` that would show the list was cut, so a truncated audit looks complete.
@@ -725,11 +694,9 @@ aws --profile $P cloudtrail lookup-events \
 - `date -d` is GNU. On macOS use `date -u -v-1d +%Y-%m-%dT%H:%M:%SZ`.
 - The history covers the whole account's management events, not just KMS. Use it to answer a question about the key, not to browse.
 
-The `secrets-at-rest` skill's post-deploy audit puts these lookups together with the realm server's boot lines and the database grants into one procedure, with what each should show.
-
 `kms decrypt`, `encrypt` and `generate-data-key` are denied to the role, and so is reading `/<env>/boxel/SECRETS_WRAPPED_DATA_KEY`.
 
-A denied call on the key is a CloudTrail event too, but it carries no resource and no key id, so the lookup by the key's ARN above never returns it. Look denied cryptographic calls up by event name instead, one call per action. The record's `errorCode` is `AccessDenied`, its caller is the session ARN of whoever tried (`assumed-role/boxel-claude-readonly/...` for this role), and its `errorMessage` names the key (`... not authorized to perform: kms:Encrypt on resource: arn:aws:kms:...:key/<id> because ...`). Keep the records that match both:
+A denied call on the key is a CloudTrail event too, but it carries no resource and no key id, so the lookup by the key's ARN never returns it. Look denied cryptographic calls up by event name instead, one call per action. The record's `errorCode` is `AccessDenied`, its caller is the session ARN of whoever tried (`assumed-role/boxel-claude-readonly/...` for this role), and its `errorMessage` names the key (`... not authorized to perform: kms:Encrypt on resource: arn:aws:kms:...:key/<id> because ...`). Keep the records that match both:
 
 ```sh
 for action in Decrypt Encrypt ReEncrypt GenerateDataKey GenerateDataKeyWithoutPlaintext \
@@ -747,7 +714,7 @@ done
 - Each event-name lookup covers every KMS key in the account, including the AWS-managed keys behind S3, SSM and Lambda, so the `Decrypt` one is large: a day of it can run to tens of thousands of events and many minutes of paging. Keep the window to hours and widen it only if you need to. The CLI retries when it's throttled, so the loop needs no pacing of its own.
 - The key match reads AWS's error-message wording. If a lookup that should find something returns nothing, drop the `contains` test and read the messages.
 - KMS logs a denied request from another AWS account only in that account, so these lookups see same-account denials only.
-- This covers cryptographic calls. Key-administration calls (`PutKeyPolicy`, `CreateGrant`, `DisableKey`, `ScheduleKeyDeletion`) that succeed show up in the lookup by the key's ARN above.
+- This covers cryptographic calls. Key-administration calls (`PutKeyPolicy`, `CreateGrant`, `DisableKey`, `ScheduleKeyDeletion`) that succeed show up in the lookup by the key's ARN, which the audit runs.
 
 ## Future skill / scripting room
 
