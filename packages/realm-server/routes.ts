@@ -103,6 +103,8 @@ import handleCapture from './handlers/handle-capture.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
 import {
+  KEY_SHARE_NOTICES_PATH,
+  KEY_SHARES_PATH,
   KEY_WRITE_TICKETS_PATH,
   OPENROUTER_PASSTHROUGH_PATH,
   REQUEST_FORWARD_PATH,
@@ -129,6 +131,15 @@ import {
   handleReplaceUserKey,
   handleShowUserKey,
 } from './handlers/handle-user-keys.ts';
+import {
+  handleListKeyShareNotices,
+  handleListKeyShares,
+  handleResumeKeyShare,
+  handleShareKey,
+  handleSuspendKeyShare,
+  handleSwapKeyIntoShare,
+  handleUnshareKey,
+} from './handlers/handle-key-shares.ts';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -329,6 +340,41 @@ export function createRoutes(args: CreateRoutesArgs) {
     `${USER_KEYS_PATH}/:keyId`,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleDeleteUserKey(args),
+  );
+  router.get(
+    KEY_SHARES_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleListKeyShares(args),
+  );
+  router.post(
+    KEY_SHARES_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleShareKey(args),
+  );
+  router.delete(
+    `${KEY_SHARES_PATH}/:shareId`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleUnshareKey(args),
+  );
+  router.post(
+    `${KEY_SHARES_PATH}/:shareId/suspend`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleSuspendKeyShare(args),
+  );
+  router.post(
+    `${KEY_SHARES_PATH}/:shareId/resume`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleResumeKeyShare(args),
+  );
+  router.post(
+    `${KEY_SHARES_PATH}/:shareId/swap`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleSwapKeyIntoShare(args),
+  );
+  router.get(
+    KEY_SHARE_NOTICES_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleListKeyShareNotices(args),
   );
   router.post(
     REQUEST_FORWARD_PATH,

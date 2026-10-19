@@ -173,6 +173,25 @@ function unlistedSlugFor(sourceRealmURL: string): string {
   return `unlisted-${slug || 'realm'}`;
 }
 
+// The realms a federated request names, with a registered prefix resolved to
+// the URL it maps onto. The host sends a realm as its caller spelled it, which
+// may be a prefix (`@cardstack/catalog/`, a test's `@test/mapped/`); the mock
+// looks realms up by URL. Only a prefix is resolved: the host's network also
+// maps the env-mode live test realm onto `https://localhost:4202/test/`, which
+// a general URL rewrite would turn back into a URL no test realm serves.
+function realmsFromPayload(payload: unknown, mountedVirtualNetwork: unknown) {
+  let virtualNetwork = mountedVirtualNetwork as VirtualNetwork | undefined;
+  return parseRealmsFromPayload(
+    payload,
+    virtualNetwork
+      ? (realm) =>
+          virtualNetwork.isRegisteredPrefix(realm)
+            ? virtualNetwork.toURL(realm).href
+            : realm
+      : undefined,
+  );
+}
+
 function registerSearchRoutes() {
   registerRealmServerRoute({
     path: '/_federated-search',
@@ -181,7 +200,7 @@ function registerSearchRoutes() {
       let payload: unknown;
       try {
         payload = await parseSearchRequestPayload(req);
-        realmList = parseRealmsFromPayload(payload);
+        realmList = realmsFromPayload(payload, state.mountedVirtualNetwork);
       } catch (e) {
         if (e instanceof SearchRequestError) {
           return buildSearchErrorResponse(e.message);
@@ -376,7 +395,7 @@ function registerInfoRoutes() {
 
       let realmList: string[];
       try {
-        realmList = parseRealmsFromPayload(payload);
+        realmList = realmsFromPayload(payload, state.mountedVirtualNetwork);
       } catch (e) {
         if (e instanceof SearchRequestError) {
           return buildSearchErrorResponse(e.message);

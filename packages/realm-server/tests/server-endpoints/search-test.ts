@@ -57,6 +57,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
     let publisher: QueuePublisher;
     let runner: QueueRunner;
     let testRealmHttpServer: Server;
+    let virtualNetwork: ReturnType<typeof createVirtualNetwork>;
 
     let ownerUserId = '@mango:localhost';
     // A second principal with read access to both realms. Used to prove the
@@ -139,7 +140,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
       liveSearchCache?: LiveSearchCache;
       linkShapePolicy?: LinkShapePolicy;
     }) {
-      let virtualNetwork = createVirtualNetwork();
+      virtualNetwork = createVirtualNetwork();
       let dir = dirSync();
       let testRealmURL = new URL('http://127.0.0.1:4444/test/');
       let secondaryRealmURL = new URL('http://127.0.0.1:4444/secondary/');
@@ -408,6 +409,59 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function (_hooks) {
         2,
         'active realms continue to search normally',
       );
+    });
+
+    test('a realm the server does not know is refused with a hint that realms takes realm URLs', async function (assert) {
+      let response = await postSearch({
+        filter: personFilter(),
+        realms: [testRealm.url, '@cardstack/nope/'],
+      });
+      assert.strictEqual(response.status, 404, 'HTTP 404 status');
+      assert.true(
+        response.text.includes('Realms not found: @cardstack/nope/'),
+        `the unknown realm is named: ${response.text}`,
+      );
+      assert.true(
+        response.text.includes(
+          'Each entry in realms must be the URL of a realm on this server, or an identifier registered for one',
+        ),
+        `the hint is given: ${response.text}`,
+      );
+    });
+
+    test('a realm named by a registered prefix answers as its URL does', async function (assert) {
+      // The prefix is registered after the realms indexed, so only the
+      // request is in a different form: the rows the realm answers with are
+      // the same ones.
+      virtualNetwork.addRealmMapping('@test/search-test/', secondaryRealm.url);
+      try {
+        let byURL = await postSearch({
+          filter: personFilter(),
+          realms: [testRealm.url, secondaryRealm.url],
+        });
+        let byPrefix = await postSearch({
+          filter: personFilter(),
+          realms: [testRealm.url, '@test/search-test/'],
+        });
+        assert.strictEqual(byPrefix.status, 200, 'HTTP 200 status');
+        assert.strictEqual(
+          byPrefix.body.meta.page.total,
+          byURL.body.meta.page.total,
+          'the prefixed realm contributes its rows',
+        );
+
+        let twice = await postSearch({
+          filter: personFilter(),
+          realms: [secondaryRealm.url, '@test/search-test/'],
+        });
+        assert.strictEqual(
+          twice.body.meta.page.total,
+          2,
+          'a realm named in both forms is searched once',
+        );
+      } finally {
+        virtualNetwork.removeRealmMapping('@test/search-test/');
+      }
     });
 
     test('cardUrls narrows results across the federation', async function (assert) {
