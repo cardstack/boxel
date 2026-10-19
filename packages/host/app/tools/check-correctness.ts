@@ -5,7 +5,6 @@ import {
   isCardErrorJSONAPI,
   rri,
   type CardErrorJSONAPI,
-  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
@@ -242,11 +241,11 @@ export default class CheckCorrectnessTool extends HostBaseTool<
       ];
     }
 
-    let { moduleURL, realmURL, fileId } = moduleInfo;
+    let { moduleURL, realmURL, fileURL } = moduleInfo;
 
     await this.toolService.waitForInvalidationAfterAIAssistantRequest(
       roomId,
-      fileId,
+      fileURL.href,
       cardIndexingTimeout,
     );
 
@@ -263,26 +262,23 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     return [errorMessage];
   }
 
-  // The prerender request crosses the network, so the module is resolved to
-  // its URL here; the file and realm stay identifiers.
-  private moduleInfoFromFile(targetRef: string):
-    | {
-        moduleURL: URL;
-        realmURL: string;
-        fileId: RealmResourceIdentifier;
-      }
-    | undefined {
+  // The prerender request and the indexing wait both speak URLs: the
+  // realm-server endpoint parses the realm as a URL, and writes register their
+  // invalidation waits by file URL. So the file is resolved to its URL before
+  // anything else, and the realm is looked up from that URL.
+  private moduleInfoFromFile(
+    targetRef: string,
+  ): { moduleURL: URL; realmURL: string; fileURL: URL } | undefined {
     try {
-      let fileId = rri(targetRef);
-      let realmURL = this.realm.realmOf(fileId);
+      let { virtualNetwork } = this.network;
+      let fileURL = virtualNetwork.toURL(targetRef);
+      let realmURL = this.realm.realmOf(fileURL);
       if (!realmURL) {
         return undefined;
       }
 
-      let moduleURL = this.network.virtualNetwork.toURL(
-        fileId.replace(/\.gts$/, ''),
-      );
-      return { moduleURL, realmURL, fileId };
+      let moduleURL = virtualNetwork.toURL(fileURL.href.replace(/\.gts$/, ''));
+      return { moduleURL, realmURL, fileURL };
     } catch {
       return undefined;
     }
