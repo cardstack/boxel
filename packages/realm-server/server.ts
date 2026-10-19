@@ -701,6 +701,7 @@ export class RealmServer {
   private definitionLookup: DefinitionLookup;
   private mediaCacheAdapter: MediaCacheAdapter | undefined;
   private assetsURL: URL;
+  private hostURL: URL;
   private getIndexHTML: () => Promise<string>;
   private serverURL: URL;
   private matrixRegistrationSecret: string | undefined;
@@ -746,6 +747,7 @@ export class RealmServer {
     definitionLookup,
     mediaCacheAdapter,
     assetsURL,
+    hostURL,
     getIndexHTML,
     matrixRegistrationSecret,
     matrixAdminUsername,
@@ -779,6 +781,10 @@ export class RealmServer {
     // absent means the POST capture endpoint captures without persisting.
     mediaCacheAdapter?: MediaCacheAdapter;
     assetsURL: URL;
+    // The host app's origin, where the render route is served. Defaults to
+    // `assetsURL`, which is the host app unless its assets are served from
+    // somewhere else.
+    hostURL?: URL;
     getIndexHTML: () => Promise<string>;
     matrixRegistrationSecret?: string;
     matrixAdminUsername?: string;
@@ -855,6 +861,7 @@ export class RealmServer {
     this.definitionLookup = definitionLookup;
     this.mediaCacheAdapter = mediaCacheAdapter;
     this.assetsURL = assetsURL;
+    this.hostURL = hostURL ?? assetsURL;
     this.getIndexHTML = getIndexHTML;
     this.matrixRegistrationSecret = matrixRegistrationSecret;
     this.matrixAdminUsername = matrixAdminUsername;
@@ -1025,6 +1032,7 @@ export class RealmServer {
           queue: this.queue,
           realms: this.realms,
           assetsURL: this.assetsURL,
+          hostURL: this.hostURL,
           realmsRootPath: this.realmsRootPath,
           getMatrixRegistrationSecret: this.getMatrixRegistrationSecret,
           matrixAdminUsername: this.matrixAdminUsername,

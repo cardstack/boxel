@@ -900,6 +900,7 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
     assetsURL: process.env.ASSETS_URL_OVERRIDE
       ? new URL(process.env.ASSETS_URL_OVERRIDE)
       : dist,
+    hostURL: dist,
     getIndexHTML,
     serverURL: new URL(serverURL),
     matrixRegistrationSecret: MATRIX_REGISTRATION_SHARED_SECRET,
