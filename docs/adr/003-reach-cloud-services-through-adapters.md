@@ -149,9 +149,9 @@ it.
   (chosen).** Portability work goes only where it is needed, and code stays
   direct where a standard already makes it portable.
 - **Call the provider directly, and port when needed.** This costs nothing
-  now, but the port would fall to each outside host, and coupling spreads. Assumptions about the platform, such as which
-  environment variables exist, stay invisible until the code runs somewhere
-  else.
+  now, but the port would fall to each outside host, and coupling spreads.
+  Assumptions about the platform, such as which environment variables exist,
+  stay invisible until the code runs somewhere else.
 - **A generic multi-cloud library.** Its lowest-common-denominator API is
   wider than what Boxel needs. It does not model capabilities such as
   envelope-key unwrapping, and it adds a dependency that must track every
