@@ -2,7 +2,13 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 
-import { pack, publishToStore } from '@cardstack/deck/node';
+import {
+  captureRepositoryCheckpoint,
+  hashBytes,
+  pack,
+  publishToStore,
+  repositoryManifest,
+} from '@cardstack/deck/node';
 import type { Realm, ResponseWithNodeStream } from '@cardstack/runtime-common';
 import {
   VirtualNetwork,
@@ -62,6 +68,7 @@ module(basename(import.meta.filename), function (hooks) {
   let virtualNetwork: VirtualNetwork;
   let realm: Realm;
   let authorized = true;
+  let writable = true;
   let publicReadable = true;
 
   test('normalizes the operator allowlist as canonical realm RRIs', function (assert) {
@@ -89,6 +96,7 @@ module(basename(import.meta.filename), function (hooks) {
 
   hooks.beforeEach(async function () {
     authorized = true;
+    writable = true;
     publicReadable = true;
     realmDir = await mkdtemp(join(tmpdir(), 'deck-version-serving-'));
     virtualNetwork = new VirtualNetwork();
@@ -99,13 +107,18 @@ module(basename(import.meta.filename), function (hooks) {
     realm = {
       dir: realmDir,
       url: 'https://realms.example/acme/theme/',
-      aclAdmits: async () =>
-        authorized
-          ? { allowed: true, publicReadable }
-          : {
+      aclAdmits: async (_request: Request, action: 'read' | 'write') =>
+        !authorized
+          ? {
               allowed: false,
               response: new Response('unauthorized', { status: 401 }),
-            },
+            }
+          : action === 'write' && !writable
+            ? {
+                allowed: false,
+                response: new Response('forbidden', { status: 403 }),
+              }
+            : { allowed: true, publicReadable },
     } as unknown as Realm;
     await publishToStore(
       join(realmDir, '.deck', 'store'),
@@ -117,6 +130,27 @@ module(basename(import.meta.filename), function (hooks) {
       join(realmDir, 'package.json'),
       JSON.stringify({ name: '@acme/theme', version: '1.1.0' }),
     );
+    await writeFile(
+      join(realmDir, 'importmap.json'),
+      JSON.stringify({ imports: {} }),
+    );
+    await writeFile(
+      join(realmDir, 'index.js'),
+      'export const accent = "tomato";\n',
+    );
+    await captureRepositoryCheckpoint({
+      realmDir,
+      config: repositoryManifest({
+        roots: ['@acme/theme/'],
+        members: { '@acme/theme/': '.' },
+      }),
+      branch: 'main',
+      historyHead: 'jj:main',
+      indexGenerationHash: hashBytes('index:main'),
+      author: { id: '@mina:boxel.test', name: 'Mina' },
+      message: 'Initialize theme',
+      createdAt: '2026-08-23T06:00:00.000Z',
+    });
   });
 
   hooks.afterEach(async function () {
@@ -190,6 +224,8 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(await allowed?.json(), {
       deckCollaboration: true,
       realmRRI: '@acme/theme/',
+      protocol: 'deck-r0',
+      sync: 'content-addressed',
     });
     assert.strictEqual(wrongRealm?.status, 404);
 
@@ -198,6 +234,157 @@ module(basename(import.meta.filename), function (hooks) {
       new Request('https://realms.example/acme/theme/.deck/capabilities'),
     );
     assert.strictEqual(privateResponse?.status, 401);
+  });
+
+  test('observes one exact branch and its content hashes without mtimes', async function (assert) {
+    let response = await serve(
+      new Request('https://realms.example/acme/theme/.deck/branch?name=main'),
+    );
+    let observation = (await response?.json()) as {
+      schema: string;
+      realmRRI: string;
+      branchName: string;
+      repositoryHash: string;
+      treeHash: string;
+      lockHash: string;
+      refGeneration: number;
+      checkpointHash: string;
+      files: Record<string, string>;
+    };
+
+    assert.strictEqual(response?.status, 200);
+    assert.strictEqual(observation.schema, 'boxel-deck-branch-observation-v1');
+    assert.strictEqual(observation.realmRRI, '@acme/theme/');
+    assert.strictEqual(observation.branchName, 'main');
+    assert.strictEqual(observation.refGeneration, 1);
+    assert.ok(observation.repositoryHash);
+    assert.ok(observation.treeHash);
+    assert.ok(observation.lockHash);
+    assert.ok(observation.checkpointHash);
+    assert.strictEqual(
+      observation.files['index.js'],
+      hashBytes('export const accent = "tomato";\n'),
+    );
+    assert.notOk('remoteMtimes' in observation);
+  });
+
+  test('serves branch bytes from the observed immutable tree', async function (assert) {
+    let branch = await serve(
+      new Request('https://realms.example/acme/theme/.deck/branch?name=main'),
+    );
+    let { treeHash, files } = (await branch?.json()) as {
+      treeHash: string;
+      files: Record<string, string>;
+    };
+    let response = await serve(
+      new Request(
+        `https://realms.example/acme/theme/.deck/tree-file?tree=${treeHash}&path=index.js`,
+      ),
+    );
+
+    assert.strictEqual(response?.status, 200);
+    assert.strictEqual(
+      await response?.text(),
+      'export const accent = "tomato";\n',
+    );
+    assert.strictEqual(response?.headers.get('etag'), `"${files['index.js']}"`);
+    assert.strictEqual(
+      response?.headers.get('cache-control'),
+      'private, max-age=31536000, immutable',
+    );
+  });
+
+  test('conditionally publishes branch bytes without mutating the live realm', async function (assert) {
+    let observedResponse = await serve(
+      new Request('https://realms.example/acme/theme/.deck/branch?name=main'),
+    );
+    let observed = (await observedResponse?.json()) as {
+      repositoryHash: string;
+      treeHash: string;
+      lockHash: string;
+      refGeneration: number;
+    };
+    let nextBytes = 'export const accent = "indigo";\n';
+    let update = {
+      schema: 'boxel-deck-branch-update-v1',
+      expected: observed,
+      operations: [
+        {
+          path: 'index.js',
+          sha256: hashBytes(nextBytes),
+          contentBase64: Buffer.from(nextBytes).toString('base64'),
+        },
+      ],
+    };
+    let published = await serve(
+      new Request('https://realms.example/acme/theme/.deck/branch?name=main', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(update),
+      }),
+    );
+    let next = (await published?.json()) as {
+      treeHash: string;
+      refGeneration: number;
+    };
+
+    assert.strictEqual(published?.status, 200);
+    assert.strictEqual(next.refGeneration, 2);
+    let exact = await serve(
+      new Request(
+        `https://realms.example/acme/theme/.deck/tree-file?tree=${next.treeHash}&path=index.js`,
+      ),
+    );
+    assert.strictEqual(await exact?.text(), nextBytes);
+    assert.strictEqual(
+      await import('node:fs/promises').then(({ readFile }) =>
+        readFile(join(realmDir, 'index.js'), 'utf8'),
+      ),
+      'export const accent = "tomato";\n',
+    );
+
+    let stale = await serve(
+      new Request('https://realms.example/acme/theme/.deck/branch?name=main', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(update),
+      }),
+    );
+    assert.strictEqual(stale?.status, 409);
+  });
+
+  test('refuses a branch write from a caller the realm ACL lets only read', async function (assert) {
+    writable = false;
+    let observed = (await (
+      await serve(
+        new Request('https://realms.example/acme/theme/.deck/branch?name=main'),
+      )
+    )?.json()) as { refGeneration: number };
+    let nextBytes = 'export const accent = "indigo";\n';
+    let refused = await serve(
+      new Request('https://realms.example/acme/theme/.deck/branch?name=main', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          schema: 'boxel-deck-branch-update-v1',
+          expected: observed,
+          operations: [
+            {
+              path: 'index.js',
+              sha256: hashBytes(nextBytes),
+              contentBase64: Buffer.from(nextBytes).toString('base64'),
+            },
+          ],
+        }),
+      }),
+    );
+    assert.strictEqual(refused?.status, 403);
+    let after = (await (
+      await serve(
+        new Request('https://realms.example/acme/theme/.deck/branch?name=main'),
+      )
+    )?.json()) as { refGeneration: number };
+    assert.strictEqual(after.refGeneration, observed.refGeneration);
   });
 
   test('resolves semver intent to one immutable Version index', async function (assert) {

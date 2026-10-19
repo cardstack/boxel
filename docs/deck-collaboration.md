@@ -76,3 +76,58 @@ elsewhere stays a conflict.
 
 The S3 suite runs against an in-memory S3 double. To run it against a real
 bucket, set `BOXEL_DECK_S3_TEST_BUCKET` and `BOXEL_DECK_S3_TEST_REGION`.
+
+## Content sync
+
+A Deck realm replaces mtime causality with an exact, three-way content
+protocol. Boxel CLI negotiates once per realm:
+
+- `GET /.deck/capabilities` answering 404 means a legacy realm, and the CLI
+  keeps its existing mtime workflow unchanged.
+- A complete Deck capability (`protocol: deck-r0`, `sync: content-addressed`)
+  selects the Deck protocol and nothing else.
+- Authentication failures, server errors, and malformed or partial
+  capabilities fail closed. A probe that merely failed never downgrades a Deck
+  realm to mtime rules.
+
+The realm serves two read endpoints and one write:
+
+- `GET /.deck/branch?name=main` returns the exact branch observation:
+  Repository, tree and lock hashes, the ref generation, and the SHA-256 of
+  every file.
+- `GET /.deck/tree-file?tree=…&path=…` returns immutable bytes from a tree;
+  the client verifies them against the hash it expected.
+- `POST /.deck/branch?name=main` carries the base the client observed plus
+  byte operations. `packages/realm-server/lib/deck-branch-content-update.ts`
+  checks the Repository, tree, lock and ref generation, stores the new
+  immutable objects, and moves the branch with one conditional ref write. A
+  stale writer gets 409; two stale writers cannot both win.
+
+In the workspace, `.boxel-sync.json` becomes a `boxel-deck-workspace-v1`
+record: the realm RRI, the branch, the exact base hashes and generation it
+last observed, and the SHA-256 of every local file. It holds no mtimes.
+`packages/boxel-cli/src/lib/deck-workspace-state.ts` classifies each path
+against that base:
+
+```text
+recorded exact base ───────┐
+                           ├── three-way plan ── conflict ──▶ no writes
+local SHA-256 tree ────────┤
+                           └── reconcile ───────▶ immutable objects
+remote branch observation ─┘                              │
+                                                          ▼
+                                              conditional branch CAS
+```
+
+- `realm pull` materializes an exact branch base.
+- `realm push` publishes local changes only when the recorded base has not
+  moved.
+- `realm sync` first takes disjoint remote work, then publishes the rest.
+- `realm watch` polls local hashes and the remote ref read-only, and its
+  debounced flush runs the same path as `realm sync`.
+- A same-path divergence is a conflict: no command sends a remote mutation for
+  it, and `--force`, `--overwrite-local` and `--prefer-newest` are not
+  consistency bypasses on a Deck realm.
+- `.boxel-sync.json`, `.boxel-watch.lock`, `.claude/`, `.deck/`, `.jj/`,
+  `.git/` and dependency directories are local machinery, never branch
+  content.
