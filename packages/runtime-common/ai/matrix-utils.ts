@@ -248,6 +248,12 @@ function cleanupCache() {
   }
 }
 
+// A failed media response, with its HTTP status, so a caller can tell a
+// missing file (404) or a refused one (403) from a transient failure.
+function mediaResponseError(status: number) {
+  return Object.assign(new Error(`HTTP error. Status: ${status}`), { status });
+}
+
 async function fetchMatrixMediaWithFallback(
   client: MatrixClient,
   url: string,
@@ -262,7 +268,7 @@ async function fetchMatrixMediaWithFallback(
     if (primaryResponse.ok) {
       return primaryResponse;
     }
-    primaryError = new Error(`HTTP error. Status: ${primaryResponse.status}`);
+    primaryError = mediaResponseError(primaryResponse.status);
   } catch (err) {
     primaryError = err;
   }
@@ -288,7 +294,7 @@ async function fetchMatrixMediaWithFallback(
     headers,
   });
   if (!fallbackResponse.ok) {
-    throw new Error(`HTTP error. Status: ${fallbackResponse.status}`);
+    throw mediaResponseError(fallbackResponse.status);
   }
 
   return fallbackResponse;

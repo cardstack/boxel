@@ -678,6 +678,7 @@ test('getRoomEvents - a history cut by a compaction builds the same prompt as th
             url: skillMediaUrl,
             name: 'SKILL.md',
             contentType: 'text/plain',
+            contentSize: 'Search the catalog.'.length,
           },
         ],
       },
@@ -732,6 +733,111 @@ test('getRoomEvents - a history cut by a compaction builds the same prompt as th
     JSON.stringify(windowed.messages?.slice(0, -1)),
     JSON.stringify(whole.messages?.slice(0, -1)),
   );
+});
+
+// A bot read before the cut whose result attached a skill file and
+// discovered a tool from it.
+function skillReadWithTool(timeline: DiscreteMatrixEvent[]) {
+  placeAt(timeline, 60, {
+    event_id: 'read-request',
+    type: 'm.room.message',
+    sender: AI_BOT_USER_ID,
+    content: {
+      body: '',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      isStreamingFinished: true,
+      data: {},
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        { id: 'read-1', name: 'readRealmFile', arguments: '{"urls":[]}' },
+      ],
+    },
+    room_id: 'test-room-id',
+  } as unknown as DiscreteMatrixEvent);
+  placeAt(timeline, 61, {
+    event_id: 'read-result',
+    type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+    sender: AI_BOT_USER_ID,
+    content: {
+      msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+      commandRequestId: 'read-1',
+      'm.relates_to': {
+        rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+        key: 'applied',
+        event_id: 'read-request',
+      },
+      data: {
+        attachedFiles: [
+          {
+            sourceUrl: 'http://localhost:4201/skills/catalog-reuse/SKILL.md',
+            url: 'http://localhost:8008/_matrix/media/v3/download/localhost/tool-skill',
+            name: 'SKILL.md',
+            contentType: 'text/plain',
+            contentSize: 'Search the catalog.'.length,
+          },
+        ],
+        discoveredTools: [
+          {
+            sourceSkillUrl:
+              'http://localhost:4201/skills/catalog-reuse/SKILL.md',
+            definition: {
+              type: 'function',
+              function: {
+                name: 'search-catalog',
+                description: 'Searches the catalog',
+                parameters: {},
+              },
+            },
+          },
+        ],
+      },
+    },
+    room_id: 'test-room-id',
+  } as unknown as DiscreteMatrixEvent);
+}
+
+test('getRoomEvents - a read listed only for its skill files keeps its tools', async function (assert) {
+  const originalFetch = globalThis.fetch;
+  (globalThis as any).fetch = async () => ({
+    ok: true,
+    status: 200,
+    text: async () => 'Search the catalog.',
+  });
+  try {
+    const listed = createRoomTimeline(3000);
+    skillReadWithTool(listed);
+    placeAt(
+      listed,
+      1700,
+      compactionEvent('compaction', 'event1500', [], ['read-result']),
+    );
+    const listedClient = createMockedClient(listed).client;
+    const kept = await getPromptParts(
+      await getRoomEvents('room123', listedClient, 'event2999'),
+      AI_BOT_USER_ID,
+      listedClient,
+    );
+    assert.deepEqual(
+      kept.tools?.map((tool) => tool.function.name),
+      ['search-catalog'],
+      'the tool comes back with the skill file read',
+    );
+
+    const unlisted = createRoomTimeline(3000);
+    skillReadWithTool(unlisted);
+    placeAt(unlisted, 1700, compactionEvent('compaction', 'event1500', [], []));
+    const unlistedClient = createMockedClient(unlisted).client;
+    const dropped = await getPromptParts(
+      await getRoomEvents('room123', unlistedClient, 'event2999'),
+      AI_BOT_USER_ID,
+      unlistedClient,
+    );
+    assert.notOk(
+      dropped.tools?.some((tool) => tool.function.name === 'search-catalog'),
+      'a read in neither list leaves its tool behind',
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test('sendErrorEvent - uses provider metadata when available', async function (assert) {

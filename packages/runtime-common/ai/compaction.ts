@@ -28,7 +28,9 @@ export interface CompactionContent {
   // The readRealmFile results before the cut that attached skill files.
   // `getRoomEvents` fetches them back, and the prompt carries their skill
   // files after the summary: the summary only names a file, and the model
-  // would otherwise follow a skill it no longer has the text of.
+  // would otherwise follow a skill it no longer has the text of. A result
+  // that also contributed tools keeps them, even when `toolSourceEventIds`
+  // no longer lists it.
   skillFileEventIds?: string[];
 }
 
@@ -156,8 +158,9 @@ export function isSkillFileUrl(url: string | undefined): boolean {
   );
 }
 
-// The most text of skill files a prompt carries after a compaction's
-// summary. The newest reads come first; the rest are only named.
+// The most skill-file text a prompt carries after a compaction's summary,
+// counted as rendered in the prompt (line numbers and headings included).
+// The newest reads come first; the rest are only named.
 export const MAX_CARRIED_SKILL_FILE_BYTES = 64 * 1024;
 
 // The most readRealmFile results a compaction lists for their skill files.

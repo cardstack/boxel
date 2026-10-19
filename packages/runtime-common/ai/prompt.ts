@@ -9,7 +9,7 @@ import type {
   PromptParts,
   TextContent,
 } from './types.ts';
-import { uniqBy } from 'lodash-es';
+import { chunk, uniqBy } from 'lodash-es';
 import { constructHistory } from './history.ts';
 import {
   canonicalizeMatrixMediaKey,
@@ -1123,7 +1123,9 @@ export function toolSourceEventIdsToCarry(
 
 // The most tool-source events a compaction event carries. The tools of the
 // events past it leave the prompt once the history before the cut is no
-// longer loaded.
+// longer loaded, unless the compaction also lists the event in
+// `skillFileEventIds`: `getRoomEvents` fetches it back for its skill files,
+// and `getTools` takes the tools of every event it is given.
 export const MAX_CARRIED_TOOL_SOURCE_EVENTS = 200;
 
 // The skill files an applied result ai-bot published attached.
@@ -1245,20 +1247,30 @@ function isDisabledSkillFile(url: string, disabledSkillIds: string[]) {
   );
 }
 
+// How many carried skill files `carriedSkillFiles` downloads at once.
+const SKILL_FILE_DOWNLOAD_CONCURRENCY = 10;
+
 // The message that follows a compaction's summary with the skill files the
 // model read in the history the summary replaces, or undefined when it read
-// none. Each file appears once, as its newest read. Files are taken newest
-// first: each one that still fits in `MAX_CARRIED_SKILL_FILE_BYTES` is
-// carried in full, so an older, smaller file can be carried after a newer
-// one too large for what is left. The files that don't fit, and any that
-// cannot be downloaded, are named for the model to read again. Files of a
-// skill the user disabled are left out, as its tools are.
+// none. Each file appears once, as its newest read.
 //
-// The message depends on the history up to the cut point and on which
-// skills are disabled, nothing else. Its bytes stay the same on every prompt
-// until the next compaction or the next time the user disables or enables a
-// skill, which also changes the tools; a file read again after the cut point
-// does not change it.
+// Files are chosen newest first by the size their read recorded: each one
+// that still fits in `MAX_CARRIED_SKILL_FILE_BYTES` is chosen, so an older,
+// smaller file can be chosen after a newer one too large for what is left.
+// Only the chosen files are downloaded, a few at a time. The message then
+// carries them as rendered, line numbers and headings included, newest first
+// up to the same limit. The files that don't fit, files with no recorded
+// size, and files the media server no longer has or won't serve are named
+// for the model to read again. Any other download failure throws, as it does
+// for the room's tool definitions, so a transient failure never changes the
+// message. Files of a skill the user disabled are left out, as its tools
+// are.
+//
+// The message depends on the history up to the cut point, the files it
+// names, and which skills are disabled. Its bytes stay the same on every
+// prompt until the next compaction, the next time the user disables or
+// enables a skill (which also changes the tools), or a carried file's media
+// goes missing; a file read again after the cut point does not change it.
 async function carriedSkillFiles(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
@@ -1283,29 +1295,73 @@ async function carriedSkillFiles(
   if (!newestFirst.length) {
     return undefined;
   }
-  let carried: SerializedFileDef[] = [];
-  let reReadUrls: string[] = [];
-  let carriedBytes = 0;
+
+  let chosen: SerializedFileDef[] = [];
+  let chosenBytes = 0;
   for (let file of newestFirst) {
-    let downloaded = await downloadTextContent(client, file);
-    let bytes =
-      downloaded.content === undefined
-        ? undefined
-        : new TextEncoder().encode(downloaded.content).length;
+    let size = file.contentSize;
     if (
-      bytes === undefined ||
-      carriedBytes + bytes > MAX_CARRIED_SKILL_FILE_BYTES
+      typeof size === 'number' &&
+      Number.isFinite(size) &&
+      size >= 0 &&
+      chosenBytes + size <= MAX_CARRIED_SKILL_FILE_BYTES
     ) {
-      reReadUrls.push(file.sourceUrl!);
+      chosenBytes += size;
+      chosen.push(file);
+    }
+  }
+
+  let downloaded: (SerializedFileDef | undefined)[] = [];
+  for (let batch of chunk(chosen, SKILL_FILE_DOWNLOAD_CONCURRENCY)) {
+    downloaded.push(
+      ...(await Promise.all(
+        batch.map(async (file) => {
+          try {
+            return {
+              ...toFileDefMetadata(file),
+              content: await downloadFile(client, file),
+            };
+          } catch (error: any) {
+            if (error?.status === 404 || error?.status === 403) {
+              getLog().warn(
+                `Skill file ${file.sourceUrl} is no longer available to carry`,
+                error,
+              );
+              return undefined;
+            }
+            throw new Error(
+              `Could not download the skill file ${file.sourceUrl} that the compaction carries: ${error?.message ?? error}`,
+              { cause: error },
+            );
+          }
+        }),
+      )),
+    );
+  }
+
+  let carried: SerializedFileDef[] = [];
+  let carriedBytes = 0;
+  let encoder = new TextEncoder();
+  for (let file of downloaded) {
+    if (!file) {
       continue;
     }
-    carriedBytes += bytes;
-    carried.push(downloaded);
+    let bytes =
+      encoder.encode(attachedFilesToMessage([file])).length +
+      (carried.length ? 1 : 0);
+    if (carriedBytes + bytes <= MAX_CARRIED_SKILL_FILE_BYTES) {
+      carriedBytes += bytes;
+      carried.push(file);
+    }
   }
+  let carriedUrls = new Set(carried.map((file) => file.sourceUrl));
+  let reReadUrls = newestFirst
+    .map((file) => file.sourceUrl!)
+    .filter((url) => !carriedUrls.has(url))
+    .reverse();
   carried.reverse();
-  reReadUrls.reverse();
   getLog().info(
-    `Carrying ${carried.length} skill files (${carriedBytes} bytes) after the compaction summary; ${reReadUrls.length} to read again: %j`,
+    `Carrying ${carried.length} skill files (${carriedBytes} bytes rendered) after the compaction summary; ${reReadUrls.length} to read again: %j`,
     reReadUrls,
   );
   return carriedSkillFilesMessage(

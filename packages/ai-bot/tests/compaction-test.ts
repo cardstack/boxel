@@ -217,20 +217,48 @@ module('compaction', (hooks) => {
     const sourceFile = 'http://localhost:4201/user/desk/ticket.gts';
 
     // Matrix media is cached by URL across tests, so every file a test
-    // attaches gets a URL of its own.
+    // attaches gets a media id of its own. The mock answers by media id, as
+    // a download falls back from the http URL to one derived from its mxc
+    // URL.
     let mediaCount = 0;
     let mediaTexts: Map<string, string>;
+    // Statuses to answer a media id with before its text, one per request.
+    let mediaFailures: Map<string, number[]>;
+    // The media ids requested, once each.
+    let fetchedMedia: Set<string>;
+    let mediaDelayMs: number;
+    let inFlight: number;
+    let maxInFlight: number;
     let originalFetch: typeof globalThis.fetch;
+
+    const mediaId = (url: string) => /file-\d+/.exec(url)?.[0] ?? url;
 
     nestedHooks.beforeEach(() => {
       mediaTexts = new Map();
+      mediaFailures = new Map();
+      fetchedMedia = new Set();
+      mediaDelayMs = 0;
+      inFlight = 0;
+      maxInFlight = 0;
       originalFetch = globalThis.fetch;
       (globalThis as any).fetch = async (url: string) => {
-        let body = mediaTexts.get(url);
-        if (body === undefined) {
-          return { ok: false, status: 404, text: async () => '' };
+        let id = mediaId(url);
+        fetchedMedia.add(id);
+        inFlight++;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        try {
+          if (mediaDelayMs) {
+            await new Promise((resolve) => setTimeout(resolve, mediaDelayMs));
+          }
+          let failure = mediaFailures.get(id)?.shift();
+          let body = mediaTexts.get(id);
+          if (failure !== undefined || body === undefined) {
+            return { ok: false, status: failure ?? 404, text: async () => '' };
+          }
+          return { ok: true, status: 200, text: async () => body };
+        } finally {
+          inFlight--;
         }
-        return { ok: true, status: 200, text: async () => body };
       };
     });
 
@@ -255,19 +283,29 @@ module('compaction', (hooks) => {
       requestEventId: string,
       toolCallId: string,
       files: Record<string, string | undefined>,
-      opts: { sender?: string; key?: string } = {},
+      opts: {
+        sender?: string;
+        key?: string;
+        // A recorded size per file in place of its text's length; null
+        // records none.
+        sizes?: Record<string, number | null>;
+      } = {},
     ): DiscreteMatrixEvent {
       let attachedFiles = Object.entries(files).map(([sourceUrl, body]) => {
         let url = `http://localhost:8008/_matrix/media/v3/download/localhost/file-${mediaCount++}`;
         if (body !== undefined) {
-          mediaTexts.set(url, body);
+          mediaTexts.set(mediaId(url), body);
         }
+        let size =
+          opts.sizes && sourceUrl in opts.sizes
+            ? opts.sizes[sourceUrl]
+            : (body?.length ?? 16);
         return {
           sourceUrl,
           url,
           name: sourceUrl.split('/').pop(),
           contentType: 'text/plain',
-          contentSize: body?.length ?? 0,
+          ...(size === null ? {} : { contentSize: size }),
         };
       });
       return {
@@ -442,19 +480,25 @@ module('compaction', (hooks) => {
     test('names the files past the size limit for the model to read again', async () => {
       let big = (letter: string) =>
         letter.repeat(Math.floor(MAX_CARRIED_SKILL_FILE_BYTES * 0.4));
-      let eventList = room([
-        readResult('r1', 'b1', 'call-1', {
-          [catalogReuse]: big('a'),
-          [catalogReuseRef]: big('b'),
-          [sourceEditing]: big('c'),
-        }),
-      ]);
-      let { messages } = await getPromptParts(eventList, aiBotUserId, client);
+      let read = readResult('r1', 'b1', 'call-1', {
+        [catalogReuse]: big('a'),
+        [catalogReuseRef]: big('b'),
+        [sourceEditing]: big('c'),
+      });
+      let oldestId = mediaId(
+        JSON.parse((read.content as any).data).attachedFiles[0].url,
+      );
+      let { messages } = await getPromptParts(
+        room([read]),
+        aiBotUserId,
+        client,
+      );
       let carried = text(messages![2]);
       assert.false(
         carried.includes(big('a')),
         'the oldest read is not carried',
       );
+      assert.false(fetchedMedia.has(oldestId), 'nor downloaded');
       assert.true(carried.includes(big('b')));
       assert.true(carried.includes(big('c')));
       assert.true(
@@ -484,7 +528,7 @@ module('compaction', (hooks) => {
       );
     });
 
-    test('names a file that cannot be downloaded for the model to read again', async () => {
+    test('names a file the media server no longer has for the model to read again', async () => {
       let eventList = room([
         readResult('r1', 'b1', 'call-1', {
           [catalogReuse]: undefined,
@@ -498,10 +542,114 @@ module('compaction', (hooks) => {
       assert.false(carried.includes('Error loading attached file'));
     });
 
+    test('fails the prompt when a chosen file fails to download for another reason', async () => {
+      let read = readResult('r1', 'b1', 'call-1', {
+        [catalogReuse]: 'Search the catalog before writing a card.',
+      });
+      let id = mediaId(
+        JSON.parse((read.content as any).data).attachedFiles[0].url,
+      );
+      mediaFailures.set(id, [500, 500]);
+      let eventList = room([read]);
+      let failure: Error | undefined;
+      try {
+        await getPromptParts(eventList, aiBotUserId, client);
+      } catch (error) {
+        failure = error as Error;
+      }
+      assert.true(
+        /catalog-reuse\/SKILL\.md/.test(failure?.message ?? ''),
+        'the prompt fails, naming the file',
+      );
+
+      // Once the download works, the message is what it would have been.
+      let later = await getPromptParts(eventList, aiBotUserId, client);
+      let again = await getPromptParts(eventList, aiBotUserId, client);
+      assert.true(text(later.messages![2]).includes('Search the catalog'));
+      assert.strictEqual(
+        JSON.stringify(later.messages!.slice(0, 3)),
+        JSON.stringify(again.messages!.slice(0, 3)),
+      );
+    });
+
+    test('names a file with no recorded size without downloading it', async () => {
+      let read = readResult(
+        'r1',
+        'b1',
+        'call-1',
+        {
+          [catalogReuse]: 'Search the catalog before writing a card.',
+          [sourceEditing]: 'Edit with realm.fs.replace.',
+        },
+        { sizes: { [catalogReuse]: null } },
+      );
+      let unsizedId = mediaId(
+        JSON.parse((read.content as any).data).attachedFiles[0].url,
+      );
+      let { messages } = await getPromptParts(
+        room([read]),
+        aiBotUserId,
+        client,
+      );
+      let carried = text(messages![2]);
+      assert.true(carried.includes('Edit with realm.fs.replace.'));
+      assert.false(carried.includes('Search the catalog'));
+      assert.true(carried.includes(`before relying on them:\n${catalogReuse}`));
+      assert.false(fetchedMedia.has(unsizedId), 'it is not downloaded');
+    });
+
+    test('budgets the files as rendered, line numbers included', async () => {
+      // Half the budget as text, but two bytes a line, so its line numbers
+      // take it far past the budget.
+      let shortLines = 'x\n'.repeat(MAX_CARRIED_SKILL_FILE_BYTES / 4);
+      let eventList = room([
+        readResult('r1', 'b1', 'call-1', {
+          [catalogReuse]: 'Search the catalog before writing a card.',
+        }),
+        readCall('b1b', 'call-2'),
+        readResult('r2', 'b1b', 'call-2', { [sourceEditing]: shortLines }),
+      ]);
+      let { messages } = await getPromptParts(eventList, aiBotUserId, client);
+      let carried = text(messages![2]);
+      assert.true(carried.includes('Search the catalog'));
+      assert.false(carried.includes('  1: x'), 'the newer file is not carried');
+      assert.true(
+        carried.includes(`before relying on them:\n${sourceEditing}`),
+      );
+      assert.true(
+        Buffer.byteLength(carried) <= MAX_CARRIED_SKILL_FILE_BYTES + 1024,
+        'the carried text stays near the budget',
+      );
+    });
+
+    test('downloads the chosen files a few at a time', async () => {
+      mediaDelayMs = 5;
+      let files = Object.fromEntries(
+        Array.from({ length: 25 }, (_, i) => [
+          `${skillsRealm}skill-${i}/SKILL.md`,
+          `Guidance ${i}.`,
+        ]),
+      );
+      let { messages } = await getPromptParts(
+        room([readResult('r1', 'b1', 'call-1', files)]),
+        aiBotUserId,
+        client,
+      );
+      let carried = text(messages![2]);
+      assert.true(
+        Array.from({ length: 25 }, (_, i) => `Guidance ${i}.`).every((line) =>
+          carried.includes(line),
+        ),
+        'every file is carried',
+      );
+      assert.true(maxInFlight > 1, 'downloads overlap');
+      assert.true(maxInFlight <= 10, `at most 10 at once (${maxInFlight})`);
+    });
+
     test('leaves out the files of a skill the user disabled', async () => {
       let disabledSkillUrl = `http://localhost:8008/_matrix/media/v3/download/localhost/file-${mediaCount++}`;
       mediaTexts.set(
-        disabledSkillUrl,
+        mediaId(disabledSkillUrl),
         '---\nboxel:\n  kind: skill\n---\nSearch the catalog.',
       );
       let eventList = room([
