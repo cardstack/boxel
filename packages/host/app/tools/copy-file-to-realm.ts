@@ -44,9 +44,12 @@ export default class CopyFileToRealmTool extends HostBaseTool<
     // registered under a prefix gets a prefix-form file identifier back.
     let sourceId = rri(input.sourceFileIdentifier);
     let sourcePath = sourceId.split(/[?#]/)[0];
-    let filename = decodeURIComponent(
-      sourcePath.split('/').pop() || sourcePath,
-    );
+    let filename = decodeURIComponent(sourcePath.split('/').pop() ?? '');
+    if (!filename) {
+      throw new Error(
+        `sourceFileIdentifier does not name a file: ${input.sourceFileIdentifier}`,
+      );
+    }
 
     let destinationId = new RealmPaths(ri(targetRealm)).fileRRI(filename);
 

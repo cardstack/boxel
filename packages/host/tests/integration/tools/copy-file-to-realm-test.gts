@@ -209,6 +209,17 @@ module('Integration | tools | copy-file-to-realm', function (hooks) {
     }
   });
 
+  test('refuses a source identifier that names a directory', async function (assert) {
+    let toolService = getService('tool-service');
+    await assert.rejects(
+      new CopyFileToRealmTool(toolService.toolContext).execute({
+        sourceFileIdentifier: `${testRealmURL}nested/`,
+        targetRealm: testRealm2URL,
+      }),
+      /does not name a file/,
+    );
+  });
+
   test('errors when user does not have write permissions to target realm', async function (assert) {
     let toolService = getService('tool-service');
     let copyFileCommand = new CopyFileToRealmTool(toolService.toolContext);
