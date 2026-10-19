@@ -2194,7 +2194,7 @@ export class TestCard extends ExportedCard {
       assert.strictEqual(content, expectedSrc, 'the source is correct');
       deferred.fulfill();
     });
-    await percySnapshot(assert);
+    await percySnapshot(assert, { scope: '[data-test-create-file-modal]' });
     await click('[data-test-create-definition]');
     await waitFor('[data-test-create-file-modal]', { count: 0 });
     await deferred.promise;
