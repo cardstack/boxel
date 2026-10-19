@@ -916,6 +916,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return Boolean(this.cardError);
   }
 
+  // Focus entering a card makes it the one keyboard shortcuts such as Escape
+  // act on, so they follow the card the user is in.
+  private markInteracted = () => {
+    this.args.item.markInteracted();
+  };
+
   private setupItemEl = (el: HTMLElement) => {
     this.itemEl = el;
     this.trackOpeningAnimation();
@@ -982,6 +988,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       role='region'
       aria-label={{this.headerTitle}}
       style={{this.styleForStackedCard}}
+      {{on 'focusin' this.markInteracted}}
       {{ContentElement onSetup=this.setupItemEl}}
     >
       <CardContainer

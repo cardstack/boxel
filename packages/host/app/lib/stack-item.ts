@@ -103,8 +103,8 @@ export class StackItem {
   type: StackItemType;
   // Monotonic sequence used to identify which item the user most
   // recently touched, for deciding what Escape / Ctrl+E should target.
-  // Bumped on construction (= a new open) AND on every format change
-  // via `markInteracted()`. The format bump is what makes "open A,
+  // Bumped on construction (= a new open), and via `markInteracted()` on
+  // every format change and whenever focus enters the item. The format bump is what makes "open A,
   // open B, edit A, Escape" target A: clicking edit on A is the most
   // recent interaction even though B was opened more recently.
   lastInteractedAt: number;
