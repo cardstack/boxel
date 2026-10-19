@@ -1139,7 +1139,7 @@ export default class OperatorModeStateService extends Service {
     let state: SerializedState = {
       stacks: [],
       submode: this._state.submode,
-      codePath: this.codePathURL?.href,
+      codePath: this._state.codePath ?? undefined,
       trail,
       fileView: this._state.fileView?.toString() as FileView,
       openDirs: Object.fromEntries(this._state.openDirs.entries()),

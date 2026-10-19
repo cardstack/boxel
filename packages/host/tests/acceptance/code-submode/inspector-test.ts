@@ -2704,7 +2704,7 @@ export class ExportedCard extends ExportedCardParent {
       .hasValue(baseRRI('card-api.gts'), 'URL bar shows the prefix form');
   });
 
-  test('the URL bar takes a base module by its prefix form, not its URL', async function (assert) {
+  test('the URL bar takes a base module by its prefix form, not its URL, and the query param keeps it', async function (assert) {
     await visitOperatorMode({
       stacks: [[]],
       submode: 'code',
@@ -2732,6 +2732,18 @@ export class ExportedCard extends ExportedCardParent {
     assert.strictEqual(
       getService('operator-mode-state-service').state.codePath,
       baseRRI('card-api.gts'),
+    );
+    let serializedCodePath = () =>
+      JSON.parse(
+        new URL(currentURL(), 'http://localhost').searchParams.get(
+          'operatorModeState',
+        )!,
+      ).codePath;
+    await waitUntil(() => serializedCodePath() === baseRRI('card-api.gts'));
+    assert.strictEqual(
+      serializedCodePath(),
+      baseRRI('card-api.gts'),
+      'the query param holds the prefix form',
     );
   });
 
