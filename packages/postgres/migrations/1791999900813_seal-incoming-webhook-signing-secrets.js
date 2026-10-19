@@ -26,9 +26,12 @@
 // REVOKE removes only the grants its grantor made. So `up` revokes each SELECT
 // grant those roles hold on the table or its columns acting as the role that
 // made it, with CASCADE, which also removes every grant passed on from it.
-// Acting as another role needs the migrating role to be a superuser or able
+// Grants the table's owner made go first, so a grant one reader passed on to
+// another goes with the grant it came from. Acting as another role needs the migrating role to be a superuser or able
 // to SET ROLE to it; where it isn't, `up` stops and names the grant rather
-// than leave the table readable.
+// than leave the table readable. Only grants a reader holds itself are
+// revoked: a reader that can read the table through PUBLIC or through a role
+// outside the read-only role keeps that access.
 //
 // Before revoking, `up` takes every SELECT grant on the table and its
 // columns, and records the ones the revokes removed, including those CASCADE
@@ -111,8 +114,11 @@ exports.up = (pgm) => {
         remaining := before_revoke;
         LOOP
           withheld := NULL;
+          -- Grants the owner made come first, so CASCADE takes what a reader
+          -- passed on from one without acting as that reader.
           SELECT held INTO withheld
-            FROM jsonb_array_elements(remaining) held
+            FROM jsonb_array_elements(remaining)
+              WITH ORDINALITY AS remaining_grant(held, position)
             WHERE held->>'grantee' IN (
               WITH RECURSIVE reader(oid) AS (
                 SELECT oid FROM pg_roles WHERE rolname = 'readonly_role'
@@ -129,6 +135,7 @@ exports.up = (pgm) => {
                 SELECT relowner FROM pg_class WHERE oid = 'incoming_webhooks'::regclass
               )
             )
+            ORDER BY held->>'grantor' IS NOT NULL, position
             LIMIT 1;
           EXIT WHEN withheld IS NULL;
           IF withheld->>'grantor' IS NOT NULL THEN
