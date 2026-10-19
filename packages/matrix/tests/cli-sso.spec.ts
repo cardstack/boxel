@@ -5,6 +5,7 @@ import {
   createSubscribedUser,
   getMatrixTestContext,
   getUniqueUsername,
+  oauthErrorResponseURL,
   subjectFor,
   updateSynapseUser,
 } from '../helpers/index.ts';
@@ -156,6 +157,42 @@ test.describe('boxel-cli browser authorization', () => {
       { headers: { Authorization: `Bearer ${auth.accessToken}` } },
     );
     expect(whoami.status).toBe(200);
+  });
+
+  // Google sends a cancel to Synapse, whose error page can't tell which page
+  // started the sign-in and sends the browser to the host's root. The host
+  // returns it to /cli-auth, where the CLI is still waiting, so the user can
+  // sign in another way.
+  test('cancelling a Google sign-in returns to the CLI page, and the CLI still signs in', async ({
+    page,
+  }) => {
+    const { matrixUrl } = getMatrixTestContext();
+    const { username, password } = await createSubscribedUser('cli-cancel');
+
+    const auth = await browserLogin({
+      matrixUrl: matrixUrl!,
+      hostUrl: HOST_URL,
+      log: () => {},
+      openBrowserFn: async (authUrl) => {
+        await page.goto(authUrl);
+        const cliAuthPage = page.url();
+        await page.locator('[data-test-cli-auth-google]').click();
+        await expect(page.locator('input[name="username"]')).toBeVisible();
+        await page.goto(oauthErrorResponseURL(page.url(), 'access_denied'));
+
+        await page.waitForURL(cliAuthPage);
+        await credentialFields(page)
+          .locator('[data-test-cli-auth-username]')
+          .fill(username);
+        await credentialFields(page)
+          .locator('[data-test-cli-auth-password]')
+          .fill(password);
+        await page.locator('[data-test-cli-auth-submit]').click();
+        return true;
+      },
+    });
+
+    expect(auth.userId).toBe(`@${username}:localhost`);
   });
 
   // A Google identity whose verified email matches no account gets a brand-new
