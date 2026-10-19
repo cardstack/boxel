@@ -12,6 +12,7 @@ import {
   type LooseSingleCardDocument,
   type RealmInfo,
   type Loader,
+  type RealmIdentifier,
   type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document';
@@ -307,13 +308,22 @@ export default class CardService extends Service {
     };
   }
 
+  // Identifiers stay in the form the caller holds them in until a request is
+  // made; a prefix-form identifier resolves through the virtual network here.
+  private toURL(id: RealmResourceIdentifier | RealmIdentifier | URL): URL {
+    return id instanceof URL ? id : this.network.virtualNetwork.toURL(id);
+  }
+
   async saveSource(
-    url: URL,
+    id: RealmResourceIdentifier | URL,
     content: string,
     type: SaveType,
     options?: SaveSourceOptions,
   ) {
     try {
+      // Resolved inside the try so an identifier that resolves nowhere is
+      // reported like any other failed write.
+      let url = this.toURL(id);
       let sizeType: 'card' | 'file' = url.href.endsWith('.json')
         ? 'card'
         : 'file';
@@ -359,7 +369,11 @@ export default class CardService extends Service {
     }
   }
 
-  async copySource(fromUrl: URL, toUrl: URL) {
+  async copySource(
+    from: RealmResourceIdentifier | URL,
+    to: RealmResourceIdentifier | URL,
+  ) {
+    let fromUrl = this.toURL(from);
     let response = await this.network.authedFetch(fromUrl, {
       method: 'GET',
       headers: {
@@ -377,10 +391,11 @@ export default class CardService extends Service {
     }
 
     const content = await response.text();
-    return await this.saveSource(toUrl, content, 'copy');
+    return await this.saveSource(to, content, 'copy');
   }
 
-  async deleteSource(url: URL) {
+  async deleteSource(id: RealmResourceIdentifier | URL) {
+    let url = this.toURL(id);
     let response = await this.network.authedFetch(url, {
       method: 'DELETE',
       headers: {
@@ -422,9 +437,10 @@ export default class CardService extends Service {
 
   async executeAtomicOperations(
     operations: AtomicOperation[],
-    realmURL: URL,
+    realm: RealmIdentifier | URL,
     opts?: { clientRequestId?: string },
   ) {
+    let realmURL = this.toURL(realm);
     for (let operation of operations) {
       if (operation.data?.type === 'source') {
         let content = operation.data.attributes?.content;

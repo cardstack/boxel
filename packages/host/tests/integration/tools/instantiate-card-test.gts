@@ -86,6 +86,63 @@ module('Integration | tools | instantiate-card', function (hooks) {
     assert.notOk(result.error, 'no error for valid instantiation');
   });
 
+  test('instantiates a card whose module and realm are prefix-form identifiers', async function (assert) {
+    let { virtualNetwork } = getService('network');
+    let testRealmPrefix = '@test/instantiate-realm/';
+    virtualNetwork.addRealmMapping(testRealmPrefix, testRealmURL);
+    try {
+      let toolService = getService('tool-service');
+      let command = new InstantiateCardTool(toolService.toolContext);
+      let InputType = await command.getInputType();
+      let moduleIdentifier = `${testRealmPrefix}valid-card`;
+      let input = new InputType({
+        moduleIdentifier,
+        cardName: 'ValidCard',
+        realmIdentifier: testRealmPrefix,
+        instanceData: JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: { name: 'Test Card' },
+            meta: {
+              adoptsFrom: { module: moduleIdentifier, name: 'ValidCard' },
+            },
+          },
+        }),
+      });
+
+      let result = await command.execute(input);
+
+      assert.true(result.passed, 'the card instantiates');
+      assert.notOk(result.error, 'no error');
+    } finally {
+      virtualNetwork.removeRealmMapping(testRealmPrefix);
+    }
+  });
+
+  test('refuses a prefix-form module outside the realm', async function (assert) {
+    let { virtualNetwork } = getService('network');
+    let testRealmPrefix = '@test/instantiate-realm/';
+    virtualNetwork.addRealmMapping(testRealmPrefix, testRealmURL);
+    try {
+      let toolService = getService('tool-service');
+      let command = new InstantiateCardTool(toolService.toolContext);
+      let InputType = await command.getInputType();
+      let input = new InputType({
+        moduleIdentifier: '@cardstack/base/card-api',
+        cardName: 'CardDef',
+        realmIdentifier: testRealmPrefix,
+      });
+
+      await assert.rejects(
+        command.execute(input),
+        /moduleUrl (origin|path)/,
+        'a module that resolves outside the realm is refused',
+      );
+    } finally {
+      virtualNetwork.removeRealmMapping(testRealmPrefix);
+    }
+  });
+
   test('valid card with no instance data passes instantiation', async function (assert) {
     let toolService = getService('tool-service');
     let command = new InstantiateCardTool(toolService.toolContext);

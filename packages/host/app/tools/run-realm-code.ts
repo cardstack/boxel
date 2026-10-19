@@ -13,6 +13,7 @@ import {
   isResolvedCodeRef,
   logger,
   resourceIdentity,
+  ri,
   rri,
   searchEntryWireQueryFromQuery,
   SupportedMimeType,
@@ -2134,11 +2135,11 @@ export default class RunRealmCodeTool extends HostBaseTool<
     let cardId: string;
     try {
       cardId = session.cardURL((value as { show: unknown }).show);
-      let source = await this.cardService.getSource(new URL(`${cardId}.json`));
+      let source = await this.cardService.getSource(rri(`${cardId}.json`));
       if (source.status !== 200) {
         // A path that names another file, such as an image or a module,
         // opens that file in code mode.
-        let file = await this.cardService.getSource(new URL(cardId));
+        let file = await this.cardService.getSource(rri(cardId));
         if (file.status !== 200) {
           throw new Error(`Not found: ${cardId}`);
         }
@@ -2279,7 +2280,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
       roomId,
       fileUrl: url,
     });
-    await this.cardService.saveSource(new URL(url), content, 'bot-patch', {
+    await this.cardService.saveSource(rri(url), content, 'bot-patch', {
       resetLoader: /\.(gts|ts)$/.test(url),
       clientRequestId,
     });
@@ -2327,7 +2328,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
         href: url,
         data: { type: 'source' as const, attributes: { content }, meta: {} },
       })),
-      new URL(realmURL),
+      ri(realmURL),
       { clientRequestId },
     );
     if (!Array.isArray(response?.['atomic:results'])) {
@@ -2461,7 +2462,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
     if (!unchanged) {
       throw new Error(`File changed while the script ran: ${url}`);
     }
-    await this.cardService.deleteSource(new URL(url));
+    await this.cardService.deleteSource(rri(url));
   }
 
   // The SHA-256 of a binary file's bytes, or undefined for a file that does

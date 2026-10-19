@@ -5,6 +5,7 @@ import {
   isCardErrorJSONAPI,
   rri,
   type CardErrorJSONAPI,
+  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
@@ -241,11 +242,11 @@ export default class CheckCorrectnessTool extends HostBaseTool<
       ];
     }
 
-    let { moduleURL, realmURL, fileURL } = moduleInfo;
+    let { moduleURL, realmURL, fileId } = moduleInfo;
 
     await this.toolService.waitForInvalidationAfterAIAssistantRequest(
       roomId,
-      fileURL.href,
+      fileId,
       cardIndexingTimeout,
     );
 
@@ -262,19 +263,26 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     return [errorMessage];
   }
 
-  private moduleInfoFromFile(
-    targetRef: string,
-  ): { moduleURL: URL; realmURL: string; fileURL: URL } | undefined {
+  // The prerender request crosses the network, so the module is resolved to
+  // its URL here; the file and realm stay identifiers.
+  private moduleInfoFromFile(targetRef: string):
+    | {
+        moduleURL: URL;
+        realmURL: string;
+        fileId: RealmResourceIdentifier;
+      }
+    | undefined {
     try {
-      let fileURL = new URL(targetRef);
-      let realmURL = this.realm.realmOf(fileURL);
+      let fileId = rri(targetRef);
+      let realmURL = this.realm.realmOf(fileId);
       if (!realmURL) {
         return undefined;
       }
 
-      let moduleHref = fileURL.href.replace(/\.gts$/, '');
-      let moduleURL = new URL(moduleHref);
-      return { moduleURL, realmURL, fileURL };
+      let moduleURL = this.network.virtualNetwork.toURL(
+        fileId.replace(/\.gts$/, ''),
+      );
+      return { moduleURL, realmURL, fileId };
     } catch {
       return undefined;
     }

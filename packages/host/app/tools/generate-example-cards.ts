@@ -2,6 +2,7 @@ import { service } from '@ember/service';
 
 import {
   isCardInstance,
+  rri,
   type LooseSingleCardDocument,
 } from '@cardstack/runtime-common';
 import {
@@ -291,7 +292,7 @@ function resolveExampleCodeRef(
     return codeRef;
   }
   try {
-    const relativeTo = realm ? new URL(realm) : undefined;
+    const relativeTo = realm ? rri(realm) : undefined;
     const resolved = codeRefWithAbsoluteIdentifier(
       codeRef,
       relativeTo,

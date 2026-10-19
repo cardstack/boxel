@@ -2346,7 +2346,7 @@ export default class StoreService extends Service implements StoreInterface {
   async __dangerousCreateFromSerialized<T extends CardDef>(
     resource: LooseCardResource,
     doc: LooseSingleCardDocument | CardDocument,
-    relativeTo?: URL | undefined,
+    relativeTo?: RealmResourceIdentifier | URL | undefined,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
   ): Promise<T> {
     return this.createFromSerialized(
