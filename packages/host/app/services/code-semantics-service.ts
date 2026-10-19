@@ -27,7 +27,6 @@ import {
 import { findDeclarationByName } from '../services/module-contents-service';
 
 import type LoaderService from './loader-service';
-import type NetworkService from './network';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type SessionService from './session';
 import type { Ready } from '../resources/file';
@@ -37,7 +36,6 @@ export default class CodeSemanticsService extends Service {
   @service declare operatorModeStateService: OperatorModeStateService;
   @service declare loaderService: LoaderService;
   @service declare session: SessionService;
-  @service declare network: NetworkService;
 
   private onModuleEditCallback: ((state: State) => void) | undefined =
     undefined;
@@ -149,8 +147,7 @@ export default class CodeSemanticsService extends Service {
   }
 
   get codePath() {
-    let codePath = this.operatorModeStateService.state.codePath;
-    return codePath ? this.network.virtualNetwork.toURL(codePath) : null;
+    return this.operatorModeStateService.state.codePath;
   }
 
   get isModule() {
