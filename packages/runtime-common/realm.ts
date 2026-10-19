@@ -8289,31 +8289,7 @@ export class Realm {
       }
 
       if (e instanceof ArchivedRealmError) {
-        // 403 (not 404) carrying an "archived" marker — both a dedicated
-        // header and a JSON:API error with a stable `code` — so the client can
-        // distinguish a sealed realm from a generic forbidden response and
-        // render the right message.
-        return createResponse({
-          body: JSON.stringify({
-            errors: [
-              {
-                status: '403',
-                code: 'archived',
-                title: 'Realm Archived',
-                detail: e.message,
-              },
-            ],
-          }),
-          init: {
-            status: 403,
-            headers: {
-              'content-type': SupportedMimeType.JSONAPI,
-              'X-Boxel-Realm-Archived': 'true',
-              'X-Boxel-Realm-Url': requestContext.realm.url,
-            },
-          },
-          requestContext,
-        });
+        return this.#archivedResponse(e, requestContext);
       }
 
       if (e instanceof AuthorizationError) {
@@ -17560,6 +17536,93 @@ export class Realm {
     return {
       realm: this,
       permissions,
+    };
+  }
+
+  // 403 (not 404) carrying an "archived" marker — both a dedicated header and
+  // a JSON:API error with a stable `code` — so the client can distinguish a
+  // sealed realm from a generic forbidden response and render the right
+  // message.
+  #archivedResponse(
+    error: ArchivedRealmError,
+    requestContext: RequestContext,
+  ): Response {
+    return createResponse({
+      body: JSON.stringify({
+        errors: [
+          {
+            status: '403',
+            code: 'archived',
+            title: 'Realm Archived',
+            detail: error.message,
+          },
+        ],
+      }),
+      init: {
+        status: 403,
+        headers: {
+          'content-type': SupportedMimeType.JSONAPI,
+          'X-Boxel-Realm-Archived': 'true',
+          'X-Boxel-Realm-Url': requestContext.realm.url,
+        },
+      },
+      requestContext,
+    });
+  }
+
+  // The realm ACL's answer to whether the caller of `request` may read or
+  // write this realm as a whole, for a realm-server route that serves what the
+  // realm owns from outside `handle` (Deck Versions, branches and History).
+  // It is the decision `checkPermission` makes, asked as a probe, and nothing
+  // more: a whole-realm read or write is not something a policy grant reaches,
+  // so a caller the ACL refuses is refused here in a realm that names a policy
+  // too, rather than told a path is missing as the byte routes tell them. An
+  // archived realm refuses every caller, as its sealed routes do. A refusal
+  // comes back as the response the realm itself would give.
+  async aclAdmits(
+    request: Request,
+    action: 'read' | 'write',
+  ): Promise<
+    | { allowed: true; publicReadable: boolean }
+    | { allowed: false; response: Response }
+  > {
+    let requestContext = await this.createRequestContext(action);
+    try {
+      await this.checkPermission(request, requestContext, action, {
+        probe: true,
+      });
+    } catch (e) {
+      if (e instanceof AuthenticationError) {
+        return {
+          allowed: false,
+          response: createResponse({
+            body: e.message,
+            init: { status: 401 },
+            requestContext,
+          }),
+        };
+      }
+      if (e instanceof AuthorizationError) {
+        return {
+          allowed: false,
+          response: new Response(e.message, { status: 403 }),
+        };
+      }
+      throw e;
+    }
+    if (await isRealmArchived(this.#dbAdapter, new URL(this.url))) {
+      return {
+        allowed: false,
+        response: this.#archivedResponse(
+          new ArchivedRealmError(`Realm ${this.url} is archived`),
+          requestContext,
+        ),
+      };
+    }
+    return {
+      allowed: true,
+      publicReadable:
+        requestContext.permissions['*']?.includes('read') === true,
     };
   }
 
