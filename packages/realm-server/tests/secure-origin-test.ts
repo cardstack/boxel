@@ -64,12 +64,20 @@ const NON_SHELL_PATHS: { path: string; accept: string }[] = [
   { path: '/secure/credentials.html', accept: 'text/html' },
 ];
 
+// The shell's own page talks to the realm server it was configured with, and
+// its sign-in may hand a session to the CLI's loopback listener.
+const SHELL_PAGE_HEADERS = {
+  connectSrc: [realmURL.origin],
+  formAction: ['http://127.0.0.1:*'],
+};
+
 function assertSecureOriginHeaders(
   assert: Assert,
   response: { headers: Record<string, string> },
   label: string,
+  options?: Parameters<typeof secureOriginHeaders>[0],
 ) {
-  for (let [name, value] of Object.entries(secureOriginHeaders())) {
+  for (let [name, value] of Object.entries(secureOriginHeaders(options))) {
     assert.strictEqual(
       response.headers[name.toLowerCase()],
       value,
@@ -111,6 +119,22 @@ module(basename(import.meta.filename), function () {
           'connect-src',
         ),
         'by default a page talks to nothing but its own origin',
+      );
+    });
+
+    test('a page that submits a form elsewhere names only where', function (assert) {
+      let csp = secureOriginHeaders({ formAction: ['http://127.0.0.1:*'] })[
+        'Content-Security-Policy'
+      ];
+      assert.ok(
+        csp.includes(`form-action 'self' http://127.0.0.1:*`),
+        'form-action names the loopback listener',
+      );
+      assert.ok(
+        secureOriginHeaders()['Content-Security-Policy'].includes(
+          `form-action 'self';`,
+        ),
+        'by default a form submits nowhere but its own origin',
       );
     });
 
@@ -330,7 +354,7 @@ module(basename(import.meta.filename), function () {
           response.headers['content-type'].startsWith('text/html'),
           `${path}: content type`,
         );
-        assertSecureOriginHeaders(assert, response, path);
+        assertSecureOriginHeaders(assert, response, path, SHELL_PAGE_HEADERS);
         assert.ok(
           response.text.includes(
             '<script type="module" src="/secure/shell.js">',
@@ -342,9 +366,47 @@ module(basename(import.meta.filename), function () {
           `${path}: has no inline script`,
         );
         assert.notOk(
-          response.text.includes(realmURL.origin),
-          `${path}: refers to nothing on the realm origin`,
+          new RegExp(`(src|href)="${realmURL.origin}`).test(response.text),
+          `${path}: loads nothing from the realm origin`,
         );
+        assert.ok(
+          response.text.includes(
+            `<meta name="boxel-realm-server-url" content="${realmURL.origin}/" />`,
+          ),
+          `${path}: names the realm server its modes talk to`,
+        );
+      }
+    });
+
+    test('serves the page shell where Google returns to', async function (assert) {
+      let response = await request
+        .get('/secure/google-callback')
+        .set('Host', secureHost)
+        .set('Accept', 'text/html');
+      assert.strictEqual(response.status, 200);
+      assertSecureOriginHeaders(
+        assert,
+        response,
+        'google-callback',
+        SHELL_PAGE_HEADERS,
+      );
+      assert.ok(
+        response.text.includes('<script type="module" src="/secure/shell.js">'),
+        'it is the shell, whose script finishes the sign-in',
+      );
+    });
+
+    test("serves the sign-in mode's scripts with the locked-down headers", async function (assert) {
+      for (let name of ['session.js', 'sign-in.js']) {
+        let response = await request
+          .get(`/secure/${name}`)
+          .set('Host', secureHost);
+        assert.strictEqual(response.status, 200, `${name}: status`);
+        assert.ok(
+          response.headers['content-type'].startsWith('text/javascript'),
+          `${name}: content type`,
+        );
+        assertSecureOriginHeaders(assert, response, name);
       }
     });
 
@@ -373,7 +435,7 @@ module(basename(import.meta.filename), function () {
       let response = await request.head('/secure').set('Host', secureHost);
       assert.strictEqual(response.status, 200);
       assert.notOk(response.text, 'no body');
-      assertSecureOriginHeaders(assert, response, 'HEAD');
+      assertSecureOriginHeaders(assert, response, 'HEAD', SHELL_PAGE_HEADERS);
     });
 
     test('refuses other methods on the shell', async function (assert) {
@@ -561,7 +623,7 @@ module(basename(import.meta.filename), function () {
           .get('/secure')
           .set('Accept', 'text/html');
         assert.strictEqual(shell.status, 200, 'shell');
-        assertSecureOriginHeaders(assert, shell, 'shell');
+        assertSecureOriginHeaders(assert, shell, 'shell', SHELL_PAGE_HEADERS);
 
         // Whatever Host it is given, this listener never reaches a realm.
         for (let host of [realmURL.host, secureHost]) {

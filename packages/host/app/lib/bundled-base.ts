@@ -188,6 +188,7 @@ export const BUNDLED_BASE_MODULES: Record<
   'default-templates/missing-template': () =>
     import('@cardstack/base/default-templates/missing-template'),
   'field-component': () => import('@cardstack/base/field-component'),
+  'computed-turn-memo': () => import('@cardstack/base/computed-turn-memo'),
   'field-support': () => import('@cardstack/base/field-support'),
   // `file-api` is deliberately NOT bundled. It declares nothing: it re-exports
   // `FileDef` and friends from card-api. A loader credits a class to the first

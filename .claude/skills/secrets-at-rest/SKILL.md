@@ -1,6 +1,6 @@
 ---
 name: secrets-at-rest
-description: Operate and diagnose the realm server's secrets-at-rest helper (`packages/realm-server/lib/secrets-at-rest/`) — AES-256-GCM sealing of stored secrets (API keys, OAuth client secrets and refresh tokens, service-account files, endpoint keys, webhook signing secrets) under a 32-byte data key that KMS wraps, bound to its field (table and column), owner, row id and destination. Covers the two providers (KMS and the local development key), the startup self-check the realm server and the worker manager run (workers take their keys from the manager) and what its log line reports, why a deployed server refuses to start, the KMS encryption contexts involved, key ids, re-sealing a secret with its destination, rotating the data key (`boxel realm-server data-keys status | reseal`, `SECRETS_ADDITIONAL_WRAPPED_DATA_KEYS`, the re-seal pass, retiring an old data key, the sealed census), the plaintext census, sealing the proxy endpoint (system) keys in `proxy_endpoints` and the incoming webhook signing secrets in `incoming_webhooks`, with the backfills that seal them and how to run them on demand, and why a webhook's signing secret is shown only once. Use when the realm server or a worker won't boot with "Secrets-at-rest self-check failed", when reading the `secrets-at-rest` boot line, when a stored secret fails to open with SecretDecryptionError, when a table starts sealing its secrets with the helper, when rotating the data key, or when the census reports `proxy_endpoints.api_key` or `incoming_webhooks.signing_secret` rows still in plain text.
+description: Operate and diagnose the realm server's secrets-at-rest helper (`packages/realm-server/lib/secrets-at-rest/`) — AES-256-GCM sealing of stored secrets (API keys, OAuth client secrets and refresh tokens, service-account files, endpoint keys, webhook signing secrets) under a 32-byte data key that KMS wraps, bound to its field (table and column), owner, row id and destination. Covers the two providers (KMS and the local development key), the startup self-check the realm server and the worker manager run (workers take their keys from the manager) and what its log line reports, why a deployed server refuses to start, the KMS encryption contexts involved, key ids, re-sealing a secret with its destination, rotating the data key (`boxel realm-server data-keys status | reseal`, `SECRETS_ADDITIONAL_WRAPPED_DATA_KEYS`, the re-seal pass, retiring an old data key, the sealed census), the plaintext census, sealing the proxy endpoint (system) keys in `proxy_endpoints` and the incoming webhook signing secrets in `incoming_webhooks`, with the backfills that seal them and how to run them on demand, why a webhook's signing secret is shown only once, and the post-deploy audit that checks, as the read-only AWS role, that a deployed environment seals with KMS, holds no plain-text secrets, lets only the task roles decrypt and withholds the secret tables from the read-only database role. Use when the realm server or a worker won't boot with "Secrets-at-rest self-check failed", when reading the `secrets-at-rest` boot line, when a stored secret fails to open with SecretDecryptionError, when a table starts sealing its secrets with the helper, when rotating the data key, or when the census reports `proxy_endpoints.api_key` or `incoming_webhooks.signing_secret` rows still in plain text, or after a deploy that changes any of this, to audit the deployed environment.
 ---
 
 # Secrets at rest (operators)
@@ -411,3 +411,305 @@ the table.
   `packages/realm-server` runs the same pass and then the census. It takes
   its database and data key exactly as `pnpm seal-proxy-endpoint-keys` does,
   and takes the same `--reseal-tampered` flag.
+
+## Post-deploy audit
+
+Four claims can only be checked in a deployed environment: the deployed
+processes seal with KMS rather than the local key, no secret is left in plain
+text, only the realm-server and worker task roles call `Decrypt` on the secrets
+key, and the read-only database role can't read the tables that hold secrets.
+This procedure checks all four. Run it after a deploy that changes anything
+here, once that deploy has fully rolled out on the realm server and the worker
+alike, and record what each step found against the deployed revision. A step
+that doesn't come out as described below is a bug to file, not a variation to
+explain away.
+
+Every command runs as the `boxel-claude-readonly` role and reads only. The
+`aws-access` skill covers getting that session, the database tunnel and the
+rules that go with it. `ENV` is the full environment name, `staging` or
+`production`, which is also the cluster name and the suffix of every service,
+log group, key alias and SSM prefix the steps use.
+
+### 0. The revision and the window
+
+```sh
+P=claude-staging ENV=staging   # claude-prod / production for prod
+cd "$(mktemp -d)"              # the steps below leave their working files here
+
+# Both services must show COMPLETED, with running equal to desired. The image
+# tag is the commit the tasks run.
+for svc in realm-server worker; do
+  aws --profile $P ecs describe-services --cluster $ENV --services boxel-$svc-$ENV \
+    --query "services[0].deployments[?status=='PRIMARY'] | [0].[taskDefinition, rolloutState, runningCount, desiredCount, createdAt]" \
+    --output text
+done
+TD=$(aws --profile $P ecs describe-services --cluster $ENV --services boxel-realm-server-$ENV \
+  --query 'services[0].taskDefinition' --output text)
+aws --profile $P ecs describe-task-definition --task-definition "$TD" \
+  --query 'taskDefinition.containerDefinitions[?name==`boxel-realm-server`].image' --output text
+
+# What each running task actually runs: its task definition and image digest.
+for svc in realm-server worker; do
+  for t in $(aws --profile $P ecs list-tasks --cluster $ENV --service-name boxel-$svc-$ENV \
+      --query 'taskArns' --output text); do
+    aws --profile $P ecs describe-tasks --cluster $ENV --tasks "$t" \
+      --query "tasks[0].[taskDefinitionArn, lastStatus, containers[?name=='boxel-$svc'].imageDigest | [0]]" \
+      --output text
+  done
+done
+
+# The boot-line window opens when the earlier of the two rollouts started.
+SINCE=$(for svc in realm-server worker; do
+  aws --profile $P ecs describe-services --cluster $ENV --services boxel-$svc-$ENV \
+    --query "services[0].deployments[?status=='PRIMARY'] | [0].createdAt" --output text
+done | xargs -I{} date -u -d {} +%FT%TZ | sort | head -1)
+SINCE_MS=$(( $(date -u -d "$SINCE" +%s) * 1000 ))
+
+# The current tasks, by id. Each one should show up in steps 1 and 3.
+for svc in realm-server worker; do
+  aws --profile $P ecs list-tasks --cluster $ENV --service-name boxel-$svc-$ENV \
+    --query 'taskArns' --output text | tr '\t' '\n' | sed 's#.*/##'
+done > tasks.txt
+```
+
+Record the image tag and the digest. Every running task is `RUNNING` on the
+primary task definition, and all tasks of a service share one digest. The
+CI deploy tags each image with its commit. A task definition registered some
+other way can name a tag such as `latest`, and the role can't look a digest up
+in ECR, so record the digest and say the commit is unconfirmed. A digest equal
+to one an earlier commit-tagged revision ran is that commit.
+
+`date -d` is GNU. On macOS, use `gdate` from coreutils.
+
+### 1. The boot lines
+
+Each task logs the startup self-check and each backfill once, and each census
+once per column it covers, as the sections above describe. Shipped lines are
+JSON, with the line itself in `log` and the task's ARN in `ecs_task_arn`:
+
+```sh
+for svc in realm-server worker; do
+  aws --profile $P logs filter-log-events --log-group-name ecs-boxel-$svc-$ENV \
+    --start-time $SINCE_MS \
+    --filter-pattern '?"secrets at rest:" ?"plaintext census:" ?"sealed census" ?"proxy endpoint keys:" ?"incoming webhook secrets:" ?"Sealing proxy endpoint keys failed" ?"Sealing incoming webhook signing secrets failed" ?"Secrets-at-rest self-check failed" ?"Could not get the secrets keyring"' \
+    --output json \
+    | jq -r --arg svc $svc '.events[] | (.message | fromjson? // {log: .}) as $m
+        | [(.timestamp / 1000 | todate), ($m.ecs_task_arn // "" | split("/") | last),
+           $svc, $m.log] | @tsv'
+done | tee boot-lines.tsv
+
+# Current tasks with no self-check line. Expect nothing.
+awk -F'\t' '$4 ~ /^secrets at rest: provider=/ { print $2 }' boot-lines.tsv | sort -u \
+  | comm -13 - <(sort tasks.txt)
+```
+
+The second column is the task id, as in `tasks.txt`. Tasks replaced since the
+window opened appear too; judge the current ones. What should be there:
+
+- **Every current realm-server and worker task:** one
+  `secrets at rest: provider=kms deployed=true keyIds=kms-… currentKeyId=kms-…`.
+  Every task names the same `currentKeyId`, and no task names
+  `local-development`.
+- **Every worker process:** one `secrets at rest: received keyIds=… from the
+worker manager` naming its task's key ids.
+- **Every realm-server task:** the backfill lines with `unloadedKey=0
+tampered=0`; `plaintext census: … plaintextRows=0` for every column it
+  lists; and `sealed census:` naming only the key ids the self-check loaded.
+  A table with no rows reports `rowsByKeyId=none`.
+- **None of:** `Secrets-at-rest self-check failed`, `Could not get the
+secrets keyring`, `Sealing proxy endpoint keys failed`, `Sealing incoming
+webhook signing secrets failed`, `sealed census failed` or
+  `plaintext census: counting … failed`. Each failure takes the place of the
+  line it would have logged, so a missing backfill or census line is a finding
+  too.
+
+A proxy endpoint row with no `api_key` counts as `unchanged` and has nothing
+sealed, so the proxy endpoint backfill's total can exceed the sealed census by
+the number of such rows.
+
+### 2. The key and its policy
+
+```sh
+KEY_ARN=$(aws --profile $P kms describe-key --key-id alias/$ENV-boxel-secrets \
+  --query KeyMetadata.Arn --output text)
+
+aws --profile $P kms describe-key --key-id "$KEY_ARN" \
+  --query 'KeyMetadata.{state:KeyState,usage:KeyUsage,spec:KeySpec,origin:Origin,manager:KeyManager,multiRegion:MultiRegion,created:CreationDate}'
+aws --profile $P kms get-key-rotation-status --key-id "$KEY_ARN"
+aws --profile $P kms list-aliases --key-id "$KEY_ARN" --query 'Aliases[].AliasName'
+
+POLICY=$(aws --profile $P kms get-key-policy --key-id "$KEY_ARN" --policy-name default \
+  --query Policy --output text)
+# Each statement's principals, actions and conditions, flattened.
+jq -c '.Statement[] | {Sid, Effect, principals: ([.Principal.AWS] | flatten),
+  actions: ([.Action] | flatten), Condition}' <<< "$POLICY"
+# Allowed actions that would let a caller use the key beyond the startup
+# unwrap and minting a wrapped data key. IAM ignores case in action names, so
+# the test does too. Expect [].
+jq -c '[.Statement[] | select(.Effect == "Allow") | [.Action] | flatten | .[]
+  | select(test("Encrypt|GenerateDataKey$|GenerateDataKeyPair|CreateGrant|\\*"; "i"))]' <<< "$POLICY"
+```
+
+What should be there:
+
+- The key is `Enabled`, `ENCRYPT_DECRYPT`, `SYMMETRIC_DEFAULT`, origin
+  `AWS_KMS`, manager `CUSTOMER`, not multi-Region, with rotation enabled, and
+  `alias/<env>-boxel-secrets` is its only alias.
+- `kms:Decrypt` is allowed to exactly two principals,
+  `role/boxel-realm-server-<env>-ecs-task` and `role/boxel-worker-<env>-ecs-task`,
+  and only with `kms:EncryptionContext:purpose` equal to
+  `boxel-secrets-data-key`.
+- The account root holds key administration, and
+  `kms:GenerateDataKeyWithoutPlaintext` only with `purpose` as the only
+  encryption-context key. No statement allows `Encrypt`, `ReEncrypt*`, a
+  plaintext `GenerateDataKey*`, `CreateGrant` or `kms:*`, so the second `jq`
+  prints `[]`.
+
+The role can't call `ListGrants`. That leaves nothing unchecked, because no
+principal can create a grant on a key whose policy allows no `CreateGrant`.
+
+### 3. Who used the key
+
+Every call on the key is in CloudTrail event history for 90 days. For a first
+audit, start the window at the key's `CreationDate` (from `describe-key`).
+After that, start it where the previous audit ended:
+
+```sh
+FROM=<ISO 8601 UTC, e.g. 2026-01-01T00:00:00Z>
+
+aws --profile $P cloudtrail lookup-events \
+  --lookup-attributes AttributeKey=ResourceName,AttributeValue="$KEY_ARN" \
+  --start-time "$FROM" --query 'Events[].CloudTrailEvent' --output json > key-events.json
+
+# Calls by event, caller (session name dropped) and outcome.
+jq -r '.[] | fromjson | [.eventName,
+    ((.userIdentity.arn // .userIdentity.invokedBy) | sub("/[^/]+$"; "/*")),
+    (.errorCode // "ok")] | @tsv' key-events.json | sort | uniq -c | sort -rn
+
+# The encryption context of every Decrypt.
+jq -r '.[] | fromjson | select(.eventName == "Decrypt")
+  | .requestParameters.encryptionContext | tojson' key-events.json | sort | uniq -c
+
+# Decrypts per task. A task role's session name is the task id.
+jq -r '.[] | fromjson | select(.eventName == "Decrypt")
+  | .userIdentity.arn | split("/")[2]' key-events.json \
+  | sort | uniq -c | awk '{ print $2, $1 }' > decrypts.txt
+# The self-check unwraps each data key it loads with one Decrypt, so a task
+# should have made as many as the key ids its step 1 boot line lists.
+awk -F'\t' '$4 ~ /^secrets at rest: provider=/ {
+    match($4, /keyIds=[^ ]*/); print $2, split(substr($4, RSTART + 7, RLENGTH - 7), k, ",") }' \
+  boot-lines.tsv | sort -u > expected-decrypts.txt
+# Tasks in the window whose count differs, or that have none. Expect nothing.
+join -a1 expected-decrypts.txt decrypts.txt | awk '$2 != $3'
+# Tasks from before the window that made more than one. Expect nothing outside
+# a rotation.
+join -v2 expected-decrypts.txt decrypts.txt | awk '$2 != 1'
+
+# Shells opened in a task, which act with its task role.
+aws --profile $P cloudtrail lookup-events \
+  --lookup-attributes AttributeKey=EventName,AttributeValue=ExecuteCommand \
+  --start-time "$FROM" --query 'Events[].CloudTrailEvent' --output json \
+  | jq -r '.[] | fromjson | [.eventTime, .userIdentity.arn, .requestParameters.task] | @tsv'
+```
+
+What should be there:
+
+- `Decrypt` comes only from the two task roles, always `ok`, and always under
+  `{"purpose":"boxel-secrets-data-key"}`.
+- Each task calls `Decrypt` once per data key it loads, at startup: once
+  outside a rotation, and once more for each key in
+  `SECRETS_ADDITIONAL_WRAPPED_DATA_KEYS` while one is under way. Both `join`
+  checks print nothing once the most recent task has been up for the fifteen
+  minutes an event can take to appear. A task that started before a rotation
+  step and is still in the history counts the keys it loaded then.
+- No `ExecuteCommand` on a realm-server or worker task. Both services run with
+  ECS Exec enabled, and a shell in a task holds the task role's credentials, so
+  a `Decrypt` made from it shows the same role and session name as the startup
+  unwrap. Only its timing and the `ExecuteCommand` event, under a person's
+  identity, tell them apart.
+- Anything else comes from an operator identity at a time someone can account
+  for (creating the key, minting a wrapped data key with
+  `GenerateDataKeyWithoutPlaintext`), from `kms.amazonaws.com` for scheduled
+  `RotateKey`, or from `boxel-claude-readonly` reading metadata. These are
+  alarming whoever made them: `PutKeyPolicy`, which can undo every claim in
+  step 2; `CreateAlias`, `UpdateAlias` or `DeleteAlias` after setup;
+  `DisableKey`; `ScheduleKeyDeletion`.
+
+The `aws-access` skill's KMS section has the notes on how event history
+answers (delay, paging, throttling), which apply to every lookup here.
+
+Denied calls carry no resource, so this lookup misses them. The `aws-access`
+skill's KMS section has the lookup by event name that finds them. Keep its
+window to hours around the deploy: the `Decrypt` lookup covers every key in
+the account.
+
+### 4. What the read-only role can read
+
+Open the database tunnel as `aws-access` describes, with
+`SSM_PREFIX=/$ENV/boxel`. These two commands take the place of its step 4,
+credential prefix and all. The identity check runs first, on its own, and the
+rest runs only once it prints `claude_readonly_user|t`:
+
+```sh
+PGUSER=$CLAUDE_USER PGPASSWORD=$(aws --profile $PROFILE ssm get-parameter \
+  --name $SSM_PREFIX/CLAUDE_DB_PASSWORD --with-decryption \
+  --query 'Parameter.Value' --output text) \
+  psql -h localhost -p $LOCAL_PORT -A -t \
+  -c "SELECT current_user, pg_has_role(current_user, 'readonly_role', 'member')"
+```
+
+Then each statement as its own `-c`, so one denial doesn't stop the rest, and
+without `-t`, so a statement that succeeds prints its header and row count:
+
+```sh
+PGUSER=$CLAUDE_USER PGPASSWORD=$(aws --profile $PROFILE ssm get-parameter \
+  --name $SSM_PREFIX/CLAUDE_DB_PASSWORD --with-decryption \
+  --query 'Parameter.Value' --output text) \
+  psql -h localhost -p $LOCAL_PORT -A \
+  -c "SELECT * FROM proxy_endpoints LIMIT 0" \
+  -c "SELECT * FROM incoming_webhooks LIMIT 0" \
+  -c "SELECT * FROM user_keys LIMIT 0" \
+  -c "SELECT * FROM key_write_tickets LIMIT 0" \
+  -c "SELECT * FROM secure_sessions LIMIT 0" \
+  -c "WITH RECURSIVE reader (oid) AS (
+        SELECT oid FROM pg_roles WHERE rolname = 'readonly_role'
+        UNION
+        SELECT m.member FROM pg_auth_members m JOIN reader ON reader.oid = m.roleid
+        WHERE m.inherit_option OR m.set_option)
+      SELECT r.rolname, t.relname, c.attname
+      FROM reader JOIN pg_roles r ON r.oid = reader.oid
+      CROSS JOIN pg_class t JOIN pg_attribute c ON c.attrelid = t.oid
+      WHERE t.oid IN (to_regclass('proxy_endpoints'), to_regclass('incoming_webhooks'),
+                      to_regclass('user_keys'), to_regclass('key_write_tickets'),
+                      to_regclass('secure_sessions'))
+        AND reader.oid <> t.relowner AND c.attnum > 0 AND NOT c.attisdropped
+        AND has_column_privilege(reader.oid, t.oid, c.attnum, 'SELECT')"
+```
+
+`LIMIT 0` means a table that is wrongly readable prints its column names and
+`(0 rows)`, and no values, so the check can't expose a secret.
+
+What should be there:
+
+- `claude_readonly_user|t` from the first command.
+- `permission denied for table <table>` for each table, and no `(0 rows)`
+  among them. A table that the
+  deployed revision doesn't have yet answers `relation "<table>" does not
+exist` instead. Check that against the revision from step 0 before taking it
+  as a finding.
+- `(0 rows)` from the last query. It asks the same question as the migration that
+  checks these grants, about `readonly_role` and every role that reads through
+  it. A row names a role and a column it can read.
+
+The list of tables is the one that migration
+(`check-readonly-role-cant-read-withheld-tables`) checks, plus
+`secure_sessions`, whose own migration checks it. A table added to either one
+goes here too.
+
+The role is also denied the wrapped data key itself. Expect
+`AccessDeniedException`:
+
+```sh
+aws --profile $P ssm get-parameter --name /$ENV/boxel/SECRETS_WRAPPED_DATA_KEY \
+  --query Parameter.Name --output text
+```

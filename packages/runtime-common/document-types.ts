@@ -1,3 +1,4 @@
+import type { RenderErrorSummary } from './error.ts';
 import type { QueryResultsMeta } from './index-query-engine.ts';
 import type { CardTypeSummary, RealmMetaValue } from './index-structure.ts';
 import {
@@ -32,10 +33,20 @@ export interface DocumentClosureMeta {
   linkClosureTruncated?: boolean;
 }
 
+// What a card's document says about its prerendered output: the error its
+// current render recorded, when that render failed while the index visit that
+// read the card's data succeeded. The document is the card's intact data
+// either way. A client that renders the card itself can ignore it; one that
+// shows the card's prerendered output (a search result, a published page)
+// gets that output's error treatment from the prerendered channel directly.
+export interface DocumentRenderMeta {
+  renderError?: RenderErrorSummary;
+}
+
 export interface SingleCardDocument<Identity extends Unsaved = Saved> {
   data: CardResource<Identity>;
   included?: (FileMetaResource | CardResource<Saved>)[];
-  meta?: DocumentClosureMeta;
+  meta?: DocumentClosureMeta & DocumentRenderMeta;
 }
 export interface CardCollectionDocument<Identity extends Unsaved = Saved> {
   data: CardResource<Identity>[];

@@ -729,6 +729,35 @@ module(basename(import.meta.filename), function (hooks) {
       );
     });
 
+    test('a failed render changes nothing about what the policy admits', async function (assert) {
+      // A render failure leaves the card's index row, and so the adoption
+      // chain the gate matches rules against, as its index visit wrote it.
+      await db.execute(
+        `UPDATE prerendered_html
+         SET error_doc = '{"status":500,"message":"render timed out","additionalErrors":null}'::jsonb
+         WHERE url IN ($1, $2) AND type = 'instance'`,
+        { bind: [`${ROOM_204}.json`, `${ROOM_205}.json`] },
+      );
+
+      let own = await getCard(ROOM_204, AUTH.teacher());
+      assert.strictEqual(own.status, 200, 'a teacher reads their classroom');
+      let body = own.body as {
+        data: { attributes: { title: string } };
+        meta?: { renderError?: { message: string } };
+      };
+      assert.strictEqual(body.data.attributes.title, 'Room 204');
+      assert.strictEqual(
+        body.meta?.renderError?.message,
+        'render timed out',
+        'with the render failure reported beside its data',
+      );
+      assert.strictEqual(
+        (await getCard(ROOM_205, AUTH.teacher())).status,
+        404,
+        'but still not a colleague’s',
+      );
+    });
+
     test('a conditional read never answers from the validator or another caller’s assembly', async function (assert) {
       let etag = (await getCard(ROOM_205, AUTH.admin())).get('etag');
       assert.ok(etag);

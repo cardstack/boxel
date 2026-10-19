@@ -525,7 +525,10 @@ function substituteInto(
 // Fills every substitution into the request, registering each value with the
 // scrubber first so nothing the response echoes carries one back. The URL is
 // filled after it was checked as given, and has to keep its origin: a value
-// may fill a path segment or a query value, never the destination.
+// may fill a path segment or a query value, never the destination. A value
+// filled into the path stays within its segment, to the URL and to a vendor
+// that decodes the path before routing alike: it may not hold `/` or `\`
+// (sent as `%2F` and `%5C`), nor be a dot segment the URL resolves away.
 function applySubstitutions(
   url: URL,
   headers: Record<string, string>,
@@ -541,12 +544,20 @@ function applySubstitutions(
       throw new Error(`A substitution token must be letters, digits and _`);
     }
     scrubber.register(value);
+    if (url.pathname.includes(token) && /[/\\]/.test(value)) {
+      throw new OutboundRefusedError(
+        'invalid-url',
+        'A value filled into the path holds a path separator',
+      );
+    }
   }
   let filled: URL;
+  let path: string;
   try {
     filled = new URL(
       substituteInto(url.href, substitutions, encodeURIComponent),
     );
+    path = substituteInto(url.pathname, substitutions, encodeURIComponent);
   } catch {
     throw new OutboundRefusedError('invalid-url', 'The URL is not valid');
   }
@@ -554,6 +565,12 @@ function applySubstitutions(
     throw new OutboundRefusedError(
       'invalid-url',
       `A filled value may not change where ${normalizeHost(url.hostname)} is reached`,
+    );
+  }
+  if (filled.pathname !== path) {
+    throw new OutboundRefusedError(
+      'invalid-url',
+      'A value filled into the path is a dot segment, which the URL resolves away',
     );
   }
   for (let [name, value] of Object.entries(headers)) {

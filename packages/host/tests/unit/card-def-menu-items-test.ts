@@ -291,6 +291,47 @@ module('Unit | CardDef menu items', function (hooks) {
     assert.notOk(hasCreateListing, 'does not contain Create Listing');
   });
 
+  test('interact context omits Delete for the index card of a realm registered under a prefix', function (assert: Assert) {
+    let virtualNetwork = getService('network').virtualNetwork;
+    virtualNetwork.addRealmMapping('@test/cards/', testRealmURL);
+    try {
+      let indexCard = new DummyCard(
+        '@test/cards/index',
+        'Workspace Index',
+      ) as unknown as CardDef;
+      (indexCard as unknown as Record<symbol, URL>)[realmURL] = new URL(
+        testRealmURL,
+      );
+      let otherCard = new DummyCard(
+        '@test/cards/card-1',
+        'One',
+      ) as unknown as CardDef;
+      (otherCard as unknown as Record<symbol, URL>)[realmURL] = new URL(
+        testRealmURL,
+      );
+      let params: GetMenuItemParams = {
+        canEdit: true,
+        cardCrudFunctions: {},
+        menuContext: 'interact',
+        toolContext: {} as any,
+      };
+
+      let indexLabels = getDefaultCardMenuItems(indexCard, params).map(
+        (i: MenuItemOptions) => i.label,
+      );
+      assert.notOk(
+        indexLabels.includes('Delete'),
+        'the index card cannot be deleted',
+      );
+      let otherLabels = getDefaultCardMenuItems(otherCard, params).map(
+        (i: MenuItemOptions) => i.label,
+      );
+      assert.ok(otherLabels.includes('Delete'), 'another card can be deleted');
+    } finally {
+      virtualNetwork.removeRealmMapping('@test/cards/');
+    }
+  });
+
   test('code-mode-preview includes Copy Card URL and Open in Interact Mode', function (assert: Assert) {
     let card = new DummyCard(
       'https://example.com/realm/card-4',

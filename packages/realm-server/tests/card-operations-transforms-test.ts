@@ -92,6 +92,7 @@ function stub(operations?: Definition['operations']): OperationCore {
           indexedAt: 1700,
           deps: [],
           captures: null,
+          renderError: null,
           queryBacked: false,
         } as any;
       },
@@ -108,6 +109,7 @@ function stub(operations?: Definition['operations']): OperationCore {
           lastModified: 1699,
           deps: [],
           captures: null,
+          renderError: null,
         } as any;
       },
       async file() {
@@ -248,6 +250,7 @@ module(basename(import.meta.filename), function () {
           lastModified: 1699,
           generation: 7,
           captures: null,
+          renderError: null,
           deps: [],
         },
         'a projection reshapes the body and not the row behind it',

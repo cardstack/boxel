@@ -2,6 +2,8 @@ import Service, { service } from '@ember/service';
 
 import { tracked } from '@glimmer/tracking';
 
+import { canonicalRealmIdentifier } from '../lib/realm-utils';
+
 import type NetworkService from './network';
 import type SessionService from './session';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
@@ -36,9 +38,18 @@ export default class MessageService extends Service {
     }
   }
 
+  // Subscriptions and deliveries are keyed by the realm in the form card ids
+  // carry, so a subscriber may name a realm by any of its spellings: an event
+  // carries the URL the realm was started under (the alias for base), while a
+  // subscriber may hold its prefix or the URL it is served from.
+  private keyFor(realmURL: string): string {
+    return canonicalRealmIdentifier(this.network.virtualNetwork, realmURL);
+  }
+
   subscribe(realmURL: string, cb: (ev: RealmEventContent) => void): () => void {
-    if (!this.listenerCallbacks.has(realmURL)) {
-      this.listenerCallbacks.set(realmURL, []);
+    let key = this.keyFor(realmURL);
+    if (!this.listenerCallbacks.has(key)) {
+      this.listenerCallbacks.set(key, []);
     }
 
     // TODO might want to consider making separate subscription methods so that
@@ -47,10 +58,10 @@ export default class MessageService extends Service {
     let wrapper = (ev: RealmEventContent) => {
       cb(ev);
     };
-    this.listenerCallbacks.get(realmURL)?.push(wrapper);
+    this.listenerCallbacks.get(key)?.push(wrapper);
 
     return () => {
-      this.removeSubscriptionCallback(realmURL, wrapper);
+      this.removeSubscriptionCallback(key, wrapper);
     };
   }
 
@@ -77,7 +88,7 @@ export default class MessageService extends Service {
     if (!realmURL) {
       return;
     }
-    let callbacks = this.listenerCallbacks.get(realmURL);
+    let callbacks = this.listenerCallbacks.get(this.keyFor(realmURL));
     callbacks?.forEach((cb) => {
       cb(event);
     });

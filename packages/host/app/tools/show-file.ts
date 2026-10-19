@@ -1,5 +1,7 @@
 import { service } from '@ember/service';
 
+import { rri } from '@cardstack/runtime-common';
+
 import HostBaseTool from '../lib/host-base-tool';
 
 import { codeSubmodeUnavailable } from '../services/operator-mode-state-service';
@@ -13,7 +15,7 @@ export default class ShowFileTool extends HostBaseTool<
   @service declare private operatorModeStateService: OperatorModeStateService;
 
   description =
-    'Show a file in the code submode. The fileIdentifier must be a fully qualified URL.';
+    'Show a file in the code submode. The fileIdentifier must be a complete file identifier: a fully qualified URL, or a realm-prefix form such as the one a write tool returns.';
 
   static actionVerb = 'Show File';
 
@@ -35,9 +37,7 @@ export default class ShowFileTool extends HostBaseTool<
     if (operatorModeStateService.workspaceChooserOpened) {
       operatorModeStateService.closeWorkspaceChooser();
     }
-    await operatorModeStateService.updateCodePath(
-      new URL(input.fileIdentifier),
-    );
+    await operatorModeStateService.updateCodePath(rri(input.fileIdentifier));
     operatorModeStateService.updateSubmode('code');
   }
 }

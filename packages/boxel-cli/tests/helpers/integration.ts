@@ -219,6 +219,10 @@ export interface StartTestRealmServerOptions {
    * realms like `@cardstack/skills/`.
    */
   realmPrefixes?: Record<string, string>;
+  /**
+   * Serve a secure origin at this URL, for tests that sign in on it.
+   */
+  secureOriginURL?: URL;
 }
 
 export async function startTestRealmServer(
@@ -347,6 +351,9 @@ async function bootTestRealmServer(
     dbAdapter,
     matrixURL,
     prerenderer: options.prerenderer ?? noopPrerenderer,
+    ...(options.secureOriginURL
+      ? { secureOriginURL: options.secureOriginURL }
+      : {}),
   };
   let result = await timePhase('boot-realm-server', () =>
     runTestRealmServerWithRealms(bootArgs),

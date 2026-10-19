@@ -22,6 +22,10 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 let fetch: NetworkService['fetch'];
 
+// A realm-prefix spelling of the test realm, registered per test, so the tool
+// receives the realm identifier in prefix form from `realmOf`.
+const testRealmPrefix = '@test/write-realm/';
+
 class StubRealmService extends RealmService {
   get defaultReadableRealm() {
     return {
@@ -34,6 +38,9 @@ class StubRealmService extends RealmService {
     let str = input instanceof URL ? input.href : input;
     if (str === testRealmURL) {
       return testRealmURL;
+    }
+    if (str.startsWith(testRealmPrefix)) {
+      return testRealmPrefix as ReturnType<RealmService['realmOf']>;
     }
     return undefined;
   }
@@ -72,6 +79,29 @@ module('Integration | tools | write-text-file', function (hooks) {
     let response = await fetch(new URL('test.txt', testRealmURL));
     let content = await response.text();
     assert.strictEqual(content, 'Hello!');
+  });
+
+  test('writes a text file into a realm registered in prefix form', async function (assert) {
+    let { virtualNetwork } = getService('network');
+    virtualNetwork.addRealmMapping(testRealmPrefix, testRealmURL);
+    try {
+      let toolService = getService('tool-service');
+      let writeTextFileCommand = new WriteTextFileTool(toolService.toolContext);
+      let result = await writeTextFileCommand.execute({
+        path: 'prefixed.txt',
+        content: 'Hello, prefix!',
+        realm: testRealmPrefix,
+      });
+      assert.strictEqual(
+        result.fileIdentifier,
+        `${testRealmPrefix}prefixed.txt`,
+        'the result keeps the prefix-form identifier',
+      );
+      let response = await fetch(new URL('prefixed.txt', testRealmURL));
+      assert.strictEqual(await response.text(), 'Hello, prefix!');
+    } finally {
+      virtualNetwork.removeRealmMapping(testRealmPrefix);
+    }
   });
 
   test('fails if the file already exists', async function (assert) {

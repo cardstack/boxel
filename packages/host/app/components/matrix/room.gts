@@ -795,7 +795,11 @@ export default class Room extends Component<Signature> {
   });
 
   private get autoAttachedFileUrls() {
-    let codePathUrl = this.operatorModeStateService.state.codePath?.href;
+    let codePathUrl = this.operatorModeStateService.state.codePath
+      ? this.network.virtualNetwork.toURLHref(
+          this.operatorModeStateService.state.codePath,
+        )
+      : undefined;
     if (!codePathUrl) {
       return [];
     }
@@ -809,13 +813,14 @@ export default class Room extends Component<Signature> {
           let fileContent = JSON.parse(openFile.content);
           let adoptsFrom = fileContent?.data?.meta?.adoptsFrom;
           if (adoptsFrom?.module) {
-            // Joins a module path against the open file's identifier. No form guard,
-            // and whether a prefix-form file identifier reaches here is unverified.
-            // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
-            let moduleURLWithExtension = new URL(
-              adoptsFrom.module.endsWith('.gts')
-                ? adoptsFrom.module
-                : `${adoptsFrom.module}.gts`,
+            let moduleRef = adoptsFrom.module.endsWith('.gts')
+              ? adoptsFrom.module
+              : `${adoptsFrom.module}.gts`;
+            // The module may be prefix-form (`@cardstack/base/card-api`), so it
+            // is resolved through the virtual network rather than joined onto
+            // the open file's URL.
+            let moduleURLWithExtension = this.network.virtualNetwork.resolveURL(
+              moduleRef,
               openFile.url,
             );
             if (!urls.includes(moduleURLWithExtension.href)) {

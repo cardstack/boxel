@@ -837,15 +837,19 @@ export function getLinksToManyComponent({
     get(target, property, received) {
       // proxying the bare minimum of an Array in order to render within a
       // template. add more getters as necessary...
+      //
+      // An iterator walks one snapshot of the component list, so a whole
+      // `{{#each @fields.x}}` builds the list once: an array iterator bound to
+      // this proxy would read `length` and every index back through it, and
+      // each of those reads re-reads the field, which re-evaluates it when it
+      // is computed or query-backed.
       if (property === Symbol.iterator) {
-        // getComponents() is in the "hot" path, don't touch it unless absolutely necessary
-        let components = getComponents();
-        return components[Symbol.iterator];
+        return () => getComponents()[Symbol.iterator]();
       }
       if (property === 'length') {
         return arrayField.children.length;
       }
-      if (typeof property === 'string' && property.match(/\d+/)) {
+      if (typeof property === 'string' && /^\d+$/.test(property)) {
         let child = arrayField.children[parseInt(property)];
         if (!child) {
           return undefined;

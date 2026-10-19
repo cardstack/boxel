@@ -68,6 +68,26 @@ export interface SerializedError {
   gatewayFailure?: true;
 }
 
+// What a card's data read reports about its failed render: the error's
+// identity, and nothing the prerender pipeline keeps for its own use. The
+// stored error document also carries the failing render's dependency list,
+// its timing diagnostics and its retry bookkeeping. Each retry of a failing
+// render rewrites the bookkeeping, so reporting the whole document would
+// change the response, and its validator, on every retry of the same failure.
+export type RenderErrorSummary = Pick<
+  SerializedError,
+  'status' | 'title' | 'message' | 'stack'
+>;
+
+export function renderErrorSummary(error: SerializedError): RenderErrorSummary {
+  return {
+    status: error.status,
+    message: error.message,
+    ...(error.title !== undefined ? { title: error.title } : {}),
+    ...(error.stack !== undefined ? { stack: error.stack } : {}),
+  };
+}
+
 // A persisted error document: the `SerializedError` plus the index metadata
 // that rode with the row that failed. Stored in the `error_doc` column and
 // carried on the wire by anything that stands in for a card/module/file that
