@@ -13,6 +13,10 @@ scope:
   - packages/realm-server/lib/deck-*.ts
   - packages/host/app/services/network.ts
   - packages/host/app/services/deck-adoption.ts
+  - packages/realm-server/node-realm.ts
+  - packages/deck-history/**
+  - packages/boxel-cli/src/lib/deck-*.ts
+  - packages/boxel-cli/src/commands/realm/sync.ts
 ---
 
 # 006. Resolve Deck packages through a per-package lock, outside the network
@@ -25,6 +29,13 @@ load, and scopes it to that package, so two Versions of one package can be
 resident at once. A Deck resolver answers in RRIs, and the network carries no
 Deck code. The mechanics are in
 `docs/deck-packages-and-runtime-resolution.md`.
+
+A Deck realm also keeps its own History. Every save is committed
+automatically, a burst of saves becoming one History Step, so nobody runs a
+commit. The realm's `main` is the one HEAD that the Boxel host and every
+boxel-cli user write to, and boxel-cli syncs with it file by file, as mtime
+sync did, on content hashes instead of modification times. The collaboration
+mechanics are in `docs/deck-collaboration.md`.
 
 ## 1. Decision
 
@@ -94,7 +105,55 @@ cached.
 The integration MUST be off unless `BOXEL_DECK_COLLABORATION_ENABLED` is
 `true`, and the realm server MUST enable it only for realms in
 `BOXEL_DECK_COLLABORATION_REALM_RRIS`. With it off, the Loader's resolution
-MUST be the network's, unchanged.
+MUST be the network's, unchanged, no save MUST be committed to History, and
+boxel-cli MUST sync by modification time as before.
+
+### 1.9. Every save is committed
+
+Every file a Deck-enabled source realm's file adapter writes, appends,
+splices or removes MUST be committed to the realm's History, without anyone
+running a commit. Saves MUST be debounced per realm: a burst that ends in a
+quiet window (400 ms) MUST become one History Step, whose message names the
+paths that changed. Deck's own state under `.deck/` MUST NOT be committed as
+a save, and a staged write the realm has not yet renamed into place MUST NOT
+be part of a Step.
+
+The realm server MUST say which writes it accepted: deckd's own file watcher
+MUST stay off, so a large branch materialization is never sealed halfway. A
+History failure MUST NOT fail the save that caused it.
+
+Restore MUST move forward: restoring a Step MUST write a new Step, never
+rewind History.
+
+### 1.10. One HEAD
+
+A realm's `main` MUST be the realm's live files. Committing saves MUST advance
+`main` to them in the same conditional update that records the History Step,
+and each hosted package's tree MUST be the subtree at its path. A branch
+update MUST first commit the live files, with any saves still waiting out the
+debounce, as their own Step, and MUST then apply on top of them, so it never
+writes over a host save. There MUST be no other writable branch, and no
+update MAY move `main` unconditionally.
+
+### 1.11. Sync per file
+
+A branch update whose every file names the content it was made against (its
+`base`, `null` for a file that did not exist) MUST apply on top of whatever
+`main` holds. It MUST be refused for a file whose current content is neither
+its base nor its result, with a 409 listing exactly those paths, and nothing
+MUST be written when any file is refused. An update that names no bases MUST
+need the whole branch unmoved since it was read; History restore uses it.
+
+boxel-cli MUST keep mtime sync's semantics, comparing content hashes against
+the base each file had at the last sync (`.boxel-sync.json`). A file changed
+on one side MUST move to the other. A file changed on both sides MUST be
+skipped and reported, and stay a conflict until resolved: with
+`--prefer-local` it MUST be pushed with the realm's current content as its
+base, and with `--prefer-remote` the realm's content MUST replace the local
+file. `--prefer-newest` MUST be refused, since content has no "newer". When a
+publish is refused because the realm changed a file after the read, boxel-cli
+MUST read again, a bounded number of times. `realm push` MUST be the push half
+of sync; neither MAY force a write.
 
 ## 2. Rationale
 
@@ -124,6 +183,27 @@ nothing they depend on can change, because re-evaluating them gives their
 classes a second identity. Cache keys fold through the mappings, so an added
 prefix is safe only when no cached module lives under its target.
 
+Committing every save is what makes the realm itself the backup: undo used
+to need boxel-cli on a local machine keeping its own git history, and a realm
+edited only through the Boxel host had none. Debouncing keeps History at the
+grain of an edit rather than a keystroke. The realm server, not deckd's file
+watcher, decides what is committed, because only it knows when a write was
+accepted and when a branch write is complete.
+
+`main` follows the live files because they are what the realm serves, and
+what boxel-cli users synced against before Deck. A Deck branch that host saves
+did not advance would hide them from boxel-cli, and the next push would write
+over them. With one HEAD, the host and the CLI see the same thing.
+
+Sync merges per file because that is what its users rely on: two people
+editing different files never block each other. A whole-branch condition
+would refuse nearly every push once host saves advance `main`. The per-file
+base keeps what mtime sync lacked: a file two writers changed is never
+silently overwritten, the loser's version is in History, and the base is a
+content hash, not a modification time that a copy or a clock can change.
+Branching and an explicit merge are left out deliberately. They need their
+own commands and review, and a force push would undo the guarantee.
+
 Probing authorization through `Realm.handle` keeps every read rule in one
 place. `addRealmMapping` refuses an undeclared `@cardstack/` prefix (#5965),
 so a lock that pins a Version of base fails instead of loading a second copy
@@ -146,6 +226,16 @@ of base's classes, which the host bundle must not have (#6445).
   ADR 002, and the alias names an entry module no scope covers.
 - **One import map for the realm or the process.** It couples competing apps,
   and it is the global registry ADR 002 §3 rejects.
+- **deckd's file watcher commits saves (History).** It cannot tell a host save
+  from a half-written branch materialization, and it would commit Deck's own
+  bookkeeping.
+- **History behind the files, `main` moved only by boxel-cli.** Host saves
+  never reach `main`, so a push overwrites them.
+- **A whole-branch condition on every push.** Simple, and right for one
+  writer; with host saves and several CLI users it refuses almost every push.
+- **`--prefer-newest`, force push, or a branch per writer.** Newest has no
+  meaning for content; a force push silently discards another writer's work;
+  branches need an explicit merge workflow, which comes later.
 
 ## 4. Consequences
 
@@ -153,12 +243,21 @@ of base's classes, which the host bundle must not have (#6445).
   registered makes the Loader discard its caches. Resolving through RRIs does
   not.
 - Querying across Versions is not part of this integration.
+- A file both a host save and a boxel-cli user changed is reported to the CLI
+  user, not merged within the file.
+- `main` moves often, so a boxel-cli History restore needs a fresh sync first:
+  restore keeps the whole-branch condition.
+- Only `main` exists. Branches, Checkpoints and Reviews are verified objects
+  (`docs/deck-collaboration.md`), but nothing writes another branch yet.
 
 ## 5. Sources
 
 1. `deck/restack-01-core` to `deck/restack-06-version-index`: `5c6f3c9f34`,
    `d7801cccea`, `3aaba08d09`, `c5043412f4`, `d3582d926c`, `ef357bbba6`,
    `b7af804295`.
-2. ADR 002 §1.2, §1.4, §3; ADR 004.
-3. #5965 (reserved `@cardstack/` names); #6073 (code refs without a
+2. `deck/restack-09-content-sync` and `deck/restack-10-history`: History
+   Steps, forward restore, content-addressed sync; `77491e337e` (every save
+   committed, debounced) and `78a6804b60` (one HEAD, per-file sync).
+3. ADR 002 §1.2, §1.4, §3; ADR 004.
+4. #5965 (reserved `@cardstack/` names); #6073 (code refs without a
    VirtualNetwork); #6445 (base in the host bundle).
