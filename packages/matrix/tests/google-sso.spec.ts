@@ -37,6 +37,32 @@ async function signInWithGoogle(
   await page.locator('input[type="submit"]').click();
 }
 
+// Starts a Google sign-in from the host and, from the identity provider's login
+// page, sends the browser back to Synapse's OIDC callback with an OAuth error
+// response — the redirect Google makes when the user presses Cancel. The mock
+// IdP's form has no cancel control, so the redirect is built from the
+// authorization request it was handed.
+async function returnFromGoogleWithError(
+  page: Page,
+  error: string,
+  errorDescription?: string,
+) {
+  await page.goto(appURL);
+  await page.locator('[data-test-google-login-btn]').click();
+  await expect(page.locator('input[name="username"]')).toBeVisible();
+  let authorizeRequest = new URL(page.url());
+  let callback = new URL(authorizeRequest.searchParams.get('redirect_uri')!);
+  callback.searchParams.set('error', error);
+  if (errorDescription) {
+    callback.searchParams.set('error_description', errorDescription);
+  }
+  callback.searchParams.set(
+    'state',
+    authorizeRequest.searchParams.get('state')!,
+  );
+  await page.goto(callback.href);
+}
+
 async function expectSignedInAs(page: Page, userId: string) {
   // The operator-mode stack confirms a successful session start.
   await expect(page.locator('[data-test-operator-mode-stack="0"]')).toHaveCount(
@@ -133,5 +159,41 @@ test.describe('Google sign-in (mock OIDC)', () => {
     expect(
       await getExternalIdsForIdp(other.credentials.userId, GOOGLE_IDP),
     ).toEqual([otherSub]);
+  });
+});
+
+// Google sends the browser back to Synapse's OIDC callback with an OAuth error
+// response, not to the host, so Synapse's SSO error page is what the user sees.
+// That page is Boxel's own template, which returns the user to the host's login.
+test.describe('Google sign-in that does not complete (mock OIDC)', () => {
+  test('cancelling at Google returns to the Boxel login page', async ({
+    page,
+  }) => {
+    await returnFromGoogleWithError(page, 'access_denied');
+
+    await page.waitForURL((url) => url.href.startsWith(`${appURL}/`));
+    await expect(page.locator('[data-test-google-login-btn]')).toBeVisible();
+    await expect(page.locator('[data-test-login-btn]')).toBeVisible();
+  });
+
+  test('a failed Google sign-in explains the failure and links back to the Boxel login page', async ({
+    page,
+  }) => {
+    await returnFromGoogleWithError(
+      page,
+      'server_error',
+      'The identity provider is unavailable',
+    );
+
+    await expect(page.locator('[data-test-sso-error]')).toContainText(
+      'The identity provider is unavailable',
+    );
+    await expect(page.locator('[data-test-sso-return-link]')).toHaveAttribute(
+      'href',
+      `${appURL}/`,
+    );
+    await page.locator('[data-test-sso-return-link]').click();
+    await page.waitForURL((url) => url.href.startsWith(`${appURL}/`));
+    await expect(page.locator('[data-test-google-login-btn]')).toBeVisible();
   });
 });
