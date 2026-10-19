@@ -58,6 +58,6 @@ Where it is thinner: no optimistic state, no undo after commit, and no draft per
 
 `--pretui-destructive-ink` for the rejected state, `--pretui-radius-encroach` for the editor's fit against the display box, and the shared `--pretui-dur-snap` / `--pretui-ease-snap` for the mode transition.
 
-`--pretui-radius-encroach` is the detail that makes the swap look deliberate: the editor has to sit inside the space the display occupied without the corners disagreeing, and a shared encroachment value is what keeps that consistent across every in-place editor in a season.
+`--pretui-radius-encroach` is the detail that makes the swap look deliberate: the editor has to sit inside the space the display occupied without the corners disagreeing, and a shared encroachment value is what keeps that consistent across every in-place editor in a theme.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

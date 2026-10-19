@@ -35,7 +35,7 @@ Gaps:
 
 - **`@for` is not validated and not required.** A `<label>` with no `for` and no wrapped control has no association at all, and nothing warns. This is the most common way labels silently fail, and the component makes it easy — `@tag` defaults to `'label'`, so the _default_ usage is the one that needs `@for`.
 - **`text-transform: uppercase` is a styling transform, not a content change**, so screen readers announce the underlying text — "Approver email", not "A P P R O V E R". That is correct. But note some readers spell out short all-caps _source_ strings, so keep the authored text in normal case and let CSS do the uppercasing, which this component's styling assumes.
-- **11px at `--muted-foreground` with 0.08em tracking** is the kit's quietest label voice. Uppercase text at that size is measurably slower to read and harder for users with low vision — the tracking mitigates it, and it is a deliberate typographic choice, but it is at the edge of **WCAG 1.4.3** for `--muted-foreground` on `--card` and should be checked per season.
+- **11px at `--muted-foreground` with 0.08em tracking** is the kit's quietest label voice. Uppercase text at that size is measurably slower to read and harder for users with low vision — the tracking mitigates it, and it is a deliberate typographic choice, but it is at the edge of **WCAG 1.4.3** for `--muted-foreground` on `--card` and should be checked per theme.
 - **No required-indicator support.** **FormField** adds a visually-hidden "(required)" inside the label; a bare `Label` has no equivalent, so composing your own required field means reimplementing that.
 - **No `aria-hidden` or decorative mode**, so a Label used purely as a visual caption still announces.
 - Nothing is focusable; clicking a correctly-wired `<label>` focuses its control, which is the platform's behaviour and is preserved.
@@ -44,9 +44,9 @@ Gaps:
 
 `--font-mono`, `--text-ui-xs` (11px), `--track-eyebrow` (0.08em), `--muted-foreground`. Weight 500 and `line-height: 16px` are fixed.
 
-Four tokens, and they are the same four that define the eyebrow voice in **Panel**, **Toolbar**, **DataGrid** and **FormField** — so a season retuning `--track-eyebrow` or `--text-ui-xs` moves all of them together, which is the intent. That coupling is the reason this exists as a component rather than as a utility class: there is one definition of what a label sounds like.
+Four tokens, and they are the same four that define the eyebrow voice in **Panel**, **Toolbar**, **DataGrid** and **FormField** — so a theme retuning `--track-eyebrow` or `--text-ui-xs` moves all of them together, which is the intent. That coupling is the reason this exists as a component rather than as a utility class: there is one definition of what a label sounds like.
 
-The `line-height: 16px` is a fixed pixel value rather than a ratio, so a season that scales `--text-ui-xs` up will get labels that clip or crowd. Worth changing to a unitless ratio.
+The `line-height: 16px` is a fixed pixel value rather than a ratio, so a theme that scales `--text-ui-xs` up will get labels that clip or crowd. Worth changing to a unitless ratio.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

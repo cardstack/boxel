@@ -14,7 +14,7 @@ A lightweight vote-and-tally block: a ballot of features, each with a vote butto
 @emptyMessage? — what an empty ballot says
 ```
 
-**The component never mutates the tally.** `@onVote` fires with the feature and the state being *requested*; the caller owns the number, because the number lives on a server. A block that incremented its own count would be showing a number that is not true anywhere else.
+**The component never mutates the tally.** `@onVote` fires with the feature and the state being _requested_; the caller owns the number, because the number lives on a server. A block that incremented its own count would be showing a number that is not true anywhere else.
 
 **Sorting by votes uses the title as a stable tiebreak**, so two features on equal support do not swap places on every render.
 
@@ -37,8 +37,8 @@ Where it is thinner: no vote limit or budget across the ballot, no per-feature s
 
 ## Theming
 
-The block rides the kit's shared surface, control and tone tokens rather than defining a token surface of its own — the vote button is a **Toggle**-shaped control and follows whatever the season does to pressed states, and the share bar takes the accent.
+The block rides the kit's shared surface, control and tone tokens rather than defining a token surface of its own — the vote button is a **Toggle**-shaped control and follows whatever the theme does to pressed states, and the share bar takes the accent.
 
-That is the right dependency for a block at this tier: a voting panel should look like the product it is embedded in, and a season that changes how "pressed" reads changes it here without anyone touching this component.
+That is the right dependency for a block at this tier: a voting panel should look like the product it is embedded in, and a theme that changes how "pressed" reads changes it here without anyone touching this component.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

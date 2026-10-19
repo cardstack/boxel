@@ -54,7 +54,7 @@ export class Grid<T = unknown> extends Component<GridSignature<T>> {
     <style scoped>
       @layer PretComponent {
         /* The engine's cell gap reads --boxel-sp — remapped to the Pretui
-           spacing scale so grid rhythm follows the season sheet. */
+           spacing scale so grid rhythm follows the theme. */
         .pretui-grid {
           width: 100%;
           font-size: var(--text-ui-md, 12.5px);

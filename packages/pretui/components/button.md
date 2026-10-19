@@ -17,7 +17,7 @@ The kit's action primitive: a native `<button>` with a two-axis treatment system
 
 **Two axes, not a variant enum.** This is the kit's central control decision. `@tone` picks the hue and sets exactly two custom properties (`--pretui-tone`, `--pretui-tone-on`); `@appearance` picks the recipe and _reads_ those properties. Seven tones × five appearances is thirty-five looks from twelve CSS rules, and adding a tone is a two-line block. `@variant` is a lookup table into the same grid (`destructive` → `['danger','accent']`) — the single-axis spelling boxel-ui (`kind`) and shadcn callers pass.
 
-**`@size` sets host `font-size` only.** Minimum height (`2.24em`, floored at 24px for `xs`), padding (`0.96em`), gap, spinner and radius are all `em`, so the whole control scales from one number and `m` stays pixel-identical to the pre-scale cut (2.24 × 12.5px = 28px). No per-size rule duplication, and a season can retune the scale by redefining `--pretui-size-*`.
+**`@size` sets host `font-size` only.** Minimum height (`2.24em`, floored at 24px for `xs`), padding (`0.96em`), gap, spinner and radius are all `em`, so the whole control scales from one number and `m` stays pixel-identical to the pre-scale cut (2.24 × 12.5px = 28px). No per-size rule duplication, and a theme can retune the scale by redefining `--pretui-size-*`.
 
 **`@busy` blocks activation but keeps focus.** It sets `aria-disabled` rather than native `disabled`, swallows clicks (and so form submission) in a capture-phase listener, and never changes the button's width: the label fades out but keeps its space, and a busy layer on top shows the spinner with `@busyLabel` when both fit, otherwise the spinner beside the dimmed label when the button has room (a stretched or `min-width` button), otherwise the spinner alone. `@busyLabel` is always in the accessible name while busy, visible or not. One arg, not three.
 
@@ -28,7 +28,7 @@ The kit's action primitive: a native `<button>` with a two-axis treatment system
 Where Pretui improves:
 
 - **Tone is a token indirection, not a colour.** Because tones only write `--pretui-tone`/`--pretui-tone-on`, an appearance recipe is written once and works for every current _and future_ tone. shadcn's `cva` map has to enumerate each combination.
-- **`color-mix` hover derivation.** Hover is `color-mix(in oklch, --foreground 10%, <bg>)` rather than a second hard-coded colour per variant, so a season that changes `--primary` gets a correct hover for free.
+- **`color-mix` hover derivation.** Hover is `color-mix(in oklch, --foreground 10%, <bg>)` rather than a second hard-coded color per variant, so a theme that changes `--primary` gets a correct hover for free.
 - **Uniform `em` sizing** (above) — Web Awesome and shadcn both restate padding/height per size.
 - Per-instance escapes (`--pretui-button-h`, `--pretui-button-min-w`, `--pretui-button-px`, `--pretui-button-radius`, `--pretui-button-bg`, `--pretui-button-fg`) are custom properties, so a call site can deviate without `:deep()`.
 
@@ -49,7 +49,7 @@ Gaps worth knowing:
 - The spinner is `aria-hidden="true"` and slows down under `prefers-reduced-motion`, which also drops the press nudge.
 - **Focus-visible paints its own ring**: `outline: 2px solid var(--ring)` with a 2px offset. How visible it is depends on the theme's `--ring` against the surface.
 - **Forced colors**: every appearance keeps a 1px border (transparent until forced colors paints it), and disabled switches to `GrayText`.
-- Disabled uses `opacity: 0.45`, which will fail contrast for label text in most seasons. That is conventional, and conventionally wrong.
+- Disabled uses `opacity: 0.45`, which will fail contrast for label text in most themes. That is conventional, and conventionally wrong.
 - Icon-only usage must go through **IconButton**, which requires `@label` and applies it as `aria-label` _and_ `title`. A bare `<Button>` with only an icon child has no accessible name and nothing warns you.
 
 ## Theming

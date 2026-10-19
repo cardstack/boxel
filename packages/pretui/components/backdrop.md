@@ -11,9 +11,9 @@ Blocks: {}   — none
 Element: HTMLElement
 ```
 
-**It yields nothing, deliberately.** A backdrop that rendered children would either nest interactive content inside a `<button>` — an accessibility violation — or force a second wrapper. **The layered surface is a *sibling* of the backdrop, above it in the stacking order.** Documented rather than hidden (Law 7), and it is the first thing to know before reaching for this.
+**It yields nothing, deliberately.** A backdrop that rendered children would either nest interactive content inside a `<button>` — an accessibility violation — or force a second wrapper. **The layered surface is a _sibling_ of the backdrop, above it in the stacking order.** Documented rather than hidden (Law 7), and it is the first thing to know before reaching for this.
 
-**`@blur={{0}}` does not paint a filter.** Only a positive blur opts in, because a no-op `backdrop-filter: blur(0px)` still promotes the scrim to its own compositing layer *and* makes it a containing block for fixed-position descendants — which would break every overlay positioned above it. That is a real, non-obvious bug avoided by a guard.
+**`@blur={{0}}` does not paint a filter.** Only a positive blur opts in, because a no-op `backdrop-filter: blur(0px)` still promotes the scrim to its own compositing layer _and_ makes it a containing block for fixed-position descendants — which would break every overlay positioned above it. That is a real, non-obvious bug avoided by a guard.
 
 `@z` is also settable as `--pretui-backdrop-z`.
 
@@ -49,8 +49,8 @@ Gaps and cautions:
 
 ## Theming
 
-`--pretui-overlay-scrim` (the tint — shared with **Dialog**'s and **Drawer**'s `::backdrop`, so a season defines it once), `--pretui-backdrop-z` (stacking level), plus the `@blur` radius as an arg.
+`--pretui-overlay-scrim` (the tint — shared with **Dialog**'s and **Drawer**'s `::backdrop`, so a theme defines it once), `--pretui-backdrop-z` (stacking level), plus the `@blur` radius as an arg.
 
-`--pretui-overlay-scrim` is the token seasons most often get wrong: it must read as a scrim in **both** light and dark, not simply invert. A dark-mode scrim that is pure black at the same alpha as the light one produces an overlay you cannot see through and a surface with no apparent elevation.
+`--pretui-overlay-scrim` is the token themes most often get wrong: it must read as a scrim in **both** light and dark, not simply invert. A dark-mode scrim that is pure black at the same alpha as the light one produces an overlay you cannot see through and a surface with no apparent elevation.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

@@ -4,6 +4,7 @@ import Component from '@glimmer/component';
 import { BoxelInput, RealmIcon } from '@cardstack/boxel-ui/components';
 import { eq } from '@cardstack/boxel-ui/helpers';
 
+import RealmURLTooltip from '@cardstack/host/components/realm-url-tooltip';
 import type { RealmSectionInfo } from '@cardstack/host/utils/search/sections';
 
 import type { ComponentLike } from '@glint/template';
@@ -14,6 +15,10 @@ interface Signature {
     hideCount?: boolean;
     icon?: ComponentLike<{ Element: Element }>;
     realmInfo?: RealmSectionInfo;
+    // The realm's own URL. When only a card in it is at hand, pass the card's
+    // URL as `urlInRealm` instead, and the realm is looked up.
+    realmURL?: string;
+    urlInRealm?: string;
     title: string;
     totalCount?: number;
     showOnlyLabel?: string;
@@ -37,7 +42,13 @@ export default class SearchSheetSectionHeader extends Component<Signature> {
     >
       <div class='icon'>
         {{#if @realmInfo}}
-          <RealmIcon @realmInfo={{@realmInfo}} />
+          <RealmURLTooltip
+            @realmURL={{@realmURL}}
+            @urlInRealm={{@urlInRealm}}
+            @announce={{true}}
+          >
+            <RealmIcon @realmInfo={{@realmInfo}} />
+          </RealmURLTooltip>
         {{else if @icon}}
           {{#let @icon as |IconComponent|}}
             <IconComponent class='icon-svg' />

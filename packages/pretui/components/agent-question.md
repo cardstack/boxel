@@ -1,6 +1,6 @@
 ## What it is
 
-The ASK verb: a question from the agent, option pills to answer it, a free-text fallback, and a quiet settled line once answered. Use it when an agent needs a decision to continue. If it needs *approval* of work already staged, **ApprovalFooter**. If it is reporting rather than asking, **WorkItem** or **ResultCard**. If the question is a form, it is a form — use **Form**.
+The ASK verb: a question from the agent, option pills to answer it, a free-text fallback, and a quiet settled line once answered. Use it when an agent needs a decision to continue. If it needs _approval_ of work already staged, **ApprovalFooter**. If it is reporting rather than asking, **WorkItem** or **ResultCard**. If the question is a form, it is a form — use **Form**.
 
 ## The contract
 
@@ -31,7 +31,7 @@ Where it is thin: no multi-select answers, no typed answer validation, no "I don
 
 No APG pattern; the pieces are a group of buttons plus a text field.
 
-Gaps, and they are the same shape as the rest of the territory — the semantics are fine, the *announcement* is missing:
+Gaps, and they are the same shape as the rest of the territory — the semantics are fine, the _announcement_ is missing:
 
 - **The question's arrival is not announced.** An agent asking a question mid-run is precisely a status message that must reach the user (**WCAG 4.1.3**), and there is no live region. A screen-reader user reading a transcript will not know the agent has stopped and is waiting. This is the same gap **ApprovalFooter** has and it is the territory's central accessibility problem.
 - **The question is not programmatically the label of the answer controls.** The pills and the input are siblings of the question text, so a screen-reader user tabbing to the input hears an unlabelled text field. `aria-labelledby` from the input to the question, and `role="group"` with the same, would fix both.
@@ -45,6 +45,6 @@ Gaps, and they are the same shape as the rest of the territory — the semantics
 
 Attention tone for the unanswered state (the territory's reserved "a human must act now" hue), receding to `--muted-foreground` once settled. Pills carry **Chip**- or **Button**-family dress; the input carries the kit's control tokens (`--field`, `--input`, `--primary`, `--control-h`, `--radius`).
 
-The unanswered-to-settled contrast is the thing a season must get right: the question must be visibly *pending* in a scroll-back of forty transcript rows, and visibly *done* afterwards. If a season flattens that difference, a long transcript stops showing where the agent is blocked — which is the one thing the territory exists to make obvious.
+The unanswered-to-settled contrast is the thing a theme must get right: the question must be visibly _pending_ in a scroll-back of forty transcript rows, and visibly _done_ afterwards. If a theme flattens that difference, a long transcript stops showing where the agent is blocked — which is the one thing the territory exists to make obvious.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

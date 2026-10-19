@@ -47,6 +47,6 @@ Further gaps:
 
 `--muted-foreground` (trail ink and links), `--foreground` (current item), `--subtle-foreground` (separators), `--boxel-font-size-xs` (the trail's size), `--boxel-sp-2xs` (the gap between items). The `500` weight on the current item and the 2px underline offset are fixed.
 
-There is no surface, no border and no padding — a Breadcrumb inherits whatever it sits on, which is why it composes above a **Toolbar** without a seam. A season must keep `--muted-foreground` and `--foreground` separable, since the current item is distinguished from its ancestors by ink and weight alone.
+There is no surface, no border and no padding — a Breadcrumb inherits whatever it sits on, which is why it composes above a **Toolbar** without a seam. A theme must keep `--muted-foreground` and `--foreground` separable, since the current item is distinguished from its ancestors by ink and weight alone.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

@@ -19,7 +19,7 @@ Two behaviours worth knowing. **Double-clicking a handle collapses a pane**, and
 
 This is a **thin runtime wrap of boxel-ui's `ResizablePanelGroup`**, per the territory's foundation rule: the machinery is boxel-ui's and only the cloth changes. The engine supplies per-panel constraint solving, pointer-captured drag (so the drag survives the pointer leaving the handle), and the double-click collapse.
 
-The dress note is the interesting implementation detail: **boxel-ui's handle declares its own `--boxel-panel-resize-handle-*` colours *from* `--boxel-450` and `--boxel-highlight`**, so the wrapper cannot repoint the handle tokens directly — it has to remap those two upstream channel tokens for the subtree instead. That is the general shape of the retrofit pattern in this kit: when a token is derived rather than read, you re-skin one level up.
+The dress note is the interesting implementation detail: **boxel-ui's handle declares its own `--boxel-panel-resize-handle-*` colors _from_ `--boxel-450` and `--boxel-highlight`**, so the wrapper cannot repoint the handle tokens directly — it has to remap those two upstream channel tokens for the subtree instead. That is the general shape of the retrofit pattern in this kit: when a token is derived rather than read, you re-skin one level up.
 
 Against the field: **`react-resizable-panels`** (which shadcn wraps as `ResizablePanel`) is the reference — `direction`, `defaultSize`/`minSize`/`maxSize`, `collapsible`/`collapsedSize`, `onLayout`, `autoSaveId` for localStorage persistence, and `ResizableHandle withHandle`. **Web Awesome `wa-split-panel`** takes `position`/`position-in-pixels`, `vertical`, `disabled`, `primary`, `snap` and `snap-threshold`. **React Spectrum** has no equivalent.
 
@@ -42,9 +42,9 @@ Governing pattern: **ARIA `separator` with `aria-valuenow`** — a focusable sep
 
 Consumed: `--text-ui-md`, `--track-ui`, and the layout tokens.
 
-Remapped for the subtree: `--boxel-450` and `--boxel-highlight` → the Pretui handle colours (rest and active). Because the handle's own custom properties are *derived* from those two, this is the only place a season can reach the handle — repointing `--boxel-panel-resize-handle-*` directly has no effect.
+Remapped for the subtree: `--boxel-450` and `--boxel-highlight` → the Pretui handle colors (rest and active). Because the handle's own custom properties are _derived_ from those two, this is the only place a theme can reach the handle — repointing `--boxel-panel-resize-handle-*` directly has no effect.
 
-`data-orientation` is reflected on the wrapper for season hooks. Note the group fills its host, so **the wrapping context must have a height** — a SplitPanes in an auto-height container collapses to nothing, which is the first thing to check when it renders blank.
+`data-orientation` is reflected on the wrapper for styling hooks. Note the group fills its host, so **the wrapping context must have a height** — a SplitPanes in an auto-height container collapses to nothing, which is the first thing to check when it renders blank.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

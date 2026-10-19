@@ -29,7 +29,7 @@
 //   * Upstream backgrounds hardcode their palettes (`#7cff67`, `rgba(255,
 //     255,255,.08)`) or fork on `dark:`. Every field here rides theme tokens
 //     (`--chart-1…5`, `--foreground`, `--background`) through
-//     `color-mix()`, so a field re-tints with the season and with light/dark
+//     `color-mix()`, so a field re-tints with the theme and with light/dark
 //     automatically. There is not one dark branch in this file.
 //   * Upstream animates `background-position` (a full repaint of a
 //     viewport-sized layer, every frame). Here the painted layer is
@@ -74,6 +74,8 @@ export function clampNum(
   return Math.min(Math.max(value, min), max);
 }
 
-export function styleFrom(parts: string[]): ReturnType<typeof htmlSafe> | undefined {
+export function styleFrom(
+  parts: string[],
+): ReturnType<typeof htmlSafe> | undefined {
   return parts.length > 0 ? htmlSafe(parts.join('; ')) : undefined;
 }

@@ -1,4 +1,4 @@
-import { click, waitFor } from '@ember/test-helpers';
+import { click, triggerEvent, waitFor } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
@@ -109,6 +109,26 @@ module('Acceptance | workspace-chooser archive', function (hooks) {
         '[data-test-archived-list] [data-test-archived-workspace="Workspace A"]',
       )
       .exists('expanding the disclosure reveals the archived workspace');
+  });
+
+  test('hovering an archived tile icon shows its realm URL', async function (assert) {
+    await visitOperatorMode({ workspaceChooserOpened: true });
+
+    await click(`[data-test-workspace-menu-trigger="${ownedRealmURL}"]`);
+    await click('[data-test-boxel-menu-item-text="Archive Workspace"]');
+    await click('[data-test-confirm-archive-button]');
+    await click('[data-test-archived-toggle]');
+    await waitFor(
+      '[data-test-archived-list] [data-test-archived-workspace="Workspace A"]',
+    );
+
+    await triggerEvent(
+      `[data-test-archived-list] [data-test-realm-url-tooltip-trigger="${ownedRealmURL}"]`,
+      'mouseenter',
+    );
+    assert
+      .dom('[data-test-realm-url-tooltip]')
+      .hasText('test-realm/testuser/workspace-a');
   });
 
   test('owner can restore an archived workspace back to active', async function (assert) {

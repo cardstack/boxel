@@ -413,6 +413,42 @@ module('Unit | declared captures', function (hooks) {
     ]);
   });
 
+  test('title is a pdf-only field that must be a non-empty string or a function', function (assert) {
+    for (let [spec, pattern] of [
+      [
+        { format: 'isolated', width: 300, height: 200, title: 'Shot' },
+        /title names a document and is only valid on a pdf capture/,
+      ],
+      [
+        { format: 'isolated', type: 'pdf', title: '  ' },
+        /title must be a non-empty string or a function/,
+      ],
+      [
+        { format: 'isolated', type: 'pdf', title: 42 },
+        /title must be a non-empty string or a function/,
+      ],
+    ] as const) {
+      class Bad extends cardApi.CardDef {
+        static captures: Record<string, any> = { shot: spec };
+      }
+      assert.throws(() => cardApi.getCaptures(Bad), pattern);
+    }
+    class Good extends cardApi.CardDef {
+      static captures: Captures = {
+        fixed: { format: 'isolated', type: 'pdf', title: 'Statement' },
+        computed: {
+          format: 'embedded',
+          type: 'pdf',
+          title: (card: CardAPIModule.CardDef) => card.cardTitle,
+        },
+      };
+    }
+    assert.deepEqual(Object.keys(cardApi.getCaptures(Good)).sort(), [
+      'computed',
+      'fixed',
+    ]);
+  });
+
   test('a transparent background on a jpeg capture is refused', function (assert) {
     class TransparentJpeg extends cardApi.CardDef {
       static captures: Captures = {
@@ -639,6 +675,68 @@ module('Unit | declared captures', function (hooks) {
     );
   });
 
+  test('serializeDeclaredCaptures resolves a pdf title against the instance it is given', function (assert) {
+    class Statement extends cardApi.CardDef {
+      static displayName = 'Statement';
+      static captures: Captures = {
+        fixed: { format: 'isolated', type: 'pdf', title: 'Annual Report' },
+        computed: {
+          format: 'isolated',
+          type: 'pdf',
+          title: (card: Statement) => `${card.cardTitle} — Q3`,
+        },
+        throwing: {
+          format: 'isolated',
+          type: 'pdf',
+          title: () => {
+            throw new Error('boom');
+          },
+        },
+        empty: { format: 'isolated', type: 'pdf', title: () => '  ' },
+        named: { format: 'isolated', type: 'pdf', filename: 'statement-q3' },
+        tile: { format: 'fitted', width: 170, height: 250 },
+      };
+    }
+    let titled = new Statement({
+      cardInfo: new cardApi.CardInfoField({ name: 'Acme' }),
+    });
+    let roster = cardApi.serializeDeclaredCaptures(Statement, titled);
+    assert.strictEqual(roster.fixed.title, 'Annual Report');
+    assert.strictEqual(roster.computed.title, 'Acme — Q3');
+    assert.strictEqual(
+      roster.throwing.title,
+      'Acme',
+      'a throwing function falls back to the card title',
+    );
+    assert.strictEqual(
+      roster.empty.title,
+      'Acme',
+      'an empty result falls back to the card title',
+    );
+    assert.strictEqual(
+      roster.named.title,
+      'Acme',
+      'a declared filename does not stand in for the title',
+    );
+    assert.false('title' in roster.tile, 'a raster slot carries none');
+
+    let untitled = cardApi.serializeDeclaredCaptures(
+      Statement,
+      new Statement(),
+    );
+    assert.strictEqual(
+      untitled.named.title,
+      'Untitled Statement',
+      'the untitled placeholder still titles the document',
+    );
+
+    let classOnly = cardApi.serializeDeclaredCaptures(Statement);
+    assert.false(
+      'title' in classOnly.fixed,
+      'a class-only roster resolves no title',
+    );
+  });
+
   test("a FileDef's pdf filename defaults to its name without the extension", function (assert) {
     class Doc extends cardApi.FileDef {
       static captures: Captures = {
@@ -650,6 +748,7 @@ module('Unit | declared captures', function (hooks) {
       new Doc({ name: 'quarterly.report.docx' }),
     );
     assert.strictEqual(roster.print.filename, 'quarterly.report');
+    assert.strictEqual(roster.print.title, 'quarterly.report');
   });
 
   test('a non-object declarations value is refused', function (assert) {

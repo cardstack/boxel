@@ -45,6 +45,6 @@ Gaps:
 
 The 0.25rem bar width, `--boxel-sp-6xs` gap, `--boxel-border-radius-2xs` radius, 0.875rem cluster height and `--boxel-sp-xs` label gap are fixed; bar heights come from `@heights`, an arg rather than a token. `@heights` takes px figures and writes them as rem (÷ 16), so the bars scale with the root font size.
 
-Four tokens, so theming is cheap. The one thing to check per theme is `--border-strong` against `--pretui-meter-hue`: they are the only distinction between lit and unlit, and a dark theme that pushes `--border-strong` toward mid-grey while using a muted hue can make a 1-of-3 meter indistinguishable from a 3-of-3 one.
+Four tokens, so theming is cheap. The one thing to check per theme is `--border-strong` against `--pretui-meter-hue`: they are the only distinction between lit and unlit, and a theme whose dark mode pushes `--border-strong` toward mid-gray while using a muted hue can make a 1-of-3 meter indistinguishable from a 3-of-3 one.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

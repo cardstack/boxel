@@ -230,7 +230,7 @@ export class Lookup extends Component<LookupSignature> {
       @layer PretComponent {
         /* power-select owns this markup, so :deep() is the channel — the same
            sanctioned exception Select makes. Every value still
-           comes from a Pretui token, so a season recompile re-dresses it. */
+           comes from a Pretui token, so a theme change re-dresses it. */
         .pretui-lookup {
           position: relative; /* anchors the in-place dropdown */
           display: block;

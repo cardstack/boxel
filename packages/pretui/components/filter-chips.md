@@ -46,13 +46,13 @@ Remaining gaps:
 - **Every chip is its own tab stop.**
 - **The count is inside the chip**, so it joins the accessible name: "Blocked 12". Acceptable, but "12" has no unit.
 - **The filter change is not announced**, and neither is the resulting row count. A `role="status"` region is the caller's job.
-- **Hue conveys nothing** to assistive tech — correct, since the label carries the meaning, but it does mean a season must not use hue as the only distinction between two similarly-named filters.
+- **Hue conveys nothing** to assistive tech — correct, since the label carries the meaning, but it does mean a theme must not use hue as the only distinction between two similarly-named filters.
 - Chip height is 18–28px depending on dress; check against WCAG **2.5.8**'s 24×24 minimum.
 
 ## Theming
 
 Per-option `hue` feeding **Chip**'s Law-2 derivation (`--pretui-chip-mix`, `--pretui-ink-mix`, mixed against `--card`, hairline against `--border`), plus `--foreground`, `--muted-foreground`, `--hover` for resting and hover states, the count's tabular-numeral dress, and `--text-ui-xs`/`--text-ui-md`.
 
-Because the selected chip and the unselected ones differ by fill strength within the same hue, a season that raises `--pretui-chip-mix` narrows that gap — the selected state can become hard to pick out in a row of tinted chips. Check the selected chip against its unselected neighbours, not against the page.
+Because the selected chip and the unselected ones differ by fill strength within the same hue, a theme that raises `--pretui-chip-mix` narrows that gap — the selected state can become hard to pick out in a row of tinted chips. Check the selected chip against its unselected neighbors, not against the page.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

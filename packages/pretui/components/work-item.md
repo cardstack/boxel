@@ -35,13 +35,13 @@ No APG pattern. The relevant criteria are WCAG **1.4.1 Use of Colour**, **4.1.3 
 
 What is right, and it is unusually good for this kind of component:
 
-- **State is always text.** `1.4.1` is satisfied by construction, not by a lint rule — the tone is a colour *and* a phrase, and the phrase is not optional. Most agent UIs fail exactly here.
+- **State is always text.** `1.4.1` is satisfied by construction, not by a lint rule — the tone is a color _and_ a phrase, and the phrase is not optional. Most agent UIs fail exactly here.
 - **The `● needs you` phrasing puts the meaning in words** rather than in the attention hue.
 - **Progress uses ProgressBar** rather than a bespoke bar, inheriting its role and value properties.
 
 Gaps, and the first is the big one:
 
-- **State changes are not announced.** A WorkItem going from `running` to `awaiting-approval` — the single most important transition in the territory, because it means the user must act — changes text silently. There is no live region anywhere in this component. For a transcript that updates while the user reads it, a `role="status"` region (existing in the DOM *before* the change) reporting attention-state transitions is the highest-value addition to the whole territory. `assertive` for `attention` and `failed`, polite for the rest, mirroring **Alert**'s tone-driven role.
+- **State changes are not announced.** A WorkItem going from `running` to `awaiting-approval` — the single most important transition in the territory, because it means the user must act — changes text silently. There is no live region anywhere in this component. For a transcript that updates while the user reads it, a `role="status"` region (existing in the DOM _before_ the change) reporting attention-state transitions is the highest-value addition to the whole territory. `assertive` for `attention` and `failed`, polite for the rest, mirroring **Alert**'s tone-driven role.
 - **The glyph characters are content.** `·`, `●`, `✓`, `✕` sit in the DOM and are announced — "middle dot", "black circle", "check mark" — before or after the status phrase, which is noise since the phrase already carries the meaning. They should be `aria-hidden`.
 - **The row has no grouping semantics.** Title, status, count and activity are sibling elements; a screen-reader user hears them as one run with no structure. `role="group"` with `aria-label` from the title, or a `<dl>`, would give it shape.
 - **No accessible name distinguishes the tiers.** A `step` and a `run` announce identically.
@@ -53,6 +53,6 @@ Gaps, and the first is the big one:
 
 Tone hues: the four semantic tokens plus the reserved attention hue (`--pretui-attention`), each driving ink and glyph. Surface and structure: `--card`, `--border`, `--muted-foreground`, `--foreground`, `--font-mono` (the verb voice), `--text-ui-*`. Progress: **ProgressBar**'s `--primary`/`--inset`.
 
-**The attention hue is the one token a season must not reuse.** Its meaning in this territory is "a human must act now", and a season that also uses it for a decorative accent destroys the signal. Everything else in the territory is deliberately quiet so that one colour can be loud.
+**The attention hue is the one token a theme must not reuse.** Its meaning in this territory is "a human must act now", and a theme that also uses it for a decorative accent destroys the signal. Everything else in the territory is deliberately quiet so that one color can be loud.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

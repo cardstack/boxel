@@ -67,6 +67,6 @@ Where it is thinner: no crop or focal-point step after a pick (**ImageCropper** 
 
 Reserving the ratio before the bytes arrive is why a card holding a well never reflows when its image loads — the same rule **ImageFrame** and **MediaPlayer** follow, and the reason all three take a ratio rather than inferring one late.
 
-A season retunes the five state surfaces through the `--pretui-well-*` tokens together, which keeps the empty, hover, in-flight, filled and failed states reading as one control changing rather than five different components.
+A theme retunes the five state surfaces through the `--pretui-well-*` tokens together, which keeps the empty, hover, in-flight, filled and failed states reading as one control changing rather than five different components.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.

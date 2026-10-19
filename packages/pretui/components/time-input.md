@@ -46,6 +46,6 @@ Where it is thinner: no timezone handling of any kind — this is a wall-clock t
 
 The segment sizing and gaps come from the shared `--pretui-otp-size` and `--pretui-otp-gap` tokens this module defines, over `--pretui-shadow-control` and `--pretui-shadow-inset` for the segment surfaces.
 
-Sharing those tokens with **OtpInput** is deliberate: both are segmented character entry, and a season that tightens one should tighten the other — a time field and a code field that disagree on slot rhythm look like two different products on the same form.
+Sharing those tokens with **OtpInput** is deliberate: both are segmented character entry, and a theme that tightens one should tighten the other — a time field and a code field that disagree on slot rhythm look like two different products on the same form.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
