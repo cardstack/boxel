@@ -33,7 +33,6 @@ import {
 } from '@cardstack/boxel-ui/icons';
 
 import {
-  baseRealmRRI,
   baseRRI,
   chooseCard,
   Deferred,
@@ -927,27 +926,23 @@ export default class CreateFileModal extends Component<Signature> {
         this.network.virtualNetwork,
       ) as ResolvedCodeRef
     ).module;
-    // Address the base realm by its stable RRI prefix (`@cardstack/base/X`),
-    // matching the `Component` import emitted below — base modules are
-    // referenced by alias, not by a deployment-specific real URL.
+    // A parent inside the selected realm is imported relative to the new
+    // file. One in another realm is imported by that realm's registered prefix
+    // (`@cardstack/base/…`, `@cardstack/catalog/…`) when it has one, matching
+    // the `Component` import emitted below, so the generated source does not
+    // carry the URL a well-known realm answers to in this environment. A realm
+    // with no registered prefix is imported by its URL.
     // `codeRefWithAbsoluteIdentifier` returns the resolved real URL for
-    // RRI-prefix inputs, so map it back to the prefix form for base only.
-    // Cross-realm references keep their absolute URL: a generated import
-    // pointing at another workspace resolves by real URL and is not
-    // rewritten to a realm-prefix form here.
-    const canonicalModule =
-      this.network.virtualNetwork.unresolveURL(absoluteModuleHref);
-    // A `canonicalModule` in prefix form takes the first arm, so the second
-    // one only ever parses an href.
-    const moduleForImport: RealmResourceIdentifier | URL =
-      canonicalModule.startsWith(`${baseRealmRRI}`)
-        ? (canonicalModule as RealmResourceIdentifier)
-        : new URL(absoluteModuleHref); // eslint-disable-line @cardstack/boxel/no-url-from-realm-identifier
+    // prefix-form input, so the relative form is computed from that URL.
+    let parentURL = new URL(absoluteModuleHref); // eslint-disable-line @cardstack/boxel/no-url-from-realm-identifier
     let moduleURL = maybeRelativeReference(
-      moduleForImport,
+      parentURL,
       url,
       new URL(this.selectedRealmURL),
     );
+    if (moduleURL === parentURL.href) {
+      moduleURL = this.network.virtualNetwork.unresolveURL(parentURL.href);
+    }
     let src: string[] = [];
 
     let componentImport = isFileDef
