@@ -329,7 +329,15 @@ export class ModuleSyntax {
         typescriptPlugin,
         [decoratorsPlugin, { legacy: true }],
         classPropertiesPlugin,
-        [removeFieldPlugin, { card, field } as RemoveOptions],
+        [
+          removeFieldPlugin,
+          {
+            card,
+            field,
+            canonicalModule: (specifier: string) =>
+              this.canonicalModule(specifier),
+          } as RemoveOptions,
+        ],
       ],
     })!.ast!;
 
