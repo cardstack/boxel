@@ -1001,6 +1001,30 @@ export default class StoreService extends Service implements StoreInterface {
     })) as T;
   }
 
+  // Deserializes `doc` into an instance the caller constructed, then hydrates
+  // it into the store like `addWithoutPersisting`. For a card class that has no
+  // code ref (one not exported from its module), which `meta.adoptsFrom` cannot
+  // name; `doc` needs no `meta`. Links come out as they do for a document added
+  // to the store: present when the card is resident, otherwise loading lazily.
+  async addWithoutPersistingFromSerialized<T extends CardDef>(
+    instance: T,
+    doc: {
+      data: {
+        type: 'card';
+        attributes?: Record<string, any>;
+        relationships?: Record<string, any>;
+      };
+    },
+  ): Promise<T> {
+    let api = await this.cardService.getAPI();
+    await api.updateFromSerialized(
+      instance,
+      doc as LooseSingleCardDocument,
+      this.store,
+    );
+    return await this.addWithoutPersisting(instance);
+  }
+
   // Hydrates and starts the write without waiting for it. The outcome lands on
   // the auto-save state for `id`, not on this call.
   async addWithoutWaiting<T extends CardDef>(

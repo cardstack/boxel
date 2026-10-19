@@ -45,11 +45,6 @@ export default class CopyCardToRealmTool extends HostBaseTool<
     if (!this.realm.canWrite(targetRealm)) {
       throw new Error(`Do not have write permissions to ${targetRealm}`);
     }
-    if (!input.sourceCard) {
-      throw new Error(
-        'No sourceCard to copy: pass the card as relationships.sourceCard.links.self, using its id as a full URL or a realm identifier such as @cardstack/catalog/…',
-      );
-    }
     let localDir = resolveLocalDir(targetRealm, input.localDir);
     let doc = await this.cardService.serializeCard(input.sourceCard, {
       useAbsoluteURL: true,
