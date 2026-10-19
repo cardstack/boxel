@@ -834,13 +834,6 @@ export default class OperatorModeStateService extends Service {
     return cards;
   });
 
-  get openFileURL(): string | undefined {
-    if (this._state.submode === Submodes.Code) {
-      return this.codePathURL?.href;
-    }
-    return undefined;
-  }
-
   stackIsEmpty(stackIndex: number) {
     return this._state.stacks[stackIndex].length === 0;
   }
@@ -1585,10 +1578,6 @@ export default class OperatorModeStateService extends Service {
     if (this.moduleInspectorPanel === 'preview') {
       let playgroundSelections =
         this.playgroundPanelService.playgroundSelections ?? {};
-      let codePath = this._state.codePath;
-      if (codePath && playgroundSelections[codePath]) {
-        return playgroundSelections[codePath];
-      }
       let selectedCodeRefUrl = this.codeSemanticsService.selectedCodeRef
         ? internalKeyFor(
             this.codeSemanticsService.selectedCodeRef!,

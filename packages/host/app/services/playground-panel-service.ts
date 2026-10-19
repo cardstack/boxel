@@ -18,8 +18,6 @@ import {
 import { PlaygroundSelections } from '@cardstack/host/utils/local-storage-keys';
 
 import type CardService from './card-service';
-import type NetworkService from './network';
-import type OperatorModeStateService from './operator-mode-state-service';
 import type SessionService from './session';
 
 import type StoreService from './store';
@@ -33,15 +31,12 @@ export interface PlaygroundSelection {
   /* fieldIndex `undefined` means we are previewing a card instances. fields MUST have a corresponding index
       based on their position on their spec's containedExamples field. otherwise, it means that we are previewing
       a spec instance on playground instead of the field. */
-  url?: string;
 }
 
 export default class PlaygroundPanelService extends Service {
   @service declare private cardService: CardService;
   @service declare private store: StoreService;
-  @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private session: SessionService;
-  @service declare private network: NetworkService;
   declare playgroundSelections: Record<string, PlaygroundSelection>; // TrackedObject<moduleId, PlaygroundSelection>
   private cachedAPI?: typeof CardAPI;
   private pendingCardIdSubscriptions = new Map<string, CardDef>();
@@ -51,7 +46,6 @@ export default class PlaygroundPanelService extends Service {
       moduleId: string;
       format: Format;
       fieldIndex: number | undefined;
-      url?: string;
     }
   >();
   private storageSnapshot: string | null = null;
@@ -73,13 +67,6 @@ export default class PlaygroundPanelService extends Service {
     );
   }
 
-  private get codePathHref(): string | undefined {
-    let codePath = this.operatorModeStateService.state.codePath;
-    return codePath
-      ? this.network.virtualNetwork.toURLHref(codePath)
-      : undefined;
-  }
-
   persistSelections = (
     moduleId: string,
     cardId: RealmResourceIdentifier,
@@ -87,13 +74,10 @@ export default class PlaygroundPanelService extends Service {
     fieldIndex: number | undefined,
   ) => {
     this.syncSelectionsWithStorage();
-    let url = this.codePathHref;
-
     this.playgroundSelections[moduleId] = {
       cardId,
       format,
       fieldIndex,
-      url,
     };
     if (isLocalId(cardId)) {
       this.storeWhenIdAssignedTask.perform(
@@ -142,7 +126,6 @@ export default class PlaygroundPanelService extends Service {
           moduleId,
           format,
           fieldIndex,
-          url: this.codePathHref,
         });
         if (this.pendingCardIdSubscriptions.has(instance[localId])) {
           return;
