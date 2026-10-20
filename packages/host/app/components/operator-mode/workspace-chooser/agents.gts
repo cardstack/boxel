@@ -6,6 +6,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import Check from '@cardstack/boxel-icons/check';
+import ChevronRight from '@cardstack/boxel-icons/chevron-right';
 import Copy from '@cardstack/boxel-icons/copy';
 import Sparkles from '@cardstack/boxel-icons/sparkles';
 import { restartableTask, timeout } from 'ember-concurrency';
@@ -111,6 +112,7 @@ interface SetupStep {
   command: string;
   state: 'done' | 'now' | 'later';
   isWorkspacePick: boolean;
+  isLast: boolean;
 }
 
 interface PickableWorkspace {
@@ -230,6 +232,7 @@ export default class Agents extends Component {
       command: step.command,
       state: index < done ? 'done' : index === done ? 'now' : 'later',
       isWorkspacePick: Boolean(step.isWorkspacePick),
+      isLast: index === steps.length - 1,
     }));
   }
 
@@ -250,8 +253,8 @@ export default class Agents extends Component {
     this.openedStep = index;
   }
 
-  // The dashboard cannot see the agent's chat, so a copied step is all it can
-  // count: it marks the step copied (never "done") and opens the next.
+  // The dashboard cannot see the agent's chat, so a copied step counts as
+  // done (as does Next step), and the next one opens.
   // A copy the browser refuses (no clipboard permission, an unfocused page)
   // leaves the step as it was rather than raising.
   private copyTask = restartableTask(async (step: SetupStep) => {
@@ -278,6 +281,19 @@ export default class Agents extends Component {
     this.copiedStep = null;
     if (this.openedStep === step.index) {
       this.openedStep = null;
+    }
+  });
+
+  // The dashboard can't see the agent's chat, so the user says when a step
+  // is done: it counts like a copy and opens the next step.
+  private finishStepTask = restartableTask(async (step: SetupStep) => {
+    this.openedStep = step.isLast ? null : step.index + 1;
+    try {
+      await this.matrixService.updateDashboardState((stored) => ({
+        agentSetupDone: Math.max(stored.agentSetupDone ?? 0, step.index + 1),
+      }));
+    } catch (error) {
+      log.warn(`marking setup step ${step.number} done failed: ${error}`);
     }
   });
 
@@ -363,7 +379,7 @@ export default class Agents extends Component {
                 <span
                   class='muted'
                   data-test-agent-setup-progress
-                >{{this.doneCount}} of {{this.stepCount}} copied</span>
+                >{{this.doneCount}} of {{this.stepCount}} done</span>
               </span>
             </div>
             <div class='progress' aria-hidden='true'>
@@ -463,6 +479,20 @@ export default class Agents extends Component {
                           {{/if}}
                         </button>
                       </span>
+                      <button
+                        type='button'
+                        class='next'
+                        {{on 'click' (fn this.finishStepTask.perform step)}}
+                        data-test-agent-next={{step.number}}
+                      >
+                        {{#if step.isLast}}
+                          <Check width='14' height='14' />
+                          Done
+                        {{else}}
+                          Next step
+                          <ChevronRight width='14' height='14' />
+                        {{/if}}
+                      </button>
                     </div>
                   {{/if}}
                 </li>
@@ -737,9 +767,6 @@ export default class Agents extends Component {
         text-transform: uppercase;
         color: var(--make-muted);
       }
-      .step.is-now .step-state {
-        color: var(--boxel-highlight);
-      }
       .step-body {
         display: flex;
         flex-direction: column;
@@ -805,6 +832,30 @@ export default class Agents extends Component {
         color: color-mix(in oklch, var(--boxel-light) 88%, transparent);
         scrollbar-width: none;
       }
+      /* Quieter than Copy: the step's way on once it's done. */
+      .next {
+        align-self: flex-start;
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-5xs);
+        height: 1.75rem;
+        padding: 0 var(--boxel-sp-xs);
+        border: 1px solid var(--make-line);
+        border-radius: 0.875rem;
+        background: none;
+        color: var(--boxel-light);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .next:hover {
+        border-color: var(--boxel-highlight);
+        color: var(--boxel-highlight);
+      }
+      .next:focus-visible {
+        outline: 2px solid var(--boxel-light);
+        outline-offset: 2px;
+      }
       .copy {
         flex: none;
         display: inline-flex;
@@ -838,5 +889,6 @@ export default class Agents extends Component {
 
 const stateClass = (state: SetupStep['state']) => `is-${state}`;
 
+// Only a finished step is labeled: the open step's own button moves on.
 const stateLabel = (state: SetupStep['state']) =>
-  state === 'done' ? 'Copied' : state === 'now' ? 'Next' : '';
+  state === 'done' ? 'Done' : '';

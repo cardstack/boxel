@@ -1473,7 +1473,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
       try {
         await visitOperatorMode({ workspaceChooserOpened: true });
 
-        assert.dom('[data-test-agent-setup-progress]').hasText('0 of 6 copied');
+        assert.dom('[data-test-agent-setup-progress]').hasText('0 of 6 done');
         assert
           .dom('[data-test-agent-step="1"] [data-test-agent-command]')
           .hasText('npm install -g @cardstack/boxel-cli');
@@ -1481,13 +1481,37 @@ module('Acceptance | workspace-chooser', function (hooks) {
         await click('[data-test-agent-copy="1"]');
 
         assert.deepEqual(copied, ['npm install -g @cardstack/boxel-cli']);
-        assert.dom('[data-test-agent-setup-progress]').hasText('1 of 6 copied');
+        assert.dom('[data-test-agent-setup-progress]').hasText('1 of 6 done');
         let matrixService = getService('matrix-service') as MatrixService;
         assert.strictEqual(matrixService.dashboardState.agentSetupDone, 1);
         assert.true(matrixService.dashboardState.agentCommandCopied);
       } finally {
         clipboard.writeText = originalWriteText;
       }
+    });
+
+    test('Next step marks a step done and opens the next, for every agent', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      let matrixService = getService('matrix-service') as MatrixService;
+
+      await click('[data-test-agent-pick="grok"]');
+      assert.dom('[data-test-agent-setup-progress]').hasText('0 of 4 done');
+
+      await click('[data-test-agent-next="1"]');
+
+      assert.dom('[data-test-agent-setup-progress]').hasText('1 of 4 done');
+      assert.strictEqual(matrixService.dashboardState.agentSetupDone, 1);
+      assert
+        .dom('[data-test-agent-step="2"] [data-test-agent-command]')
+        .exists('the next step opens');
+
+      await click('[data-test-agent-next="2"]');
+      await click('[data-test-agent-next="3"]');
+      assert
+        .dom('[data-test-agent-next="4"]')
+        .hasText('Done', 'the last step finishes rather than moving on');
+      await click('[data-test-agent-next="4"]');
+      assert.dom('[data-test-agent-setup-progress]').hasText('4 of 4 done');
     });
 
     test('the workspace step offers the user’s own workspaces and follows the pick', async function (assert) {
