@@ -1575,7 +1575,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
       await revealCursor();
       assert.dom('[data-test-workspace-ring]').exists();
 
-      await triggerEvent('[data-test-dashboard-greeting]', 'pointerdown');
+      await triggerEvent('[data-test-dashboard-greeting]', 'pointerup');
       assert
         .dom('[data-test-workspace-ring]')
         .doesNotExist('pointer use hides the keyboard cursor');

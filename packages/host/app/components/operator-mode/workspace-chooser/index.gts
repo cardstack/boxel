@@ -607,7 +607,7 @@ export default class WorkspaceChooser extends Component<Signature> {
     return this.keyboardEngaged;
   }
 
-  @action private onPointerDown() {
+  @action private onPointerUp() {
     this.keyboardEngaged = false;
   }
 
@@ -746,7 +746,7 @@ export default class WorkspaceChooser extends Component<Signature> {
       data-test-workspace-chooser
       {{on 'keydown' this.onKeydown}}
       {{on 'focusin' this.onFocusIn}}
-      {{on 'pointerdown' this.onPointerDown}}
+      {{on 'pointerup' this.onPointerUp}}
     >
       <div
         class='workspace-chooser__content boxel-dark-scrollbar'
