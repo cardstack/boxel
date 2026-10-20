@@ -157,6 +157,13 @@ the registered mappings, so adding or removing any mapping clears all three.
 Consumers that key their own caches by resolved form can subscribe to
 `onMappingChange` to invalidate alongside them.
 
+Telling the two forms apart needs no VirtualNetwork, and code asks only one
+way: `isPrefixForm(identifier)` from `@cardstack/runtime-common`. It reads the
+spelling, so it answers for an unregistered prefix too. Don't ask a URL parser
+instead: `URL.canParse` answers `false` for a prefix-form identifier, which is
+absolute, and so misreads it as a relative path. Whether a prefix is registered
+is a separate question, and `isRegisteredPrefix` answers it.
+
 ## Resolution belongs at the network boundary
 
 The rule the runtime is built around: **inside the runtime, identifiers stay in
