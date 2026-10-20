@@ -161,13 +161,12 @@ environment they render in. That can only work if the physicality lives low in
 the platform, in the components that render card-api boundaries. Card authors
 cannot be asked to coordinate with a host motion service.
 
-PR #6325 gave operator mode high-fidelity motion through a central motion
-service that callers asked to start crossings and scenes. Motion concerns
-spread into the callers. Existing components had to check the motion service,
-or inspect the DOM, to see whether an animation was running. Stack state
-gained a field that held back a card's content until its flight ended. Review
-of that PR found that state changes ran inside a crossing's update and could
-be lost when a second open or close started. These failures are what §1.1 and
+A central motion service that callers ask to start crossings and scenes
+spreads motion concerns into those callers. Existing components have to check
+the motion service, or inspect the DOM, to see whether an animation is
+running. Stack state gains fields that hold back a card's content until its
+flight ends. State changes run inside a crossing's update, and they can be
+lost when a second open or close starts. These failures are what §1.1 and
 §1.2 rule out. When animation cannot reach state, a broken animation can only
 look wrong. It cannot leave the app in the wrong state.
 
@@ -187,8 +186,7 @@ actions many times a day.
 - **A reactive engine with declarative components (chosen).** State stays
   simple and testable. Card authors get motion for free. Motion failures stay
   cosmetic.
-- **A central imperative motion service.** This was PR #6325's approach.
-  Callers ask a service to cross, begin or defer. It gives one place for
+- **A central imperative motion service.** Callers ask a service to cross, begin or defer. It gives one place for
   policy. But every caller has to know about motion, state ends up waiting on
   animation, and user-authored cards cannot take part.
 - **Each component animates itself, with no coordination.** This works for
@@ -214,11 +212,10 @@ correct code more easily against clean state.
 
 ## 5. Sources
 
-- Edward Faulkner, review comment on PR #6325, 2026-10-02:
-  https://github.com/cardstack/boxel/pull/6325#issuecomment-5956990440
-- Review of PR #6325 by burieberry, 2026-09-28 (lost open or close; motion
-  left off after a cancelled portal).
-- PR #6325: the central-service approach.
+- Edward Faulkner, 2026-10-02: the reactive-layer architecture, the
+  two-level declarations, and native animation APIs.
+- burieberry, 2026-09-28: a lost open or close, and motion left off after a
+  cancelled portal.
 - `.claude/skills/motion-pattern/SKILL.md`: View Transitions freeze live
   content.
 - WCAG 2.2, Success Criteria 2.3.3 (Animation from Interactions) and 2.2.2
