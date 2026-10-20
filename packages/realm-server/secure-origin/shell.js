@@ -8,10 +8,16 @@
 // naming no known mode leaves the page empty. The address Google returns to
 // after a sign-in is a mode of its own.
 import { cliSignInMode, googleCallbackMode, signInMode } from './sign-in.js';
+import { registerMode, verifyEmailMode } from './register.js';
+import { forgotPasswordMode, resetPasswordMode } from './password-reset.js';
 
 const modes = {
   'sign-in': signInMode,
   'cli-sign-in': cliSignInMode,
+  register: registerMode,
+  'verify-email': verifyEmailMode,
+  'forgot-password': forgotPasswordMode,
+  'reset-password': resetPasswordMode,
 };
 
 let root = document.getElementById('secure-shell');

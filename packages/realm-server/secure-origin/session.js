@@ -82,20 +82,36 @@ async function request(url, { method = 'POST', body, token, signal } = {}) {
 }
 
 // Signs in with a password. `client` is 'window' for this window's own
-// session, 'cli' for a session handed to the CLI.
+// session, 'cli' for a session handed to the CLI. `registrationToken` is the
+// invite code an account just created here registered with, which its first
+// sign-in to Boxel records.
 export async function signInWithPassword(
   config,
-  { username, password, client },
+  { username, password, client, registrationToken },
 ) {
   let json = await request(new URL('_secure-session', config.realmServerURL), {
     body: {
       data: {
         type: 'secure-session',
-        attributes: { username, password, client },
+        attributes: {
+          username,
+          password,
+          client,
+          ...(registrationToken ? { registrationToken } : {}),
+        },
       },
     },
   });
   return json.data.attributes;
+}
+
+// The name of the Matrix server Boxel's accounts are on, which a username is
+// shown with (`@name:server`).
+export async function matrixServerName(config) {
+  let json = await request(new URL('_secure-origin', config.realmServerURL), {
+    method: 'GET',
+  });
+  return json.data.attributes.matrixServerName;
 }
 
 // Where to send the user to sign in with Google, or undefined when this realm

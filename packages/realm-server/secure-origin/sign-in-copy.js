@@ -52,3 +52,19 @@ export function tooManyFailedAttempts(retryAfterMs) {
     ? `Sign-in failed. Too many failed attempts, try again ${relativeTime(retryAfterMs)}.`
     : 'Sign-in failed. Too many failed attempts, try again later.';
 }
+
+// A failed password sign-in, in the app's words: a refused password or
+// account as the app reports a refused Matrix login, and too many failed
+// attempts with how long to wait.
+export function signInFailed(error) {
+  if (error?.code === 'invalid-credentials') {
+    return 'Sign-in failed. Please check your credentials and try again.';
+  }
+  if (error?.code === 'rate-limited') {
+    return tooManyFailedAttempts(error.retryAfterMs);
+  }
+  let message = String(error?.message ?? '').trim();
+  return message
+    ? `Sign-in failed. ${message[0].toUpperCase()}${message.slice(1)}${/[.!?]$/.test(message) ? '' : '.'}`
+    : 'Sign-in failed.';
+}

@@ -290,7 +290,7 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleCreateUserRequest(args),
   );
   router.get('/_secure-origin', handleSecureOriginInfo(args));
-  router.post(SECURE_SESSION_PATH, handlePasswordSignIn(args));
+  router.post(SECURE_SESSION_PATH, handlePasswordSignIn(args, createRealmDeps));
   router.get(`${SECURE_SESSION_PATH}/google`, handleGoogleSignInStart(args));
   router.post(
     `${SECURE_SESSION_PATH}/google`,

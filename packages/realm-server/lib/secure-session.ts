@@ -211,8 +211,11 @@ function userPath(user: string) {
 }
 
 // The name of the Matrix server this realm server's own user is on, which
-// every account it resolves by localpart is on too.
-async function matrixServerName(deps: SecureSessionDeps): Promise<string> {
+// every account it resolves by localpart, or the secure origin registers, is
+// on too.
+export async function matrixServerName(
+  deps: Pick<SecureSessionDeps, 'matrixClient'>,
+): Promise<string> {
   await ensureLoggedIn(deps.matrixClient);
   let serverName = deps.matrixClient.getUserId()?.split(':').slice(1).join(':');
   if (!serverName) {
@@ -240,16 +243,20 @@ async function userByEmail(
   return typeof body.user_id === 'string' ? body.user_id : undefined;
 }
 
-// The Matrix user a password sign-in names: a full Matrix id as given, an
-// email address by the account it is bound to, or a bare username on this
-// realm server's Matrix server. Undefined when there is no such account.
+// The Matrix user a password sign-in names: a full Matrix id on this realm
+// server's Matrix server, an email address by the account it is bound to, or a
+// bare username on that server. Undefined when there is no such account,
+// including for an id on another server, which no account here can be.
 async function resolveMatrixUser(
   deps: SecureSessionDeps,
   username: string,
 ): Promise<string | undefined> {
   let name = username.trim();
   if (name.startsWith('@')) {
-    return /^@[^:\s]+:\S+$/.test(name) ? name : undefined;
+    let match = /^@[^:\s]+:(\S+)$/.exec(name);
+    return match && match[1] === (await matrixServerName(deps))
+      ? name
+      : undefined;
   }
   if (name.includes('@')) {
     return await userByEmail(deps, name.toLowerCase());
@@ -351,10 +358,21 @@ async function asUser<T>(
 // password is checked. Failures are counted as the Matrix server counts failed
 // logins: against the Matrix user id the account resolves to, however it was
 // named, or against the name itself when it names no account.
+//
+// An account that has never signed in to Boxel, as one just registered on the
+// secure origin, gets the app's first-sign-in setup once its password checks
+// out. `registrationToken` is the invite code the account registered with,
+// which the realm-server user it makes records, as the app's first sign-in
+// records it.
 export async function signInWithPassword(
   deps: SecureSessionDeps,
   limiter: SignInLimiter,
-  attempt: { username: string; password: string; client: SecureSessionClient },
+  attempt: {
+    username: string;
+    password: string;
+    client: SecureSessionClient;
+    registrationToken?: string;
+  },
 ): Promise<SignedInSession> {
   if (!attempt.username.trim() || !attempt.password) {
     throw invalidCredentials();
@@ -380,10 +398,32 @@ export async function signInWithPassword(
 async function checkPassword(
   deps: SecureSessionDeps,
   user: string | undefined,
-  { password, client }: { password: string; client: SecureSessionClient },
+  {
+    password,
+    client,
+    registrationToken,
+  }: {
+    password: string;
+    client: SecureSessionClient;
+    registrationToken?: string;
+  },
 ): Promise<SignedInSession> {
-  if (!user || !(await fetchSessionRoom(deps.dbAdapter, user))) {
+  if (!user) {
     throw invalidCredentials();
+  }
+  // The admin API mints a token for any user id, so a name that names no
+  // account is caught here, before anything acts as it. Only "no such
+  // account" is the account's answer; any other failure is the Matrix
+  // server's, and isn't counted against the account.
+  let account = await adminRequest(deps, userPath(user));
+  if (account.status === 404) {
+    throw invalidCredentials();
+  }
+  if (account.status !== 200) {
+    log.error(
+      `looking up a secure sign-in's account got HTTP ${account.status}`,
+    );
+    throw unavailable();
   }
   let request = {
     clientSecret: randomBytes(24).toString('hex'),
@@ -440,6 +480,9 @@ async function checkPassword(
       `completing a secure sign-in got HTTP ${completed.status} ${completed.body.errcode ?? ''}`,
     );
     throw unavailable();
+  }
+  if (!(await fetchSessionRoom(deps.dbAdapter, user))) {
+    await setUpFirstSignIn(deps, user, registrationToken);
   }
   return await createSecureSession(deps, {
     user,
@@ -782,12 +825,14 @@ async function realmRegistered(
 }
 
 // The setup the app runs on a user's first sign-in to Boxel: their
-// realm-server user, their personal realm, and the session room the realm
-// server messages them in. The session room comes last, since it is what
-// marks the setup done: a sign-in that fails part way sets up again.
+// realm-server user (recording the invite code they registered with, if any)
+// and its first credit grant, their personal realm, and the session room the
+// realm server messages them in. The session room comes last, since it is
+// what marks the setup done: a sign-in that fails part way sets up again.
 async function setUpFirstSignIn(
   deps: SecureSessionDeps,
   user: string,
+  registrationToken?: string,
 ): Promise<void> {
   if (!deps.createRealm) {
     throw unavailable();
@@ -841,7 +886,7 @@ async function setUpFirstSignIn(
     });
   });
   await ensureLoggedIn(deps.matrixClient);
-  await ensureSessionRoom(deps, user);
+  await ensureSessionRoom(deps, user, registrationToken);
 }
 
 async function createSecureSession(
@@ -853,9 +898,7 @@ async function createSecureSession(
   }: { user: string; client: SecureSessionClient; proof: string },
 ): Promise<SignedInSession> {
   // The room the realm server messages the user in, which their first sign-in
-  // to Boxel creates. Only a Google sign-in can be someone's first sign-in
-  // (`setUpFirstSignIn`); every other secure session is for someone who
-  // already uses Boxel.
+  // to Boxel creates (`setUpFirstSignIn`).
   let sessionRoom = await fetchSessionRoom(deps.dbAdapter, user);
   if (!sessionRoom) {
     throw new SecureSessionError(
