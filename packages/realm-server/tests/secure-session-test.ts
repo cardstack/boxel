@@ -836,6 +836,38 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test("a realm shared with the user before their first sign-in doesn't stand in for their own", async function (assert) {
+      // An account that has never signed in to Boxel, already granted
+      // someone else's realm, which puts that realm in its account data.
+      let { userId } = await registerPasswordUser(dbAdapter, {
+        boxelAccount: false,
+      });
+      let localpart = userId.slice(1).split(':')[0];
+      let email = `${localpart}@example.com`;
+      await updateAccount(userId, {
+        threepids: [{ medium: 'email', address: email }],
+      });
+      let shared = 'http://127.0.0.1:4444/someone-else/shared/';
+      await setAccountRealms(userId, [shared]);
+
+      let response = await googleSignIn(
+        google.issue(`google-${randomUUID()}`, {
+          claims: { email, email_verified: true },
+        }),
+      );
+      assert.strictEqual(response.status, 201, response.text);
+      assert.strictEqual(response.body.data.attributes.user, userId);
+      let realms = await accountRealms(userId);
+      assert.strictEqual(realms[0], shared, 'the shared realm is kept');
+      assert.deepEqual(
+        realms
+          .slice(1)
+          .map((url) => new URL(url).pathname.split('/').slice(-3)),
+        [[localpart, 'personal', '']],
+        'and the user gets their own personal realm',
+      );
+    });
+
     test('an account a new Google sign-in could not finish is not signed into later', async function (assert) {
       let base = `secure-${randomBytes(6).toString('hex')}`;
       let sub = `google-${randomUUID()}`;

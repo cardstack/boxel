@@ -747,16 +747,19 @@ async function setUpFirstSignIn(
       accessToken,
       APP_BOXEL_REALMS_EVENT_TYPE,
     );
-    if (Array.isArray(realms) && realms.length > 0) {
-      return;
-    }
-    // A realm an earlier, unfinished sign-in made is recorded rather than
-    // made again.
+    // The user's own personal realm, as the app judges it: a realm someone
+    // else shared with the user before their first sign-in is in their
+    // account data too, and doesn't count.
     let realmURL = realmURLFor(
       createRealmDeps.serverURL,
       user,
       PERSONAL_REALM_ENDPOINT,
     );
+    if (Array.isArray(realms) && realms.includes(realmURL)) {
+      return;
+    }
+    // A realm an earlier, unfinished sign-in made is recorded rather than
+    // made again.
     if (!(await realmRegistered(deps.dbAdapter, realmURL))) {
       try {
         await createRealm(createRealmDeps, {

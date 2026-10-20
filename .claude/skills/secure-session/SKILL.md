@@ -102,7 +102,8 @@ Matrix server's Google client (`lib/google-sign-in.ts`):
 
 5. An account with no session room gets the app's first-sign-in setup before
    the session is minted: the realm-server user and its first credit grant, a
-   personal realm when its account data lists none (one already in
+   personal realm when its account data doesn't list the user's own
+   (`<username>/personal/`; a realm shared with them doesn't count) (one already in
    `realm_registry` is recorded, not made again), and last the session
    room, so a sign-in that fails part way sets up again.
 
