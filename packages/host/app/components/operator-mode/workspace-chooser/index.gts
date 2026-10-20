@@ -1,3 +1,4 @@
+import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
 import { service } from '@ember/service';
@@ -5,12 +6,10 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import ArchiveIcon from '@cardstack/boxel-icons/archive';
-import Home from '@cardstack/boxel-icons/home';
-import Shapes from '@cardstack/boxel-icons/shapes';
 import { didCancel, dropTask } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
 
-import { BoxelSelect, LoadingIndicator } from '@cardstack/boxel-ui/components';
+import { LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { add, eq } from '@cardstack/boxel-ui/helpers';
 import {
   FailureBordered as FailureIcon,
@@ -51,17 +50,14 @@ export function leadWith<T extends string>(
   return [urls[index], ...urls.slice(0, index), ...urls.slice(index + 1)];
 }
 
-interface SortOption {
-  label: string;
-  icon: Icon;
-  value: 'default' | 'hosted-only';
-}
-
 interface Signature {
   Element: HTMLDivElement;
 }
 
 const log = logger('component:workspace-chooser');
+
+// Fewer workspaces of one's own than this, and the catalog leads the page.
+export const CATALOG_LEADS_BELOW = 3;
 
 // Favorites keep the roomy tile and gap; the lists below them are compact.
 const FAVORITE_MIN_WIDTH_PX = 440;
@@ -152,22 +148,22 @@ export default class WorkspaceChooser extends Component<Signature> {
     }
   }
 
-  private sortOptions: SortOption[] = [
-    { label: 'View All', icon: Shapes, value: 'default' },
-    { label: 'Hosted Only', icon: Home, value: 'hosted-only' },
-  ];
+  // Everything, or only workspaces published to the web. It narrows every
+  // section, so it sits beside the greeting at the head of the page.
+  @tracked private scope: 'default' | 'hosted-only' = 'default';
 
-  @tracked private selectedSortOption: SortOption = this.sortOptions[0]!;
-
-  @action private onSortChange(option: SortOption | null) {
-    if (!option) {
-      return;
-    }
-    this.selectedSortOption = option;
+  @action private setScope(scope: 'default' | 'hosted-only') {
+    this.scope = scope;
   }
 
   private get sortOrder(): 'default' | 'hosted-only' {
-    return this.selectedSortOption.value;
+    return this.scope;
+  }
+
+  // Someone with few workspaces of their own gets the most to look at from
+  // the catalog, so its shelf leads the page for them.
+  get catalogLeads() {
+    return this.realmServer.userRealmIdentifiers.length < CATALOG_LEADS_BELOW;
   }
 
   // "Good morning, Chris" — first name only, and no name rather than a
@@ -642,11 +638,47 @@ export default class WorkspaceChooser extends Component<Signature> {
           </div>
         {{/if}}
         <div class='sections-wrapper'>
-          <h1
-            class='greeting'
-            data-test-dashboard-greeting
-          >{{this.greeting}}</h1>
+          <div class='page-head'>
+            <h1
+              class='greeting'
+              data-test-dashboard-greeting
+            >{{this.greeting}}</h1>
+            <div class='scope-filter' role='group' aria-label='Show'>
+              <button
+                type='button'
+                class='scope-option'
+                aria-pressed={{if (eq this.scope 'default') 'true' 'false'}}
+                {{on 'click' (fn this.setScope 'default')}}
+                data-test-dashboard-filter='all'
+              >Everything</button>
+              <button
+                type='button'
+                class='scope-option'
+                aria-pressed={{if (eq this.scope 'hosted-only') 'true' 'false'}}
+                {{on 'click' (fn this.setScope 'hosted-only')}}
+                data-test-dashboard-filter='hosted'
+              >Live only</button>
+            </div>
+          </div>
           <GetStarted />
+          {{#if this.catalogLeads}}
+            <section
+              class='dashboard-section'
+              aria-labelledby='dashboard-section-catalogs'
+              data-dashboard-section='catalogs'
+              data-test-dashboard-section='catalogs'
+            >
+              <div class='dashboard-section-header'>
+                <h2
+                  id='dashboard-section-catalogs'
+                  class='dashboard-section-title'
+                >Start from the catalog</h2>
+                <p class='dashboard-section-hint'>New here? Pick something
+                  ready-made and make it yours.</p>
+              </div>
+              <CatalogShowcase />
+            </section>
+          {{/if}}
           <section
             class='dashboard-section'
             aria-labelledby='dashboard-section-workspaces'
@@ -658,24 +690,8 @@ export default class WorkspaceChooser extends Component<Signature> {
                 id='dashboard-section-workspaces'
                 class='dashboard-section-title'
               >Workspaces</h2>
-              <div class='sort-controls'>
-                <BoxelSelect
-                  class='sort-select'
-                  @dropdownClass='workspace-chooser-sort-dropdown'
-                  @options={{this.sortOptions}}
-                  @selected={{this.selectedSortOption}}
-                  @onChange={{this.onSortChange}}
-                  @matchTriggerWidth={{false}}
-                  aria-label='Filter workspaces'
-                  data-test-sort-dropdown-trigger
-                  as |option|
-                >
-                  <option.icon width='16' height='16' />
-                  <span class='sort-label'>{{option.label}}</span>
-                </BoxelSelect>
-              </div>
-              <p class='dashboard-section-hint'>Where your cards live. Star one
-                to keep it at the top.</p>
+              <p class='dashboard-section-hint'>Where your cards live. Pin a
+                card from its menu and it shows on its workspace here.</p>
             </div>
             <div class='workspace-section' data-test-favorites-section>
               <div class='section-header'>
@@ -815,13 +831,13 @@ export default class WorkspaceChooser extends Component<Signature> {
           </section>
           <section
             class='dashboard-section'
-            aria-labelledby='dashboard-section-catalogs'
-            data-dashboard-section='catalogs'
-            data-test-dashboard-section='catalogs'
+            aria-labelledby='dashboard-section-catalog-list'
+            data-dashboard-section={{unless this.catalogLeads 'catalogs'}}
+            data-test-dashboard-section={{unless this.catalogLeads 'catalogs'}}
           >
             <div class='dashboard-section-header'>
               <h2
-                id='dashboard-section-catalogs'
+                id='dashboard-section-catalog-list'
                 class='dashboard-section-title'
               >Catalogs</h2>
               {{#if this.filteredCatalogRealmIdentifiers.length}}
@@ -833,10 +849,12 @@ export default class WorkspaceChooser extends Component<Signature> {
               <p class='dashboard-section-hint'>Apps, fields and themes to use
                 in your workspaces.</p>
             </div>
-            <CatalogShowcase />
-            <div class='section-header'>
-              <span class='workspace-chooser__title'>Catalog workspaces</span>
-            </div>
+            {{#unless this.catalogLeads}}
+              <CatalogShowcase />
+              <div class='section-header'>
+                <span class='workspace-chooser__title'>Catalog workspaces</span>
+              </div>
+            {{/unless}}
             {{#if this.catalogEmptyMessage}}
               <span
                 class='section-empty'
@@ -924,40 +942,6 @@ export default class WorkspaceChooser extends Component<Signature> {
           100vw - 2 * var(--workspace-chooser-gutter)
         );
       }
-      /* The filter narrows every section, so it sits with the page's first
-         heading rather than in the top bar. */
-      .sort-controls {
-        display: flex;
-        align-items: center;
-        margin-left: auto;
-        align-self: center;
-        white-space: nowrap;
-      }
-      .sort-select {
-        flex-shrink: 0;
-        /* Keep the icon and label on one line at narrow top-bar widths. */
-        --boxel-select-trigger-content-wrap: nowrap;
-        --boxel-select-background-color: var(--boxel-800);
-        --boxel-select-text-color: var(--boxel-light);
-        --boxel-select-border-color: var(--boxel-light-25);
-        --boxel-select-focus-border-color: var(--boxel-light-50);
-        --icon-color: var(--boxel-light);
-      }
-      :global(.boxel-select__dropdown.workspace-chooser-sort-dropdown) {
-        --boxel-dropdown-background-color: var(--boxel-650);
-        --boxel-dropdown-border-color: var(--boxel-light-25);
-        --boxel-dropdown-text-color: var(--boxel-light);
-        --boxel-dropdown-selected-text-color: var(--boxel-light);
-        --boxel-dropdown-hover-color: var(--boxel-700);
-        --boxel-dropdown-highlight-color: var(--boxel-650);
-        --boxel-dropdown-highlight-hover-color: var(--boxel-700);
-        --boxel-dropdown-selected-highlighted-color: var(--boxel-700);
-        --boxel-dropdown-selected-hover-color: var(--boxel-700);
-      }
-      :global(.workspace-chooser-sort-dropdown .boxel-select-option-checkmark) {
-        --icon-color: var(--boxel-highlight);
-        color: var(--boxel-highlight);
-      }
       .workspace-chooser__content {
         display: flex;
         flex-direction: column;
@@ -1043,9 +1027,44 @@ export default class WorkspaceChooser extends Component<Signature> {
       .section-count::before {
         content: '· ';
       }
+      .page-head {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp);
+      }
+      .scope-filter {
+        margin-left: auto;
+        display: inline-flex;
+        padding: 0.1875rem;
+        border-radius: 0.75rem;
+        background-color: var(--boxel-700);
+        box-shadow: inset 0 0 0 1px
+          color-mix(in oklch, var(--boxel-light) 10%, transparent);
+      }
+      .scope-option {
+        height: 2rem;
+        padding: 0 var(--boxel-sp-sm);
+        border: 0;
+        border-radius: 0.5625rem;
+        background: none;
+        color: var(--workspace-chooser-label-color);
+        font: 600 var(--boxel-font-sm);
+        cursor: pointer;
+      }
+      .scope-option[aria-pressed='true'] {
+        background-color: var(--boxel-light);
+        color: var(--boxel-dark);
+      }
+      .scope-option:focus-visible {
+        outline: 2px solid var(--boxel-highlight);
+        outline-offset: 2px;
+      }
+      /* One type scale: greeting, then section, then everything inside a
+         section; nothing inside a section outranks its heading. */
       .greeting {
         margin: 0;
-        font-size: 1.625rem;
+        font-size: 2rem;
         font-weight: 700;
         letter-spacing: -0.02em;
         color: var(--boxel-light);
@@ -1088,7 +1107,7 @@ export default class WorkspaceChooser extends Component<Signature> {
       }
       .dashboard-section-title {
         margin: 0;
-        font-size: 1.25rem;
+        font-size: 1.375rem;
         font-weight: 700;
         letter-spacing: -0.015em;
         color: var(--boxel-light);
@@ -1096,8 +1115,8 @@ export default class WorkspaceChooser extends Component<Signature> {
       .dashboard-section-hint {
         flex-basis: 100%;
         margin: 0;
-        font-size: var(--boxel-font-size-sm);
-        color: var(--workspace-chooser-count-color);
+        font-size: 0.9375rem;
+        color: var(--workspace-chooser-label-color);
       }
       .section-empty {
         color: var(--boxel-400);
@@ -1120,6 +1139,16 @@ export default class WorkspaceChooser extends Component<Signature> {
       }
       .unreachable-notice-spinner {
         flex-shrink: 0;
+      }
+      /* At the wide breakpoint the dashboard rail becomes a labeled sidebar
+         (see nav-rail.gts); the page starts past it. */
+      @media (min-width: 80rem) {
+        .workspace-chooser__content {
+          padding-left: calc(
+            var(--host-dashboard-sidebar-width) + var(--operator-mode-spacing) +
+              var(--boxel-sp-xl)
+          );
+        }
       }
       /* One tile per row, filling the chooser's own width, which is less
          than the viewport's when the AI assistant panel is open. */

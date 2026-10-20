@@ -402,16 +402,17 @@ export default class Agents extends Component {
         gap: var(--boxel-sp-xs);
         max-width: 38rem;
       }
+      /* Below the section heading in rank: the pitch never outshouts it. */
       .pitch-title {
         margin: 0;
-        font-size: 1.75rem;
+        font-size: 1.25rem;
         font-weight: 700;
         line-height: 1.1;
         letter-spacing: -0.02em;
       }
       .pitch-body {
         margin: 0;
-        font-size: var(--boxel-font-size);
+        font-size: 0.9375rem;
         line-height: 1.5;
         color: var(--make-muted);
       }
@@ -422,11 +423,13 @@ export default class Agents extends Component {
         align-items: flex-start;
         gap: var(--boxel-sp-lg);
       }
+      /* The dashboard's one surface: a dark panel with a hairline edge. */
       .steps,
       .browser {
         box-sizing: border-box;
         border: 1px solid var(--make-line);
-        border-radius: 1.375rem;
+        border-radius: 1.25rem;
+        background-color: var(--boxel-700);
       }
       .steps {
         flex: 1.6 1 30rem;
@@ -435,11 +438,6 @@ export default class Agents extends Component {
         flex-direction: column;
         gap: var(--boxel-sp-sm);
         padding: var(--boxel-sp-lg);
-        background-color: var(--boxel-700);
-        box-shadow:
-          0 0.875rem 1.875rem
-            color-mix(in oklch, var(--boxel-dark) 35%, transparent),
-          inset 0 1px 0 color-mix(in oklch, var(--boxel-light) 6%, transparent);
       }
       .steps-top {
         display: flex;
@@ -671,8 +669,8 @@ export default class Agents extends Component {
         outline-offset: 2px;
       }
 
-      /* Boxel AI, for anyone without an agent: the dashed edge says it's
-         the other way in, not a sixth step. */
+      /* Boxel AI, for anyone without an agent: the same panel, its teal
+         edge saying it's the other way in, not a sixth step. */
       .browser {
         flex: 1 1 16rem;
         max-width: 22rem;
@@ -680,17 +678,16 @@ export default class Agents extends Component {
         flex-direction: column;
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-lg);
-        border-style: dashed;
-        background-image: radial-gradient(
-          120% 80% at 0% 0%,
-          color-mix(in oklch, var(--boxel-highlight) 14%, transparent),
-          transparent 60%
+        border-color: color-mix(
+          in oklch,
+          var(--boxel-highlight) 35%,
+          transparent
         );
         font-size: var(--boxel-font-size-sm);
         line-height: 1.45;
       }
       .browser-title {
-        font-size: var(--boxel-font-size-lg);
+        font-size: var(--boxel-font-size);
       }
       .browser-action {
         align-self: flex-start;

@@ -27,7 +27,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
-import { leadWith } from './index';
+import { CATALOG_LEADS_BELOW, leadWith } from './index';
 
 const RECENT_SESSION_COUNT = 5;
 const FAVORITES_SHOWN = 6;
@@ -93,9 +93,19 @@ const trackSection = modifier(
   },
 );
 
+interface RailSection {
+  id: Section;
+  label: string;
+  icon: typeof LayoutGrid;
+  count: number | undefined;
+}
+
 interface Signature {
   Element: HTMLElement;
   Args: {
+    // Below the wide breakpoint the rail shows only while summoned from the
+    // wordmark; at and above it, it stays as a labeled sidebar.
+    isSummoned: boolean;
     // Pointer and focus inside the rail keep it open; leaving starts the
     // owner's dismiss grace period, so the pointer can travel between the
     // wordmark and the rail without the rail flickering shut.
@@ -157,6 +167,34 @@ export default class NavRail extends Component<Signature> {
     ).map(this.entryFor);
   }
 
+  // The rail lists the page's sections in page order, which puts the
+  // catalog first for someone with few workspaces of their own.
+  private get sections(): RailSection[] {
+    let workspaces: RailSection = {
+      id: 'workspaces',
+      label: 'Workspaces',
+      icon: LayoutGrid,
+      count: this.realmServer.userRealmIdentifiers.length || undefined,
+    };
+    let catalogs: RailSection = {
+      id: 'catalogs',
+      label: 'Catalogs',
+      icon: Store,
+      count:
+        (this.realmServer.displayedCatalogRealmIdentifiers ?? []).length ||
+        undefined,
+    };
+    let agents: RailSection = {
+      id: 'agents',
+      label: 'Agents',
+      icon: Bot,
+      count: undefined,
+    };
+    return this.realmServer.userRealmIdentifiers.length < CATALOG_LEADS_BELOW
+      ? [catalogs, workspaces, agents]
+      : [workspaces, catalogs, agents];
+  }
+
   private get recentSessions() {
     return this.aiAssistantPanelService.aiSessionRooms.slice(
       0,
@@ -204,8 +242,9 @@ export default class NavRail extends Component<Signature> {
     ).matches
       ? 'auto'
       : 'smooth';
-    // Workspaces opens the page, greeting and all, so it goes to the top.
-    if (section === 'workspaces') {
+    // The first section opens the page, greeting and all, so it goes to
+    // the top.
+    if (section === this.sections[0]?.id) {
       dashboardScroller()?.scrollTo({ top: 0, behavior });
       return;
     }
@@ -236,7 +275,7 @@ export default class NavRail extends Component<Signature> {
     {{! Escape closes the flyout, then the rail, from any control inside it. }}
     {{! template-lint-disable no-invalid-interactive }}
     <nav
-      class='nav-rail'
+      class={{cn 'nav-rail' is-summoned=@isSummoned}}
       aria-label='Dashboard'
       data-theme='dark'
       data-nav-rail
@@ -248,196 +287,163 @@ export default class NavRail extends Component<Signature> {
       {{trackSection this.setCurrentSection}}
       ...attributes
     >
-      <div
-        class='rail-item'
-        {{on 'mouseenter' (fn this.showFlyout 'workspaces')}}
-        {{on 'mouseleave' (fn this.showFlyout null)}}
-      >
-        <button
-          type='button'
-          class={{cn
-            'rail-button'
-            is-current=(eq this.currentSection 'workspaces')
-            is-open=(eq this.openFlyout 'workspaces')
-          }}
-          aria-current={{if (eq this.currentSection 'workspaces') 'location'}}
-          aria-label='Workspaces'
-          aria-haspopup='true'
-          aria-expanded={{if (eq this.openFlyout 'workspaces') 'true' 'false'}}
-          {{on 'focus' (fn this.showFlyout 'workspaces')}}
-          {{on 'click' (fn this.scrollToSection 'workspaces')}}
-          data-test-nav-rail-item='workspaces'
+      {{#each this.sections key='id' as |section|}}
+        <div
+          class='rail-item'
+          {{on 'mouseenter' (fn this.showFlyout section.id)}}
+          {{on 'mouseleave' (fn this.showFlyout null)}}
         >
-          <LayoutGrid width='20' height='20' />
-        </button>
-        {{#if (eq this.openFlyout 'workspaces')}}
-          <div
-            class='flyout'
-            role='group'
-            aria-label='Favorite workspaces'
-            data-test-nav-rail-flyout='workspaces'
+          <button
+            type='button'
+            class={{cn
+              'rail-button'
+              is-current=(eq this.currentSection section.id)
+              is-open=(eq this.openFlyout section.id)
+            }}
+            aria-current={{if (eq this.currentSection section.id) 'location'}}
+            aria-label={{section.label}}
+            aria-haspopup='true'
+            aria-expanded={{if (eq this.openFlyout section.id) 'true' 'false'}}
+            {{on 'focus' (fn this.showFlyout section.id)}}
+            {{on 'click' (fn this.scrollToSection section.id)}}
+            data-test-nav-rail-item={{section.id}}
           >
-            <header class='flyout-header'>
-              <span class='flyout-title'>Workspaces</span>
-              <span class='flyout-hint'>Favorites</span>
-            </header>
-            {{#each this.favorites key='url' as |entry|}}
-              <button
-                type='button'
-                class='realm-row'
-                {{on 'click' (fn this.openRealm entry.url)}}
-                data-test-nav-rail-favorite={{entry.url}}
+            <section.icon class='rail-icon' width='20' height='20' />
+            <span class='rail-label' aria-hidden='true'>{{section.label}}</span>
+            {{#if section.count}}
+              <span
+                class='rail-count'
+                aria-hidden='true'
+              >{{section.count}}</span>
+            {{/if}}
+          </button>
+          {{#if (eq this.openFlyout section.id)}}
+            {{#if (eq section.id 'workspaces')}}
+              <div
+                class='flyout'
+                role='group'
+                aria-label='Favorite workspaces'
+                data-test-nav-rail-flyout='workspaces'
               >
-                <span
-                  class='realm-thumb'
-                  style={{cssVar rail-wallpaper=(this.wallpaper entry)}}
-                >
-                  <RealmIcon
-                    class='realm-thumb-icon'
-                    @realmInfo={{entry.info}}
-                  />
-                </span>
-                <span class='row-title'>{{entry.name}}</span>
-                {{#if entry.isLive}}
-                  <span class='live-chip'>Live</span>
-                {{/if}}
-              </button>
-            {{else}}
-              <p class='flyout-empty'>
-                Star a workspace to keep it here and at the top of the
-                dashboard.
-              </p>
-            {{/each}}
-          </div>
-        {{/if}}
-      </div>
+                <header class='flyout-header'>
+                  <span class='flyout-title'>Workspaces</span>
+                  <span class='flyout-hint'>Favorites</span>
+                </header>
+                {{#each this.favorites key='url' as |entry|}}
+                  <button
+                    type='button'
+                    class='realm-row'
+                    {{on 'click' (fn this.openRealm entry.url)}}
+                    data-test-nav-rail-favorite={{entry.url}}
+                  >
+                    <span
+                      class='realm-thumb'
+                      style={{cssVar rail-wallpaper=(this.wallpaper entry)}}
+                    >
+                      <RealmIcon
+                        class='realm-thumb-icon'
+                        @realmInfo={{entry.info}}
+                      />
+                    </span>
+                    <span class='row-title'>{{entry.name}}</span>
+                    {{#if entry.isLive}}
+                      <span class='live-chip'>Live</span>
+                    {{/if}}
+                  </button>
+                {{else}}
+                  <p class='flyout-empty'>
+                    Star a workspace to keep it here and at the top of the
+                    dashboard.
+                  </p>
+                {{/each}}
+              </div>
 
-      <div
-        class='rail-item'
-        {{on 'mouseenter' (fn this.showFlyout 'catalogs')}}
-        {{on 'mouseleave' (fn this.showFlyout null)}}
-      >
-        <button
-          type='button'
-          class={{cn
-            'rail-button'
-            is-current=(eq this.currentSection 'catalogs')
-            is-open=(eq this.openFlyout 'catalogs')
-          }}
-          aria-current={{if (eq this.currentSection 'catalogs') 'location'}}
-          aria-label='Catalogs'
-          aria-haspopup='true'
-          aria-expanded={{if (eq this.openFlyout 'catalogs') 'true' 'false'}}
-          {{on 'focus' (fn this.showFlyout 'catalogs')}}
-          {{on 'click' (fn this.scrollToSection 'catalogs')}}
-          data-test-nav-rail-item='catalogs'
-        >
-          <Store width='20' height='20' />
-        </button>
-        {{#if (eq this.openFlyout 'catalogs')}}
-          <div
-            class='flyout'
-            role='group'
-            aria-label='Catalogs'
-            data-test-nav-rail-flyout='catalogs'
-          >
-            <header class='flyout-header'>
-              <span class='flyout-title'>Catalogs</span>
-              <span class='flyout-hint'>Apps, fields and themes to use</span>
-            </header>
-            <div class='catalog-grid'>
-              {{#each this.catalogs key='url' as |entry|}}
+            {{else if (eq section.id 'catalogs')}}
+              <div
+                class='flyout'
+                role='group'
+                aria-label='Catalogs'
+                data-test-nav-rail-flyout='catalogs'
+              >
+                <header class='flyout-header'>
+                  <span class='flyout-title'>Catalogs</span>
+                  <span class='flyout-hint'>Apps, fields and themes to use</span>
+                </header>
+                <div class='catalog-grid'>
+                  {{#each this.catalogs key='url' as |entry|}}
+                    <button
+                      type='button'
+                      class='catalog-tile'
+                      style={{cssVar rail-wallpaper=(this.wallpaper entry)}}
+                      {{on 'click' (fn this.openRealm entry.url)}}
+                      data-test-nav-rail-catalog={{entry.url}}
+                    >
+                      <span class='catalog-name'>
+                        <RealmIcon
+                          class='catalog-icon'
+                          @realmInfo={{entry.info}}
+                        />
+                        <span class='row-title'>{{entry.name}}</span>
+                      </span>
+                    </button>
+                  {{/each}}
+                </div>
+              </div>
+
+            {{else}}
+              <div
+                class='flyout'
+                role='group'
+                aria-label='Agents'
+                data-test-nav-rail-flyout='agents'
+              >
+                <header class='flyout-header'>
+                  <span class='flyout-title'>Boxel AI</span>
+                  <button
+                    type='button'
+                    class='header-action'
+                    {{on 'click' this.startSession}}
+                    data-test-nav-rail-new-session
+                  >
+                    <Plus width='14' height='14' />
+                    New session
+                  </button>
+                </header>
+                {{#each this.recentSessions as |session|}}
+                  <button
+                    type='button'
+                    class='session-row'
+                    {{on 'click' (fn this.openSession session.roomId)}}
+                    data-test-nav-rail-session={{session.roomId}}
+                  >
+                    <span class='session-icon'>
+                      <MessageCircle width='14' height='14' />
+                    </span>
+                    <span class='row-title'>{{session.name}}</span>
+                    <span class='row-meta'>{{this.formatWhen
+                        session.lastActiveTimestamp
+                      }}</span>
+                  </button>
+                {{else}}
+                  <p class='flyout-empty' data-test-nav-rail-sessions-empty>
+                    No sessions yet. Ask Boxel AI to build or change something.
+                  </p>
+                {{/each}}
                 <button
                   type='button'
-                  class='catalog-tile'
-                  style={{cssVar rail-wallpaper=(this.wallpaper entry)}}
-                  {{on 'click' (fn this.openRealm entry.url)}}
-                  data-test-nav-rail-catalog={{entry.url}}
+                  class='session-row is-link'
+                  {{on 'click' (fn this.scrollToSection 'agents')}}
+                  data-test-nav-rail-connect-agent
                 >
-                  <span class='catalog-name'>
-                    <RealmIcon class='catalog-icon' @realmInfo={{entry.info}} />
-                    <span class='row-title'>{{entry.name}}</span>
-                  </span>
+                  <span class='row-title'>Connect Claude Code or Codex</span>
+                  <ChevronRight width='14' height='14' />
                 </button>
-              {{/each}}
-            </div>
-          </div>
-        {{/if}}
-      </div>
+              </div>
 
-      <div
-        class='rail-item'
-        {{on 'mouseenter' (fn this.showFlyout 'agents')}}
-        {{on 'mouseleave' (fn this.showFlyout null)}}
-      >
-        <button
-          type='button'
-          class={{cn
-            'rail-button'
-            is-current=(eq this.currentSection 'agents')
-            is-open=(eq this.openFlyout 'agents')
-          }}
-          aria-current={{if (eq this.currentSection 'agents') 'location'}}
-          aria-label='Agents'
-          aria-haspopup='true'
-          aria-expanded={{if (eq this.openFlyout 'agents') 'true' 'false'}}
-          {{on 'focus' (fn this.showFlyout 'agents')}}
-          {{on 'click' (fn this.scrollToSection 'agents')}}
-          data-test-nav-rail-item='agents'
-        >
-          <Bot width='20' height='20' />
-        </button>
-        {{#if (eq this.openFlyout 'agents')}}
-          <div
-            class='flyout'
-            role='group'
-            aria-label='Agents'
-            data-test-nav-rail-flyout='agents'
-          >
-            <header class='flyout-header'>
-              <span class='flyout-title'>Boxel AI</span>
-              <button
-                type='button'
-                class='header-action'
-                {{on 'click' this.startSession}}
-                data-test-nav-rail-new-session
-              >
-                <Plus width='14' height='14' />
-                New session
-              </button>
-            </header>
-            {{#each this.recentSessions as |session|}}
-              <button
-                type='button'
-                class='session-row'
-                {{on 'click' (fn this.openSession session.roomId)}}
-                data-test-nav-rail-session={{session.roomId}}
-              >
-                <span class='session-icon'>
-                  <MessageCircle width='14' height='14' />
-                </span>
-                <span class='row-title'>{{session.name}}</span>
-                <span class='row-meta'>{{this.formatWhen
-                    session.lastActiveTimestamp
-                  }}</span>
-              </button>
-            {{else}}
-              <p class='flyout-empty' data-test-nav-rail-sessions-empty>
-                No sessions yet. Ask Boxel AI to build or change something.
-              </p>
-            {{/each}}
-            <button
-              type='button'
-              class='session-row is-link'
-              {{on 'click' (fn this.scrollToSection 'agents')}}
-              data-test-nav-rail-connect-agent
-            >
-              <span class='row-title'>Connect Claude Code or Codex</span>
-              <ChevronRight width='14' height='14' />
-            </button>
-          </div>
-        {{/if}}
-      </div>
+            {{/if}}
+          {{/if}}
+        </div>
+      {{/each}}
     </nav>
 
     <style scoped>
@@ -472,6 +478,9 @@ export default class NavRail extends Component<Signature> {
         z-index: var(--host-nav-rail-z-index);
         transform-origin: top left;
         animation: rail-in 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+      .rail-icon {
+        flex: none;
       }
       @keyframes rail-in {
         from {
@@ -518,6 +527,42 @@ export default class NavRail extends Component<Signature> {
         outline-offset: 2px;
       }
 
+      /* Summoned below the wide breakpoint (80rem, matched in the chooser's
+         own padding); a labeled sidebar at and above it. */
+      .nav-rail:not(.is-summoned) {
+        display: none;
+      }
+      .rail-label,
+      .rail-count {
+        display: none;
+      }
+      @media (min-width: 80rem) {
+        .nav-rail,
+        .nav-rail:not(.is-summoned) {
+          display: flex;
+          width: var(--host-dashboard-sidebar-width);
+          box-sizing: border-box;
+          animation: none;
+        }
+        .rail-button {
+          width: 100%;
+          justify-content: flex-start;
+          gap: var(--boxel-sp-sm);
+          padding: 0 var(--boxel-sp-sm);
+        }
+        .rail-label {
+          display: inline;
+          font-size: var(--boxel-font-size-sm);
+          font-weight: 600;
+        }
+        .rail-count {
+          display: inline;
+          margin-left: auto;
+          font-family: var(--boxel-monospace-font-family);
+          font-size: var(--boxel-font-size-xs);
+          color: var(--muted-foreground);
+        }
+      }
       .flyout {
         position: absolute;
         top: calc(-1 * var(--rail-pad));

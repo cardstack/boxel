@@ -243,7 +243,7 @@ export default class CatalogShowcase extends Component {
                     </span>
                     <button
                       type='button'
-                      class='act raised'
+                      class='row-act raised'
                       {{on 'click' (fn this.openListing item.id)}}
                     >Open</button>
                   </article>
@@ -262,21 +262,18 @@ export default class CatalogShowcase extends Component {
     </SearchResults>
 
     <style scoped>
-      /* Paper on the dark dashboard, as the catalog's own pages are: the
-         shelf reads as the store, apart from the workspaces around it. */
+      /* The shelf sits on the dashboard's one surface family: the same dark
+         panel and hairline as every other section, so the store reads as
+         part of the page. Teal marks what's featured; the art carries the
+         colour. */
       .showcase {
-        --story-ink: var(--boxel-dark);
-        --story-paper: var(--boxel-light);
-        --story-line: color-mix(in oklch, var(--boxel-dark) 10%, transparent);
-        /* Teal deep enough to read on paper. */
-        --story-accent: color-mix(
-          in oklch,
-          var(--boxel-teal) 62%,
-          var(--boxel-dark)
-        );
+        --story-ink: var(--boxel-light);
+        --story-panel: var(--boxel-700);
+        --story-line: color-mix(in oklch, var(--boxel-light) 10%, transparent);
+        --story-muted: color-mix(in oklch, var(--boxel-light) 66%, transparent);
         display: flex;
         flex-wrap: wrap;
-        align-items: flex-start;
+        align-items: stretch;
         gap: var(--boxel-sp-lg);
         color: var(--story-ink);
       }
@@ -308,12 +305,9 @@ export default class CatalogShowcase extends Component {
         flex-direction: column;
         gap: var(--boxel-sp-xs);
         padding: var(--boxel-sp-lg);
-        border-radius: 1.375rem;
-        background-color: var(--story-paper);
-        box-shadow:
-          0 0 0 1px var(--story-line),
-          0 0.875rem 1.875rem
-            color-mix(in oklch, var(--boxel-dark) 40%, transparent);
+        border-radius: 1.25rem;
+        background-color: var(--story-panel);
+        box-shadow: inset 0 0 0 1px var(--story-line);
       }
       .eyebrow {
         font-family: var(--boxel-monospace-font-family);
@@ -321,11 +315,14 @@ export default class CatalogShowcase extends Component {
         font-weight: 700;
         letter-spacing: 0.16em;
         text-transform: uppercase;
-        color: var(--story-accent);
+        color: var(--story-muted);
+      }
+      .lead .eyebrow {
+        color: var(--boxel-highlight);
       }
       .headline {
         margin: 0;
-        font-size: 1.5rem;
+        font-size: 1.25rem;
         font-weight: 700;
         line-height: 1.12;
         letter-spacing: -0.015em;
@@ -333,8 +330,8 @@ export default class CatalogShowcase extends Component {
       .art {
         display: block;
         height: 12rem;
-        border-radius: 0.875rem;
-        background-color: var(--boxel-200);
+        border-radius: 0.75rem;
+        background-color: var(--boxel-600);
         background-image: var(--story-art);
         background-size: cover;
         background-position: top center;
@@ -347,7 +344,7 @@ export default class CatalogShowcase extends Component {
         overflow: hidden;
         font-size: var(--boxel-font-size-sm);
         line-height: 1.4;
-        color: color-mix(in oklch, var(--story-ink) 75%, transparent);
+        color: var(--story-muted);
       }
       .foot {
         display: flex;
@@ -360,8 +357,8 @@ export default class CatalogShowcase extends Component {
         flex: none;
         width: 2.5rem;
         height: 2.5rem;
-        border-radius: 0.625rem;
-        background-color: var(--boxel-200);
+        border-radius: 0.5rem;
+        background-color: var(--boxel-600);
         background-image: var(--story-art);
         background-size: cover;
         background-position: top left;
@@ -380,16 +377,16 @@ export default class CatalogShowcase extends Component {
         white-space: nowrap;
       }
       .app-words span {
-        color: color-mix(in oklch, var(--story-ink) 65%, transparent);
+        color: var(--story-muted);
       }
       .act {
         flex: none;
-        height: 2rem;
+        height: 2.75rem;
         padding: 0 var(--boxel-sp);
         border: 0;
-        border-radius: 1rem;
-        background-color: var(--story-ink);
-        color: var(--story-paper);
+        border-radius: 0.75rem;
+        background-color: var(--boxel-light);
+        color: var(--boxel-dark);
         font-size: var(--boxel-font-size-sm);
         font-weight: 700;
         cursor: pointer;
@@ -397,8 +394,8 @@ export default class CatalogShowcase extends Component {
       .act:hover {
         background-color: color-mix(
           in oklch,
-          var(--story-ink) 82%,
-          var(--story-paper)
+          var(--boxel-light) 85%,
+          var(--boxel-dark)
         );
       }
       .act:focus-visible {
@@ -412,12 +409,9 @@ export default class CatalogShowcase extends Component {
         display: flex;
         flex-direction: column;
         padding: var(--boxel-sp-xs);
-        border-radius: 1.375rem;
-        background-color: var(--story-paper);
-        box-shadow:
-          0 0 0 1px var(--story-line),
-          0 0.875rem 1.875rem
-            color-mix(in oklch, var(--boxel-dark) 40%, transparent);
+        border-radius: 1.25rem;
+        background-color: var(--story-panel);
+        box-shadow: inset 0 0 0 1px var(--story-line);
       }
       .row {
         display: flex;
@@ -427,14 +421,18 @@ export default class CatalogShowcase extends Component {
         border-radius: 0.875rem;
       }
       .row:hover {
-        background-color: color-mix(in oklch, var(--story-ink) 4%, transparent);
+        background-color: color-mix(
+          in oklch,
+          var(--boxel-light) 6%,
+          transparent
+        );
       }
       .thumb {
         flex: none;
         width: 3rem;
         height: 3rem;
         border-radius: 0.75rem;
-        background-color: var(--boxel-200);
+        background-color: var(--boxel-600);
         background-image: var(--story-art);
         background-size: cover;
         background-position: top left;
@@ -453,6 +451,25 @@ export default class CatalogShowcase extends Component {
         white-space: nowrap;
         font-size: var(--boxel-font-size-sm);
       }
+      .row-act {
+        flex: none;
+        height: 2.75rem;
+        padding: 0 var(--boxel-sp-xs);
+        border: 0;
+        border-radius: 0.75rem;
+        background: none;
+        color: var(--story-muted);
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .row:hover .row-act {
+        color: var(--story-ink);
+      }
+      .row-act:focus-visible {
+        outline: 2px solid var(--boxel-highlight);
+        outline-offset: 2px;
+      }
       .browse {
         margin-top: var(--boxel-sp-4xs);
         padding: var(--boxel-sp-xs);
@@ -460,7 +477,7 @@ export default class CatalogShowcase extends Component {
         border-top: 1px solid var(--story-line);
         border-radius: 0 0 0.875rem 0.875rem;
         background: none;
-        color: color-mix(in oklch, var(--story-ink) 70%, transparent);
+        color: var(--story-muted);
         font-size: var(--boxel-font-size-sm);
         font-weight: 600;
         text-align: left;
@@ -484,9 +501,14 @@ export default class CatalogShowcase extends Component {
 }
 
 // The listing's subtype ("CardListing") names what it offers ("Card").
+// The search reports a listing's base type, but an instance lives in a
+// folder named for its own class ("…/CardListing/<id>"), which says what
+// the listing offers ("Card").
+const LISTING_FOLDER = /^([A-Za-z]+)Listing$/;
+
 function kindOf(entry: RenderableSearchEntryLike) {
-  let name = entry.displayName ?? entry.codeRef?.name ?? 'Listing';
-  return name === 'Listing' ? name : name.replace(/\s*Listing$/, '');
+  let folder = entry.id.split('/').slice(-2, -1)[0] ?? '';
+  return LISTING_FOLDER.exec(folder)?.[1] ?? 'Listing';
 }
 
 function toShelfItem(entry: RenderableSearchEntryLike): ShelfItem {
@@ -497,9 +519,26 @@ function toShelfItem(entry: RenderableSearchEntryLike): ShelfItem {
   return {
     id: entry.id,
     kind: kindOf(entry),
-    name: text(attributes.name) ?? 'Untitled listing',
-    summary: text(attributes.summary),
+    name: shelfName(text(attributes.name)),
+    summary: shelfSummary(text(attributes.summary)),
     art,
     artCss: art ? `url("${art}")` : undefined,
   };
+}
+
+// Listing names are written for the catalog's own index ("Wine Cellar Card
+// Definition"); on the shelf the kind already rides in the eyebrow.
+const DEFINITION_SUFFIX = /\s+(?:(?:card|field|app)\s+)?definition$/i;
+
+function shelfName(name: string | undefined) {
+  return name ? name.replace(DEFINITION_SUFFIX, '') : 'Untitled listing';
+}
+
+// A summary that opens by describing the code ("The WineCellar component
+// serves as…") is documentation, not a pitch, so the shelf leaves it out
+// until the catalog carries editorial copy for what it features.
+const CODE_DESCRIPTION = /^the\s+\S+\s+(?:component|card|field)\b/i;
+
+function shelfSummary(summary: string | undefined) {
+  return summary && !CODE_DESCRIPTION.test(summary) ? summary : undefined;
 }

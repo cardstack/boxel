@@ -941,37 +941,38 @@ module('Acceptance | workspace-chooser', function (hooks) {
   });
 
   module('sort dropdown', function () {
-    test('sort dropdown renders with View All as default', async function (assert) {
+    test('the filter shows everything by default', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
-
-      assert.dom('[data-test-sort-dropdown-trigger]').includesText('View All');
-    });
-
-    test('can switch to Hosted Only filter', async function (assert) {
-      await visitOperatorMode({ workspaceChooserOpened: true });
-
-      await click('[data-test-sort-dropdown-trigger]');
-      await click('[data-test-option="1"]');
 
       assert
-        .dom('[data-test-sort-dropdown-trigger]')
-        .includesText('Hosted Only');
+        .dom('[data-test-dashboard-filter="all"]')
+        .hasAttribute('aria-pressed', 'true');
     });
 
-    test('can switch back to View All filter', async function (assert) {
+    test('can switch to the Live only filter', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
 
-      await click('[data-test-sort-dropdown-trigger]');
-      await click('[data-test-option="1"]');
+      await click('[data-test-dashboard-filter="hosted"]');
 
       assert
-        .dom('[data-test-sort-dropdown-trigger]')
-        .includesText('Hosted Only');
+        .dom('[data-test-dashboard-filter="hosted"]')
+        .hasAttribute('aria-pressed', 'true');
+    });
 
-      await click('[data-test-sort-dropdown-trigger]');
-      await click('[data-test-option="0"]');
+    test('can switch back to Everything', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
 
-      assert.dom('[data-test-sort-dropdown-trigger]').includesText('View All');
+      await click('[data-test-dashboard-filter="hosted"]');
+
+      assert
+        .dom('[data-test-dashboard-filter="hosted"]')
+        .hasAttribute('aria-pressed', 'true');
+
+      await click('[data-test-dashboard-filter="all"]');
+
+      assert
+        .dom('[data-test-dashboard-filter="all"]')
+        .hasAttribute('aria-pressed', 'true');
     });
   });
 
@@ -994,8 +995,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
       });
 
       // Switch to hosted-only
-      await click('[data-test-sort-dropdown-trigger]');
-      await click('[data-test-option="1"]');
+      await click('[data-test-dashboard-filter="hosted"]');
 
       assert
         .dom('[data-test-workspace-list] [data-test-workspace="Workspace A"]')
@@ -1028,8 +1028,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
         },
       });
 
-      await click('[data-test-sort-dropdown-trigger]');
-      await click('[data-test-option="1"]');
+      await click('[data-test-dashboard-filter="hosted"]');
 
       assert
         .dom('[data-test-favorites-list] [data-test-workspace="Workspace A"]')
@@ -1056,8 +1055,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
         .exists();
 
       // Switch to hosted-only — workspace A is not hosted
-      await click('[data-test-sort-dropdown-trigger]');
-      await click('[data-test-option="1"]');
+      await click('[data-test-dashboard-filter="hosted"]');
 
       assert.dom('[data-test-favorites-empty]').hasText('No matching results');
     });

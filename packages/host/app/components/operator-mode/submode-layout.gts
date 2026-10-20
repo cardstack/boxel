@@ -389,9 +389,9 @@ export default class SubmodeLayout extends Component<Signature> {
       !this.operatorModeStateService.workspaceChooserOpened;
   }
 
-  // The dashboard's nav rail is summoned from the wordmark: hover or focus
-  // opens it, and leaving both the wordmark and the rail closes it after a
-  // grace period long enough to travel between them.
+  // The dashboard's nav rail is summoned from the wordmark below the wide
+  // breakpoint (at and above it, it stays as a sidebar): hover or focus opens
+  // it; leaving the wordmark and the rail closes it after a grace period.
   @tracked private isNavRailOpen = false;
 
   private get isWorkspaceButtonDisabled() {
@@ -584,13 +584,12 @@ export default class SubmodeLayout extends Component<Signature> {
           </div>
           {{#if this.workspaceChooserOpened}}
             <WorkspaceChooser />
-            {{#if this.isNavRailOpen}}
-              <NavRail
-                @onPointerEnter={{this.summonNavRail}}
-                @onPointerLeave={{this.scheduleNavRailDismiss}}
-                @onDismiss={{this.dismissNavRail}}
-              />
-            {{/if}}
+            <NavRail
+              @isSummoned={{this.isNavRailOpen}}
+              @onPointerEnter={{this.summonNavRail}}
+              @onPointerLeave={{this.scheduleNavRailDismiss}}
+              @onDismiss={{this.dismissNavRail}}
+            />
           {{/if}}
 
           {{yield

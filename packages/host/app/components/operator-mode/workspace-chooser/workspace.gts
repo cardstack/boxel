@@ -186,6 +186,10 @@ export default class Workspace extends Component<Signature> {
                 @realmURL={{@realmIdentifier}}
                 @workspaceName={{this.name}}
               />
+            {{else}}
+              <p class='desk-hint' data-test-favorite-pin-hint>
+                Pin cards from any card’s menu to show them here.
+              </p>
             {{/if}}
           </div>
           <div class='desk-caption'>
@@ -1295,8 +1299,8 @@ export default class Workspace extends Component<Signature> {
       /* A compact row: the wallpaper shrinks to a thumbnail at the start and
          the name, visibility and last change read beside it. */
       .workspace-card.is-compact {
-        --workspace-chooser-tile-width: 4.5rem;
-        --workspace-chooser-tile-height: 3rem;
+        --workspace-chooser-tile-width: 2.75rem;
+        --workspace-chooser-tile-height: 2.75rem;
         width: var(--workspace-chooser-row-width, 16rem);
         box-sizing: border-box;
         flex-direction: row;
@@ -1327,12 +1331,25 @@ export default class Workspace extends Component<Signature> {
       .workspace-card.is-compact.is-selected {
         box-shadow: inset 0 0 0 2px var(--boxel-highlight);
       }
+      /* Sixty wallpapers in a list are noise at scan distance: the row shows
+         the realm's mark, and its wallpaper only while the row is hovered. */
       .row-thumb {
         flex: none;
         width: var(--workspace-chooser-tile-width);
         height: var(--workspace-chooser-tile-height);
         border-radius: 0.75rem;
-        box-shadow: inset 0 0 0 1px rgba(255 255 255 / 15%);
+        background-color: color-mix(
+          in oklch,
+          var(--boxel-light) 6%,
+          transparent
+        );
+      }
+      .row-thumb::before {
+        opacity: 0;
+        transition: opacity var(--boxel-transition);
+      }
+      .workspace-card.is-compact:hover .row-thumb::before {
+        opacity: 1;
       }
       /* A button ignores line-clamp, so the name truncates on one line. */
       .is-compact .info > .row-open {
@@ -1415,6 +1432,20 @@ export default class Workspace extends Component<Signature> {
       }
       .is-compact .host-dropdown {
         top: 100%;
+      }
+      /* An unpinned favorite says how to fill it. The wallpaper under it
+         still opens the workspace. */
+      .desk-hint {
+        position: relative;
+        align-self: flex-start;
+        margin: auto 0 0;
+        padding: var(--boxel-sp-xs) var(--boxel-sp-sm);
+        border-radius: 0.75rem;
+        background-color: var(--desk-glass);
+        backdrop-filter: blur(10px);
+        color: var(--boxel-light);
+        font: 400 var(--boxel-font-sm);
+        pointer-events: none;
       }
       .dropdown-header {
         font-size: var(--boxel-font-size-2xs);

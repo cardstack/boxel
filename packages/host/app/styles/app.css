@@ -13,6 +13,7 @@
   --host-search-sheet-z-index: 300;
 
   --host-nav-rail-z-index: 250;
+  --host-dashboard-sidebar-width: 12.5rem;
 
   --host-workspace-chooser-z-index: 200;
 }
