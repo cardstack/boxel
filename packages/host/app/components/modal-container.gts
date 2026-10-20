@@ -62,6 +62,7 @@ export default class ModalContainer extends Component<Signature> {
           {{@cardContainerClass}}
           {{if (has-block "sidebar") "dialog-box--with-sidebar"}}'
         @displayBoundaries={{true}}
+        data-test-modal-container-box
       >
         {{#if (has-block 'sidebar')}}
           <section class='dialog-box__sidebar-header'></section>
