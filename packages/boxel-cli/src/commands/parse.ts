@@ -1301,8 +1301,11 @@ export function registerParseCommand(program: Command): void {
           currentFile = e.file;
           console.log(`\n${DIM}${e.file}${RESET}`);
         }
+        // Indent tsc's elaboration lines so they read as part of this error,
+        // not as sibling lines; `--json` keeps the message as is.
+        let message = e.message.replace(/\n/g, '\n    ');
         console.log(
-          `  ${FG_RED}error${RESET} ${e.line}:${e.column} ${e.message}`,
+          `  ${FG_RED}error${RESET} ${e.line}:${e.column} ${message}`,
         );
       }
 
