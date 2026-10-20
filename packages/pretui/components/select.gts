@@ -314,7 +314,7 @@ export class Select extends Component<SelectSignature> {
       @layer PretComponent {
         .pretui-selectwrap {
           /* per-instance knob: the trigger's height */
-          --pretui-select-h: 1.875rem;
+          --pretui-select-h: var(--boxel-form-control-height-sm);
 
           min-width: 0;
           /* BoxelSelect's knobs, set to theme tokens. The --boxel-dropdown-*
@@ -435,7 +435,7 @@ export class Select extends Component<SelectSignature> {
           /* the trigger's padding and default height, restated: the wrapper's
              knobs do not reach the wormhole */
           --_select-px: 0.625rem;
-          --_select-h: 1.875rem;
+          --_select-h: var(--boxel-form-control-height-sm);
           /* the list matches the trigger's width as a floor, never a ceiling:
              a trigger sized to a short value must not clip the other labels */
           min-width: max-content;

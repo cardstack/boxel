@@ -50,7 +50,7 @@ Theme tokens: `--field`, `--input`, `--foreground`, `--muted-foreground`, `--rin
 
 Forwarded through BoxelSelect's knobs: `--boxel-form-control-border-radius`, `--boxel-select-trigger-padding`, `--boxel-select-trigger-gap`, `--boxel-select-trigger-content-display`, `--boxel-select-background-color`, `--boxel-select-text-color`, and the `--boxel-dropdown-*` colors. Hovered or keyboard-highlighted, the selected row darkens a shade in both schemes, the same as an accent Button's hover.
 
-Per-instance knob: `--pretui-select-h` (the trigger's height, 1.875rem by default), set on your class.
+Per-instance knob: `--pretui-select-h` (the trigger's height, `--boxel-form-control-height-sm` (1.875rem) by default), set on your class.
 
 On touch screens (`pointer: coarse`) the trigger, its placeholder, the options and the search box are at least 16px (`--boxel-form-control-touch-font-size`), matching **Input** and **Autocomplete**, so iOS doesn't zoom into the search box on focus; the trigger keeps its height.
 

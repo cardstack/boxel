@@ -906,7 +906,7 @@ export class Autocomplete extends Component<AutocompleteSignature> {
         }
         /* Select's trigger height, whatever --pretui-size-m is */
         .pretui-ac[data-size='m'] .pretui-ac-field {
-          min-height: var(--pretui-ac-h, 1.875rem);
+          min-height: var(--pretui-ac-h, var(--boxel-form-control-height-sm));
         }
         /* edges are drawn in the tone's -ink: the fill hue misses the 3:1 a
            field boundary needs */
