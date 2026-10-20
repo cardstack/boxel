@@ -21,9 +21,51 @@ import {
 const LOOPBACK_CALLBACK_PATH = '/callback';
 const GOOGLE_CALLBACK_SUFFIX = /\/google-callback$/;
 
-// The window's own sign-in, from the callback Google returns to.
+// The shell's own address, from the callback Google returns to.
+function shellPath() {
+  return window.location.pathname.replace(GOOGLE_CALLBACK_SUFFIX, '/');
+}
+
+// The window's own sign-in.
 function signInURL() {
-  return `${window.location.pathname.replace(GOOGLE_CALLBACK_SUFFIX, '/')}?mode=sign-in`;
+  return `${shellPath()}?mode=sign-in`;
+}
+
+// The page a Google sign-in started from, rebuilt from the `resume` the window
+// kept when it sent the user to Google: the OAuth request or Connected
+// applications it interrupted, the CLI's sign-in, for the same listener and
+// with the same username, or else the window's own. The CLI keeps
+// waiting on its listener while the user starts again there.
+function startURL(resume) {
+  // An OAuth request or Connected applications, signed into on the way.
+  if (
+    typeof resume?.oauthUid === 'string' &&
+    /^[A-Za-z0-9_-]{1,128}$/.test(resume.oauthUid)
+  ) {
+    return `/oauth/interaction/${resume.oauthUid}`;
+  }
+  if (resume?.mode === 'connected-apps') {
+    return `${shellPath()}?mode=connected-apps`;
+  }
+  let cli = resume?.client === 'cli' ? resume.cli : undefined;
+  let port;
+  try {
+    port = cli ? new URL(cli.url).port : undefined;
+  } catch {
+    port = undefined;
+  }
+  if (!port || !cli.state) {
+    return signInURL();
+  }
+  let params = new URLSearchParams({
+    mode: 'cli-sign-in',
+    port,
+    state: cli.state,
+  });
+  if (resume.username) {
+    params.set('user', resume.username);
+  }
+  return `${shellPath()}?${params}`;
 }
 
 // Builds an element. Text is only ever set as text, never as markup.
@@ -116,6 +158,13 @@ export async function googleCallbackMode(root) {
   try {
     result = await finishGoogleSignIn(config);
   } catch (e) {
+    let startAgain = startURL(e.resume);
+    if (e.code === 'google-cancelled') {
+      // Pressing Cancel at Google isn't a failure: back to the page the
+      // sign-in started from, to try again or sign in with a password.
+      window.location.replace(startAgain);
+      return;
+    }
     let error = errorLine();
     showError(error, e.message);
     root.replaceChildren(
@@ -126,7 +175,7 @@ export async function googleCallbackMode(root) {
           'a',
           {
             class: 'secure-button secondary',
-            href: signInURL(),
+            href: startAgain,
             'data-test-secure-start-again': true,
           },
           'Start again',
@@ -313,7 +362,12 @@ export function renderSignIn(
           button.disabled = true;
           showError(error, undefined);
           try {
-            await beginGoogleSignIn(google, { ...resume, client, cli });
+            await beginGoogleSignIn(google, {
+              ...resume,
+              client,
+              cli,
+              username,
+            });
           } catch (e) {
             showError(error, e.message);
             button.disabled = false;

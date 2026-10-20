@@ -10,7 +10,7 @@ import { canonicalModuleKey, resolveAdoptsFrom } from './code-ref.ts';
 import { baseRealmRRI, realmURL } from './constants.ts';
 import { logger } from './log.ts';
 import type { LocalPath } from './paths.ts';
-import { ri, rri } from './realm-identifiers.ts';
+import { isPrefixForm, ri, rri } from './realm-identifiers.ts';
 import type { RealmResourceIdentifier } from './realm-identifiers.ts';
 import { resolveRRIReference } from './url.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
@@ -218,7 +218,7 @@ export class ListingPathResolver {
   // and keep the rest of the path. That prefix is the origin for a URL, and the
   // `@scope/name` namespace for a prefix RRI.
   private localFallback(id: RealmResourceIdentifier): LocalPath {
-    if (id.startsWith('@')) {
+    if (isPrefixForm(id)) {
       return id.split('/').slice(2).join('/').replace(/\/+$/, '');
     }
     try {

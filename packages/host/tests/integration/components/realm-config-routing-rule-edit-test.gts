@@ -79,7 +79,7 @@ module(
               ...(relationships ? { relationships } : {}),
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/realm-config',
+                  module: '@cardstack/base/realm-config',
                   name: 'RealmConfig',
                 },
               },
@@ -369,7 +369,7 @@ module(
               attributes: { hostRoutingRules: [{ path: '/docs' }] },
               meta: {
                 adoptsFrom: {
-                  module: 'https://cardstack.com/base/realm-config',
+                  module: '@cardstack/base/realm-config',
                   name: 'RealmConfig',
                 },
               },

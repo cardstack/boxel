@@ -16,7 +16,9 @@ import {
   fixtureDir,
   insertUser,
   insertPlan,
+  insertProxyEndpoints,
   realmSecretSeed,
+  setupSecretsKeyring,
   createVirtualNetwork,
   waitUntil,
 } from './helpers/index.ts';
@@ -86,6 +88,10 @@ module(basename(import.meta.filename), function () {
         },
       });
 
+      // The endpoint's key is sealed as it is written, and opened as the
+      // passthrough reads it.
+      setupSecretsKeyring(hooks);
+
       setupDB(hooks, {
         templateDatabase,
         beforeEach: async (_dbAdapter, _publisher, _runner) => {
@@ -95,17 +101,14 @@ module(basename(import.meta.filename), function () {
 
           // Whitelist OpenRouter chat completions so the passthrough handler
           // can resolve a destination config + credit strategy.
-          await dbAdapter.execute(
-            `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, auth_method, auth_parameter_name, created_at, updated_at)
-             VALUES
-               (gen_random_uuid(), 'https://openrouter.ai/api/v1/chat/completions', 'openrouter-api-key', 'openrouter', true, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-             ON CONFLICT (url)
-             DO UPDATE SET
-               api_key = EXCLUDED.api_key,
-               credit_strategy = EXCLUDED.credit_strategy,
-               supports_streaming = EXCLUDED.supports_streaming,
-               updated_at = CURRENT_TIMESTAMP`,
-          );
+          await insertProxyEndpoints(dbAdapter, [
+            {
+              url: 'https://openrouter.ai/api/v1/chat/completions',
+              apiKey: 'openrouter-api-key',
+              creditStrategy: 'openrouter',
+              supportsStreaming: true,
+            },
+          ]);
 
           await startRealmServer(dbAdapter, publisher, runner);
 

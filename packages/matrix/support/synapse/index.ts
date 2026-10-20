@@ -57,6 +57,28 @@ const registrationSecretFile = path.resolve(
   path.join(import.meta.dirname, '..', '..', 'registration_secret.txt'),
 );
 
+const templatesDir = path.join(import.meta.dirname, 'templates');
+
+// templates/sso_error.html sends a browser whose single sign-on failed back to
+// the Boxel login page at this URL, the dev host's. Each Synapse launch writes
+// the templates into its config dir with the URL of the host it serves, and the
+// Synapse asset sync workflow does the same for staging and production.
+export const TEMPLATE_LOGIN_URL = 'https://localhost:4200/';
+
+export async function writeTemplates(configDir: string, loginUrl: string) {
+  let dest = path.join(configDir, 'templates');
+  // A persistent data dir keeps the previous launch's copy; start clean so a
+  // template removed from the repo doesn't outlive it there.
+  await fse.remove(dest);
+  await fse.copy(templatesDir, dest);
+  let ssoError = path.join(dest, 'sso_error.html');
+  let contents = await fse.readFile(ssoError, 'utf8');
+  await fse.writeFile(
+    ssoError,
+    contents.split(TEMPLATE_LOGIN_URL).join(loginUrl),
+  );
+}
+
 interface SynapseConfig {
   configDir: string;
   registrationSecret: string;
@@ -153,6 +175,7 @@ export async function cfgDirFromTemplate(
   options?: {
     publicBaseUrl?: string;
     port?: number;
+    loginUrl?: string;
   },
 ): Promise<SynapseConfig> {
   const templateDir = path.join(import.meta.dirname, template);
@@ -198,6 +221,7 @@ export async function cfgDirFromTemplate(
   hsYaml = applyTestOidcGating(hsYaml, process.env.MOCK_OAUTH2_ISSUER);
 
   await fse.writeFile(path.join(configDir, 'homeserver.yaml'), hsYaml);
+  await writeTemplates(configDir, options?.loginUrl ?? TEMPLATE_LOGIN_URL);
 
   // now generate a signing key (we could use synapse's config generation for
   // this, or we could just do this...)
@@ -251,8 +275,6 @@ export function synapseDockerParams(args: {
     `${SYNAPSE_OWNER_HOST_LABEL}=${args.ownerHost}`,
     '-v',
     `${args.configDir}:/data`,
-    '-v',
-    `${path.join(import.meta.dirname, 'templates')}:/custom/templates/`,
     '-v',
     `${path.join(import.meta.dirname, 'modules')}:/custom/modules/`,
     '-e',
@@ -443,9 +465,13 @@ export async function synapseStart(
 
   for (let attempt = 1; attempt <= attempts; attempt++) {
     hostPort = useDynamicHostPort ? await findAvailablePort() : SYNAPSE_PORT;
-    synCfg = await cfgDirFromTemplate(opts?.template ?? 'test', opts?.dataDir, {
+    let template = opts?.template ?? 'test';
+    synCfg = await cfgDirFromTemplate(template, opts?.dataDir, {
       port: hostPort,
       publicBaseUrl: `http://localhost:${hostPort}`,
+      // The test templates serve the Playwright suite's host; dev serves the
+      // dev host the templates already name.
+      loginUrl: template === 'dev' ? undefined : `${appURL}/`,
     });
     // On a host without IPv6, rewrite the generated config's listeners to bind
     // IPv4 only — synapse is reached via localhost:8008 in dev regardless, so
@@ -738,6 +764,7 @@ export interface UpdateUserOptions {
   displayname?: string;
   avatar_url?: string;
   emailAddresses?: string[];
+  deactivated?: boolean;
   matrixURL?: string;
 }
 
@@ -749,6 +776,7 @@ export async function updateUser(
     displayname,
     avatar_url,
     emailAddresses,
+    deactivated,
     matrixURL,
   }: UpdateUserOptions,
 ) {
@@ -772,6 +800,7 @@ export async function updateUser(
             })),
           }
         : {}),
+      ...(deactivated !== undefined ? { deactivated } : {}),
     }),
   });
   if (!res.ok) {

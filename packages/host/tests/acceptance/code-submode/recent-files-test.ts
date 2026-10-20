@@ -517,8 +517,8 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
 
   test('displays recent files in base realm', async function (assert) {
     setRecentFiles([
-      ['https://cardstack.com/base/', 'code-ref.gts'],
-      ['https://cardstack.com/base/', 'spec.gts'],
+      [baseRealm.url, 'code-ref.gts'],
+      [baseRealm.url, 'spec.gts'],
       // @ts-ignore error on purpose
       'a-non-url-to-ignore',
     ]);
@@ -533,7 +533,7 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
         ],
       ],
       submode: 'code',
-      codePath: `https://cardstack.com/base/date.gts`,
+      codePath: `${baseRealm.url}date.gts`,
       fileView: 'browser',
       openDirs: {},
     });
@@ -585,10 +585,10 @@ module('Acceptance | code submode | recent files tests', function (hooks) {
     );
 
     assert.deepEqual(removedCursorPositions, [
-      ['https://cardstack.com/base/', 'field-component.gts'],
-      ['https://cardstack.com/base/', 'date.gts'],
-      ['https://cardstack.com/base/', 'code-ref.gts'],
-      ['https://cardstack.com/base/', 'spec.gts'],
+      [baseRealm.url, 'field-component.gts'],
+      [baseRealm.url, 'date.gts'],
+      [baseRealm.url, 'code-ref.gts'],
+      [baseRealm.url, 'spec.gts'],
     ]);
   });
 

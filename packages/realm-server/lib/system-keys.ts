@@ -9,6 +9,7 @@ import {
   PROXY_ENDPOINT_KEY_COLUMNS,
   proxyEndpointKeyBinding,
   readProxyEndpointKey,
+  UnreadableProxyEndpointKeyError,
   type ProxyEndpointKeyRow,
 } from './proxy-endpoint-keys.ts';
 import {
@@ -196,7 +197,7 @@ export function validateNote(note: unknown): void {
 }
 
 const SYSTEM_KEY_COLUMNS = `id, url, auth_method, auth_parameter_name,
-  credit_strategy, supports_streaming, api_key IS NOT NULL AS has_value,
+  credit_strategy, supports_streaming, api_key_ciphertext IS NOT NULL AS has_value,
   api_key_key_id, created_at, updated_at`;
 
 function toSystemKey(row: Record<string, unknown>): SystemKey {
@@ -277,9 +278,17 @@ async function refuseNoteWithCurrentValue(
     `SELECT id, url, ${PROXY_ENDPOINT_KEY_COLUMNS} FROM proxy_endpoints WHERE id = $1`,
     { bind: [id] },
   );
-  let current = row
-    ? readProxyEndpointKey(row as unknown as ProxyEndpointKeyRow)
-    : null;
+  // A key that doesn't open has no value a note could carry.
+  let current: string | null = null;
+  if (row) {
+    try {
+      current = readProxyEndpointKey(row as unknown as ProxyEndpointKeyRow);
+    } catch (e) {
+      if (!(e instanceof UnreadableProxyEndpointKeyError)) {
+        throw e;
+      }
+    }
+  }
   if (current && note.includes(current)) {
     throw new SystemKeyError(400, 'the note must not contain the value');
   }
@@ -319,8 +328,7 @@ function callerBindings(caller: SystemKeyCaller) {
 }
 
 // Adds a system key for a destination that has none. The value is sealed
-// under the row's id and destination, and the plain-text column is kept in
-// step, as every write to `proxy_endpoints` does.
+// under the row's id and destination.
 export async function addSystemKey(
   dbAdapter: DBAdapter,
   key: NewSystemKey,
@@ -371,12 +379,12 @@ export async function addSystemKey(
   let [row] = await dbAdapter.execute(
     `WITH added AS (
        INSERT INTO proxy_endpoints (
-         id, url, api_key, credit_strategy, supports_streaming, auth_method,
+         id, url, credit_strategy, supports_streaming, auth_method,
          auth_parameter_name, api_key_ciphertext, api_key_nonce, api_key_tag,
          api_key_key_id, created_at, updated_at
        ) VALUES (
-         $1, $2, $3, $4, $5, $6, $7, decode($8, 'base64'),
-         decode($9, 'base64'), decode($10, 'base64'), $11,
+         $1, $2, $3, $4, $5, $6, decode($7, 'base64'),
+         decode($8, 'base64'), decode($9, 'base64'), $10,
          CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
        )
        ON CONFLICT (url) DO NOTHING
@@ -386,14 +394,13 @@ export async function addSystemKey(
          endpoint_id, url, action, note, key_id, client_address,
          token_issued_at
        )
-       SELECT id, url, 'add', $12, api_key_key_id, $13, $14 FROM added
+       SELECT id, url, 'add', $11, api_key_key_id, $12, $13 FROM added
      )
      SELECT id FROM added`,
     {
       bind: [
         id,
         destination,
-        key.value,
         STORED_CREDIT_STRATEGY[key.creditStrategy],
         key.supportsStreaming,
         key.authMethod,
@@ -438,11 +445,10 @@ export async function replaceSystemKey(
   let [row] = await dbAdapter.execute(
     `WITH replaced AS (
        UPDATE proxy_endpoints SET
-         api_key = $3,
-         api_key_ciphertext = decode($4, 'base64'),
-         api_key_nonce = decode($5, 'base64'),
-         api_key_tag = decode($6, 'base64'),
-         api_key_key_id = $7,
+         api_key_ciphertext = decode($3, 'base64'),
+         api_key_nonce = decode($4, 'base64'),
+         api_key_tag = decode($5, 'base64'),
+         api_key_key_id = $6,
          updated_at = CURRENT_TIMESTAMP
        WHERE id = $1 AND url = $2
        RETURNING id, url, api_key_key_id
@@ -451,14 +457,13 @@ export async function replaceSystemKey(
          endpoint_id, url, action, note, key_id, client_address,
          token_issued_at
        )
-       SELECT id, url, 'replace', $8, api_key_key_id, $9, $10 FROM replaced
+       SELECT id, url, 'replace', $7, api_key_key_id, $8, $9 FROM replaced
      )
      SELECT id FROM replaced`,
     {
       bind: [
         id,
         existing.destination,
-        value,
         ...sealedBindings(sealed),
         note,
         ...callerBindings(caller),

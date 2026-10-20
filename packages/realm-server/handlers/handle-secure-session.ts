@@ -10,6 +10,7 @@ import {
   setContextResponse,
 } from '../middleware/index.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
+import type { CreateRealmDeps } from './create-realm.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import {
   endSecureSession,
@@ -49,7 +50,12 @@ type SecureSignInArgs = Pick<
   | 'googleSignIn'
 >;
 
-function deps(args: SecureSignInArgs): SecureSessionDeps {
+// Realm creation is optional: the standalone OAuth service has none, and
+// refuses a first Google sign-in, which would need to make the user's realm.
+function deps(
+  args: SecureSignInArgs,
+  createRealm?: CreateRealmDeps,
+): SecureSessionDeps {
   return {
     dbAdapter: args.dbAdapter,
     matrixClient: args.matrixClient,
@@ -58,6 +64,7 @@ function deps(args: SecureSignInArgs): SecureSessionDeps {
     matrixAdminPassword: args.matrixAdminPassword,
     secureOriginURL: args.secureOriginURL,
     googleSignIn: args.googleSignIn,
+    createRealm,
   };
 }
 
@@ -221,14 +228,18 @@ export function handleGoogleSignInStart(args: SecureSignInArgs): Handler {
 
 // POST /_secure-session/google: signs in with the authorization code Google
 // sent to the secure origin's callback, with the PKCE verifier and nonce the
-// window started the sign-in with.
-export function handleGoogleSignIn(args: SecureSignInArgs): Handler {
+// window started the sign-in with. A user's first sign-in to Boxel makes their
+// personal realm, hence the realm deps where this server has them.
+export function handleGoogleSignIn(
+  args: SecureSignInArgs,
+  createRealm?: CreateRealmDeps,
+): Handler {
   return secureSessionHandler(async (ctxt) => {
     requireSecureOrigin(ctxt, args.secureOriginURL);
     let attributes = await readAttributes(ctxt, 'google-sign-in');
     await sendSession(
       ctxt,
-      await signInWithGoogle(deps(args), {
+      await signInWithGoogle(deps(args, createRealm), {
         code: textOf(attributes, 'code'),
         codeVerifier: textOf(attributes, 'codeVerifier'),
         nonce: textOf(attributes, 'nonce'),

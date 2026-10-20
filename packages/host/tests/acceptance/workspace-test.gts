@@ -2,6 +2,8 @@ import {
   click,
   fillIn,
   find,
+  getSettledState,
+  settled,
   triggerKeyEvent,
   visit,
   waitUntil,
@@ -87,7 +89,7 @@ module('Acceptance | workspace card', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/remix-card',
+                module: '@cardstack/base/remix-card',
                 name: 'RemixCard',
               },
             },
@@ -407,10 +409,43 @@ module('Acceptance | workspace card | Library pages', function (hooks) {
     return document.querySelectorAll(GRID_ITEM).length;
   }
 
+  // The Library's state when a wait gives up, read at that moment rather than
+  // when the wait began: which rows and page it shows, whether a page is
+  // still loading, and what `settled()` still waits on.
+  function describeLibrary(): string {
+    let ids = [...document.querySelectorAll(GRID_ITEM)].map((el) =>
+      (el.getAttribute('data-test-cards-grid-item') ?? '?').replace(
+        testRealmURL,
+        '',
+      ),
+    );
+    let page =
+      document
+        .querySelector(`${PAGINATION} [aria-current="page"]`)
+        ?.textContent?.trim() ?? '<no page controls>';
+    let loading = Boolean(
+      document.querySelector(`${STACK} [data-test-card-list-loading]`),
+    );
+    let s = getSettledState();
+    return [
+      `grid items (${ids.length}): [${ids.join(', ')}]`,
+      `current page: ${page}`,
+      `loading state shown: ${loading}`,
+      `settled state: hasRunLoop=${s.hasRunLoop} hasPendingTimers=${s.hasPendingTimers} hasPendingWaiters=${s.hasPendingWaiters} hasPendingRequests=${s.hasPendingRequests} isRenderPending=${s.isRenderPending}`,
+    ].join('; ');
+  }
+
   async function waitForGridItems(count: number) {
-    await waitUntil(() => gridItemCount() === count, {
-      timeoutMessage: `expected ${count} grid items, saw ${gridItemCount()}`,
-    });
+    let startedAt = Date.now();
+    try {
+      await waitUntil(() => gridItemCount() === count);
+    } catch {
+      throw new Error(
+        `expected ${count} grid items, gave up after ${
+          Date.now() - startedAt
+        }ms; ${describeLibrary()}`,
+      );
+    }
   }
 
   test('a filter with more rows than a page steps through them page by page', async function (assert) {
@@ -491,6 +526,26 @@ module('Acceptance | workspace card | Library pages', function (hooks) {
     // Every row on page 2, so the notes left fit on one page.
     for (let i = PAGE_SIZE + 1; i <= NOTE_COUNT; i++) {
       await realm.delete(`${noteId(i)}.json`);
+    }
+
+    // The deletions reach the grid through work the test did not start: each
+    // realm event is dispatched on a later macrotask, debounced into the
+    // matrix timeline, and coalesced into a live-search refresh; that refresh
+    // re-runs the page-2 query, finds it empty, moves the Library back to
+    // page 1, and runs the query again. The searches are held by test waiters
+    // and the debounce by the run loop, so wait for them to settle instead of
+    // polling against a fixed clock. Two hops are not held by a waiter: the
+    // timeline drain that the debounce starts, and the card list's move back
+    // to the last page (`followLastPage`). Here both continue only on
+    // microtasks, which settle before `settled()` checks again. If a later
+    // change makes either wait on a macrotask, the warning below fires.
+    let deletedAt = Date.now();
+    await settled();
+    let settledAfterMs = Date.now() - deletedAt;
+    if (gridItemCount() !== PAGE_SIZE) {
+      console.warn(
+        `[library-pages] settled ${settledAfterMs}ms after the deletions with the grid not yet on the last page; ${describeLibrary()}`,
+      );
     }
 
     await waitForGridItems(PAGE_SIZE);

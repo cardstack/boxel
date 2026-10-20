@@ -31,8 +31,11 @@ endpoint is the URL.
   a judge scores against, `initialCards` and `initialFiles` copied into the
   test workspace before the prompt (same path relative to the realm root, so
   relative `adoptsFrom` references keep working; the cards are opened in the
-  stack so they are in the message context), and a query-backed
-  `sessionReports` list.
+  stack so they are in the message context), `skillFeatures` switched on in
+  each room before the first prompt (`EVAL_SKILL_FEATURES` adds more, and a
+  name with a leading `-` leaves one out),
+  `secondsPerPrompt` replacing the default 200 s time target for each prompt,
+  and a query-backed `sessionReports` list.
 - **EvaluationResult**: one per model per session. The runner fills the
   mechanical fields (verdict, turns, cost, caching rate, start and end, tool
   calls, notes, the screenshot, the skills the room had). A judge fills
@@ -43,7 +46,7 @@ endpoint is the URL.
 - **EvaluationReport**: one per session, with a query-backed `results` table
   and the total cost.
 
-Four evaluations ship. `hello-world` is the smallest build there is, one
+Nine evaluations ship. `hello-world` is the smallest build there is, one
 definition and one instance shown on screen — the one to start from, and the
 one to reach for when checking that a change did not break the basics.
 `linkedin-profile-computed-edit-restyle` is the step up: one definition with a
@@ -57,6 +60,11 @@ the assistant edits its own work in place instead of writing it again.
 card with three instances, then a list and a closing line the user asks for once
 everything is saved. It catches a final reply that shrinks to a one-sentence
 acknowledgement after the write passes its correctness check.
+`reuse-service-desk-build` and `reuse-listing-ownership` grade catalog reuse:
+how much of a brief the assistant answers from catalog parts, and whether it
+references a catalog definition or installs its own copy. The three
+`search-route-*` evaluations check that a search runs through a
+`run-realm-code` script.
 
 Add one by adding a JSON file under `eval-realm/Evaluation/` and running setup
 again. An evaluation that wants a card or a file already in the test workspace
@@ -137,15 +145,16 @@ A run also prints the table at the end.
    first, and sends each follow-up prompt once the bot is idle) and waits
    until the bot is idle: no message streaming, no
    tool pill applying or waiting for approval, no pending Accept. The run is cut
-   short only when it has clearly gone wrong (a failed or invalid tool call, an
-   error alert, the same call repeated three
-   times, a pill stuck past the host's tool timeout) or after the safety wall
-   clock.
+   short only when it has clearly gone wrong (three turns in a row with a
+   failed or invalid tool call or an error alert, or eight in all, the same
+   call repeated three times, a pill stuck past the host's tool timeout) or
+   after the safety wall clock.
 4. Looks for a rendered card in the stack that is not the workspace index and
    has no error state; screenshots the page.
 5. Reads the room's Matrix events: turns, tokens, cost, tool calls and their
-   outcomes, run-realm-code writes, files written.
-6. Classifies: `pass` (card rendered), `model` failure (never wrote, wrong
+   outcomes, run-realm-code writes and other writing tool calls, files written.
+6. Classifies: `pass` (card rendered, and at least one applied run-realm-code
+   or other writing tool call), `model` failure (never wrote, wrong
    tool, gave up), or `host` failure (a pill stuck applying, a
    tool with no result, the tab left the workspace). Keeps the room id so the
    room can be inspected afterwards.

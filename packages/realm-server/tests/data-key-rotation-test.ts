@@ -21,6 +21,7 @@ import {
   createVirtualNetwork,
   fixtureDir,
   insertPlan,
+  insertProxyEndpoints,
   insertUser,
   realmSecretSeed,
   runTestRealmServer,
@@ -499,10 +500,6 @@ module(basename(import.meta.filename), function () {
       templateDatabase,
       beforeEach: async (_dbAdapter, publisher, runner) => {
         dbAdapter = _dbAdapter;
-        await dbAdapter.execute(
-          `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, auth_method, auth_parameter_name, created_at, updated_at)
-           VALUES (gen_random_uuid(), '${vendor.url}/', 'stub-vendor-key', 'no-credit', false, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-        );
         configureOutbound({ devAllowlist: ['127.0.0.1', 'localhost'] });
         vendor.requests.length = 0;
         await startRealmServer(dbAdapter, publisher, runner);
@@ -541,6 +538,15 @@ module(basename(import.meta.filename), function () {
           ],
           currentKeyId: 'new',
         });
+        await insertProxyEndpoints(dbAdapter, [
+          {
+            url: `${vendor.url}/`,
+            apiKey: 'stub-vendor-key',
+            creditStrategy: 'no-credit',
+            supportsStreaming: false,
+          },
+        ]);
+        AllowedProxyDestinations.reset();
       },
       afterEach: async () => {
         await resetResealPass();

@@ -14,7 +14,7 @@ import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
 import type { SingleCardDocument } from '@cardstack/runtime-common';
-import { Deferred, isLocalId } from '@cardstack/runtime-common';
+import { baseRealm, Deferred, isLocalId } from '@cardstack/runtime-common';
 
 import { claimsFromRawToken } from '@cardstack/host/services/realm';
 import { RecentCards } from '@cardstack/host/utils/local-storage-keys';
@@ -191,9 +191,7 @@ module(
         await click('[data-test-create-new-card-button]');
         await fillIn('[data-test-search-field]', 'Skill');
         // Select a card from catalog entries
-        await click(
-          `[data-test-item-button="https://cardstack.com/base/cards/skill"]`,
-        );
+        await click(`[data-test-item-button="${baseRealm.url}cards/skill"]`);
 
         await click(`[data-test-card-chooser-go-button]`);
 
@@ -216,9 +214,7 @@ module(
         await click('[data-test-boxel-filter-list-button="All Cards"]');
         await click('[data-test-create-new-card-button]');
         await fillIn('[data-test-search-field]', 'Skill');
-        await click(
-          `[data-test-item-button="https://cardstack.com/base/cards/skill"]`,
-        );
+        await click(`[data-test-item-button="${baseRealm.url}cards/skill"]`);
 
         let id: string | undefined;
         this.onSave((url) => {
@@ -300,9 +296,7 @@ module(
         await click('[data-test-boxel-filter-list-button="All Cards"]');
         await click('[data-test-create-new-card-button]');
         await fillIn('[data-test-search-field]', 'Skill');
-        await click(
-          `[data-test-item-button="https://cardstack.com/base/cards/skill"]`,
-        );
+        await click(`[data-test-item-button="${baseRealm.url}cards/skill"]`);
 
         let id: string | undefined;
         this.onSave((url) => {

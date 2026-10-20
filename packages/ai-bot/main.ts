@@ -65,11 +65,7 @@ import type { Tool } from '@cardstack/base/matrix-event';
 import { Responder } from './lib/responder.ts';
 import { collectUsedToolCallIds } from './lib/tool-call-ids.ts';
 import { buildChatCompletionRequest } from './lib/chat-completion-request.ts';
-import {
-  shouldSetRoomTitle,
-  setTitle,
-  roomTitleAlreadySet,
-} from './lib/set-title.ts';
+import { shouldSetRoomTitle, setTitle, roomHasTitle } from './lib/set-title.ts';
 import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
 import * as Sentry from '@sentry/node';
 
@@ -1244,15 +1240,20 @@ Common issues are:
       undefined,
     );
     try {
-      //TODO: optimise this so we don't need to sync room events within a reaction event
+      // Most rooms already have their title by now, and the name events
+      // alone settle that, so check them before fetching any history.
+      if (
+        await profTime(event.getId()!, 'title:roomHasTitle', async () =>
+          roomHasTitle(room.roomId, client),
+        )
+      ) {
+        return;
+      }
       let eventList = await profTime(
         event.getId()!,
         'title:getRoomEvents',
         async () => getRoomEvents(room.roomId, client, event.getId()),
       );
-      if (roomTitleAlreadySet(eventList)) {
-        return;
-      }
       let history: DiscreteMatrixEvent[] = await profTime(
         event.getId()!,
         'title:constructHistory',

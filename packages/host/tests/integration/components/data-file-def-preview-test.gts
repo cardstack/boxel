@@ -3,7 +3,7 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, type Loader } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common';
 
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -42,12 +42,12 @@ module('Integration | json/csv file def preview', function (hooks) {
     loader = getService('loader-service').loader;
     JsonFileDef = (
       await loader.import<typeof JsonFileDefModule>(
-        `${baseRealm.url}json-file-def`,
+        `@cardstack/base/json-file-def`,
       )
     ).JsonFileDef;
     CsvFileDef = (
       await loader.import<typeof CsvFileDefModule>(
-        `${baseRealm.url}csv-file-def`,
+        `@cardstack/base/csv-file-def`,
       )
     ).CsvFileDef;
   });

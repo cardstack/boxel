@@ -7,7 +7,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, type Loader } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common';
 
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -24,7 +24,7 @@ module('Unit | html-meta-extractor', function (hooks) {
     loader = getService('loader-service').loader;
     ({ extractHtmlMetadata, extractHtmlExcerpt } = await loader.import<
       typeof HtmlModule
-    >(`${baseRealm.url}html-meta-extractor`));
+    >(`@cardstack/base/html-meta-extractor`));
   });
 
   test('decodes entities and strips markup from the title', function (assert) {

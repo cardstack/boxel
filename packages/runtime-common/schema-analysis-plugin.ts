@@ -194,6 +194,7 @@ const coreVisitor = {
       path.node.loc &&
       'filename' in path.node.loc &&
       (path.node.loc.filename === '@cardstack/base/card-api' ||
+        // eslint-disable-next-line @cardstack/boxel/no-url-form-base-imports -- recognizes card-api compiled under its legacy alias
         path.node.loc.filename === 'https://cardstack.com/base/card-api');
     let decoratorInfo = getNamedImportInfo(path.scope, expression.node.name);
     if (!decoratorInfo && !isCardApiFile) {

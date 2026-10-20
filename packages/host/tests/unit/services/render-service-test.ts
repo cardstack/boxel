@@ -86,8 +86,7 @@ module('Unit | Service | render-service', function (hooks) {
         type: 'card',
         meta: {
           adoptsFrom: {
-            module:
-              'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+            module: '@cardstack/base/card-api' as RealmResourceIdentifier,
             name: 'CardDef',
           },
         },
@@ -143,8 +142,7 @@ module('Unit | Service | render-service', function (hooks) {
         type: 'file-meta',
         meta: {
           adoptsFrom: {
-            module:
-              'https://cardstack.com/base/card-api' as RealmResourceIdentifier,
+            module: '@cardstack/base/card-api' as RealmResourceIdentifier,
             name: 'FileDef',
           },
         },

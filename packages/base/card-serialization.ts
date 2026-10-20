@@ -32,6 +32,7 @@ import {
   identifyCard,
   isSingleCardDocument,
   isSingleFileMetaDocument,
+  isPrefixForm,
   loadCardDef,
   localId,
   maybeRelativeReference,
@@ -260,7 +261,7 @@ export function relativeReferenceFor(
   return (possibleReference: string) => {
     // Prefix-form RRIs (e.g. @cardstack/catalog/foo) are already in their
     // canonical portable form — return as-is.
-    if (possibleReference.startsWith('@')) {
+    if (isPrefixForm(possibleReference)) {
       return possibleReference;
     }
     // Identifiers are canonical RRI, so resolve relative refs to their
