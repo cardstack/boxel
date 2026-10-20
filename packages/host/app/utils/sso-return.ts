@@ -1,0 +1,98 @@
+import window from 'ember-window-mock';
+
+import { CLI_AUTH_TIMEOUT_MS } from '@cardstack/runtime-common/cli-auth';
+
+// A Google sign-in leaves the host for Synapse and Google. When it doesn't
+// finish (the user cancels at Google, or the sign-in fails), Synapse's SSO
+// error page can't tell which page started it, so every way out of that page
+// leads to the host's root with `SSO_RETURN_PARAM`. The page that starts a
+// sign-in remembers itself here, in this tab's session storage, so the browser
+// can be returned to it: `/cli-auth` for the CLI, or whatever page a web
+// sign-in started on.
+//
+// Only a landing that carries the param reads the entry, so an entry left
+// behind by a sign-in that went on to succeed (the CLI's lands on its loopback
+// listener, never back here) can't redirect a later visit.
+
+export const SSO_RETURN_PARAM = 'ssoReturn';
+const STORAGE_KEY = 'boxel-sso-return';
+// As long as the longest wait on a sign-in, the CLI's on its loopback listener;
+// past that, the error page's landing stays on the root page.
+export const SSO_RETURN_TTL_MS = CLI_AUTH_TIMEOUT_MS;
+
+interface SsoReturn {
+  url: string;
+  expiresAt: number;
+}
+
+// Called just before handing the browser to Synapse's SSO redirect.
+export function rememberSsoReturn(url: string = window.location.href) {
+  try {
+    window.sessionStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        url,
+        expiresAt: Date.now() + SSO_RETURN_TTL_MS,
+      } satisfies SsoReturn),
+    );
+  } catch {
+    // Without session storage the error page's landing stays on the root
+    // page, which still offers sign-in.
+  }
+}
+
+export function forgetSsoReturn() {
+  try {
+    window.sessionStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // Nothing was stored.
+  }
+}
+
+// On a landing from the SSO error page, strips the param from the URL and returns
+// the page the sign-in started from, when it is on this origin, unexpired, and
+// not the page the browser is already on (ignoring the fragment, which a
+// replace wouldn't reload for). Returns undefined otherwise, and on any other
+// page.
+export function takeSsoReturn(): string | undefined {
+  let current = new URL(window.location.href);
+  if (!current.searchParams.has(SSO_RETURN_PARAM)) {
+    return undefined;
+  }
+  current.searchParams.delete(SSO_RETURN_PARAM);
+  window.history.replaceState(
+    {},
+    '',
+    current.pathname + current.search + current.hash,
+  );
+
+  let entry: Partial<SsoReturn> | null;
+  try {
+    entry = JSON.parse(window.sessionStorage.getItem(STORAGE_KEY) ?? 'null');
+  } catch {
+    entry = null;
+  }
+  forgetSsoReturn();
+  if (
+    !entry ||
+    typeof entry.url !== 'string' ||
+    typeof entry.expiresAt !== 'number' ||
+    entry.expiresAt < Date.now()
+  ) {
+    return undefined;
+  }
+  let target: URL;
+  try {
+    target = new URL(entry.url);
+  } catch {
+    return undefined;
+  }
+  let withoutFragment = (url: URL) => url.href.split('#')[0];
+  if (
+    target.origin !== current.origin ||
+    withoutFragment(target) === withoutFragment(current)
+  ) {
+    return undefined;
+  }
+  return target.href;
+}

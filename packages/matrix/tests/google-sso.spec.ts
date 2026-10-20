@@ -38,18 +38,26 @@ async function signInWithGoogle(
   await page.locator('input[type="submit"]').click();
 }
 
-// Starts a Google sign-in from the host and, from the identity provider's login
-// page, sends the browser back to Synapse's OIDC callback with an OAuth error
-// response, the redirect Google makes when the user presses Cancel.
+// Starts a Google sign-in from the host page at `startURL` and, from the
+// identity provider's login page, sends the browser back to Synapse's OIDC
+// callback with an OAuth error response, the redirect Google makes when the
+// user presses Cancel. Returns the address the sign-in started from.
 async function returnFromGoogleWithError(
   page: Page,
   error: string,
-  errorDescription?: string,
-) {
-  await page.goto(appURL);
-  await page.locator('[data-test-google-login-btn]').click();
+  { errorDescription, startURL = appURL } = {} as {
+    errorDescription?: string;
+    startURL?: string;
+  },
+): Promise<string> {
+  await page.goto(startURL);
+  let googleButton = page.locator('[data-test-google-login-btn]');
+  await expect(googleButton).toBeVisible();
+  let startedFrom = page.url();
+  await googleButton.click();
   await expect(page.locator('input[name="username"]')).toBeVisible();
   await page.goto(oauthErrorResponseURL(page.url(), error, errorDescription));
+  return startedFrom;
 }
 
 async function expectSignedInAs(page: Page, userId: string) {
@@ -153,26 +161,39 @@ test.describe('Google sign-in (mock OIDC)', () => {
 
 // Google sends the browser back to Synapse's OIDC callback with an OAuth error
 // response, not to the host, so Synapse's SSO error page is what the user sees.
-// That page is Boxel's own template, which returns the user to the host's login.
+// That page is Boxel's own template. It sends a cancel to the host's root,
+// which returns it to the page the sign-in started from.
 test.describe('Google sign-in that does not complete (mock OIDC)', () => {
   test('cancelling at Google returns to the Boxel login page', async ({
     page,
   }) => {
-    await returnFromGoogleWithError(page, 'access_denied');
+    let startedFrom = await returnFromGoogleWithError(page, 'access_denied');
 
-    await page.waitForURL((url) => url.href.startsWith(`${appURL}/`));
+    await page.waitForURL(startedFrom);
     await expect(page.locator('[data-test-google-login-btn]')).toBeVisible();
     await expect(page.locator('[data-test-login-btn]')).toBeVisible();
+  });
+
+  test('cancelling at Google returns a sign-in started on a deep link to that page', async ({
+    page,
+  }) => {
+    let startedFrom = await returnFromGoogleWithError(page, 'access_denied', {
+      startURL: `${appURL}/index`,
+    });
+    expect(new URL(startedFrom).pathname).not.toBe(
+      new URL(`${appURL}/`).pathname,
+    );
+
+    await page.waitForURL(startedFrom);
+    await expect(page.locator('[data-test-google-login-btn]')).toBeVisible();
   });
 
   test('a failed Google sign-in explains the failure and links back to the Boxel login page', async ({
     page,
   }) => {
-    await returnFromGoogleWithError(
-      page,
-      'server_error',
-      'The identity provider is unavailable',
-    );
+    let startedFrom = await returnFromGoogleWithError(page, 'server_error', {
+      errorDescription: 'The identity provider is unavailable',
+    });
 
     // The provider's description is shown only as its quoted words, apart
     // from Boxel's own sentence, since anyone can put it in a callback link.
@@ -184,10 +205,11 @@ test.describe('Google sign-in that does not complete (mock OIDC)', () => {
     );
     await expect(page.locator('[data-test-sso-return-link]')).toHaveAttribute(
       'href',
-      `${appURL}/`,
+      `${appURL}/?ssoReturn=1`,
     );
+    // The host takes the link back to the page the sign-in started from.
     await page.locator('[data-test-sso-return-link]').click();
-    await page.waitForURL((url) => url.href.startsWith(`${appURL}/`));
+    await page.waitForURL(startedFrom);
     await expect(page.locator('[data-test-google-login-btn]')).toBeVisible();
   });
 });

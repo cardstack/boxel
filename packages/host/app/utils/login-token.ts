@@ -1,5 +1,7 @@
 import window from 'ember-window-mock';
 
+import { forgetSsoReturn } from './sso-return';
+
 // The `loginToken` handed off by `boxel browse` and by Google SSO is
 // deliberately NOT a registered route query param, so it must be read straight
 // from `window.location.search`. It is single-use, so readers strip it from the
@@ -18,6 +20,8 @@ export function consumeLoginTokenFromUrl(): string | null {
   if (!token) {
     return null;
   }
+  // The sign-in reached the host, so there is no cancel left to return from.
+  forgetSsoReturn();
   params.delete('loginToken');
   let search = params.toString();
   let newUrl =

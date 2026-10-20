@@ -20,6 +20,7 @@ import ENV from '@cardstack/host/config/environment';
 import { cliAuthLoopbackUrl } from '@cardstack/host/lib/cli-auth-loopback';
 import { CredentialFields } from '@cardstack/host/lib/credential-fields';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import { rememberSsoReturn } from '@cardstack/host/utils/sso-return';
 
 import AuthButton from './auth-button';
 import AuthContainer from './auth-container';
@@ -489,6 +490,9 @@ export default class CliAuth extends Component {
       matrixURL,
     );
     url.searchParams.set('redirectUrl', redirect);
+    // A cancel at Google lands on the host's root, not on the listener; this
+    // brings it back here, where the CLI is still waiting.
+    rememberSsoReturn();
     window.location.assign(url.href);
   });
 

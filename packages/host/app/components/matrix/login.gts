@@ -31,6 +31,7 @@ import {
   consumeLoginTokenFromUrl,
   peekLoginToken,
 } from '@cardstack/host/utils/login-token';
+import { rememberSsoReturn } from '@cardstack/host/utils/sso-return';
 
 import AuthButton from './auth-button';
 import CredentialFieldsFrame from './credential-fields';
@@ -290,6 +291,8 @@ export default class Login extends Component<Signature> {
         window.location.href,
         GOOGLE_IDP_ID,
       );
+      // A cancel at Google lands on the host's root; this brings it back here.
+      rememberSsoReturn();
       window.location.assign(url);
     } catch (e: any) {
       this.error = `Could not start Google sign-in: ${e.message}`;

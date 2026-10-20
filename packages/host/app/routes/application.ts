@@ -1,7 +1,10 @@
 import Route from '@ember/routing/route';
 import { service } from '@ember/service';
 
+import window from 'ember-window-mock';
+
 import ENV from '@cardstack/host/config/environment';
+import { takeSsoReturn } from '@cardstack/host/utils/sso-return';
 
 import type MonacoService from '../services/monaco-service';
 
@@ -9,6 +12,17 @@ export default class Application extends Route {
   @service declare monacoService: MonacoService;
 
   async beforeModel(transition: any): Promise<void> {
+    // A Google sign-in that didn't finish leaves Synapse's SSO error page for
+    // the root page, whether or not this tab is signed in to the app; send it
+    // back to the page that started it.
+    let ssoReturn = takeSsoReturn();
+    if (ssoReturn) {
+      window.location.replace(ssoReturn);
+      // The browser is leaving this page. Hold the transition rather than
+      // render the root page, or abort it, which would surface as an
+      // unhandled rejection.
+      await new Promise(() => {});
+    }
     // Override the matrix URL for testing
     if (ENV.environment === 'test' || ENV.environment === 'development') {
       if (transition.to?.queryParams.matrixURL) {
