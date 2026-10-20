@@ -2474,7 +2474,10 @@ export default class AgentScreencast extends Component<Signature> {
         --app-bg: #faf9f5;
         --app-side: #f0eee6;
         --app-panel: #f4f2ec;
-        border-radius: 1.375rem;
+        /* Two concentric radii: containers, and what sits inside them. */
+        --claude-round: 0.75rem;
+        --claude-round-inner: 0.5rem;
+        border-radius: 1rem;
       }
       .window.is-codex {
         --app-ink: #0d0d0d;
@@ -2509,7 +2512,7 @@ export default class AgentScreencast extends Component<Signature> {
       /* Claude: rounded bubbles and composer, its serif voice in replies,
          and a clay send button. */
       .window.is-claude .bubble {
-        border-radius: 1rem;
+        border-radius: var(--claude-round);
         background-color: #ebe8de;
       }
       .window.is-claude .reply {
@@ -2517,15 +2520,22 @@ export default class AgentScreencast extends Component<Signature> {
         font-size: 0.8125rem;
       }
       .window.is-claude .composer {
-        border-radius: 1.125rem;
+        border-radius: var(--claude-round);
         background-color: white;
         box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.05);
       }
-      .window.is-claude .composer-chip {
-        border-radius: 0.5rem;
+      .window.is-claude .composer-chip,
+      .window.is-claude .attachment,
+      .window.is-claude .side-item,
+      .window.is-claude .form-input,
+      .window.is-claude .form-send {
+        border-radius: var(--claude-round-inner);
+      }
+      .window.is-claude .form-card {
+        border-radius: var(--claude-round);
       }
       .window.is-claude .send {
-        border-radius: 0.5rem;
+        border-radius: var(--claude-round-inner);
         background-color: #c96442;
       }
       .window.is-claude .side-item.is-active {
