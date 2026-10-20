@@ -52,8 +52,8 @@ so an interpolation behind a literal prefix is not reported.
 ## Type information is required
 
 The rule reads types, so it reports only where the ESLint config sets
-`parserOptions.project`. Everywhere else it is inert rather than wrong, which is
-why it can be enabled broadly and given type information one package at a time.
+`parserOptions.project`. Without a TypeScript program it reports nothing, so a
+package that enables it must also give it one.
 
 ## Examples
 
@@ -67,12 +67,16 @@ let url = new URL(card.id); // `id` is a RealmResourceIdentifier
 Correct:
 
 ```ts
+// A request — the VirtualNetwork resolves the identifier as it sends it.
+let response = await virtualNetwork.fetch(identifier);
+
 // Path work — RealmPaths accepts an identifier and stays in that form.
 let paths = new RealmPaths(realmIdentifier);
-
-// A genuine network boundary — resolve through the VirtualNetwork.
-let url = virtualNetwork.toURL(identifier);
 ```
 
-If a site really is the boundary where an identifier becomes a URL, disable the
-rule on that line with a comment saying why.
+`virtualNetwork.toURL(identifier)` resolves too, for the rare caller that needs
+the URL for something other than a request.
+
+Disable the rule on a line only where a guard on the same path admits nothing
+but URL form, and name that guard in the reason. A `catch` around the parse is
+not a guard: it hides the prefix-form failure instead of excluding it.

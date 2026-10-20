@@ -135,10 +135,45 @@ module('Integration | tools | copy-file-to-realm', function (hooks) {
       'submode is switched to code',
     );
     assert.strictEqual(
-      operatorModeStateService.state?.codePath?.href,
+      operatorModeStateService.state?.codePath,
       result.newFileIdentifier,
       'code path is set to the copied file URL',
     );
+  });
+
+  test('show file command opens a prefix-form file identifier', async function (assert) {
+    let toolService = getService('tool-service');
+    let operatorModeStateService = getService('operator-mode-state-service');
+    let { virtualNetwork } = getService('network');
+    let testRealmPrefix = '@test/show-realm/';
+    virtualNetwork.addRealmMapping(testRealmPrefix, testRealmURL);
+    try {
+      operatorModeStateService.restore({
+        stacks: [[]],
+        submode: 'interact',
+      });
+
+      await new ShowFileTool(toolService.toolContext).execute({
+        fileIdentifier: `${testRealmPrefix}hello.txt`,
+      });
+
+      assert.strictEqual(
+        operatorModeStateService.state?.submode,
+        'code',
+        'submode is switched to code',
+      );
+      let codePath = operatorModeStateService.state?.codePath;
+      assert.strictEqual(
+        codePath ? virtualNetwork.toURL(codePath).href : undefined,
+        `${testRealmURL}hello.txt`,
+        'code path is the file the prefix-form identifier names',
+      );
+    } finally {
+      // The code path is held in the prefix form, so it is cleared before the
+      // prefix stops resolving.
+      await operatorModeStateService.updateCodePath(null);
+      virtualNetwork.removeRealmMapping(testRealmPrefix);
+    }
   });
 
   test('errors when user does not have write permissions to target realm', async function (assert) {

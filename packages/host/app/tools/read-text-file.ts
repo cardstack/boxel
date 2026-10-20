@@ -25,9 +25,11 @@ export default class ReadTextFileTool extends HostBaseTool<
   protected async run(
     input: BaseToolModule.ReadTextFileInput,
   ): Promise<BaseToolModule.FileContents> {
-    let url = input.realm
-      ? new URL(input.path, input.realm)
-      : new URL(input.path);
+    // The path can be relative to the realm, a URL, or an RRI in prefix form.
+    let url = this.network.virtualNetwork.resolveURL(
+      input.path,
+      input.realm || undefined,
+    );
     let response = await this.network.authedFetch(url, {
       headers: { Accept: 'text/plain' },
     });

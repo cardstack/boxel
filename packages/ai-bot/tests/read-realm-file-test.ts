@@ -15,6 +15,11 @@ import {
 } from '../lib/bot-tools/read-realm-file/read.ts';
 import { READ_URL_TOOL_NAME } from '../lib/bot-tools/read-url/read.ts';
 import { classifyToolCalls } from '../lib/bot-tools/index.ts';
+import {
+  realmPrefixesFromHistory,
+  resolveRealmPrefix,
+} from '../lib/bot-tools/realm-prefixes.ts';
+import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
 
 const ON_BEHALF_OF = '@user:localhost';
 const REALM = 'https://localhost:4201/user/jane/';
@@ -830,6 +835,57 @@ module('readFilesLabel', () => {
         { url: 'x' },
       ]),
       'Read file: a.md',
+    );
+  });
+});
+
+module('realm prefixes', () => {
+  test('a later message maps a prefix in place of an earlier one', () => {
+    let context = (realmPrefixes: Record<string, string>) => ({
+      type: 'm.room.message',
+      sender: '@user:localhost',
+      content: { data: JSON.stringify({ context: { realmPrefixes } }) },
+    });
+    let history = [
+      context({ '@cardstack/base/': 'https://old.example/base/' }),
+      context({ '@cardstack/base/': 'https://new.example/base/' }),
+      {
+        type: 'm.room.message',
+        sender: '@aibot:localhost',
+        content: {
+          data: {
+            context: {
+              realmPrefixes: { '@cardstack/base/': 'https://bot.example/' },
+            },
+          },
+        },
+      },
+    ] as unknown as DiscreteMatrixEvent[];
+
+    assert.deepEqual(
+      [...realmPrefixesFromHistory(history, '@aibot:localhost')],
+      [['@cardstack/base/', 'https://new.example/base/']],
+    );
+  });
+
+  test('a prefix-form identifier resolves through its longest prefix', () => {
+    let prefixes = new Map([
+      ['@cardstack/', 'https://packages.example/'],
+      ['@cardstack/base/', 'https://localhost:4201/base/'],
+    ]);
+    assert.strictEqual(
+      resolveRealmPrefix('@cardstack/base/card-api.gts', prefixes),
+      'https://localhost:4201/base/card-api.gts',
+    );
+    assert.strictEqual(
+      resolveRealmPrefix('https://localhost:4201/user/x.gts', prefixes),
+      'https://localhost:4201/user/x.gts',
+      'a URL is unchanged',
+    );
+    assert.strictEqual(
+      resolveRealmPrefix('@other/realm/x.gts', prefixes),
+      '@other/realm/x.gts',
+      'an unregistered prefix is unchanged',
     );
   });
 });

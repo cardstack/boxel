@@ -78,15 +78,16 @@ is most of what there is to see, and `--tabs` costs no wall-clock.
 
 Knobs (env vars):
 
-| var                                     | default                                            | meaning                                                                                                                                                                                                                                                                                                |
-| --------------------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `EVAL_MODELS`                           | `Claude Sonnet 4.6`                                | comma-separated model names **as the picker shows them**; substring, case-insensitive, must match exactly one option (the picker keys options by ModelConfiguration card id, not model id — the model id actually used is read back from the room)                                                     |
-| `EVAL_PROMPT`                           | `create a hello world card and show it`            | the prompt                                                                                                                                                                                                                                                                                             |
-| `EVAL_MAX_MINUTES`                      | 15                                                 | safety net only; a run still going after that is stopped. Pace is graded, never a reason to stop                                                                                                                                                                                                       |
-| `EVAL_USERS` / `EVAL_PASSWORD`          | `ai-assistant-eval-user-1` … `-5` / `password`     | one local matrix user per model, comma-separated, same password. Register once: `MATRIX_USERNAME=ai-assistant-eval-user-1 MATRIX_PASSWORD=password node ./scripts/register-test-user.ts` in `packages/matrix`, per user. Two models on one account race over which room the panel opens on (see below) |
-| `EVAL_HOST_URL` / `EVAL_MATRIX_URL`     | `https://localhost:4200` / `http://localhost:8008` | stack endpoints                                                                                                                                                                                                                                                                                        |
-| `EVAL_BOT_USER`                         | `@aibot:localhost`                                 | the ai-bot's matrix id                                                                                                                                                                                                                                                                                 |
-| `EVAL_WORKERS` / `EVAL_STAGGER_SECONDS` | 5 / 40                                             | parallel workers, and the gap between their starts                                                                                                                                                                                                                                                     |
+| var                                     | default                                            | meaning                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| --------------------------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `EVAL_MODELS`                           | `Claude Sonnet 4.6`                                | comma-separated model names **as the picker shows them**; substring, case-insensitive, must match exactly one option (the picker keys options by ModelConfiguration card id, not model id — the model id actually used is read back from the room)                                                                                                                                                                                                                                           |
+| `EVAL_PROMPT`                           | `create a hello world card and show it`            | the prompt                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `EVAL_MAX_MINUTES`                      | 15                                                 | safety net only; a run still going after that is stopped. Pace is graded, never a reason to stop                                                                                                                                                                                                                                                                                                                                                                                             |
+| `EVAL_USERS` / `EVAL_PASSWORD`          | `ai-assistant-eval-user-1` … `-5` / `password`     | one local matrix user per model, comma-separated, same password. Register once: `MATRIX_USERNAME=ai-assistant-eval-user-1 MATRIX_PASSWORD=password node ./scripts/register-test-user.ts` in `packages/matrix`, per user. Two models on one account race over which room the panel opens on (see below)                                                                                                                                                                                       |
+| `EVAL_HOST_URL` / `EVAL_MATRIX_URL`     | `https://localhost:4200` / `http://localhost:8008` | stack endpoints                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
+| `EVAL_BOT_USER`                         | `@aibot:localhost`                                 | the ai-bot's matrix id                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| `EVAL_WORKERS` / `EVAL_STAGGER_SECONDS` | 5 / 40                                             | parallel workers, and the gap between their starts                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `EVAL_SKILL_FEATURES`                   | none                                               | comma-separated skill features to switch on in each room before the first prompt (`boxel-debug:feature:enable:<name>`). On top of an evaluation card's own `skillFeatures`; a name with a leading `-` leaves out one the card switches on (`-catalog-reuse` for the off arm of an A/B run). A bare `pnpm eval:models` run has no card, so this is how it switches a feature on. A skill section between `<!-- feature:<name> -->` markers is left out of the prompt unless its feature is on |
 
 Models run in parallel, `EVAL_WORKERS` at a time (default 5), starting
 `EVAL_STAGGER_SECONDS` apart (default 40) so the dev server's first page
@@ -118,9 +119,10 @@ nothing.
 When one appears:
 
 1. **Stop the generation, but only when it has clearly gone sideways.** The
-   runner does this itself when four separate turns carry a failed or invalid
-   pill or an error alert (a normal repair takes two or three rounds, each of
-   which can fail once more before it lands), the
+   runner does this itself when three turns in a row carry a failed or
+   invalid pill or an error alert, or eight in all (a normal repair takes two
+   or three rounds, each of which can fail once more before it lands, and a
+   failure the next turn repaired is graded, not stopped), the
    same tool call repeated three times, a pill stuck past the host's two-minute
    tool timeout, a turn that streams nothing for three minutes, and the
    15-minute safety clock (verdict notes start with "stopped early"). It never stops a run for being
@@ -143,15 +145,16 @@ When one appears:
 is also printed at the end of the run.
 
 Columns: result grade, model id used, effort the room carried, verdict, turns,
-tool calls by name with counts, run-realm-code writes, cost, wall time, whether a card
-rendered and where (`stack` or `preview`), notes with the reasons, the missed
+tool calls by name with counts, realm writes (run-realm-code writes plus other
+writing tool calls), cost, wall time, whether a card rendered and where (`stack` or `preview`), notes with the reasons, the missed
 benchmarks, and the room id.
 
 The grade is the one-word answer per model:
 
 - ✅ **GOOD** — it did the job nicely. The card rendered inside every
-  benchmark below: at most 10 turns, one mode switch, 200 seconds, at most two
-  failed steps the model repaired, no cache miss after a skill load.
+  benchmark below: at most 10 turns, one mode switch, 200 seconds (or the
+  evaluation's own `secondsPerPrompt`), at most two failed steps the model
+  repaired, no cache miss after a skill load.
 - 🟡 **ROUGH** — it did the job, but not nicely. The card rendered, and the
   way there missed a benchmark: too many turns, too slow, more than two failed
   steps, or a cache miss. A usable model with rough edges; the notes say
@@ -199,15 +202,17 @@ After every run, two checks on the money, whatever the grade:
 Verdicts:
 
 - `pass` — a card from the new workspace rendered with no error boundary, and at
-  least one run-realm-code write was applied.
+  least one applied run-realm-code or other writing tool call.
 - `model-failure` — the model did not get there: no write, or no card. Reasons are listed.
 - `host-failure` — a tool pill stayed in "applying" past the host's own
   two-minute tool timeout, or a tool call never got a result. The model may be
   fine; the tab froze. Keep the room id, this is a repro for a host bug.
 - `bot-failure` — the bot showed "Generating results" with no new text for
   three minutes: the request between the ai-bot and the provider never came
-  back. The ai-bot has no timeout of its own for this. Not the model's doing;
-  check the ai-bot's terminal for the request error.
+  back. The ai-bot has no timeout of its own for this. Also a reply the bot
+  posted empty (no text, no tool call, no usage): the provider returned
+  nothing and the ai-bot finalized it. Not the model's doing; check the
+  ai-bot's terminal for the request error.
 - `runner-failure` — the script itself broke (a selector, a timeout on the UI).
   The step name is in the notes. Fix the runner, not the model.
 
@@ -237,7 +242,7 @@ Claude Sonnet 4.6 without thinking, the model the workflow was tuned for:
 | files written in one reply   | `filesWritten` in the JSON                                                                                                                                                                                                                                                                                                               | definition and instance in the same reply                                                                                                                                                                                                                   |
 | cost                         | Cost column, not part of the grade                                                                                                                                                                                                                                                                                                       | judge it against the model's price class: Sonnet 4.6 lands at $0.05 to $0.10, so $0.20 for it already means extra turns; an Opus-class model costs two to three times that for the same work. A run over $1 is a fragmentation problem, not a price problem |
 | prompt cache                 | Cache column: share of input tokens served from the cache, counted only after the initial skill load. Turn one has one tool; the first skill read adds the host tools, and tools lead the cached prefix, so the turn right after the read is always billed cold. That structural miss is excluded; the window opens on the turn after it | 90% or more, 0 misses inside the window. A miss there means history was rewritten, the cache expired between turns, or the provider changed                                                                                                                 |
-| wall time                    | Time column                                                                                                                                                                                                                                                                                                                              | up to 200 seconds                                                                                                                                                                                                                                           |
+| wall time                    | Time column                                                                                                                                                                                                                                                                                                                              | up to 200 seconds, or the evaluation's `secondsPerPrompt`                                                                                                                                                                                                   |
 
 Every run costs real money, so run each model once. One run answers the
 question it is for: can this model do the smallest build. A pass is a pass. A
@@ -319,6 +324,9 @@ changes a selector the run ends as `runner-failure` with the step name.
 `eval-realm/evaluation.gts`; the evaluations themselves are JSON under
 `eval-realm/Evaluation/`. An evaluation that wants a card or file already in
 the test workspace names it in `initialCards` / `initialFiles` and keeps it
-under `eval-realm/`; the runner copies those in before the prompt.
+under `eval-realm/`; the runner copies those in before the prompt. Its
+`skillFeatures` are switched on in each room before the first prompt (the
+result card's notes list the features a run had), and `secondsPerPrompt`
+replaces the default 200 s time target per prompt.
 `pnpm eval:setup` pushes them into the writer's AI Assistant Evaluations
 workspace.

@@ -8,6 +8,8 @@ pinned Synapse image (see scripts/test-oidc-mapping-provider.sh).
 """
 
 import inspect
+import json
+import os
 import unittest
 from unittest.mock import AsyncMock, Mock
 
@@ -91,6 +93,39 @@ class MapUserAttributesTests(unittest.IsolatedAsyncioTestCase):
         provider = make_provider(existing_users=["alice", "alice1", "alice2"])
         result = await provider.map_user_attributes(userinfo(), {}, 0)
         self.assertEqual(result["localpart"], "alice3")
+
+
+# The vectors the realm server's own Google sign-in runs too, so the two
+# resolve a Google identity to the same account.
+VECTORS_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "test_google_sign_in_vectors.json"
+)
+
+
+class SharedVectorTests(unittest.IsolatedAsyncioTestCase):
+    async def test_shared_vectors(self):
+        with open(VECTORS_PATH, encoding="utf-8") as f:
+            vectors = json.load(f)["vectors"]
+        for vector in vectors:
+            with self.subTest(vector=vector["name"]):
+                provider = make_provider(
+                    existing_users=vector["existingLocalparts"],
+                    users_by_email=vector["usersByEmail"],
+                )
+                expected = vector["expected"]
+                if expected["outcome"] == "refused":
+                    with self.assertRaises(MappingException) as raised:
+                        await provider.map_user_attributes(
+                            vector["userinfo"], {}, 0
+                        )
+                    self.assertEqual(str(raised.exception), expected["message"])
+                    continue
+                result = await provider.map_user_attributes(
+                    vector["userinfo"], {}, 0
+                )
+                self.assertEqual(result["localpart"], expected["localpart"])
+                self.assertEqual(result["display_name"], expected["displayName"])
+                self.assertEqual(result["emails"], [expected["email"]])
 
 
 class InterfaceShapeTests(unittest.TestCase):

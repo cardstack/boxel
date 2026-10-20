@@ -1,22 +1,70 @@
 import * as readline from 'readline';
 import { Writable } from 'stream';
 
-export function prompt(question: string): Promise<string> {
-  const wasFlowing = process.stdin.readableFlowing;
+// A question whose input ended before it was answered. The CLI's entry point
+// prints its message without a stack, since it describes how the command was
+// run rather than a fault in it.
+export class PromptInputClosedError extends Error {
+  constructor(question: string, fromTerminal: boolean) {
+    super(
+      `No answer to "${question.trim()}".` +
+        (fromTerminal
+          ? ''
+          : ' Input ended before one was given. Run the command in a terminal, ' +
+            'or pass what it asks for as flags or environment variables.'),
+    );
+    this.name = 'PromptInputClosedError';
+  }
+}
+
+export interface PromptOptions {
+  /** @internal The streams to read from and write to; tests pass their own. */
+  input?: NodeJS.ReadableStream & {
+    readableFlowing?: boolean | null;
+    isTTY?: boolean;
+  };
+  output?: NodeJS.WritableStream;
+}
+
+export function prompt(
+  question: string,
+  options: PromptOptions = {},
+): Promise<string> {
+  const input = options.input ?? process.stdin;
+  const wasFlowing = input.readableFlowing;
   const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
+    input,
+    output: options.output ?? process.stdout,
   });
 
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
+    // Input that ends before an answer arrives (stdin from /dev/null, or a pipe
+    // that runs dry) closes the interface without ever calling the question's
+    // callback. Left alone, the command's promise never settles and the process
+    // exits as if it had finished, having done nothing it was asked to.
+    let answered = false;
+    rl.once('close', () => {
+      if (!answered) {
+        reject(new PromptInputClosedError(question, Boolean(input.isTTY)));
+      }
+    });
+    // Ctrl+C stops the command, as it does at the no-echo prompt below. Without
+    // a listener here readline would close the interface instead, which reads
+    // as a question left unanswered.
+    rl.on('SIGINT', () => {
+      answered = true;
+      rl.close();
+      process.exit(130);
+    });
     rl.question(question, (answer) => {
+      answered = true;
       rl.close();
       // Creating the interface resumes stdin, and closing it doesn't undo that —
       // a resumed stdin keeps the event loop alive, so a command whose last act
       // is a prompt would sit there having already finished its work. The
       // no-echo prompt below takes the same care.
       if (!wasFlowing) {
-        process.stdin.pause();
+        input.pause();
       }
       resolve(answer.trim());
     });

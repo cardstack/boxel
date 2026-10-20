@@ -59,13 +59,6 @@ const BreadcrumbItemContent: TemplateOnlyComponent<BreadcrumbItemContentSignatur
         color: var(--boxel-highlight);
       }
 
-      @media (max-width: 30rem) {
-        .breadcrumb-item-icon {
-          width: 0.75rem;
-          height: 0.75rem;
-        }
-      }
-
       .label {
         font: 500 var(--boxel-font-sm);
         color: var(--boxel-light);

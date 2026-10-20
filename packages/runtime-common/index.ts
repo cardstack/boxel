@@ -1900,6 +1900,7 @@ export * from './capture-perf.ts';
 export * from './capture-spec.ts';
 export * from './capture-disposition.ts';
 export * from './capture-url-token.ts';
+export * from './diagnostic-session.ts';
 export * from './expression.ts';
 export * from './searchable-parity.ts';
 export * from './infer-content-type.ts';

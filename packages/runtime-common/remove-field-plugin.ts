@@ -13,6 +13,9 @@ interface State {
 export interface Options {
   card: PossibleCardOrFieldDeclaration;
   field: PossibleField;
+  // The field's references name their modules in canonical form, so an import
+  // source is canonicalized the same way before it is compared with them.
+  canonicalModule: (specifier: string) => string;
 }
 export function removeFieldPlugin() {
   return {
@@ -41,7 +44,8 @@ function maybeRemoveFieldDecoratorImport(
 ) {
   if (
     state.opts.field.decorator.type === 'internal' ||
-    path.node.source.value !== state.opts.field.decorator.module
+    state.opts.canonicalModule(path.node.source.value) !==
+      state.opts.field.decorator.module
   ) {
     return;
   }
@@ -67,7 +71,8 @@ function maybeRemoveFieldTypeImport(
 ) {
   if (
     state.opts.field.type.type === 'internal' ||
-    path.node.source.value !== state.opts.field.type.module
+    state.opts.canonicalModule(path.node.source.value) !==
+      state.opts.field.type.module
   ) {
     return;
   }
@@ -93,7 +98,8 @@ function maybeRemoveFieldClassImport(
 ) {
   if (
     state.opts.field.card.type !== 'external' ||
-    path.node.source.value !== state.opts.field.card.module
+    state.opts.canonicalModule(path.node.source.value) !==
+      state.opts.field.card.module
   ) {
     return;
   }

@@ -74,7 +74,7 @@ module('Integration | tools | switch-submode', function (hooks) {
     });
     assert.strictEqual(operatorModeStateService.state?.submode, 'code');
     assert.strictEqual(
-      operatorModeStateService.state?.codePath?.href,
+      operatorModeStateService.state?.codePath,
       `${instance.id}.json`,
     );
   });
@@ -94,7 +94,7 @@ module('Integration | tools | switch-submode', function (hooks) {
     });
     assert.strictEqual(operatorModeStateService.state?.submode, 'code');
     assert.strictEqual(
-      operatorModeStateService.state?.codePath?.href,
+      operatorModeStateService.state?.codePath,
       `${instance.id}.json`,
     );
   });
@@ -141,7 +141,7 @@ module('Integration | tools | switch-submode', function (hooks) {
     });
 
     assert.strictEqual(operatorModeStateService.state?.submode, 'code');
-    assert.strictEqual(operatorModeStateService.state?.codePath?.href, fileUrl);
+    assert.strictEqual(operatorModeStateService.state?.codePath, fileUrl);
     assert.notOk(result, 'no result card when using requested path');
 
     let { status, content } = await cardService.getSource(new URL(fileUrl));
@@ -178,7 +178,7 @@ module('Integration | tools | switch-submode', function (hooks) {
     assert.ok(result, 'returns a result card with the new filename');
     assert.strictEqual(result?.codePath, newFileIdentifier);
     assert.strictEqual(
-      operatorModeStateService.state?.codePath?.href,
+      operatorModeStateService.state?.codePath,
       newFileIdentifier,
     );
 
@@ -210,7 +210,7 @@ module('Integration | tools | switch-submode', function (hooks) {
       createFile: true,
     });
 
-    assert.strictEqual(operatorModeStateService.state?.codePath?.href, fileUrl);
+    assert.strictEqual(operatorModeStateService.state?.codePath, fileUrl);
     assert.notOk(result, 'no result card when using existing blank file');
 
     let { status, content } = await cardService.getSource(new URL(fileUrl));

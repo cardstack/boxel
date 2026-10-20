@@ -414,7 +414,15 @@ export class GalleryGrid extends Component<Signature> {
         font-style: normal;
         color: transparent;
         /* the tail fades toward --gradient-tail, which is --ink in dark mode
-           and copper in light, where fading to --ink would turn muddy */
+           and copper in light, where fading to --ink would turn muddy.
+           The bright accents are a deliberate brand treatment in both
+           themes. On light cream they fall under the 3:1 large-text
+           minimum (ember-hot 2.4:1, copper about 1.8:1, lower under the
+           page's ember glow). That is a brand choice, not a WCAG pass:
+           the word is display-size heading text, and forced-colors modes
+           repaint it in CanvasText without the gradient.
+           The -ink stops (--ember-ink to --copper-ink) would clear 3:1
+           in light but read too dull for the hero. */
         background: linear-gradient(
           120deg,
           var(--ember-hot) 10%,
