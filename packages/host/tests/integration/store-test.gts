@@ -4571,7 +4571,7 @@ module('Integration | Store', function (hooks) {
       args: null,
     });
     await started.promise;
-    let pendingCallers = () =>
+    let pendingCallers = (): (string | null)[] =>
       ((queue as any).jobs as { jobType: string; args: any }[])
         .filter((job) => job.jobType === 'incremental-index')
         .flatMap((job) =>
@@ -4580,7 +4580,56 @@ module('Integration | Store', function (hooks) {
               caller.clientRequestId,
           ),
         );
-    return { holder, release, pendingCallers };
+    // A writer reaches the held pass when its publish lands on the queue, and
+    // how long its write takes to get there varies with the machine. So a
+    // test waits on the publish itself rather than polling against a clock.
+    let published: { jobType: string; at: number }[] = [];
+    let arrivals: { ready: () => boolean; deferred: Deferred<void> }[] = [];
+    let heldAt = performance.now();
+    let publish = queue.publish.bind(queue);
+    queue.publish = (async (args: Parameters<typeof queue.publish>[0]) => {
+      let job = await publish(args);
+      published.push({
+        jobType: args.jobType,
+        at: Math.round(performance.now() - heldAt),
+      });
+      for (let arrival of [...arrivals]) {
+        if (arrival.ready()) {
+          arrivals.splice(arrivals.indexOf(arrival), 1);
+          arrival.deferred.fulfill();
+        }
+      }
+      return job;
+    }) as typeof queue.publish;
+    let callersArrive = async (
+      description: string,
+      ready: (callers: (string | null)[]) => boolean,
+    ) => {
+      if (ready(pendingCallers())) {
+        return;
+      }
+      let deferred = new Deferred<void>();
+      let arrival = { ready: () => ready(pendingCallers()), deferred };
+      arrivals.push(arrival);
+      // Only a guard, so a lost publish fails with what the hold saw instead
+      // of hanging until the test times out.
+      let guard = setTimeout(() => {
+        arrivals.splice(arrivals.indexOf(arrival), 1);
+        deferred.reject(
+          new Error(
+            `the held index pass never had ${description}: ` +
+              `callers=${JSON.stringify(pendingCallers())} ` +
+              `publishes=${JSON.stringify(published)}`,
+          ),
+        );
+      }, 20_000);
+      try {
+        await deferred.promise;
+      } finally {
+        clearTimeout(guard);
+      }
+    };
+    return { holder, release, pendingCallers, callersArrive };
   }
 
   test("this client's own write, announced under another writer's id in a pass they shared, is not read back", async function (assert) {
@@ -4615,13 +4664,16 @@ module('Integration | Store', function (hooks) {
         } as LooseSingleCardDocument),
         { clientRequestId: 'instance:another-tab' },
       );
-      await waitUntil(() =>
-        hold!.pendingCallers().includes('instance:another-tab'),
+      await hold.callersArrive("the other writer's write", (callers) =>
+        callers.includes('instance:another-tab'),
       );
       let instance = storeService.peek(mine) as CardDef;
       (instance as any).name = 'Mine Edited';
       let ownSave = storeService.save(mine);
-      await waitUntil(() => hold!.pendingCallers().length === 2);
+      await hold.callersArrive(
+        "this client's save",
+        (callers) => callers.length === 2,
+      );
       hold.release.fulfill();
       await Promise.all([theirWrite, ownSave, hold.holder.done]);
       await settled();
