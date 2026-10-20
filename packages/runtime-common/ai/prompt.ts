@@ -410,6 +410,12 @@ function shouldPromptCheckCorrectnessSummary(
   if (checkCorrectnessBatchPassed(batch, history)) {
     return false;
   }
+  // The same holds for a batch that already asks for a fix, or says the
+  // attempts are used up: that instruction is the one to act on, and a
+  // summary read after it would end the reply instead.
+  if (checkCorrectnessBatchHasFailureInstruction(batch, history)) {
+    return false;
+  }
   let lastNonResultIndex = findLastIndex(
     history,
     (event) => !isToolResult(event),
@@ -466,6 +472,34 @@ function checkCorrectnessBatchPassed(
       isTerminalToolResultEventFor(event, request.id!),
     ) as ToolResultEvent | undefined;
     return result !== undefined && correctnessCheckPassed(result);
+  });
+}
+
+// Whether any check in the batch is followed by an instruction about its
+// failure (fix the errors, fix the warnings, or stop at the attempt limit).
+// Derived from the same per-result content the tool messages are built from,
+// so the two cannot disagree.
+function checkCorrectnessBatchHasFailureInstruction(
+  batch: CheckCorrectnessBatch,
+  history: DiscreteMatrixEvent[],
+): boolean {
+  let laterEvents = history.slice(batch.sourceIndex + 1);
+  return batch.requests.some((request) => {
+    let result = findLast(laterEvents, (event) =>
+      isTerminalToolResultEventFor(event, request.id!),
+    ) as ToolResultEvent | undefined;
+    if (!result) {
+      return false;
+    }
+    let { followUpUserMessage } = buildCheckCorrectnessResultContent(
+      request,
+      result,
+    );
+    return (
+      followUpUserMessage === CODE_FIX_INSTRUCTION ||
+      followUpUserMessage === CORRECTNESS_WARNINGS_FIX_INSTRUCTION ||
+      followUpUserMessage === CORRECTNESS_FAILURE_LIMIT_INSTRUCTION
+    );
   });
 }
 
@@ -1781,14 +1815,16 @@ const CORRECTNESS_WARNINGS_FIX_INSTRUCTION =
 const CORRECTNESS_FAILURE_LIMIT_INSTRUCTION = `Automated correctness fixes have already been attempted ${MAX_CORRECTNESS_FIX_ATTEMPTS} times and the target is still failing validation. Stop proposing further automated patches; instead, summarize the remaining errors and ask the user how they want to proceed. Do not mention correctness or automated checks or tool calls.`;
 
 // Rides the trailing context message after a batch with a check that did
-// not pass (a clean batch gets the success note above instead). This lands
-// mid-answer, right after a file is written, and it is the last thing the
-// model reads before replying — so an instruction that only asks for a
-// summary reads as the end of the work. It was: a build announced as two
-// cards delivered one, reported it was clean, and stopped, because nothing
-// resumes a plan across turns.
+// not pass and carries no instruction of its own: a card that says it is
+// incorrect without naming an error, a result card that could not be read, or
+// a check marked failed or rejected. (A clean batch gets the success note, and
+// a batch with errors to fix gets the fix or limit instruction, instead.)
+// It is the last thing the model reads before replying, right after a file
+// is written, so it sizes the note at one line and sends the model back to
+// the user's message: an instruction that only asks for a summary reads as
+// the end of the work, and nothing resumes a plan across turns.
 const CHECK_CORRECTNESS_SUMMARY_INSTRUCTION =
-  'The automated correctness checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention: correctness, automated correctness checks, tool calls. If work you already described remains unfinished, carry straight on with it in the same reply — this is a note on what just landed, not a request to stop.';
+  'The automated correctness checks have finished, and at least one did not come back clean. Note the outcome in at most one line of your reply, based on the tool output above; if it leaves something open, say what. Then finish your answer to the user: cover everything their last message asked for that you have not yet answered. If work you already described remains unfinished, carry straight on with it in the same reply. This is a note on what just landed, not a request to stop. Do not mention correctness, automated checks or tool calls.';
 
 // What a check result carries: no result card at all (a result with no
 // output), a card whose content could not be read (its download failed, or

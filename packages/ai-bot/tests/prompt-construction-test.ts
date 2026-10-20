@@ -4981,6 +4981,20 @@ ${patchedFileSource}
       messageText(failureLimitMessage).includes('Fix the errors above'),
       'The failure limit prompt should not ask for another round of fixes',
     );
+    assert.notOk(
+      messages?.some((message) =>
+        messageText(message).includes(
+          'The automated correctness checks have finished',
+        ),
+      ),
+      'The limit instruction is the last one the model reads: no trailing summary follows it',
+    );
+    assert.notOk(
+      messages?.some((message) =>
+        messageText(message).includes('one short sentence'),
+      ),
+      'Nothing sizes the reply at one sentence',
+    );
   });
 
   test('warning-only passes ask for fixes and count toward the attempt cap', async function () {
@@ -5511,7 +5525,7 @@ ${patchedFileSource}
     );
   });
 
-  test('getPromptParts includes the correctness summary in the trailing message after a failed check', async function () {
+  test('a failed check ends with the fix instruction, not a trailing summary', async function () {
     const roomId = '!room:localhost';
     const aiMessageId = '$ai-msg';
     const eventList: DiscreteMatrixEvent[] = [
@@ -5622,28 +5636,24 @@ ${patchedFileSource}
       },
     ];
 
-    const summaryMessage =
-      'The automated correctness checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention: correctness, automated correctness checks, tool calls. If work you already described remains unfinished, carry straight on with it in the same reply — this is a note on what just landed, not a request to stop.';
-
     const promptParts = await getPromptParts(
       eventList,
       '@aibot:localhost',
       fakeMatrixClient,
     );
-    // The instruction exists for this one request only, so it rides the
-    // volatile trailing context message rather than the history — a history
-    // entry that vanishes on the next request would defeat the prompt cache.
     let trailingMessage = promptParts.messages?.at(-1);
     assert.equal(trailingMessage?.role, 'user');
-    assert.true(
-      messageText(trailingMessage).endsWith(summaryMessage),
-      'Summary should be appended to the trailing context message',
+    assert.false(
+      messageText(trailingMessage).includes(
+        'The automated correctness checks have finished',
+      ),
+      'The trailing message carries no summary to compete with the fix instruction',
     );
     assert.false(
-      promptParts.messages
-        ?.slice(0, -1)
-        .some((message) => messageText(message).includes(summaryMessage)),
-      'Summary must not be a history entry — it vanishes on the next request',
+      promptParts.messages?.some((message) =>
+        messageText(message).includes('one short sentence'),
+      ),
+      'Nothing sizes the reply at one sentence',
     );
     assert.true(
       promptParts.messages?.some(
@@ -5938,7 +5948,7 @@ ${patchedFileSource}
 
   const SUCCESS_NOTE_START = 'The write above passed its checks.';
   const TRAILING_SUMMARY_START =
-    'The automated correctness checks have finished.';
+    'The automated correctness checks have finished';
 
   function userMessagesWith(
     messages: Parameters<typeof messageText>[0][] | undefined,
@@ -5969,7 +5979,7 @@ ${patchedFileSource}
     );
   });
 
-  test('a batch with a failed check gets only the fix instruction and the trailing summary', async function () {
+  test('a batch with a failed check gets only the fix instruction', async function () {
     const { messages } = await getPromptParts(
       correctnessBatchHistory([
         { correct: true, errors: [] },
@@ -5990,8 +6000,55 @@ ${patchedFileSource}
     );
     assert.strictEqual(
       userMessagesWith(messages, TRAILING_SUMMARY_START).length,
-      1,
-      'The trailing summary fires as it does for any failed batch',
+      0,
+      'The fix instruction is the last one the model reads: no trailing summary follows it',
+    );
+  });
+
+  test('a failed check with no error listed gets the trailing note, which asks to finish the answer', async function () {
+    const { messages } = await getPromptParts(
+      correctnessBatchHistory([{ correct: false, errors: [] }]),
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, SUCCESS_NOTE_START).length,
+      0,
+      'The check did not pass, so there is no success note',
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, 'Fix the errors above').length,
+      0,
+      'There is no listed error to fix',
+    );
+    // The note exists for this one request only, so it rides the volatile
+    // trailing context message rather than the history: a history entry that
+    // vanishes on the next request would defeat the prompt cache.
+    let trailingMessage = messages?.at(-1);
+    assert.equal(trailingMessage?.role, 'user');
+    let trailingText = messageText(trailingMessage);
+    let noteStart = trailingText.indexOf(TRAILING_SUMMARY_START);
+    assert.true(noteStart !== -1, 'The trailing message ends with the note');
+    let note = trailingText.slice(noteStart);
+    assert.true(
+      note.includes('finish your answer to the user'),
+      'The note sends the model back to the user',
+    );
+    assert.true(
+      note.includes('carry straight on'),
+      'The note does not read as a request to stop',
+    );
+    assert.false(
+      note.includes('one short sentence'),
+      'The note does not size the reply at one sentence',
+    );
+    assert.false(
+      messages
+        ?.slice(0, -1)
+        .some((message) =>
+          messageText(message).includes(TRAILING_SUMMARY_START),
+        ),
+      'The note is not a history entry',
     );
   });
 
@@ -6014,7 +6071,12 @@ ${patchedFileSource}
     assert.strictEqual(
       userMessagesWith(messages, TRAILING_SUMMARY_START).length,
       1,
-      'The trailing summary fires',
+      'The trailing note is the only instruction, so it fires',
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, 'one short sentence').length,
+      0,
+      'Nothing sizes the reply at one sentence',
     );
   });
 
