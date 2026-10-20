@@ -996,6 +996,25 @@ module('Acceptance | interact submode | single stack tests', function (hooks) {
         .isFocused('focus stays in the panel');
     });
 
+    test("a card opened while focus is in a card's input leaves focus in the input", async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'edit' }]],
+      });
+      let fieldInput = '[data-test-field="firstName"] input';
+      await focus(fieldInput);
+
+      let operatorModeStateService = getService('operator-mode-state-service');
+      operatorModeStateService.addItemToStack(
+        operatorModeStateService.createStackItem(`${testRealmURL}Pet/mango`, 1),
+      );
+      await settled();
+
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Pet/mango"]`)
+        .exists('the card opened');
+      assert.dom(fieldInput).isFocused('focus stays in the input');
+    });
+
     test('duplicate card in a stack is not allowed', async function (assert) {
       await visitOperatorMode({
         stacks: [

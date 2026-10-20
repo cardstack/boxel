@@ -4,6 +4,7 @@ import type { StackItem } from '@cardstack/host/lib/stack-item';
 import {
   focusIfConnected,
   focusStackItem,
+  isTextEntry,
 } from '@cardstack/host/utils/stack-item-focus';
 
 interface Placed {
@@ -104,9 +105,15 @@ export default class StackFocus {
       }
     }
 
-    // A panel that holds focus, like the AI assistant's, keeps it while the
+    // Focus in a text entry stays there, so a card opened on the user's behalf
+    // (by the AI assistant, say) doesn't take keystrokes meant for a field. A
+    // panel that holds focus, like the AI assistant's, keeps it too while the
     // cards it opens appear in the stacks.
-    if (opened.length === 0 || active?.closest('[data-holds-focus]')) {
+    if (
+      opened.length === 0 ||
+      isTextEntry(active) ||
+      active?.closest('[data-holds-focus]')
+    ) {
       return;
     }
     let target =

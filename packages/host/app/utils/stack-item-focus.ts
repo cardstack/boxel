@@ -17,3 +17,18 @@ export function focusStackItem(item: HTMLElement) {
   item.tabIndex = -1;
   item.focus({ preventScroll: true });
 }
+
+// Whether the target takes typed text, so keys pressed there belong to it and
+// focus is not moved out from under it.
+export function isTextEntry(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) {
+    return false;
+  }
+  let tag = target.tagName;
+  return (
+    tag === 'INPUT' ||
+    tag === 'TEXTAREA' ||
+    tag === 'SELECT' ||
+    target.isContentEditable
+  );
+}

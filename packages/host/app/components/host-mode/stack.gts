@@ -8,6 +8,7 @@ import { modifier } from 'ember-modifier';
 import {
   focusIfConnected,
   focusStackItem,
+  isTextEntry,
 } from '@cardstack/host/utils/stack-item-focus';
 
 import HostModeStackItem from './stack-item';
@@ -19,19 +20,6 @@ interface Signature {
     isNarrow?: boolean;
     close?: (cardId: string) => void;
   };
-}
-
-function isTextEntry(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) {
-    return false;
-  }
-  let tag = target.tagName;
-  return (
-    tag === 'INPUT' ||
-    tag === 'TEXTAREA' ||
-    tag === 'SELECT' ||
-    target.isContentEditable
-  );
 }
 
 export default class HostModeStack extends Component<Signature> {
