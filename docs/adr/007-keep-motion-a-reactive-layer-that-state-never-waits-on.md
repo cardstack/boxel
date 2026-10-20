@@ -10,7 +10,7 @@ scope:
   - packages/base/card-api.gts
   - packages/base/field-component.gts
   - packages/base/links-to-*.gts
-  - packages/boxel-ui/src/components/**
+  - packages/pretui/components/**
   - packages/glimmer-motion/src/**
   - packages/choreo/src/**
 ---
@@ -75,8 +75,8 @@ Transition.
 Low-level components SHOULD declare how they could move. This covers their
 identity, which of their parts may animate, and constraints such as "must not
 deform". These are the components at card-api boundaries (`packages/base`
-render and field components) and the semantically meaningful `boxel-ui`
-components.
+render and field components) and the semantically meaningful Pret UI
+(`@cardstack/pretui`) components.
 
 Screen-level components SHOULD declare how possible changes should move: which
 change gets which motion, in what order, and with what timing.
