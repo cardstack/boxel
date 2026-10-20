@@ -17,6 +17,8 @@ description: What the secure origin (`secure.boxel.ai` / `secure.stack.cards`, `
 
 Adding to it means adding a mode to `shell.js`, or a file to `SHELL_ASSETS` or `CREDENTIALS_ASSETS`. Each addition must be code this repo owns and reviews. Never add a proxy, a passthrough to realm routing, a CDN script, an analytics snippet or a host-app import.
 
+The pages are deliberately not host components and not built from boxel-ui. [ADR 008](../../../docs/adr/008-build-the-secure-origins-pages-as-their-own-ember-app.md) (proposed) records why, and the shape they take: a package of their own, an Ember app with its own components, behind an import allowlist. Read it before adding a screen or a dependency.
+
 ## The credential fields the app frames
 
 Every input a password is typed into — sign-in, the CLI sign-in page, registration, password reset, change password, and the change-email modal's "confirm your identity" — is a cross-origin frame of `credentials?form=<form>&origin=<app origin>`. Unlike the secure window, the frame is meant to be invisible: the user sees the app's own form.

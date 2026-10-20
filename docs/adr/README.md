@@ -12,7 +12,8 @@ or backfill one.
 
 ## Index
 
-| ADR                                                                          | Title                                                                             | Status   |
-| ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------- |
-| [001](001-record-architecture-decisions.md)                                  | Record architecture decisions as short, normative ADRs                            | proposed |
-| [005](005-authorize-key-changes-only-with-a-session-card-code-cant-reach.md) | Authorize changes to a user's keys only with a session that card code can't reach | proposed |
+| ADR                                                                          | Title                                                                                 | Status   |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | -------- |
+| [001](001-record-architecture-decisions.md)                                  | Record architecture decisions as short, normative ADRs                                | proposed |
+| [005](005-authorize-key-changes-only-with-a-session-card-code-cant-reach.md) | Authorize changes to a user's keys only with a session that card code can't reach     | proposed |
+| [008](008-build-the-secure-origins-pages-as-their-own-ember-app.md)          | Build the secure origin's pages as their own Ember app, with no host or boxel-ui code | proposed |
