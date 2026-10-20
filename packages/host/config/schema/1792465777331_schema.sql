@@ -86,9 +86,13 @@
    webhook_path TEXT NOT NULL,
    verification_type TEXT NOT NULL,
    verification_config BLOB NOT NULL,
-   signing_secret TEXT NOT NULL,
    created_at NOT NULL,
    updated_at NOT NULL,
+   signing_secret_ciphertext,
+   signing_secret_nonce,
+   signing_secret_tag,
+   signing_secret_key_id TEXT,
+   signing_secret_created_at,
    PRIMARY KEY ( id ) 
 );
 

@@ -1,6 +1,6 @@
 ---
 name: system-keys
-description: Operate the realm server's system keys — the platform's own vendor keys (OpenRouter's among them) in `proxy_endpoints` that `_request-forward` and the OpenRouter passthrough attach — with `boxel realm-server keys list | show | add | replace | delete`. Covers the realm secret seed and the operator token it signs, masked entry and the `--stdin` / `--key-file` alternatives, the operator note, the `proxy_endpoint_history` audit table and the `system-keys` log channel, what the `/_system-keys` endpoints accept and refuse, and how a change reaches the proxy. Points to the secrets-at-rest procedures (sealing, the backfill, the census, data-key rotation) that apply to these keys. Use when adding, rotating, replacing or removing a system key in any environment, when auditing who changed one, when a proxy destination stops getting its key, or when someone reaches for a hand-written `INSERT INTO proxy_endpoints`. Not for user-owned keys, and not for boxel-skills.
+description: Operate the realm server's system keys — the platform's own vendor keys (OpenRouter's among them) in `proxy_endpoints` that `_request-forward` and the OpenRouter passthrough attach — with `boxel realm-server keys list | show | add | replace | delete`. Covers the realm secret seed and the operator token it signs, masked entry and the `--stdin` / `--key-file` alternatives, the operator note, the `proxy_endpoint_history` audit table and the `system-keys` log channel, what the `/_system-keys` endpoints accept and refuse, and how a change reaches the proxy. Points to the secrets-at-rest procedures (sealing, the census, data-key rotation) that apply to these keys. Use when adding, rotating, replacing or removing a system key in any environment, when auditing who changed one, when a proxy destination stops getting its key, or when someone reaches for a hand-written `INSERT INTO proxy_endpoints`. Not for user-owned keys, and not for boxel-skills.
 ---
 
 # System keys (operators)
@@ -14,9 +14,9 @@ its path. System keys belong to the platform, not to any user: they are
 managed by developers who hold the environment's **realm secret seed**, and no
 user session, however privileged, can reach them.
 
-Never add or change a row with a hand-written SQL statement: the value lands
-in shell history and in Postgres statement logs, and the change leaves no
-audit entry. Use the command.
+Never add or change a row with a hand-written SQL statement: the table holds
+no plain-text key, so SQL can't seal one, and the change would leave no audit
+entry. Use the command.
 
 ## The command
 
@@ -125,8 +125,8 @@ keys: treat the seed as a production credential.
 | `DELETE /_system-keys/:id` | Delete: `note`                                                                                        |
 
 **No route answers with a value.** A key's metadata reports `hasValue` and
-`keyId`, the data key its value is sealed under (null while a hand-added row
-is in plain text only, until the backfill seals it). Bodies are JSON, at most
+`keyId`, the data key its value is sealed under (null for a destination with
+no key). Bodies are JSON, at most
 64 KiB; a larger one is refused with 413 before it is buffered. Sentry events
 raised during these routes keep only the method and path, as for the proxy
 routes.
@@ -183,18 +183,16 @@ operator naming it.
 
 The value is sealed with the secrets-at-rest helper, bound to field
 `proxy_endpoints.api_key`, owner `boxel-platform`, the row's id and its
-destination, and the plain-text `api_key` column is kept in step so a rollback
-keeps working. Everything else about these keys is in the `secrets-at-rest`
-skill:
+destination. The sealed columns are its only copy: the table has no plain-text
+key, so a hand-written `INSERT` or `UPDATE` can't add or change one. Everything
+else about these keys is in the `secrets-at-rest` skill:
 
-- the backfill that seals hand-added rows (`pnpm seal-proxy-endpoint-keys`)
-  and the `proxy endpoint keys:` boot line;
-- the plaintext census (`plaintext census: proxy_endpoints.api_key …`) and the
-  sealed census;
+- the plaintext census (`plaintext census: no plain-text secret columns`) and
+  the sealed census;
 - rotating the data key (`boxel realm-server data-keys status | reseal`), the
   other `boxel realm-server` family;
 - what a `SecretDecryptionError` or the `the sealed key for proxy endpoint …`
-  warning means.
+  error means, and why `keys replace` is the fix.
 
 ## Troubleshooting
 

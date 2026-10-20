@@ -75,7 +75,14 @@ import {
   installSecretsKeyring,
   LocalKeyProvider,
   resetSecretsAtRest,
+  sealedColumnBindings,
+  secretsKeyring,
 } from '../../lib/secrets-at-rest/index.ts';
+import {
+  saveProxyEndpoint,
+  type ProxyEndpoint,
+} from '../../lib/proxy-endpoint-keys.ts';
+import { incomingWebhookSecretBinding } from '../../lib/incoming-webhook-secrets.ts';
 import { findRealm } from '../../lib/realm-routing.ts';
 import { upsertPublishedRealmInRegistry } from '../../lib/realm-registry-writes.ts';
 
@@ -1271,6 +1278,65 @@ export function setupSecretsKeyring(hooks: NestedHooks) {
   hooks.afterEach(function () {
     resetSecretsAtRest();
   });
+}
+
+// Adds proxy endpoints as the application writes them, each key sealed under
+// the installed keyring.
+export async function insertProxyEndpoints(
+  dbAdapter: PgAdapter,
+  endpoints: ProxyEndpoint[],
+): Promise<void> {
+  for (let endpoint of endpoints) {
+    await saveProxyEndpoint(dbAdapter, endpoint);
+  }
+}
+
+// Adds an incoming webhook as the application writes it, its signing secret
+// sealed under the installed keyring.
+export async function insertIncomingWebhookRow(
+  dbAdapter: PgAdapter,
+  {
+    id = uuidv4(),
+    username,
+    webhookPath,
+    verificationType = 'HMAC_SHA256_HEADER',
+    verificationConfig = { header: 'X-Hub-Signature-256', encoding: 'hex' },
+    signingSecret,
+  }: {
+    id?: string;
+    username: string;
+    webhookPath: string;
+    verificationType?: string;
+    verificationConfig?: Record<string, unknown>;
+    signingSecret: string;
+  },
+): Promise<string> {
+  let sealed = secretsKeyring().seal(
+    signingSecret,
+    incomingWebhookSecretBinding({ id, username }),
+  );
+  await dbAdapter.execute(
+    `INSERT INTO incoming_webhooks (
+       id, username, webhook_path, verification_type, verification_config,
+       signing_secret_ciphertext, signing_secret_nonce, signing_secret_tag,
+       signing_secret_key_id, signing_secret_created_at, created_at, updated_at
+     ) VALUES (
+       $1, $2, $3, $4, $5, decode($6, 'base64'), decode($7, 'base64'),
+       decode($8, 'base64'), $9, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
+       CURRENT_TIMESTAMP
+     )`,
+    {
+      bind: [
+        id,
+        username,
+        webhookPath,
+        verificationType,
+        JSON.stringify(verificationConfig),
+        ...sealedColumnBindings(sealed),
+      ],
+    },
+  );
+  return id;
 }
 
 export function setupDB(

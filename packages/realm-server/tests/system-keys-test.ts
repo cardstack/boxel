@@ -19,6 +19,7 @@ import {
   createVirtualNetwork,
   fixtureDir,
   insertPlan,
+  insertProxyEndpoints,
   insertUser,
   realmSecretSeed,
   runTestRealmServer,
@@ -108,11 +109,15 @@ module(basename(import.meta.filename), function () {
       templateDatabase,
       beforeEach: async (_dbAdapter, publisher, runner) => {
         dbAdapter = _dbAdapter;
-        await dbAdapter.execute(
-          `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, auth_method, auth_parameter_name, created_at, updated_at)
-           VALUES (gen_random_uuid(), '${vendor.url}/', '${SEEDED_KEY}', 'no-credit', false, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-        );
         installSecretsKeyring(await new LocalKeyProvider().loadDataKeys());
+        await insertProxyEndpoints(dbAdapter, [
+          {
+            url: `${vendor.url}/`,
+            apiKey: SEEDED_KEY,
+            creditStrategy: 'no-credit',
+            supportsStreaming: false,
+          },
+        ]);
         configureOutbound({ devAllowlist: ['127.0.0.1', 'localhost'] });
         vendor.requests.length = 0;
         await startRealmServer(dbAdapter, publisher, runner);
@@ -539,7 +544,7 @@ module(basename(import.meta.filename), function () {
           if (
             hold &&
             typeof sql === 'string' &&
-            sql.includes('auth_parameter_name, api_key')
+            sql.includes('auth_parameter_name, encode(api_key_ciphertext')
           ) {
             hold = false;
             held();
@@ -646,9 +651,15 @@ module(basename(import.meta.filename), function () {
         }
       }
       let rows = await dbAdapter.execute(
-        `SELECT url, api_key FROM proxy_endpoints`,
+        `SELECT id, url, ${PROXY_ENDPOINT_KEY_COLUMNS} FROM proxy_endpoints`,
       );
-      assert.deepEqual(rows, [{ url: `${vendor.url}/`, api_key: SEEDED_KEY }]);
+      assert.deepEqual(
+        (rows as unknown as ProxyEndpointKeyRow[]).map((row) => ({
+          url: row.url,
+          key: readProxyEndpointKey(row),
+        })),
+        [{ url: `${vendor.url}/`, key: SEEDED_KEY }],
+      );
       assert.deepEqual(await historyRows(), []);
     });
 
