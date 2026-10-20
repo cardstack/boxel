@@ -29,6 +29,8 @@ import { logger, ri } from '@cardstack/runtime-common';
 import config from '@cardstack/host/config/environment';
 import { catalogRealmURL } from '@cardstack/host/lib/utils';
 import type MatrixService from '@cardstack/host/services/matrix-service';
+import type NetworkService from '@cardstack/host/services/network';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
@@ -88,6 +90,20 @@ export default class WorkspaceChooser extends Component<Signature> {
   @service declare matrixService: MatrixService;
   @service declare realmServer: RealmServerService;
   @service declare realm: RealmService;
+  @service declare private network: NetworkService;
+  @service declare private operatorModeStateService: OperatorModeStateService;
+
+  // The workspace the dashboard opened over, read once: the cursor starts on
+  // it, so Enter goes straight back to where the user was.
+  private returnRealmURL = this.readReturnRealmURL();
+
+  private readReturnRealmURL(): string | undefined {
+    try {
+      return this.operatorModeStateService.realmURL || undefined;
+    } catch {
+      return undefined;
+    }
+  }
 
   // Archived realms are tucked away below the fold and collapsed by default —
   // they're rarely needed, so the section stays out of the way and the list
@@ -508,6 +524,34 @@ export default class WorkspaceChooser extends Component<Signature> {
     return this.userWorkspacesNavBase + this.userWorkspacesCount;
   }
 
+  // Where the workspace the dashboard opened over sits in the walk, when
+  // it's shown; the New Workspace tile holds its place without a realm.
+  private get returnNavIndex(): number | undefined {
+    let target = this.returnRealmURL;
+    if (!target) {
+      return undefined;
+    }
+    let walk: (string | undefined)[] = [
+      ...this.favoriteRealmIdentifiers,
+      ...(this.isAddWorkspaceShown ? [undefined] : []),
+      ...this.recentUserRealmIdentifiers,
+      ...this.visibleOtherRealmIdentifiers,
+      ...(this.catalogEmptyMessage ? [] : this.filteredCatalogRealmIdentifiers),
+    ];
+    let index = walk.findIndex(
+      (id) => id !== undefined && this.toURL(id) === target,
+    );
+    return index >= 0 ? index : undefined;
+  }
+
+  private toURL(id: string) {
+    try {
+      return this.network.virtualNetwork.toURL(id).href;
+    } catch {
+      return id;
+    }
+  }
+
   private get selectableCount() {
     return this.catalogNavBase + this.renderedCatalogCount;
   }
@@ -518,6 +562,10 @@ export default class WorkspaceChooser extends Component<Signature> {
   // would make the first Enter create a workspace instead of opening one. Skip
   // past it to the first real workspace whenever there is one.
   private get defaultSelectedIndex() {
+    let returnIndex = this.returnNavIndex;
+    if (returnIndex !== undefined) {
+      return returnIndex;
+    }
     if (this.favoritesCount > 0) {
       return 0;
     }
@@ -549,12 +597,18 @@ export default class WorkspaceChooser extends Component<Signature> {
     return Math.min(Math.max(index, 0), count - 1);
   }
 
-  // True once the user has moved the selection off its open-time default.
-  // Drives whether a tile shows its selection ring: the default tile is
-  // focused on open (so keyboard nav works) but stays unringed until the user
-  // engages, so opening the chooser doesn't look like a tile is pre-selected.
+  // The selection is the keyboard's cursor, so its ring shows only while the
+  // keyboard is in use: the first arrow key or Tab in the dashboard reveals
+  // it, and a pointer press hides it again. On open the cursor already rests
+  // on a tile, focused, so Enter works at once, but nothing looks picked.
+  @tracked private keyboardEngaged = false;
+
   private get isSelectionActive() {
-    return this.selectedIndex !== null;
+    return this.keyboardEngaged;
+  }
+
+  @action private onPointerDown() {
+    this.keyboardEngaged = false;
   }
 
   // Keep the selection in sync with focus, so tabbing onto a tile selects it.
@@ -582,10 +636,23 @@ export default class WorkspaceChooser extends Component<Signature> {
     if (count === 0) {
       return;
     }
+    // Tabbing anywhere in the dashboard is keyboard use, wherever it lands.
+    if (kbEvent.key === 'Tab') {
+      this.keyboardEngaged = true;
+    }
     // Only handle keys that originate from a selectable tile. Other controls
     // inside the chooser (a card's favorite/options/host buttons) handle their
     // own keys, so we must not intercept (and preventDefault) their events.
     if (!(kbEvent.target as HTMLElement).closest('[data-nav-index]')) {
+      return;
+    }
+    // The first arrow key shows where the cursor is rather than moving it.
+    if (!this.keyboardEngaged && kbEvent.key.startsWith('Arrow')) {
+      event.preventDefault();
+      this.keyboardEngaged = true;
+      container
+        .querySelector(`[data-nav-index="${this.currentIndex}"]`)
+        ?.scrollIntoView({ block: 'nearest' });
       return;
     }
     switch (kbEvent.key) {
@@ -679,6 +746,7 @@ export default class WorkspaceChooser extends Component<Signature> {
       data-test-workspace-chooser
       {{on 'keydown' this.onKeydown}}
       {{on 'focusin' this.onFocusIn}}
+      {{on 'pointerdown' this.onPointerDown}}
     >
       <div
         class='workspace-chooser__content boxel-dark-scrollbar'
@@ -851,6 +919,7 @@ export default class WorkspaceChooser extends Component<Signature> {
                         this.currentIndex
                         this.addWorkspaceNavIndex
                       }}
+                      @selectionActive={{this.isSelectionActive}}
                     />
                     {{#if this.matrixService.isInitializingNewUser}}
                       <WorkspaceLoadingIndicator />

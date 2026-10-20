@@ -78,6 +78,8 @@ One Matrix account-data key, `app.boxel.dashboard` (`AppBoxelDashboardContent` i
 
 ## Accessibility and keyboard
 
+- **The selection is the keyboard's cursor.** On open it rests, focused, on the workspace the dashboard opened over (else the first favorite or workspace), so Enter goes straight back, but nothing looks picked. The first arrow key or Tab shows the ring where it rests; a pointer press hides it again. The ring is the one mark: on the outer edge of a desk, tile or row, never an outline on the pill or button carrying focus. Controls inside a tile show on hover, with the ring, or when one of them has Tab focus.
+- Workspace names show on one line; hovering one shows it whole over its realm URL, so long names read in full and same-named workspaces can be told apart.
 - Arrow keys walk the tiles in the order shown: favorites, New Workspace, recent tiles, visible rows, catalog rows.
 - A compact row's name is its one button, stretched over the row; the star, menu and live link sit above it as their own controls. A favorite's name pill carries the same role.
 - The rail's entries are buttons with `aria-current='location'` on the section being read; the scope filter's options use `aria-pressed`.

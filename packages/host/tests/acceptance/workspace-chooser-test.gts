@@ -1544,6 +1544,61 @@ module('Acceptance | workspace-chooser', function (hooks) {
       );
     }
 
+    // The first arrow key shows the cursor where it rests rather than
+    // moving it, so a walk starts with one reveal.
+    async function revealCursor() {
+      await pressKey('ArrowRight');
+    }
+
+    test('the cursor is hidden on open, and the first arrow key reveals it without moving it', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      await waitFor('[data-test-workspace-selected]');
+
+      let [first] = orderedWorkspaceNames();
+      assert
+        .dom('[data-test-workspace-ring]')
+        .doesNotExist('nothing looks picked when the dashboard opens');
+
+      await pressKey('ArrowRight');
+      assert
+        .dom(`[data-test-workspace-ring="${first}"]`)
+        .exists('the first arrow key shows the ring where the cursor rests');
+      assert
+        .dom(`[data-test-workspace-selected="${first}"]`)
+        .exists('and does not move it');
+    });
+
+    test('a pointer press hides the cursor again', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      await waitFor('[data-test-workspace-selected]');
+
+      await revealCursor();
+      assert.dom('[data-test-workspace-ring]').exists();
+
+      await triggerEvent('[data-test-dashboard-greeting]', 'pointerdown');
+      assert
+        .dom('[data-test-workspace-ring]')
+        .doesNotExist('pointer use hides the keyboard cursor');
+    });
+
+    test('reopening the dashboard puts the cursor on the workspace just left', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      await waitFor('[data-test-workspace-selected]');
+
+      let [, second] = orderedWorkspaceNames();
+      await click(`[data-test-workspace-button="${second}"]`);
+      await waitFor(`[data-test-stack-card="${urlByName[second]}index"]`);
+
+      await click('[data-test-workspace-chooser-toggle]');
+      await waitFor('[data-test-workspace-selected]');
+      assert
+        .dom(`[data-test-workspace-selected="${second}"]`)
+        .exists('the cursor starts on the workspace the user came from');
+      assert
+        .dom('[data-test-workspace-ring]')
+        .doesNotExist('still without a ring until a key is pressed');
+    });
+
     test('the first workspace is selected and focused when the chooser opens', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
       await waitFor('[data-test-workspace-selected]');
@@ -1566,6 +1621,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
 
       let [first, second] = orderedWorkspaceNames();
 
+      await revealCursor();
       await pressKey('ArrowRight');
       assert
         .dom(`[data-test-workspace-selected="${second}"]`)
@@ -1619,6 +1675,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
       // ArrowDown leaves the Favorites row and lands somewhere in the row
       // below (Your Workspaces). The exact tile depends on column alignment,
       // so assert the row, not a specific tile.
+      await revealCursor();
       await pressKey('ArrowDown');
       assert
         .dom('[data-test-favorites-list] [data-test-workspace-selected]')
@@ -1676,6 +1733,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
       await waitFor('[data-test-workspace-selected]');
 
       // The New Workspace tile sits immediately left of the first workspace.
+      await revealCursor();
       await pressKey('ArrowLeft');
       assert
         .dom('[data-test-add-workspace-selected]')
@@ -1705,6 +1763,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
         .exists('catalogs are shown in this configuration');
 
       let [, second] = orderedWorkspaceNames();
+      await revealCursor();
       await pressKey('ArrowRight'); // second user workspace — the last of them
       assert
         .dom(`[data-test-workspace-list] [data-test-workspace-selected]`)

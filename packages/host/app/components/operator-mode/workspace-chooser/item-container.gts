@@ -41,8 +41,10 @@ const WorkspaceChooserItemContainer: TemplateOnlyComponent<Signature> =
           rgba(255 255 255 / 40%)
         );
       }
+      /* The tile carries the keyboard cursor; its selection ring shows it,
+         so focus draws no outline of its own. */
       .workspace:focus-visible {
-        outline-offset: -1px;
+        outline: none;
       }
       .workspace.is-selected::after {
         border-color: var(--boxel-teal);

@@ -19,6 +19,7 @@ import {
   FieldContainer,
   LoadingIndicator,
 } from '@cardstack/boxel-ui/components';
+import { and } from '@cardstack/boxel-ui/helpers';
 import { IconPlus } from '@cardstack/boxel-ui/icons';
 
 import type MatrixService from '@cardstack/host/services/matrix-service';
@@ -182,6 +183,8 @@ interface Signature {
   Element: HTMLButtonElement;
   Args: {
     isSelected?: boolean;
+    // Whether the keyboard cursor is showing; the ring waits for it.
+    selectionActive?: boolean;
     navIndex?: number;
   };
 }
@@ -236,7 +239,7 @@ export default class AddWorkspace extends Component<Signature> {
     <ItemContainer
       {{on 'click' (fn this.setIsModalOpen true)}}
       {{focusWhenSelected @isSelected}}
-      class='container {{if @isSelected "is-selected"}}'
+      class='container {{if (and @isSelected @selectionActive) "is-selected"}}'
       title='Create a New Workspace'
       data-nav-index={{@navIndex}}
       data-test-add-workspace

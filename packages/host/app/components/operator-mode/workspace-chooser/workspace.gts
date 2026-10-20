@@ -113,6 +113,7 @@ export default class Workspace extends Component<Signature> {
         {{on 'mouseleave' this.closeHostDropdown}}
         data-test-workspace={{this.name}}
         data-test-workspace-selected={{if @isSelected this.name}}
+        data-test-workspace-ring={{if this.showSelectionRing this.name}}
         ...attributes
       >
         {{#if this.reindexError}}
@@ -784,7 +785,9 @@ export default class Workspace extends Component<Signature> {
          sees the star the same way a pointer user does on hover — not only
          when the star itself is the focused tab stop. */
       .workspace-card:hover .tile-favorite-btn,
-      .workspace-card:has(:focus-visible) .tile-favorite-btn {
+      .workspace-card.is-selected .tile-favorite-btn,
+      .workspace-card:has(:focus-visible:not([data-nav-index]))
+        .tile-favorite-btn {
         opacity: 1;
         background: var(--boxel-dark-40);
         backdrop-filter: blur(6px);
@@ -839,7 +842,8 @@ export default class Workspace extends Component<Signature> {
         --boxel-icon-button-height: var(--boxel-button-xs);
       }
       .workspace-card:hover .tile-menu-btn,
-      .workspace-card:has(:focus-visible) .tile-menu-btn {
+      .workspace-card.is-selected .tile-menu-btn,
+      .workspace-card:has(:focus-visible:not([data-nav-index])) .tile-menu-btn {
         opacity: 1;
         background: var(--boxel-dark-40);
         backdrop-filter: blur(6px);
@@ -969,9 +973,10 @@ export default class Workspace extends Component<Signature> {
           transparent
         );
       }
+      /* The pill carries the keyboard cursor; the ring around the desk
+         shows it, so the pill draws no outline of its own. */
       .desk-pill:focus-visible {
-        outline: 2px solid var(--boxel-highlight);
-        outline-offset: 2px;
+        outline: none;
       }
       .desk-pill-icon {
         --boxel-realm-icon-size: 1.625rem;
@@ -1211,14 +1216,12 @@ export default class Workspace extends Component<Signature> {
         text-align: center;
         letter-spacing: var(--boxel-lsp);
       }
+      /* One line under every tile, so tiles keep one height and their
+         chips line up across the row; hovering the name shows it whole. */
       .info .name {
+        display: block;
         color: var(--boxel-light);
         font: 400 var(--boxel-font-sm);
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        text-wrap: wrap;
-        overflow-wrap: anywhere;
       }
       .visibility {
         color: var(--boxel-400);
@@ -1425,11 +1428,9 @@ export default class Workspace extends Component<Signature> {
         z-index: 1;
         border-radius: inherit;
       }
+      /* The row carries the keyboard cursor; its ring shows it. */
       .row-open:focus-visible {
         outline: none;
-      }
-      .workspace-card.is-compact:has(.row-open:focus-visible) {
-        box-shadow: inset 0 0 0 2px var(--boxel-highlight);
       }
       .is-compact .workspace-realm-icon {
         --boxel-realm-icon-size: 1.5rem;
@@ -1448,7 +1449,6 @@ export default class Workspace extends Component<Signature> {
         text-align: left;
       }
       .is-compact .info .name {
-        -webkit-line-clamp: 1;
         font-weight: 600;
       }
       .is-compact .visibility {
