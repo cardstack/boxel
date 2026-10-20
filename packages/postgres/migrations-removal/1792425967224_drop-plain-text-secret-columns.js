@@ -60,16 +60,19 @@ exports.up = (pgm) => {
 // expects, since the plain-text values are gone. `signing_secret` comes back
 // nullable: the rows already present have no value to give it.
 //
-// A revision that reads these columns treats them as the source, so starting
-// one against rows the current revision wrote loses secrets, whether that is
-// a rollback past this migration or one before it (the realm server's rollout
-// failing and its tasks rolling back before this migration runs): its startup
-// backfill empties the sealed columns of a proxy endpoint with no plain-text
-// key, and it can't verify a webhook with no plain-text secret. After either,
-// add again every system key written since the current revision rolled out
-// (`boxel realm-server keys list` and the `proxy_endpoint_history` entries
-// show which) and rotate every webhook secret issued since then; after a
-// rollback past this migration, that is every key and secret.
+// A revision that reads these columns can't be rolled back to without loss
+// or an outage once the current revision has run:
+// - before this migration runs (a failed realm-server rollout rolling back),
+//   its startup backfill empties the sealed columns of a proxy endpoint with
+//   no plain-text key, and it can't verify a webhook with no plain-text
+//   secret, so the system keys and webhook secrets written since need adding
+//   again or rotating (`boxel realm-server keys list` and the
+//   `proxy_endpoint_history` entries show which keys);
+// - after it, redeploying that revision's image without `down` leaves it
+//   selecting the dropped columns: it loads no proxy destination and answers
+//   every webhook delivery with 500 until the columns exist again;
+// - after `down`, the columns are empty, so every system key needs adding
+//   again and every webhook secret rotating.
 exports.down = (pgm) => {
   pgm.sql(
     `ALTER TABLE proxy_endpoints ADD COLUMN IF NOT EXISTS api_key varchar`,

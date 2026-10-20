@@ -1,6 +1,6 @@
 ---
 name: secrets-at-rest
-description: Operate and diagnose the realm server's secrets-at-rest helper (`packages/realm-server/lib/secrets-at-rest/`) — AES-256-GCM sealing of stored secrets (API keys, OAuth client secrets and refresh tokens, service-account files, endpoint keys, webhook signing secrets) under a 32-byte data key that KMS wraps, bound to its field (table and column), owner, row id and destination. Covers the two providers (KMS and the local development key), the startup self-check the realm server and the worker manager run (workers take their keys from the manager) and what its log line reports, why a deployed server refuses to start, the KMS encryption contexts involved, key ids, re-sealing a secret with its destination, rotating the data key (`boxel realm-server data-keys status | reseal`, `SECRETS_ADDITIONAL_WRAPPED_DATA_KEYS`, the re-seal pass, retiring an old data key, the sealed census), the plaintext census (no plain-text secret columns remain), the sealed proxy endpoint (system) keys in `proxy_endpoints` and incoming webhook signing secrets in `incoming_webhooks`, what a read does with a sealed value that won't open, why a webhook's signing secret is shown only once, and the post-deploy audit that checks, as the read-only AWS role, that a deployed environment seals with KMS, holds no plain-text secrets, lets only the task roles decrypt and withholds the secret tables from the read-only database role. Use when the realm server or a worker won't boot with "Secrets-at-rest self-check failed", when reading the `secrets-at-rest` boot line, when a stored secret fails to open with SecretDecryptionError, when a table starts sealing its secrets with the helper, when rotating the data key, when a proxy endpoint is refused or a webhook's deliveries can't be verified, or after a deploy that changes any of this, to audit the deployed environment.
+description: Operate and diagnose the realm server's secrets-at-rest helper (`packages/realm-server/lib/secrets-at-rest/`) — AES-256-GCM sealing of stored secrets (API keys, OAuth client secrets and refresh tokens, service-account files, endpoint keys, webhook signing secrets) under a 32-byte data key that KMS wraps, bound to its field (table and column), owner, row id and destination. Covers the two providers (KMS and the local development key), the startup self-check the realm server and the worker manager run (workers take their keys from the manager) and what its log line reports, why a deployed server refuses to start, the KMS encryption contexts involved, key ids, re-sealing a secret with its destination, rotating the data key (`boxel realm-server data-keys status | reseal`, `SECRETS_ADDITIONAL_WRAPPED_DATA_KEYS`, the re-seal pass, retiring an old data key, the sealed census), the plaintext census and the drop of the plain-text columns, the sealed proxy endpoint (system) keys in `proxy_endpoints` and incoming webhook signing secrets in `incoming_webhooks`, what a read does with a sealed value that won't open, why a webhook's signing secret is shown only once, and the post-deploy audit that checks, as the read-only AWS role, that a deployed environment seals with KMS, holds no plain-text secrets, lets only the task roles decrypt and withholds the secret tables from the read-only database role. Use when the realm server or a worker won't boot with "Secrets-at-rest self-check failed", when reading the `secrets-at-rest` boot line, when a stored secret fails to open with SecretDecryptionError, when a table starts sealing its secrets with the helper, when rotating the data key, when a proxy endpoint is refused or a webhook's deliveries can't be verified, or after a deploy that changes any of this, to audit the deployed environment.
 ---
 
 # Secrets at rest (operators)
@@ -213,22 +213,34 @@ it.
 
 ## Plaintext census
 
-A table that adopts the helper while it still has a plain-text column adds a
-`PlaintextCensusEntry` (table, column, a `count` query of rows still in plain
-text) to `PLAINTEXT_CENSUS` in `lib/secrets-at-rest/index.ts`, and removes it
-once the column is dropped. The realm server logs one line per entry at
-startup, such as
-`plaintext census: <table>.<column> plaintextRows=0`, and a count that fails
-logs a warning and doesn't stop startup.
+`PLAINTEXT_CENSUS` in `lib/secrets-at-rest/index.ts` lists each column that
+holds a secret in plain text alongside its sealed copy: `proxy_endpoints.api_key`
+and `incoming_webhooks.signing_secret`. At startup the realm server counts the
+rows that still hold one, for each listed column that exists:
 
-No column holds a secret in plain text, so the census has no entries and
-logs:
+```
+plaintext census: proxy_endpoints.api_key plaintextRows=12
+plaintext census: incoming_webhooks.signing_secret plaintextRows=40
+```
+
+The application reads and writes only the sealed columns, so these counts are
+rows holding a plain-text copy written by a revision that kept one. They stay
+until the
+removal migrations drop both columns, after the realm server is stable on the
+revision that runs them. A boot line comes before that, so the deploy that
+drops the columns still logs these counts. Every later start logs:
 
 ```
 plaintext census: no plain-text secret columns
 ```
 
-Every stored secret is held only in its sealed columns.
+A count that fails logs a warning and doesn't stop startup.
+
+Dropping a column only marks it dropped, and a row written before the drop
+keeps its bytes in the table's pages until the row is rewritten. The removal
+migration that follows the drop runs `VACUUM FULL` on both tables, which
+rewrites them without those bytes. WAL archives and database snapshots taken
+before the rewrite keep the plain text until they expire.
 
 ## Tables that seal in their own row
 
@@ -255,16 +267,22 @@ columns.
 ### Rolling back to a revision that reads plain text
 
 A revision that still reads `proxy_endpoints.api_key` or
-`incoming_webhooks.signing_secret` treats those columns as the source. Started
-against rows a sealed-only revision wrote, whether because a realm-server
-rollout failed and rolled back before the removal migrations ran or because the
-migrations were rolled back past the drop, its startup backfill empties the
-sealed columns of every proxy endpoint with no plain-text key, and it can't
-verify a webhook with no plain-text secret. After such a rollback, add again
-every system key written since the sealed-only revision rolled out
-(`boxel realm-server keys list` and `proxy_endpoint_history` show which) and
-rotate every webhook secret issued since then. After a rollback past the drop,
-that is every key and secret.
+`incoming_webhooks.signing_secret` can't be rolled back to without loss or an
+outage once a sealed-only revision has run:
+
+- **Before the drop.** The revision treats those columns as the source. If a
+  realm-server rollout fails and rolls back before the removal migrations
+  run, its startup backfill empties the sealed columns of every proxy
+  endpoint written since with no plain-text key, and it can't verify a
+  webhook with no plain-text secret. Add those system keys again
+  (`boxel realm-server keys list` and `proxy_endpoint_history` show which) and
+  rotate those webhook secrets.
+- **After the drop, redeploying its image.** Its reads select the dropped
+  columns, so it loads no proxy destination and answers every webhook
+  delivery with 500 until the columns exist again. Roll forward instead.
+- **After the drop, migrating down first.** The columns come back empty, and
+  the revision behaves as before the drop for every row: add every system key
+  again and rotate every webhook secret.
 
 ## Proxy endpoint keys
 
@@ -443,11 +461,14 @@ window opened appear too; judge the current ones. What should be there:
 worker manager` naming its task's key ids.
 - **Every realm-server task:** `plaintext census: no plain-text secret
 columns`, and `sealed census:` naming only the key ids the self-check
-  loaded. A table with no rows reports `rowsByKeyId=none`.
+  loaded. A table with no rows reports `rowsByKeyId=none`. A task that
+  started before the removal migrations ran (the deploy that drops the
+  columns) logs `plaintextRows=` counts instead; step 4 checks the columns
+  are gone.
 - **None of:** `Secrets-at-rest self-check failed`, `Could not get the
-secrets keyring`, `sealed census failed`, or a `plaintext census:` line
-  naming a column. Each failure takes the place of the line it would have
-  logged, so a missing census line is a finding too.
+secrets keyring`, `sealed census failed` or
+  `plaintext census: counting … failed`. Each failure takes the place of the
+  line it would have logged, so a missing census line is a finding too.
 
 ### 2. The key and its policy
 
@@ -605,7 +626,11 @@ PGUSER=$CLAUDE_USER PGPASSWORD=$(aws --profile $PROFILE ssm get-parameter \
                       to_regclass('user_keys'), to_regclass('key_write_tickets'),
                       to_regclass('secure_sessions'))
         AND reader.oid <> t.relowner AND c.attnum > 0 AND NOT c.attisdropped
-        AND has_column_privilege(reader.oid, t.oid, c.attnum, 'SELECT')"
+        AND has_column_privilege(reader.oid, t.oid, c.attnum, 'SELECT')" \
+  -c "SELECT attrelid::regclass, attname FROM pg_attribute
+      WHERE (attrelid, attname) IN (('proxy_endpoints'::regclass, 'api_key'),
+                                    ('incoming_webhooks'::regclass, 'signing_secret'))
+        AND NOT attisdropped"
 ```
 
 `LIMIT 0` means a table that is wrongly readable prints its column names and
@@ -619,9 +644,12 @@ What should be there:
   deployed revision doesn't have yet answers `relation "<table>" does not
 exist` instead. Check that against the revision from step 0 before taking it
   as a finding.
-- `(0 rows)` from the last query. It asks the same question as the migration that
-  checks these grants, about `readonly_role` and every role that reads through
-  it. A row names a role and a column it can read.
+- `(0 rows)` from the role query. It asks the same question as the migration
+  that checks these grants, about `readonly_role` and every role that reads
+  through it. A row names a role and a column it can read.
+- `(0 rows)` from the last query: neither plain-text column exists. The
+  catalog is readable to the role even where the tables aren't. A row names a
+  column the removal migrations haven't dropped yet.
 
 The list of tables is the one that migration
 (`check-readonly-role-cant-read-withheld-tables`) checks, plus

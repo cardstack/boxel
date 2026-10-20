@@ -3,9 +3,11 @@ const { module, test } = QUnit;
 import { basename, dirname, join } from 'path';
 import { createRequire } from 'module';
 import { insertIncomingWebhookRow, setupDB } from './helpers/index.ts';
+import { logLinesDuring } from './helpers/log-capture.ts';
 import {
   installSecretsKeyring,
   LocalKeyProvider,
+  reportPlaintextCensus,
   resetSecretsAtRest,
 } from '../lib/secrets-at-rest/index.ts';
 import {
@@ -128,6 +130,37 @@ module(basename(import.meta.filename), function () {
         ),
         'survives-the-drop',
       );
+    });
+
+    test('the plaintext census counts the rows holding plain text while the columns exist', async function (assert) {
+      async function censusLines() {
+        let lines = await logLinesDuring(['secrets-at-rest'], () =>
+          reportPlaintextCensus(dbAdapter),
+        );
+        return lines
+          .map(({ message }) => message)
+          .filter((message) => message.startsWith('plaintext census:'));
+      }
+      await runMigration('down');
+      await saveProxyEndpoint(dbAdapter, {
+        url: OPENROUTER_URL,
+        apiKey: 'sk-or-v1-counted',
+        creditStrategy: 'openrouter',
+        supportsStreaming: true,
+      });
+      await dbAdapter.execute(
+        `UPDATE proxy_endpoints SET api_key = 'sk-or-v1-counted'`,
+      );
+
+      assert.deepEqual(await censusLines(), [
+        'plaintext census: proxy_endpoints.api_key plaintextRows=1',
+        'plaintext census: incoming_webhooks.signing_secret plaintextRows=0',
+      ]);
+
+      await runMigration('up');
+      assert.deepEqual(await censusLines(), [
+        'plaintext census: no plain-text secret columns',
+      ]);
     });
 
     test('stops rather than drop a key held only in plain text', async function (assert) {
