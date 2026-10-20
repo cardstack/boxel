@@ -451,66 +451,108 @@
     letter-spacing: var(--boxel-lsp);
   }
 
-  /* boxel-ui InputGroup, for the username's "@" and server name. */
-  .input-group {
+  /* boxel-ui InputGroup with Text accessories, for the username's "@" and
+     server name. */
+  .input-group-container {
     display: flex;
+    flex-direction: column;
+  }
+
+  .boxel-input-group {
+    --boxel-input-group-padding-x: var(--boxel-sp-sm);
+    --boxel-input-group-padding-y: var(--boxel-sp-xxs);
+    --boxel-input-group-border-color: var(
+      --border,
+      var(--boxel-form-control-border-color)
+    );
+    --boxel-input-group-border-radius: var(--boxel-form-control-border-radius);
+    --boxel-input-group-inner-border-radius: calc(
+      var(--boxel-input-group-border-radius) - 1px
+    );
+    --boxel-input-group-height: var(
+      --boxel-input-height,
+      var(--boxel-form-control-height)
+    );
+
+    border-radius: var(--boxel-input-group-border-radius);
+    cursor: text;
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
     align-items: stretch;
     width: 100%;
-    min-height: var(--boxel-form-control-height);
-    padding: 0;
+    max-width: 100%;
+    min-height: var(--boxel-input-group-height);
     background-color: var(--background, var(--boxel-light));
     color: var(--foreground, var(--boxel-dark));
-    border: 1px solid var(--border, var(--boxel-form-control-border-color));
-    border-radius: var(--boxel-form-control-border-radius);
-    outline: 1px solid transparent;
-    transition:
-      var(--boxel-transition-properties),
-      outline-color var(--boxel-transition);
+    border: 1px solid var(--boxel-input-group-border-color);
   }
 
-  .input-group:hover:not(:focus-within):not(.invalid) {
-    border-color: currentColor;
-  }
-
-  .input-group:focus-within {
-    outline-color: var(--ring, var(--boxel-highlight));
-    border-color: var(--ring, var(--boxel-highlight));
-  }
-
-  .input-group.invalid {
-    border-color: var(--destructive, var(--boxel-error-100));
-    box-shadow: 0 0 0 1px var(--destructive, var(--boxel-error-100));
-  }
-
-  .input-group .group-input {
-    flex: 1;
+  .boxel-input-group > .form-control {
+    appearance: none;
+    background-clip: padding-box;
+    display: block;
+    flex: 1 1 auto;
     min-width: 0;
-    margin: 0;
-    padding: var(--boxel-sp-xxs) var(--boxel-sp-sm);
-    background: transparent;
+    padding: var(--boxel-input-group-padding-y)
+      var(--boxel-input-group-padding-x);
+    width: 1%;
+    background-color: inherit;
     color: inherit;
+    position: relative;
+    z-index: 1;
+    outline-offset: 0;
+    margin: 0;
+    min-height: inherit;
+    box-shadow: none;
     border: none;
     outline: none;
   }
 
-  .input-group .group-input::placeholder {
-    color: var(--muted-foreground, var(--boxel-450));
+  .boxel-input-group:focus-within:not(.boxel-input-group--invalid) {
+    outline: 1px solid var(--ring, var(--boxel-highlight));
+    border-color: var(--ring, var(--boxel-highlight));
   }
 
-  .input-group .accessory {
-    display: flex;
+  .boxel-input-group > :last-child {
+    border-top-right-radius: var(--boxel-input-group-inner-border-radius);
+    border-bottom-right-radius: var(--boxel-input-group-inner-border-radius);
+  }
+
+  .boxel-input-group > :not(:last-child) {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+  }
+
+  .boxel-input-group > :first-child {
+    border-top-left-radius: var(--boxel-input-group-inner-border-radius);
+    border-bottom-left-radius: var(--boxel-input-group-inner-border-radius);
+  }
+
+  .boxel-input-group > :not(:first-child) {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+  }
+
+  .boxel-input-group--invalid {
+    box-shadow: 0 0 0 1px var(--destructive, var(--boxel-error-100));
+    border-color: var(--destructive, var(--boxel-error-100));
+  }
+
+  .text-accessory {
     align-items: center;
-    padding: 0 var(--boxel-sp-sm);
     color: color-mix(in oklch, var(--muted-foreground) 55%, var(--foreground));
+    display: flex;
     font-size: var(--boxel-font-size-sm);
+    padding: var(--boxel-input-group-padding-y)
+      var(--boxel-input-group-padding-x);
+    text-align: center;
+    white-space: nowrap;
   }
 
-  .input-group .accessory.prefix {
+  /* RegisterUser */
+  .text-accessory.username-prefix {
     padding-right: 0;
-  }
-
-  .input-group .accessory.prefix + .group-input {
-    padding-left: var(--boxel-sp-5xs);
   }
 }
 
@@ -708,6 +750,14 @@ body {
 }
 
 /* RegisterUser and ForgotPassword */
+.registration-page {
+  display: contents;
+}
+
+.registration-page form {
+  display: block;
+}
+
 .button-wrapper {
   width: 100%;
   margin-top: var(--boxel-sp-xl);

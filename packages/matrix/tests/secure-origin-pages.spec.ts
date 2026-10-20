@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { expect, test } from './fixtures.ts';
-import type { Page, Route, TestInfo } from '@playwright/test';
+import type { Frame, Page, Route, TestInfo } from '@playwright/test';
 import { appURL, secureOriginURL } from '../support/isolated-realm-server.ts';
 import {
   REGISTRATION_TOKEN,
@@ -42,8 +42,10 @@ async function signedInUser(secure: Page): Promise<string> {
 }
 
 // How far apart, in any colour channel out of 255, two pixels may be and
-// still count as the same.
-const PIXEL_TOLERANCE = 8;
+// still count as the same: the browser may shade a rounded edge, or the
+// fringe of a glyph, a little differently from one page to the other. A
+// shifted or restyled element differs by far more.
+const PIXEL_TOLERANCE = 32;
 
 // How many pixels of two same-sized screenshots differ by more than
 // `tolerance` in any colour channel, decoded and compared in a blank page.
@@ -52,11 +54,12 @@ async function differingPixels(
   a: Buffer,
   b: Buffer,
   tolerance: number,
+  skip?: { x: number; y: number; width: number; height: number },
 ): Promise<number> {
   let scratch = await page.context().newPage();
   try {
     return await scratch.evaluate(
-      async ({ a, b, tolerance }) => {
+      async ({ a, b, tolerance, skip }) => {
         async function pixels(base64: string) {
           let bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
           let bitmap = await createImageBitmap(
@@ -73,6 +76,17 @@ async function differingPixels(
         }
         let count = 0;
         for (let i = 0; i < first.data.length; i += 4) {
+          let x = (i / 4) % first.width;
+          let y = Math.floor(i / 4 / first.width);
+          if (
+            skip &&
+            x >= Math.floor(skip.x) &&
+            x < Math.ceil(skip.x + skip.width) &&
+            y >= Math.floor(skip.y) &&
+            y < Math.ceil(skip.y + skip.height)
+          ) {
+            continue;
+          }
           for (let channel = 0; channel < 3; channel++) {
             if (
               Math.abs(first.data[i + channel] - second.data[i + channel]) >
@@ -85,11 +99,132 @@ async function differingPixels(
         }
         return count;
       },
-      { a: a.toString('base64'), b: b.toString('base64'), tolerance },
+      { a: a.toString('base64'), b: b.toString('base64'), tolerance, skip },
     );
   } finally {
     await scratch.close();
   }
+}
+
+async function expectAppFields(page: Page) {
+  await expect(
+    page
+      .frameLocator('[data-test-credential-fields-frame]')
+      .locator('[data-test-password-field]'),
+  ).toBeVisible();
+}
+
+// The app's page and the secure origin's, drawn in the same browser, are
+// compared with each other pixel for pixel, so neither can drift from the
+// other. Both screenshots are attached, and kept with the test's results.
+//
+// The app draws its password fields in a frame, and the browser may place the
+// frame's text a pixel apart from the same text drawn in a page, so the
+// frame's area is left out of the pixel comparison. Its fields are compared
+// instead by where each label and input is, to a hundredth of a pixel, and by
+// how each is styled.
+async function expectSamePixels(
+  testInfo: TestInfo,
+  name: string,
+  app: Page,
+  secure: Page,
+) {
+  let frame = app.locator('[data-test-credential-fields-frame]');
+  let frameBox = (await frame.count()) > 0 ? await frame.boundingBox() : null;
+  let shots: Buffer[] = [];
+  // Nothing hovered on either page.
+  await app.mouse.move(0, 0);
+  await secure.mouse.move(0, 0);
+  for (let [side, page] of [
+    ['app', app],
+    ['secure', secure],
+  ] as const) {
+    let shot = await settledScreenshot(page);
+    await testInfo.attach(`${side}-${name}`, {
+      body: shot,
+      contentType: 'image/png',
+    });
+    writeFileSync(testInfo.outputPath(`${side}-${name}.png`), shot);
+    shots.push(shot);
+  }
+  if (frameBox) {
+    let appFrame = (await (await frame.elementHandle())!.contentFrame())!;
+    let appFields = await fieldLayout(appFrame, frameBox);
+    expect(appFields.length).toBeGreaterThan(0);
+    expect(
+      await fieldLayout(
+        secure,
+        { x: 0, y: 0 },
+        appFields.map(({ name }) => name),
+      ),
+      `the secure origin's ${name} page lays out and styles the password fields as the app's do`,
+    ).toEqual(appFields);
+  }
+  expect(
+    await differingPixels(
+      app,
+      shots[0],
+      shots[1],
+      PIXEL_TOLERANCE,
+      frameBox ?? undefined,
+    ),
+    `pixels the secure origin's ${name} page draws differently from the app's (compare the attached screenshots)`,
+  ).toBe(0);
+}
+
+// Where each visible input and its label are, offset by `origin`, and how
+// they're styled, by the input's name: all of them, or those `names` lists.
+async function fieldLayout(
+  target: Page | Frame,
+  origin: { x: number; y: number },
+  names?: string[],
+) {
+  return await target.evaluate(
+    ({ origin, names }) => {
+      let round = (n: number) => Math.round(n * 100) / 100;
+      let box = (element: Element) => {
+        let r = element.getBoundingClientRect();
+        return [
+          round(r.x + origin.x),
+          round(r.y + origin.y),
+          round(r.width),
+          round(r.height),
+        ];
+      };
+      let style = (element: Element) => {
+        let s = getComputedStyle(element);
+        return [
+          s.font,
+          s.letterSpacing,
+          s.color,
+          s.backgroundColor,
+          s.border,
+          s.borderRadius,
+          s.padding,
+        ].join(' | ');
+      };
+      let inputs = [
+        ...document.querySelectorAll<HTMLInputElement>('input[name]'),
+      ].filter(
+        (input) => !input.hidden && (!names || names.includes(input.name)),
+      );
+      return inputs.map((input) => {
+        let label = input
+          .closest('.boxel-field')
+          ?.querySelector('.boxel-label');
+        return {
+          name: input.name,
+          input: box(input),
+          inputStyle: style(input),
+          placeholder: input.placeholder,
+          label: label ? box(label) : null,
+          labelStyle: label ? style(label) : null,
+          labelText: label?.textContent?.trim() ?? null,
+        };
+      });
+    },
+    { origin, names },
+  );
 }
 
 // A screenshot of the page once its typeface has loaded and it has stopped
@@ -164,40 +299,46 @@ test.describe('The secure origin’s pages', () => {
   test('the sign-in page looks exactly like the app’s', async ({
     page,
   }, testInfo) => {
-    // The two pages are drawn in the same browser and compared with each
-    // other, pixel for pixel, so neither can drift from the other.
     await page.goto(appURL);
     await expect(page.locator('[data-test-google-login-btn]')).toBeVisible();
-    await expect(
-      page
-        .frameLocator('[data-test-credential-fields-frame]')
-        .locator('[data-test-password-field]'),
-    ).toBeVisible();
-    let app = await settledScreenshot(page);
-    await testInfo.attach('app-sign-in', {
-      body: app,
-      contentType: 'image/png',
-    });
-    writeFileSync(testInfo.outputPath('app-sign-in.png'), app);
-
+    await expectAppFields(page);
     let secure = await openSecurePage(page, 'mode=sign-in');
     await expect(secure.locator('[data-test-secure-google]')).toBeVisible();
     // The secure page starts with the email field focused, which the app's
     // doesn't; with focus elsewhere, the two match.
     await secure.evaluate(() => (document.activeElement as HTMLElement).blur());
-    let secureShot = await settledScreenshot(secure);
-    await testInfo.attach('secure-sign-in', {
-      body: secureShot,
-      contentType: 'image/png',
-    });
-    writeFileSync(testInfo.outputPath('secure-sign-in.png'), secureShot);
-    // The browser may shade a rounded edge a level or two differently from
-    // one page to the other (the app's fields are a frame, placed at a
-    // fraction of a pixel); anything more than that is a difference.
-    expect(
-      await differingPixels(page, app, secureShot, PIXEL_TOLERANCE),
-      'pixels the secure origin’s sign-in page draws differently from the app’s (compare the attached screenshots)',
-    ).toBe(0);
+    await expectSamePixels(testInfo, 'sign-in', page, secure);
+  });
+
+  test('the account creation page looks exactly like the app’s', async ({
+    page,
+  }, testInfo) => {
+    await page.goto(appURL);
+    await page.locator('[data-test-register-user]').click();
+    await expectAppFields(page);
+    // Leaving the name empty shows its error, on both pages.
+    await page.locator('[data-test-name-field]').focus();
+    await page.locator('[data-test-name-field]').blur();
+    let secure = await openSecurePage(page, 'mode=register');
+    await expect(
+      secure.locator('[data-test-secure-field="username"] .suffix'),
+    ).toHaveText('localhost');
+    await secure.getByLabel('Your Name').blur();
+    await expect(
+      secure.locator('[data-test-boxel-input-error-message]'),
+    ).toHaveText('Your name is missing');
+    await expectSamePixels(testInfo, 'register', page, secure);
+  });
+
+  test('the forgotten password page looks exactly like the app’s', async ({
+    page,
+  }, testInfo) => {
+    await page.goto(appURL);
+    await page.locator('[data-test-forgot-password]').click();
+    await page.locator('[data-test-email-field]').focus();
+    let secure = await openSecurePage(page, 'mode=forgot-password');
+    await expect(secure.getByLabel('Email Address')).toBeFocused();
+    await expectSamePixels(testInfo, 'forgot-password', page, secure);
   });
 
   test('the sign-in page reads and works from the keyboard as the app’s does', async ({
@@ -291,8 +432,10 @@ test.describe('The secure origin’s pages', () => {
     await expect(secure.getByLabel('Your Name')).toBeFocused();
     await expect(secure.locator('[data-test-register-btn]')).toBeDisabled();
     await expect(
-      secure.locator('[data-test-secure-field="username"] .accessory.suffix'),
-    ).toHaveText(':localhost');
+      secure.locator(
+        '[data-test-secure-field="username"] .text-accessory.suffix',
+      ),
+    ).toHaveText('localhost');
     await snapshot(testInfo, secure, 'secure-register-1-form');
 
     await fillRegistration(secure, {

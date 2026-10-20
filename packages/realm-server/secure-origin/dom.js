@@ -215,19 +215,25 @@ export function field({ label, input: inputAttributes, group, testId }) {
   let id = `secure-field-${++fieldIds}`;
   let input = h('input', {
     id,
-    class: group ? 'group-input' : 'boxel-input',
+    class: group ? 'form-control' : 'boxel-input',
     ...inputAttributes,
   });
+  // A BoxelInput is a grid around its input; an InputGroup is a bordered row
+  // of its accessories and input, with any error under it.
   let control = group
     ? h(
         'div',
-        { class: 'input-group' },
-        h('span', { class: 'accessory prefix' }, group.prefix),
+        { class: 'boxel-input-group' },
+        h('span', { class: 'text-accessory username-prefix' }, group.prefix),
         input,
-        h('span', { class: 'accessory suffix' }, group.suffix),
+        h('span', { class: 'text-accessory suffix' }, group.suffix),
       )
     : input;
-  let container = h('div', { class: 'input-container' }, control);
+  let container = h(
+    'div',
+    { class: group ? 'input-group-container' : 'input-container' },
+    control,
+  );
   let content = h('div', { class: 'content' }, container);
   let element = h(
     'div',
@@ -242,6 +248,7 @@ export function field({ label, input: inputAttributes, group, testId }) {
     ),
     content,
   );
+
   let errorElement;
   let hintElement;
   return {
@@ -255,7 +262,14 @@ export function field({ label, input: inputAttributes, group, testId }) {
       errorElement = undefined;
       input.removeAttribute('aria-invalid');
       input.removeAttribute('aria-errormessage');
-      (group ? control : input).classList.toggle('invalid', Boolean(message));
+      if (group) {
+        control.classList.toggle(
+          'boxel-input-group--invalid',
+          Boolean(message),
+        );
+      } else {
+        input.classList.toggle('invalid', Boolean(message));
+      }
       input.setAttribute(
         'data-test-boxel-input-validation-state',
         message ? 'invalid' : 'initial',

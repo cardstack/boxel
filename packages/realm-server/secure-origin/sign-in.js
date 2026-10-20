@@ -341,7 +341,6 @@ function renderSignIn(
           );
         } catch (e) {
           showError(error, signInFailed(e));
-          passwordInput.value = '';
           submitting = false;
           setLoading(submit, false);
           refresh();
