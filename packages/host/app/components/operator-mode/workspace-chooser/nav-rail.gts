@@ -158,6 +158,8 @@ export default class NavRail extends Component<Signature> {
     entry.backgroundURL ? `url("${entry.backgroundURL}")` : undefined;
 
   <template>
+    {{! Escape closes the flyout, then the rail, from any control inside it. }}
+    {{! template-lint-disable no-invalid-interactive }}
     <nav
       class='nav-rail'
       aria-label='Dashboard'

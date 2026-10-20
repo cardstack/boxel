@@ -110,8 +110,10 @@ export default class GetStarted extends Component<Signature> {
     });
   });
 
+  private agentSetupCommand = AGENT_SETUP_COMMAND;
+
   private copyAgentCommandTask = task(async () => {
-    await navigator.clipboard.writeText(AGENT_SETUP_COMMAND);
+    await navigator.clipboard.writeText(this.agentSetupCommand);
     this.copiedJustNow = true;
     if (!this.matrixService.dashboardState.agentCommandCopied) {
       await this.matrixService.updateDashboardState({
@@ -211,7 +213,7 @@ export default class GetStarted extends Component<Signature> {
                       <span class='command'>
                         <code
                           class='command-text'
-                        >{{AGENT_SETUP_COMMAND}}</code>
+                        >{{this.agentSetupCommand}}</code>
                         <Button
                           @kind='primary'
                           @size='small'
