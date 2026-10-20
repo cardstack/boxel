@@ -660,6 +660,7 @@ export class MockClient implements ExtendedClient {
       case APP_BOXEL_SYSTEM_CARD_EVENT_TYPE:
       case APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE:
       case APP_BOXEL_CATALOG_REALMS_EVENT_TYPE:
+      case APP_BOXEL_DASHBOARD_EVENT_TYPE:
       case 'm.direct':
         return this.sdk.ClientEvent.AccountData;
       case APP_BOXEL_ROOM_SKILLS_EVENT_TYPE:

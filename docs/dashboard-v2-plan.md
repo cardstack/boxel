@@ -24,7 +24,7 @@ Top to bottom, inside `workspace-chooser/index.gts`:
    - **Pinned cards.** Up to four per favorite, collaged on the tile (below). A favorite with none says how to pin.
    - **Your Workspaces** leads with the most recently updated workspaces as full wallpaper tiles, enough to fill three rows beside New Workspace (about a dozen). The rest continue straight on, with no break, as compact rows: realm mark, name, visibility, last update; the wallpaper shows on hover. After ten rows a scrim fades the last one under a **Show N more** button; **Show fewer** collapses the list again. Only rendered rows are in the DOM.
    - **Archived**, collapsed, as before.
-5. **Catalogs.** The catalog shelf (when it didn't lead the page), then the catalog workspaces as compact rows.
+5. **Catalogs.** The catalog shelf (when it didn't lead the page), then the catalog workspaces as medium wallpaper tiles.
 6. **Agents.** A pitch ("Build with the agent you already pay for"), a five-step setup for Claude Code or Codex, and Boxel AI beside it for anyone without an agent.
 
 Every section is the same dark panel family (`--boxel-700` with a hairline edge, radius 1.25rem) and one type scale: greeting 2rem, section heading 1.375rem, anything inside a section smaller than its heading.
@@ -52,9 +52,10 @@ Every section is the same dark panel family (`--boxel-700` with a hairline edge,
 
 ## The catalog shelf
 
-`catalog-showcase.gts`, the app-store treatment from the Home preview's catalog column.
+`catalog-showcase.gts`, the app-store treatment from the Home preview's catalog column: posts, not listings. The store is the one place the page leaves its dark panels, for a warm paper lead post and a white list, the way the catalog's own pages look.
 
-- **Featured** listings come from the catalog's own index card (`featured` links), so the catalog curates its lead. The lead story shows an eyebrow (Featured · kind), headline, art and an Open action; up to four rows follow with more listings.
+- **Featured** listings come from the catalog's own index card (`featured` links), so the catalog curates its lead. The lead post shows an eyebrow (Featured · kind), a headline, art, a short description and an app footer with Open; up to four rows follow with more listings, each with an Open pill.
+- **The lead's art is the listing in use:** the listing's first example card, rendered from prerendered isolated HTML as a 1000px page zoomed into the frame (the pin collage's `fitPage`). The listing thumbnail is the fallback, and a listing with an example to show is preferred as the lead.
 - **Index data only:** the search asks for `item.name`, `item.summary` and `item.cardThumbnailURL` as a sparse fieldset, so no card code loads.
 - **The kind** (Card, App, Field…) comes from the listing's folder (`…/CardListing/<id>`), since search reports the base `Listing` type.
 - **Interim copy cleanup:** names drop "Card Definition", and summaries that describe the code ("The X component…") are hidden. Real headlines and short descriptions need an editorial field on featured listings in boxel-catalog.
@@ -92,7 +93,7 @@ One Matrix account-data key, `app.boxel.dashboard` (`AppBoxelDashboardContent` i
 
 ## Still to do before this ships
 
-- **Acceptance tests:** rail and scroll-spy, scope filter, pin and auto-favorite, catalog shelf, setup progress, recent tiles and Show more. The filter tests are updated for the new control; none have been run locally yet.
+- **Test coverage gaps:** the acceptance tests (`Acceptance | workspace-chooser > dashboard`) cover the page head, catalog-first order, the rail's order, current section, flyouts and Escape, pins, pin-to-favorite and agent setup. The fixture has two workspaces, so the recent-tile / compact-row split, Show N more and keyboard navigation across the rows are untested; so is the catalog shelf, which needs the catalog realm.
 - A notice when pinning also favorites a workspace.
 - Get started's agent step should link to the Agents section and tick when setup does.
 - Linear tickets for what this defers: the catalog editorial field (a boxel-catalog change), push detection for the last setup step.

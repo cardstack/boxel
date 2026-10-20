@@ -6,7 +6,7 @@ import Component from '@glimmer/component';
 
 import { modifier } from 'ember-modifier';
 
-import { cn, cssVar, eq } from '@cardstack/boxel-ui/helpers';
+import { add, cn, cssVar, eq } from '@cardstack/boxel-ui/helpers';
 
 import {
   searchEntryWireQueryFromQuery,
@@ -66,8 +66,8 @@ const fitCanvas = modifier((element: HTMLElement) => {
   return () => observer.disconnect();
 });
 
-// Zooms a page-format card to its box in the collage, in canvas pixels.
-const fitPage = modifier(
+// Zooms a page-format card to its box (here and on the catalog shelf).
+export const fitPage = modifier(
   (element: HTMLElement, [pageWidth]: [number | undefined]) => {
     if (!pageWidth) {
       return;
@@ -145,18 +145,23 @@ export default class PinnedCards extends Component<Signature> {
         ...attributes
       >
         <div class={{cn 'canvas' (shapeClass this.shape)}}>
-          {{#each this.pins key='cardId' as |pin|}}
+          {{#each this.pins key='cardId' as |pin i|}}
             <button
               type='button'
               class={{cn 'pin' (formatClass pin.format)}}
               style={{cssVar page-width=(this.pageWidthCss pin)}}
-              aria-label='Open pinned card in {{@workspaceName}}'
+              aria-label='Open pinned card {{add
+                i
+                1
+              }} of {{this.pins.length}} in {{@workspaceName}}'
               {{fitPage (this.pageWidth pin)}}
               {{on 'click' (fn this.openPin pin.cardId)}}
               data-test-pinned-card={{pin.cardId}}
               data-test-pinned-card-format={{pin.format}}
             >
-              <span class='pin-render'>
+              {{! A preview, not the card: nothing in it takes focus or
+                  input, so an edit-format pin can't be typed into here. }}
+              <span class='pin-render' inert>
                 {{#if (eq pin.format 'edit')}}
                   <HydratableCard
                     @cardId={{pin.cardId}}

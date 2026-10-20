@@ -14,12 +14,16 @@ import { restartableTask, timeout } from 'ember-concurrency';
 import { Button, RealmIcon } from '@cardstack/boxel-ui/components';
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
+import { logger } from '@cardstack/runtime-common';
+
 import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import { formatRelativeTime } from './nav-rail';
+
+const log = logger('component:workspace-chooser/agents');
 
 const RECENT_SESSION_COUNT = 3;
 const PICKABLE_WORKSPACE_COUNT = 4;
@@ -66,6 +70,7 @@ export default class Agents extends Component {
   @tracked private copiedStep: number | null = null;
 
   private agents = AGENTS;
+  private stepCount = STEP_COUNT;
 
   private get recentSessions() {
     return this.aiAssistantPanelService.aiSessionRooms.slice(
@@ -164,18 +169,27 @@ export default class Agents extends Component {
 
   // The dashboard cannot see a terminal, so a copied command is all it can
   // count: it marks the step copied (never "done") and opens the next.
+  // A copy the browser refuses (no clipboard permission, an unfocused page)
+  // leaves the step as it was rather than raising.
   private copyTask = restartableTask(async (step: SetupStep) => {
-    await navigator.clipboard.writeText(step.command);
-    this.copiedStep = step.index;
-    let done = Math.max(this.doneCount, step.index + 1);
-    if (
-      done !== this.doneCount ||
-      !this.matrixService.dashboardState.agentCommandCopied
-    ) {
-      await this.matrixService.updateDashboardState({
-        agentSetupDone: done,
-        agentCommandCopied: true,
-      });
+    try {
+      await navigator.clipboard.writeText(step.command);
+      this.copiedStep = step.index;
+      if (
+        step.index + 1 > this.doneCount ||
+        !this.matrixService.dashboardState.agentCommandCopied
+      ) {
+        // Computed from the stored count, so a later step copied in another
+        // tab isn't wound back.
+        await this.matrixService.updateDashboardState((stored) => ({
+          agentSetupDone: Math.max(stored.agentSetupDone ?? 0, step.index + 1),
+          agentCommandCopied: true,
+        }));
+      }
+    } catch (error) {
+      log.warn(`copying setup step ${step.number} failed: ${error}`);
+      this.copiedStep = null;
+      return;
     }
     await timeout(COPIED_FEEDBACK_MS);
     this.copiedStep = null;
@@ -217,7 +231,7 @@ export default class Agents extends Component {
               <span
                 class='muted'
                 data-test-agent-setup-progress
-              >{{this.doneCount}} of 5 copied</span>
+              >{{this.doneCount}} of {{this.stepCount}} copied</span>
             </span>
             <span class='agent-pick' role='group' aria-label='Your agent'>
               {{#each this.agents as |agent|}}

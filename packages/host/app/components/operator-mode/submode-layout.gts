@@ -408,6 +408,15 @@ export default class SubmodeLayout extends Component<Signature> {
     this.isNavRailOpen = true;
   }
 
+  // Tabbing away from the wordmark, anywhere but into the rail, lets the
+  // rail go as the pointer leaving it does.
+  @action private onWorkspaceButtonFocusOut(event: Event) {
+    let next = (event as FocusEvent).relatedTarget as HTMLElement | null;
+    if (!next?.closest('[data-nav-rail]')) {
+      this.scheduleNavRailDismiss();
+    }
+  }
+
   @action private scheduleNavRailDismiss() {
     if (this.isNavRailOpen) {
       this.navRailDismissTask.perform();
@@ -516,6 +525,7 @@ export default class SubmodeLayout extends Component<Signature> {
               class='workspace-button-wrapper'
               {{on 'mouseenter' this.summonNavRail}}
               {{on 'mouseleave' this.scheduleNavRailDismiss}}
+              {{on 'focusout' this.onWorkspaceButtonFocusOut}}
             >
               <IconButton
                 @icon={{BoxelIconWithText}}
@@ -588,6 +598,7 @@ export default class SubmodeLayout extends Component<Signature> {
             <div
               class='nav-rail-edge'
               aria-hidden='true'
+              data-test-nav-rail-edge
               {{on 'mouseenter' this.summonNavRail}}
               {{on 'mouseleave' this.scheduleNavRailDismiss}}
             ></div>
@@ -815,10 +826,12 @@ export default class SubmodeLayout extends Component<Signature> {
         );
         bottom: 0;
         left: 0;
-        width: calc(var(--operator-mode-spacing) + 1rem);
+        width: var(--operator-mode-spacing);
         z-index: var(--host-nav-rail-z-index);
       }
-      @media (min-width: 80rem) {
+      /* Not where the rail stands anyway, nor on a phone or a touch screen,
+         where a strip over the page would only swallow taps. */
+      @media (min-width: 80rem), (max-width: 30rem), (hover: none) {
         .nav-rail-edge {
           display: none;
         }

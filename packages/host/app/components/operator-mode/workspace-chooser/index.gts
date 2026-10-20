@@ -37,6 +37,16 @@ import ManageCatalogs from './manage-catalogs';
 import Workspace from './workspace';
 import WorkspaceLoadingIndicator from './workspace-loading-indicator';
 
+// The catalogs the dashboard shows, page and rail alike. Production leaves
+// out the homepage realm, which is a site rather than a catalog.
+export function displayedCatalogs(realmServer: RealmServerService): string[] {
+  let realmURLs = realmServer.displayedCatalogRealmIdentifiers ?? [];
+  if (config.environment !== 'production') {
+    return realmURLs;
+  }
+  return realmURLs.filter((realmURL) => !realmURL.includes('/boxel-homepage/'));
+}
+
 // Moves `first` to the front of `urls` when it's there, keeping the rest in
 // order.
 export function leadWith<T extends string>(
@@ -67,8 +77,8 @@ const COLLAPSED_WORKSPACE_ROWS = 10;
 export const CATALOG_LEADS_BELOW = 3;
 
 // Favorites keep the roomy tile and gap; the lists below them are compact.
-const FAVORITE_MIN_WIDTH_PX = 440;
-const FAVORITE_ROW_GAP_PX = 48;
+const FAVORITE_MIN_WIDTH_REM = 27.5;
+const FAVORITE_ROW_GAP_REM = 3;
 
 export default class WorkspaceChooser extends Component<Signature> {
   @service declare matrixService: MatrixService;
@@ -184,13 +194,7 @@ export default class WorkspaceChooser extends Component<Signature> {
   }
 
   private get communityRealmIdentifiers() {
-    let realmURLs = this.realmServer.displayedCatalogRealmIdentifiers ?? [];
-    if (config.environment !== 'production') {
-      return realmURLs;
-    }
-    return realmURLs.filter(
-      (realmURL) => !realmURL.includes('/boxel-homepage/'),
-    );
+    return displayedCatalogs(this.realmServer);
   }
 
   private isHosted = (url: string): boolean => {
@@ -312,6 +316,13 @@ export default class WorkspaceChooser extends Component<Signature> {
   // mirror however many tiles actually fit per row at the current viewport
   // width (see measureWorkspaceGrid below).
   @tracked private workspaceSectionWidth = 0;
+  // The root font size, so the favorites' rem sizes become pixels the way
+  // CSS resolves them for this user.
+  @tracked private remPx = 16;
+
+  private get favoriteGapPx() {
+    return FAVORITE_ROW_GAP_REM * this.remPx;
+  }
   @tracked private workspaceRowColumns = 0;
   @tracked private recentTileColumns = 0;
 
@@ -334,8 +345,8 @@ export default class WorkspaceChooser extends Component<Signature> {
     return Math.max(
       1,
       Math.floor(
-        (this.workspaceSectionWidth + FAVORITE_ROW_GAP_PX) /
-          (FAVORITE_MIN_WIDTH_PX + FAVORITE_ROW_GAP_PX),
+        (this.workspaceSectionWidth + this.favoriteGapPx) /
+          (FAVORITE_MIN_WIDTH_REM * this.remPx + this.favoriteGapPx),
       ),
     );
   }
@@ -348,7 +359,7 @@ export default class WorkspaceChooser extends Component<Signature> {
       return null;
     }
     let n = this.favoritesSlotCount;
-    return (this.workspaceSectionWidth - (n - 1) * FAVORITE_ROW_GAP_PX) / n;
+    return (this.workspaceSectionWidth - (n - 1) * this.favoriteGapPx) / n;
   }
 
   // Applied to real favorited tiles (via cssVar, see workspace.gts) so they
@@ -364,6 +375,8 @@ export default class WorkspaceChooser extends Component<Signature> {
   private measureWorkspaceGrid = modifier((el: HTMLElement) => {
     let measure = () => {
       this.workspaceSectionWidth = el.clientWidth;
+      this.remPx =
+        parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
       let recent = el.querySelector<HTMLElement>('[data-workspace-recent]');
       this.recentTileColumns = recent
         ? getComputedStyle(recent).gridTemplateColumns.split(' ').length
@@ -966,7 +979,7 @@ export default class WorkspaceChooser extends Component<Signature> {
                 data-test-catalog-empty
               >{{this.catalogEmptyMessage}}</span>
             {{else}}
-              <div class='workspace-list is-compact' data-test-catalog-list>
+              <div class='workspace-list is-medium' data-test-catalog-list>
                 {{#each
                   this.filteredCatalogRealmIdentifiers
                   as |realmIdentifier i|
@@ -975,7 +988,6 @@ export default class WorkspaceChooser extends Component<Signature> {
                     <Workspace
                       @realmIdentifier={{realmIdentifier}}
                       @navIndex={{navIndex}}
-                      @compact={{true}}
                       @isSelected={{eq this.currentIndex navIndex}}
                       @selectionActive={{this.isSelectionActive}}
                     />
@@ -1177,7 +1189,7 @@ export default class WorkspaceChooser extends Component<Signature> {
       .workspace-list {
         display: flex;
         flex-wrap: wrap;
-        /* Matches FAVORITE_ROW_GAP_PX, which sizes the favorite tiles. */
+        /* Matches FAVORITE_ROW_GAP_REM, which sizes the favorite tiles. */
         gap: 3rem;
         padding: var(--boxel-sp-xs) 0;
       }
@@ -1195,8 +1207,10 @@ export default class WorkspaceChooser extends Component<Signature> {
         flex-direction: column;
         gap: var(--boxel-sp-xs);
       }
-      /* The recent workspaces keep the full wallpaper tile, a size up. */
-      .workspace-list.is-recent {
+      /* Recent workspaces and catalogs keep the full wallpaper tile, at a
+         medium size that fills the row. */
+      .workspace-list.is-recent,
+      .workspace-list.is-medium {
         --workspace-chooser-card-width: 100%;
         --workspace-chooser-tile-width: 100%;
         --workspace-chooser-tile-height: 8rem;

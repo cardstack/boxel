@@ -66,7 +66,10 @@ import {
   getMenuItems,
   baseCardRef,
 } from '@cardstack/runtime-common';
-import type { DashboardPinFormat } from '@cardstack/runtime-common/matrix-constants';
+import {
+  MAX_DASHBOARD_PINS_PER_WORKSPACE,
+  type DashboardPinFormat,
+} from '@cardstack/runtime-common/matrix-constants';
 
 import {
   stackItemTypeToStoreReadType,
@@ -760,7 +763,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
               action: () => this.matrixService.pinCard(realmURL, cardId),
             })
           : new MenuItem({
-              label: 'Pin to Dashboard (4 pinned — unpin one first)',
+              label: `Pin to Dashboard (${MAX_DASHBOARD_PINS_PER_WORKSPACE} pinned — unpin one first)`,
               icon: Pin,
               action: () => undefined,
               disabled: true,

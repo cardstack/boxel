@@ -1204,24 +1204,267 @@ module('Acceptance | workspace-chooser', function (hooks) {
         let cardEl = document.querySelector(cardSelector) as HTMLElement | null;
         assert.ok(cardEl, 'workspace-card element is present in the DOM');
 
-        // ItemContainer (.workspace button) is hard-pinned to
-        // var(--boxel-xxs-container) (250px) in item-container.gts. With the
-        // .info > .name 2-line clamp + text-wrap: wrap, the widest child of
-        // .workspace-card is the tile, so the column's fit-content width
-        // resolves to 250px. Reading the resolved CSS width (rather than
-        // comparing two laid-out flex boxes via offsetWidth) is deterministic
-        // and doesn't depend on subpixel/flex layout timing.
+        // Recent workspaces fill equal grid columns, and the name is clamped
+        // under the tile, so a long name must leave its card exactly as wide
+        // as a short-named one beside it. Reading the resolved CSS widths is
+        // deterministic and doesn't depend on subpixel layout timing.
+        let shortCardEl = document.querySelector(
+          '[data-test-workspace-list] [data-test-workspace="Workspace B"]',
+        ) as HTMLElement | null;
         let cardWidth = cardEl
           ? parseFloat(window.getComputedStyle(cardEl).width)
           : NaN;
+        let shortCardWidth = shortCardEl
+          ? parseFloat(window.getComputedStyle(shortCardEl).width)
+          : NaN;
         assert.strictEqual(
           cardWidth,
-          250,
-          `workspace-card resolves to the tile width (250px) regardless of name length; got ${cardWidth}px`,
+          shortCardWidth,
+          `a long name doesn't widen its card; got ${cardWidth}px beside ${shortCardWidth}px`,
         );
       } finally {
         restoreA();
       }
+    });
+  });
+
+  module('dashboard', function () {
+    // The rail stays hidden below the wide breakpoint until it's summoned;
+    // nearing the left edge summons it, as hovering the wordmark does.
+    // The rail is always in the DOM, hidden until summoned, so wait for the
+    // summons itself rather than the element.
+    async function summonRail() {
+      await triggerEvent('[data-test-nav-rail-edge]', 'mouseenter');
+      await waitFor('[data-test-nav-rail-summoned="true"]');
+    }
+
+    function sectionOrder(selector: string, attribute: string) {
+      return [...document.querySelectorAll(selector)].map(
+        (el) => el.getAttribute(attribute) ?? '',
+      );
+    }
+
+    test('the page head greets the user and shows everything by default', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      assert.dom('[data-test-dashboard-greeting]').includesText('Good');
+      assert
+        .dom('[data-test-dashboard-filter="all"]')
+        .hasAttribute('aria-pressed', 'true');
+      assert
+        .dom('[data-test-dashboard-filter="hosted"]')
+        .hasAttribute('aria-pressed', 'false');
+    });
+
+    test('with few workspaces of their own, the catalog leads the page and the rail', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      await summonRail();
+
+      assert.deepEqual(
+        sectionOrder('[data-dashboard-section]', 'data-dashboard-section'),
+        ['catalogs', 'workspaces', 'agents'],
+        'the page puts the catalog first',
+      );
+      assert.deepEqual(
+        sectionOrder('[data-test-nav-rail-item]', 'data-test-nav-rail-item'),
+        ['catalogs', 'workspaces', 'agents'],
+        'the rail lists the sections in page order',
+      );
+    });
+
+    test('choosing a section in the rail marks it as the one being read', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      await summonRail();
+
+      await click('[data-test-nav-rail-item="agents"]');
+
+      assert
+        .dom('[data-test-nav-rail-item="agents"]')
+        .hasAttribute('aria-current', 'location');
+      assert.strictEqual(
+        document.querySelectorAll(
+          '[data-test-nav-rail-item][aria-current="location"]',
+        ).length,
+        1,
+        'exactly one section is current',
+      );
+    });
+
+    test('focusing a rail entry opens its flyout', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      await summonRail();
+
+      await focus('[data-test-nav-rail-item="agents"]');
+
+      assert.dom('[data-test-nav-rail-flyout="agents"]').exists();
+      assert
+        .dom('[data-test-nav-rail-sessions-empty]')
+        .exists('a user with no sessions is told how to start one');
+
+      await focus('[data-test-nav-rail-item="workspaces"]');
+
+      assert.dom('[data-test-nav-rail-flyout="agents"]').doesNotExist();
+      assert.dom('[data-test-nav-rail-flyout="workspaces"]').exists();
+    });
+
+    test('Escape closes the flyout, then the rail', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      await summonRail();
+      await focus('[data-test-nav-rail-item="workspaces"]');
+      assert.dom('[data-test-nav-rail-flyout="workspaces"]').exists();
+
+      await triggerKeyEvent(
+        '[data-test-nav-rail-item="workspaces"]',
+        'keydown',
+        'Escape',
+      );
+
+      assert.dom('[data-test-nav-rail-flyout="workspaces"]').doesNotExist();
+      assert
+        .dom('[data-test-nav-rail]')
+        .hasAttribute(
+          'data-test-nav-rail-summoned',
+          'true',
+          'the first Escape leaves the rail up',
+        );
+
+      await triggerKeyEvent(
+        '[data-test-nav-rail-item="workspaces"]',
+        'keydown',
+        'Escape',
+      );
+
+      assert
+        .dom('[data-test-nav-rail]')
+        .hasAttribute(
+          'data-test-nav-rail-summoned',
+          'false',
+          'the second Escape dismisses the rail',
+        );
+    });
+
+    test('a favorite with no pins says how to pin', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      let matrixService = getService('matrix-service') as MatrixService;
+      matrixService.workspaceFavorites = [realmAURL];
+      await settled();
+
+      assert
+        .dom(
+          '[data-test-favorites-list] [data-test-workspace="Workspace A"] [data-test-favorite-pin-hint]',
+        )
+        .hasText('Pin cards from any card’s menu to show them here.');
+    });
+
+    test('a pinned card shows on its favorite’s tile and opens the card', async function (assert) {
+      let cardId = `${realmAURL}index`;
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      let matrixService = getService('matrix-service') as MatrixService;
+      matrixService.workspaceFavorites = [realmAURL];
+      matrixService.dashboardState = {
+        pinnedCards: { [realmAURL]: [{ cardId, format: 'fitted' }] },
+      };
+      await settled();
+
+      assert
+        .dom(
+          `[data-test-favorites-list] [data-test-pinned-cards="${realmAURL}"] [data-test-pinned-card="${cardId}"]`,
+        )
+        .hasAttribute('data-test-pinned-card-format', 'fitted');
+      assert
+        .dom('[data-test-favorite-pin-hint]')
+        .doesNotExist('a tile with pins drops the hint');
+
+      await click(`[data-test-pinned-card="${cardId}"]`);
+
+      assert
+        .dom('[data-test-workspace-chooser]')
+        .doesNotExist('opening a pin closes the dashboard');
+      assert.dom(`[data-test-stack-card="${cardId}"]`).exists();
+    });
+
+    test('pinning a card favorites its workspace, so the pin has a tile to show on', async function (assert) {
+      let cardId = `${realmBURL}index`;
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      let matrixService = getService('matrix-service') as MatrixService;
+      assert.deepEqual(matrixService.workspaceFavorites, []);
+
+      await matrixService.pinCard(realmBURL, cardId);
+      await settled();
+
+      assert.deepEqual(
+        matrixService.pinnedCardsFor(realmBURL),
+        [{ cardId, format: 'fitted' }],
+        'the pin is stored',
+      );
+      assert.deepEqual(
+        matrixService.workspaceFavorites,
+        [realmBURL],
+        'its workspace became a favorite',
+      );
+      assert
+        .dom(`[data-test-favorites-list] [data-test-pinned-card="${cardId}"]`)
+        .exists('the pin shows on the new favorite');
+    });
+
+    test('agent setup counts copied commands and moves to the next step', async function (assert) {
+      let copied: string[] = [];
+      let clipboard = navigator.clipboard;
+      let originalWriteText = clipboard.writeText;
+      // The page can't reach a terminal; what it can see is the copy, so the
+      // test records what was copied instead of touching the real clipboard.
+      clipboard.writeText = async (text: string) => {
+        copied.push(text);
+      };
+
+      try {
+        await visitOperatorMode({ workspaceChooserOpened: true });
+
+        assert.dom('[data-test-agent-setup-progress]').hasText('0 of 5 copied');
+        assert
+          .dom('[data-test-agent-step="1"] [data-test-agent-command]')
+          .hasText('npm install -g @cardstack/boxel-cli');
+
+        await click('[data-test-agent-copy="1"]');
+
+        assert.deepEqual(copied, ['npm install -g @cardstack/boxel-cli']);
+        assert.dom('[data-test-agent-setup-progress]').hasText('1 of 5 copied');
+        let matrixService = getService('matrix-service') as MatrixService;
+        assert.strictEqual(matrixService.dashboardState.agentSetupDone, 1);
+        assert.true(matrixService.dashboardState.agentCommandCopied);
+      } finally {
+        clipboard.writeText = originalWriteText;
+      }
+    });
+
+    test('the pull step offers the user’s own workspaces and follows the pick', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      let matrixService = getService('matrix-service') as MatrixService;
+      await matrixService.updateDashboardState({ agentSetupDone: 2 });
+      await settled();
+
+      assert.dom('[data-test-agent-workspace]').exists({ count: 2 });
+
+      await click(`[data-test-agent-workspace="${realmBURL}"]`);
+
+      assert
+        .dom('[data-test-agent-step="3"] [data-test-agent-command]')
+        .hasText(`boxel realm pull ${realmBURL} ./workspace-b`);
+    });
+
+    test('Describe it opens Boxel AI', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
+
+      await click('[data-test-agent-new-session]');
+
+      assert
+        .dom('[data-test-ai-assistant-panel]')
+        .exists('the Boxel AI panel opens for a new session');
     });
   });
 

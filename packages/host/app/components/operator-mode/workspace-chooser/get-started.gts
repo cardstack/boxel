@@ -4,11 +4,13 @@ import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
-import { task } from 'ember-concurrency';
+import { restartableTask, task, timeout } from 'ember-concurrency';
 
 import { Button, ProgressBar } from '@cardstack/boxel-ui/components';
 import { cn, not } from '@cardstack/boxel-ui/helpers';
 import { CheckMark } from '@cardstack/boxel-ui/icons';
+
+import { logger } from '@cardstack/runtime-common';
 
 import { publishedRealmURLsFromInfo } from '@cardstack/host/lib/utils';
 import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
@@ -17,6 +19,10 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 import type RecentCardsService from '@cardstack/host/services/recent-cards-service';
+
+const log = logger('component:workspace-chooser/get-started');
+
+const COPIED_FEEDBACK_MS = 2000;
 
 export const AGENT_SETUP_COMMAND =
   'npm install -g @cardstack/boxel-cli && boxel profile add';
@@ -105,21 +111,33 @@ export default class GetStarted extends Component<Signature> {
   }
 
   private dismissTask = task(async () => {
-    await this.matrixService.updateDashboardState({
-      onboardingDismissed: true,
-    });
+    try {
+      await this.matrixService.updateDashboardState({
+        onboardingDismissed: true,
+      });
+    } catch (error) {
+      log.warn(`dismissing Get started failed: ${error}`);
+    }
   });
 
   private agentSetupCommand = AGENT_SETUP_COMMAND;
 
-  private copyAgentCommandTask = task(async () => {
-    await navigator.clipboard.writeText(this.agentSetupCommand);
-    this.copiedJustNow = true;
-    if (!this.matrixService.dashboardState.agentCommandCopied) {
-      await this.matrixService.updateDashboardState({
-        agentCommandCopied: true,
-      });
+  // A copy the browser refuses (no clipboard permission, an unfocused page)
+  // leaves the step as it was rather than raising.
+  private copyAgentCommandTask = restartableTask(async () => {
+    try {
+      await navigator.clipboard.writeText(this.agentSetupCommand);
+      this.copiedJustNow = true;
+      if (!this.matrixService.dashboardState.agentCommandCopied) {
+        await this.matrixService.updateDashboardState({
+          agentCommandCopied: true,
+        });
+      }
+    } catch (error) {
+      log.warn(`copying the agent setup command failed: ${error}`);
     }
+    await timeout(COPIED_FEEDBACK_MS);
+    this.copiedJustNow = false;
   });
 
   @action private async openFirstWorkspace() {

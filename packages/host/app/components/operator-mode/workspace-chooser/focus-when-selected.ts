@@ -28,8 +28,8 @@ function focusIsAvailable(): boolean {
 }
 
 // When a workspace-chooser tile becomes the keyboard-selected item, move DOM
-// focus to it and scroll it into view, so the selection is visible and the
-// tile is reachable as arrow-key navigation walks the list.
+// focus to it, and when arrow keys moved it there, scroll it into view, so
+// the selection stays visible as the walk goes down the page.
 export default modifier(
   (element: HTMLElement, [isSelected]: [boolean | undefined]) => {
     let selected = !!isSelected;
@@ -40,8 +40,16 @@ export default modifier(
       document.activeElement !== element &&
       focusIsAvailable()
     ) {
-      element.focus();
-      element.scrollIntoView({ block: 'nearest' });
+      // Arrow keys walk from tile to tile, and the walk follows the
+      // selection down the page. The selection a freshly opened dashboard
+      // starts on takes focus where it is, so the page opens at its top
+      // (greeting, Get started, the catalog for a new user), not scrolled
+      // down to the first tile.
+      let fromTile = !!document.activeElement?.closest('[data-nav-index]');
+      element.focus({ preventScroll: true });
+      if (fromTile) {
+        element.scrollIntoView({ block: 'nearest' });
+      }
     }
   },
 );

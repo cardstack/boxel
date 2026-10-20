@@ -167,10 +167,14 @@ export default class Workspace extends Component<Signature> {
                 {{on 'click' this.openWorkspace}}
                 {{focusWhenSelected @isSelected}}
               >
-                <RealmIcon
-                  class='desk-pill-icon'
-                  @realmInfo={{this.realmInfo}}
-                />
+                {{! Hovering the mark shows the realm URL, so favorites with
+                    the same name can be told apart. }}
+                <RealmURLTooltip @realmURL={{@realmIdentifier}}>
+                  <RealmIcon
+                    class='desk-pill-icon'
+                    @realmInfo={{this.realmInfo}}
+                  />
+                </RealmURLTooltip>
                 <span
                   class='desk-pill-name'
                   data-test-workspace-name
@@ -1026,10 +1030,13 @@ export default class Workspace extends Component<Signature> {
         text-transform: capitalize;
         --icon-color: currentColor;
       }
+      /* Holds its line before the counts arrive, so they land in reserved
+         space instead of growing the caption. */
       .desk-stats {
         display: inline-flex;
         flex-wrap: wrap;
         gap: var(--boxel-sp-sm);
+        min-height: 1lh;
       }
       .desk-stat {
         display: inline-flex;
@@ -2281,7 +2288,7 @@ export default class Workspace extends Component<Signature> {
   }
 
   // Compact metadata for the enlarged favorite tile's in-tile content (see
-  // .tile-metadata-row below). Label and count stay separate fields so the
+  // .desk-stats below). Label and count stay separate fields so the
   // template can emphasize the count with larger type than its unit label.
   // A stat with no count is dropped rather than rendered as "0" — that's
   // what gives each favorite tile its own mix of metadata instead of always

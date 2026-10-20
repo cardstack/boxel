@@ -1190,18 +1190,34 @@ export default class MatrixService extends Service {
     this.workspaceFavorites = newFavorites;
   }
 
-  // Merges `changes` into the stored dashboard state. Reads the server copy
-  // first so a write from another tab isn't lost.
-  public async updateDashboardState(
-    changes: Partial<AppBoxelDashboardContent>,
+  // Dashboard writes run one at a time, each reading the server copy and
+  // applying its change to that, so neither a write from another tab nor an
+  // overlapping one from this tab is lost.
+  private dashboardWrites: Promise<unknown> = Promise.resolve();
+
+  // Applies `change` to the stored dashboard state: an object of fields to
+  // set, or a function from the stored state to those fields.
+  public updateDashboardState(
+    change:
+      | Partial<AppBoxelDashboardContent>
+      | ((
+          stored: AppBoxelDashboardContent,
+        ) => Partial<AppBoxelDashboardContent>),
   ): Promise<void> {
-    let stored =
-      ((await this.client.getAccountDataFromServer(
-        APP_BOXEL_DASHBOARD_EVENT_TYPE,
-      )) as AppBoxelDashboardContent | null) ?? {};
-    let next = { ...stored, ...changes };
-    await this.client.setAccountData(APP_BOXEL_DASHBOARD_EVENT_TYPE, next);
-    this.dashboardState = next;
+    let write = this.dashboardWrites.then(async () => {
+      let stored =
+        ((await this.client.getAccountDataFromServer(
+          APP_BOXEL_DASHBOARD_EVENT_TYPE,
+        )) as AppBoxelDashboardContent | null) ?? {};
+      let changes = typeof change === 'function' ? change(stored) : change;
+      let next = { ...stored, ...changes };
+      await this.client.setAccountData(APP_BOXEL_DASHBOARD_EVENT_TYPE, next);
+      this.dashboardState = next;
+    });
+    // A failed write mustn't stall the ones queued behind it; its caller
+    // still sees the failure.
+    this.dashboardWrites = write.catch(() => undefined);
+    return write;
   }
 
   pinnedCardsFor(realmURL: string): DashboardPin[] {
@@ -1227,17 +1243,18 @@ export default class MatrixService extends Service {
     if (this.isCardPinned(realmURL, cardId) || !this.canPinTo(realmURL)) {
       return;
     }
-    await this.setPinnedCards(realmURL, [
-      ...this.pinnedCardsFor(realmURL),
-      { cardId, format: 'fitted' },
-    ]);
+    await this.updatePinnedCards(realmURL, (pins) =>
+      pins.some((pin) => pin.cardId === cardId) ||
+      pins.length >= MAX_DASHBOARD_PINS_PER_WORKSPACE
+        ? pins
+        : [...pins, { cardId, format: 'fitted' }],
+    );
     await this.addWorkspaceFavorite(realmURL);
   }
 
   async unpinCard(realmURL: string, cardId: string): Promise<void> {
-    await this.setPinnedCards(
-      realmURL,
-      this.pinnedCardsFor(realmURL).filter((pin) => pin.cardId !== cardId),
+    await this.updatePinnedCards(realmURL, (pins) =>
+      pins.filter((pin) => pin.cardId !== cardId),
     );
   }
 
@@ -1246,22 +1263,27 @@ export default class MatrixService extends Service {
     cardId: string,
     format: DashboardPinFormat,
   ): Promise<void> {
-    await this.setPinnedCards(
-      realmURL,
-      this.pinnedCardsFor(realmURL).map((pin) =>
-        pin.cardId === cardId ? { ...pin, format } : pin,
-      ),
+    await this.updatePinnedCards(realmURL, (pins) =>
+      pins.map((pin) => (pin.cardId === cardId ? { ...pin, format } : pin)),
     );
   }
 
-  private async setPinnedCards(realmURL: string, pins: DashboardPin[]) {
-    let pinnedCards = { ...(this.dashboardState.pinnedCards ?? {}) };
-    if (pins.length) {
-      pinnedCards[realmURL] = pins;
-    } else {
-      delete pinnedCards[realmURL];
-    }
-    await this.updateDashboardState({ pinnedCards });
+  // Changes one workspace's pins as stored on the server, leaving every
+  // other workspace's pins as stored there.
+  private async updatePinnedCards(
+    realmURL: string,
+    change: (pins: DashboardPin[]) => DashboardPin[],
+  ) {
+    await this.updateDashboardState((stored) => {
+      let pinnedCards = { ...(stored.pinnedCards ?? {}) };
+      let pins = change(pinnedCards[realmURL] ?? []);
+      if (pins.length) {
+        pinnedCards[realmURL] = pins;
+      } else {
+        delete pinnedCards[realmURL];
+      }
+      return { pinnedCards };
+    });
   }
 
   // Replaces the public realms the user added to the Catalogs section of their

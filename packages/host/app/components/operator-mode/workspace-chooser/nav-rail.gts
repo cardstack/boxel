@@ -1,7 +1,8 @@
+import { registerDestructor } from '@ember/destroyable';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
-import { cancel, scheduleOnce } from '@ember/runloop';
+import { cancel, next, scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
@@ -28,7 +29,7 @@ import type OperatorModeStateService from '@cardstack/host/services/operator-mod
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
-import { CATALOG_LEADS_BELOW, leadWith } from './index';
+import { CATALOG_LEADS_BELOW, displayedCatalogs, leadWith } from './index';
 
 const RECENT_SESSION_COUNT = 5;
 const FAVORITES_SHOWN = 6;
@@ -114,9 +115,17 @@ const trackSection = modifier(
       timer = scheduleOnce('afterRender', update);
     };
     scroller.addEventListener('scroll', schedule, { passive: true });
+    // A resize or a section changing size moves the sections without a
+    // scroll, so it re-reads too.
+    let resizeObserver = new ResizeObserver(schedule);
+    resizeObserver.observe(scroller);
+    for (let section of scroller.querySelectorAll('[data-dashboard-section]')) {
+      resizeObserver.observe(section);
+    }
     schedule();
     return () => {
       scroller.removeEventListener('scroll', schedule);
+      resizeObserver.disconnect();
       if (timer) {
         cancel(timer);
       }
@@ -134,8 +143,9 @@ interface RailSection {
 interface Signature {
   Element: HTMLElement;
   Args: {
-    // Below the wide breakpoint the rail shows only while summoned from the
-    // wordmark; at and above it, it stays as a labeled sidebar.
+    // Below the wide breakpoint the rail shows only while summoned (from the
+    // wordmark or the left edge); at and above it, it stays as an icon
+    // column. Its labels slide out on hover either way.
     isSummoned: boolean;
     // Pointer and focus inside the rail keep it open; leaving starts the
     // owner's dismiss grace period, so the pointer can travel between the
@@ -166,6 +176,15 @@ export default class NavRail extends Component<Signature> {
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
 
+  constructor(owner: unknown, args: Signature['Args']) {
+    super(owner as never, args);
+    // The rail goes with the dashboard; closing it (by opening a workspace,
+    // say) shouldn't leave the rail summoned for the next time it opens.
+    // After this render, so the reset isn't a write during teardown.
+    let dismiss = args.onDismiss;
+    registerDestructor(this, () => next(dismiss));
+  }
+
   @tracked private openFlyout: Section | null = null;
   @tracked private currentSection: Section = 'workspaces';
 
@@ -192,10 +211,9 @@ export default class NavRail extends Component<Signature> {
   }
 
   private get catalogs(): RealmEntry[] {
-    return leadWith(
-      this.realmServer.displayedCatalogRealmIdentifiers ?? [],
-      catalogRealmURL,
-    ).map(this.entryFor);
+    return leadWith(displayedCatalogs(this.realmServer), catalogRealmURL).map(
+      this.entryFor,
+    );
   }
 
   // The rail lists the page's sections in page order, which puts the
@@ -211,9 +229,7 @@ export default class NavRail extends Component<Signature> {
       id: 'catalogs',
       label: 'Catalogs',
       icon: Store,
-      count:
-        (this.realmServer.displayedCatalogRealmIdentifiers ?? []).length ||
-        undefined,
+      count: displayedCatalogs(this.realmServer).length || undefined,
     };
     let agents: RailSection = {
       id: 'agents',
@@ -271,7 +287,11 @@ export default class NavRail extends Component<Signature> {
       return;
     }
     if (this.openFlyout && this.isAimingAtOpenFlyout) {
-      this.flyoutIntentTask.perform(section, FLYOUT_AIM_DELAY_MS);
+      this.flyoutIntentTask.perform(
+        section,
+        FLYOUT_AIM_DELAY_MS,
+        this.currentPoint,
+      );
       return;
     }
     this.showFlyout(section);
@@ -281,16 +301,27 @@ export default class NavRail extends Component<Signature> {
   // flyout (part of the entry) or another entry cancels it.
   @action private leaveEntry() {
     if (this.openFlyout) {
-      this.flyoutIntentTask.perform(null, FLYOUT_CLOSE_DELAY_MS);
+      this.flyoutIntentTask.perform(null, FLYOUT_CLOSE_DELAY_MS, null);
     }
   }
 
+  // Focus leaving the rail lets it go, as the pointer leaving it does.
+  @action private onFocusOut(event: Event) {
+    let { currentTarget, relatedTarget } = event as FocusEvent;
+    if (!(currentTarget as HTMLElement).contains(relatedTarget as Node)) {
+      this.openFlyout = null;
+      this.args.onPointerLeave();
+    }
+  }
+
+  // `from` is where the pointer was when the wait began. A pointer that
+  // hasn't moved since has stopped short of the flyout, so the switch
+  // happens; one still travelling into it gets another look.
   private flyoutIntentTask = restartableTask(
-    async (section: Section | null, delay: number) => {
+    async (section: Section | null, delay: number, from: Point | null) => {
       await timeout(delay);
-      if (section && this.isAimingAtOpenFlyout) {
-        // Still travelling into the open flyout: look again shortly.
-        this.flyoutIntentTask.perform(section, delay);
+      if (section && this.currentPoint !== from && this.isAimingAtOpenFlyout) {
+        this.flyoutIntentTask.perform(section, delay, this.currentPoint);
         return;
       }
       this.openFlyout = section;
@@ -371,9 +402,11 @@ export default class NavRail extends Component<Signature> {
       data-theme='dark'
       data-nav-rail
       data-test-nav-rail
+      data-test-nav-rail-summoned={{if @isSummoned 'true' 'false'}}
       {{on 'mouseenter' @onPointerEnter}}
       {{on 'mouseleave' @onPointerLeave}}
       {{on 'focusin' @onPointerEnter}}
+      {{on 'focusout' this.onFocusOut}}
       {{on 'keydown' this.onKeydown}}
       {{on 'mousemove' this.trackPointer}}
       {{trackSection this.setCurrentSection}}
@@ -394,7 +427,6 @@ export default class NavRail extends Component<Signature> {
             }}
             aria-current={{if (eq this.currentSection section.id) 'location'}}
             aria-label={{section.label}}
-            aria-haspopup='true'
             aria-expanded={{if (eq this.openFlyout section.id) 'true' 'false'}}
             {{on 'focus' (fn this.showFlyout section.id)}}
             {{on 'click' (fn this.scrollToSection section.id)}}
