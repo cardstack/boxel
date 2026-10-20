@@ -1,5 +1,5 @@
 ---
-description: Sign a browser into the Boxel app as a boxel-cli profile with `boxel browse`. Use when you or the user need to view, test, or verify the Boxel app in a browser — especially a host running locally or on any custom origin against staging or production, where the email/password form on the sign-in page is blank or won't load. Run it on the user's behalf; reach for it before Railway deploys, custom hostnames, or certificates.
+description: Sign a browser into the Boxel app as a boxel-cli profile with `boxel browse`. Use when you or the user need to view, test, or verify the Boxel app in a browser signed in without typing a password — on the environment's own host, a local host, or an origin such as a Railway deployment or custom domain where the email/password area of the sign-in page is blank. Run it on the user's behalf; reach for it before Railway deploys, custom hostnames, or certificates.
 ---
 
 # Signing a browser in
@@ -8,8 +8,11 @@ Wraps `boxel browse`, which mints a Matrix login token from a saved profile and 
 
 ## When to use it
 
-- **A host on another origin.** A host served from `http://localhost:<port>/`, a preview, or any origin other than the environment's own can't use the email/password form: that form is a frame from the secure origin (`secure.stack.cards`, `secure.boxel.ai`), which only the environment's own app origins may frame. The symptom is a sign-in page whose email/password area is blank. `boxel browse --host-url` skips the form entirely. (Google SSO also works there.)
-- **Showing the user a change.** They want to see it signed in, and a profile already has the account.
+- **Signing in without typing a password.** The user wants to see a change, or work in the app, signed in as an account a profile already holds. This works on any host, local or deployed, whether or not its password form does.
+- **A host on another origin.** The email/password fields are a frame from the environment's secure origin (`secure.stack.cards`, `secure.boxel.ai`), which only listed app origins may frame; on an origin it doesn't list, the sign-in page's email/password area is blank. `boxel browse --host-url` skips the form entirely. Google SSO goes through Synapse rather than the frame, so it works there too (production's Synapse shows a confirmation page before it redirects to an origin it doesn't list).
+  - Against staging, `secure.stack.cards` lists staging's host PR previews (`https://*.boxel-host-preview.stack.cards`) and loopback origins. Any other origin, such as a Railway deployment or a custom domain, gets a blank password area until it is added to staging's `--secureOriginAppOrigin` by name.
+  - Against production, `secure.boxel.ai` lists only loopback origins, and nothing else is ever added. A preview, a Railway deployment or a custom domain against production always signs in with `boxel browse --host-url` or Google SSO.
+  - A local host (`localhost` or `127.0.0.1`, any port, http or https) against staging or production doesn't need `browse` to sign in: both list loopback origins, so its email/password form works. If its password area is blank anyway, follow the `local-host-against-remote` skill in a `cardstack/boxel` checkout (`.claude/skills/local-host-against-remote/SKILL.md`), which covers the env vars that point the host at the environment and how to diagnose the frame.
 - **Opening a card signed in.** Pass the card's path on the realm server, for example `example-user/example-realm/Person/1` (owner, realm, then the card), not a path inside one realm. With no card path the app opens on the workspace chooser.
 
 ## Run it yourself
@@ -19,7 +22,7 @@ When the user wants a browser signed in, run `boxel browse` for them. Don't hand
 | Situation                             | Run                                                                    |
 | ------------------------------------- | ---------------------------------------------------------------------- |
 | Staging or production, on its own host | `boxel browse [card-path] --profile <id>`                              |
-| Local or custom host against staging  | `boxel browse [card-path] --profile <id> --host-url http://localhost:<port>/` |
+| Local or custom host                  | `boxel browse [card-path] --profile <id> --host-url https://localhost:<port>/` |
 | Rate-limited                          | add `--wait`                                                           |
 
 `boxel profile list` shows the profiles; match an account the user names ("my test account") to its ID there, and pass `--profile` even when it is the active one. A staging profile is `@<user>:stack.cards`, with realm server `https://realms-staging.stack.cards/`; a production one is `@<user>:boxel.ai`, with `https://app.boxel.ai/`. Without `--host-url`, the token is redeemed on the profile's realm-server origin (`https://localhost:4200/` for standard local dev).
