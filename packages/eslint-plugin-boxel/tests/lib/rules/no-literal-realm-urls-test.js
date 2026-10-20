@@ -1,6 +1,7 @@
 'use strict';
 
 const rule = require('../../../lib/rules/no-literal-realm-urls');
+const { PREFIX_REALM_PREFIXES } = require('../../../lib/utils/prefix-realms');
 const RuleTester = require('eslint').RuleTester;
 
 const ruleTester = new RuleTester({
@@ -8,6 +9,23 @@ const ruleTester = new RuleTester({
     ecmaVersion: 2022,
     sourceType: 'module',
   },
+});
+
+// Every registered prefix, at every origin a realm server is reached at.
+const EVERY_PREFIX_AT_EVERY_ORIGIN = PREFIX_REALM_PREFIXES.flatMap((prefix) => {
+  let realmPath = prefix.slice('@cardstack/'.length);
+  return [
+    'http://localhost:4201',
+    'https://localhost:4201',
+    'https://realms-staging.stack.cards',
+    'https://app.boxel.ai',
+    'http://realm-server.linty.localhost',
+    'https://realm-server.linty.localhost:4201',
+  ].map((origin) => ({
+    code: `let id = '${origin}/${realmPath}Some/card';`,
+    output: `let id = '${prefix}Some/card';`,
+    errors: [{ messageId: 'noLiteralRealmUrl' }],
+  }));
 });
 
 ruleTester.run('no-literal-realm-urls', rule, {
@@ -40,9 +58,19 @@ ruleTester.run('no-literal-realm-urls', rule, {
     {
       code: `let url = 'http://localhost:4201/other/foo';`,
     },
+    // The base realm's alias is a fetch target, not an environment-specific URL
+    {
+      code: `let url = 'https://cardstack.com/base/card-api';`,
+    },
+    // A realm name that only begins with a registered one
+    {
+      code: `let url = 'http://localhost:4201/skills-extra/foo';`,
+    },
   ],
 
   invalid: [
+    ...EVERY_PREFIX_AT_EVERY_ORIGIN,
+
     // --- Exact URL matches ---
 
     // localhost catalog URL in a string literal

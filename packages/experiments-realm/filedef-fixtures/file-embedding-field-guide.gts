@@ -4,14 +4,14 @@ import {
   contains,
   field,
   linksTo,
-} from 'https://cardstack.com/base/card-api';
-import StringField from 'https://cardstack.com/base/string';
-import { MarkdownDef } from 'https://cardstack.com/base/markdown-file-def';
+} from '@cardstack/base/card-api';
+import StringField from '@cardstack/base/string';
+import { MarkdownDef } from '@cardstack/base/markdown-file-def';
 // Content-only markdown renderer (no FileDef shell chrome) from the file-formats
 // barrel — the supported way to embed a file's content, in place of rendering
 // the FileDef field with @displayContainer={{false}} and reaching into the
 // shell's markup with :deep().
-import { MarkdownPreview } from 'https://cardstack.com/base/file-formats/index';
+import { MarkdownPreview } from '@cardstack/base/file-formats/index';
 import { FittedCard } from '@cardstack/boxel-ui/components';
 import BookOpenIcon from '@cardstack/boxel-icons/book-open';
 

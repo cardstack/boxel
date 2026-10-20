@@ -190,7 +190,7 @@ module('Unit | zip-archive', function (hooks) {
   hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
     let mod = await loader.import<typeof ZipArchiveModule>(
-      `${'https://cardstack.com/base/'}zip-archive`,
+      '@cardstack/base/zip-archive',
     );
     parseZipListing = mod.parseZipListing;
     extractZipListing = mod.extractZipListing;

@@ -14,14 +14,14 @@ import {
   field,
   linksTo,
   realmURL,
-} from 'https://cardstack.com/base/card-api';
-import { Spec } from 'https://cardstack.com/base/spec';
-import { MarkdownDef } from 'https://cardstack.com/base/markdown-file-def';
-import { MarkdownPreview } from 'https://cardstack.com/base/file-formats/index';
-import StringField from 'https://cardstack.com/base/string';
-import enumField from 'https://cardstack.com/base/enum';
-import BooleanField from 'https://cardstack.com/base/boolean';
-import NumberField from 'https://cardstack.com/base/number';
+} from '@cardstack/base/card-api';
+import { Spec } from '@cardstack/base/spec';
+import { MarkdownDef } from '@cardstack/base/markdown-file-def';
+import { MarkdownPreview } from '@cardstack/base/file-formats/index';
+import StringField from '@cardstack/base/string';
+import enumField from '@cardstack/base/enum';
+import BooleanField from '@cardstack/base/boolean';
+import NumberField from '@cardstack/base/number';
 import GlimmerComponent from '@glimmer/component';
 import { guidFor } from '@ember/object/internals';
 import { tracked } from '@glimmer/tracking';
