@@ -177,12 +177,19 @@ export interface DashboardPin {
   format: DashboardPinFormat;
 }
 
+// The agents the dashboard's Agents section sets up: coding agents that
+// build through the Boxel plugin, and Boxel's own assistant.
+export type DashboardAgent = 'claude' | 'codex' | 'grok' | 'boxel';
+
 export interface AppBoxelDashboardContent {
   onboardingDismissed?: boolean;
   agentCommandCopied?: boolean;
+  // The agent whose onboarding the Agents section shows, picked there or
+  // from the rail.
+  agent?: DashboardAgent;
   // How many of the Agents section's setup steps the user has copied
-  // through. Nothing can see a terminal, so copying a step's command is
-  // what counts as doing it.
+  // through. Nothing can see the agent's chat, so copying a step is what
+  // counts as doing it.
   agentSetupDone?: number;
   // Realm URL → the cards pinned to that workspace's tile, in pin order.
   pinnedCards?: Record<string, DashboardPin[]>;

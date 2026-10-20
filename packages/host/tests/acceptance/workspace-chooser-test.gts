@@ -1298,8 +1298,8 @@ module('Acceptance | workspace-chooser', function (hooks) {
 
       assert.dom('[data-test-nav-rail-flyout="agents"]').exists();
       assert
-        .dom('[data-test-nav-rail-sessions-empty]')
-        .exists('a user with no sessions is told how to start one');
+        .dom('[data-test-nav-rail-flyout="agents"] [data-test-nav-rail-agent]')
+        .exists({ count: 4 }, 'the flyout lists the agents to build with');
 
       await focus('[data-test-nav-rail-item="workspaces"]');
 
@@ -1506,9 +1506,35 @@ module('Acceptance | workspace-chooser', function (hooks) {
         .hasText(`Work on my Boxel workspace ${realmBURL}`);
     });
 
-    test('Describe it opens Boxel AI', async function (assert) {
+    test('picking an agent in the rail picks it in the Agents section', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      assert
+        .dom('[data-test-agent-pick="claude"]')
+        .hasAttribute('aria-pressed', 'true', 'Claude Code is picked first');
+
+      await summonRail();
+      await focus('[data-test-nav-rail-item="agents"]');
+      await click('[data-test-nav-rail-agent="codex"]');
+
+      assert
+        .dom('[data-test-agent-pick="codex"]')
+        .hasAttribute('aria-pressed', 'true');
+      assert.strictEqual(
+        (getService('matrix-service') as MatrixService).dashboardState.agent,
+        'codex',
+        'the pick is kept with the dashboard',
+      );
+    });
+
+    test('Boxel AI Assistant needs no setup, and Describe it opens it', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
       assert.dom('[data-test-ai-assistant-panel]').doesNotExist();
+
+      await click('[data-test-agent-pick="boxel"]');
+      assert.dom('[data-test-agent-built-in]').exists();
+      assert
+        .dom('[data-test-agent-setup-progress]')
+        .doesNotExist('no setup steps for the built-in assistant');
 
       await click('[data-test-agent-new-session]');
 

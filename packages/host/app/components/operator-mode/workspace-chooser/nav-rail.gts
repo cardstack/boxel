@@ -8,10 +8,7 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import Bot from '@cardstack/boxel-icons/bot';
-import ChevronRight from '@cardstack/boxel-icons/chevron-right';
 import LayoutGrid from '@cardstack/boxel-icons/layout-grid';
-import MessageCircle from '@cardstack/boxel-icons/message-circle';
-import Plus from '@cardstack/boxel-icons/plus';
 import Store from '@cardstack/boxel-icons/store';
 import { restartableTask, timeout } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
@@ -23,15 +20,15 @@ import {
   catalogRealmURL,
   publishedRealmURLsFromInfo,
 } from '@cardstack/host/lib/utils';
-import type AiAssistantPanelService from '@cardstack/host/services/ai-assistant-panel-service';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
+import { AGENT_KINDS, AgentLogo, type DashboardAgent } from './agent-kinds';
+
 import { CATALOG_LEADS_BELOW, displayedCatalogs, leadWith } from './index';
 
-const RECENT_SESSION_COUNT = 5;
 const FAVORITES_SHOWN = 6;
 
 // How long a flyout waits before following the pointer to another entry
@@ -170,7 +167,6 @@ interface RealmEntry {
 // Each entry jumps to its section of the dashboard and marks the one being
 // read; hovering one opens a flyout of the places it leads to.
 export default class NavRail extends Component<Signature> {
-  @service declare private aiAssistantPanelService: AiAssistantPanelService;
   @service declare private matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private realm: RealmService;
@@ -242,12 +238,7 @@ export default class NavRail extends Component<Signature> {
       : [workspaces, catalogs, agents];
   }
 
-  private get recentSessions() {
-    return this.aiAssistantPanelService.aiSessionRooms.slice(
-      0,
-      RECENT_SESSION_COUNT,
-    );
-  }
+  private agentKinds = AGENT_KINDS;
 
   @action private showFlyout(flyout: Section | null) {
     this.flyoutIntentTask.cancelAll();
@@ -309,8 +300,17 @@ export default class NavRail extends Component<Signature> {
   @action private onFocusOut(event: Event) {
     let { currentTarget, relatedTarget } = event as FocusEvent;
     if (!(currentTarget as HTMLElement).contains(relatedTarget as Node)) {
-      this.openFlyout = null;
-      this.args.onPointerLeave();
+      // Focus can leave in the middle of a render (a pick inside a flyout
+      // removes the focused row; a tile takes focus as the page updates),
+      // so the rail lets go on the next run loop rather than writing state
+      // inside that render.
+      next(() => {
+        if (this.isDestroying || this.isDestroyed) {
+          return;
+        }
+        this.openFlyout = null;
+        this.args.onPointerLeave();
+      });
     }
   }
 
@@ -375,20 +375,16 @@ export default class NavRail extends Component<Signature> {
       ?.scrollIntoView({ behavior, block: 'start' });
   }
 
-  @action private async openSession(roomId: string) {
-    this.closeRail();
-    // `openPanel` reselects the persisted room, so enter it first.
-    this.aiAssistantPanelService.enterRoom(roomId);
-    await this.aiAssistantPanelService.openPanel();
-  }
-
-  @action private async startSession() {
-    this.closeRail();
-    await this.aiAssistantPanelService.openPanel();
-    await this.aiAssistantPanelService.createNewSession();
-  }
-
-  private formatWhen = (timestamp: number) => formatRelativeTime(timestamp);
+  // Picking an agent here picks it in the Agents section too (the pick is
+  // kept with the dashboard's account data), then shows its onboarding.
+  private pickAgentTask = restartableTask(async (agent: DashboardAgent) => {
+    this.scrollToSection('agents');
+    try {
+      await this.matrixService.updateDashboardState({ agent });
+    } catch {
+      // The section still opens; it just keeps its previous pick.
+    }
+  });
 
   private wallpaper = (entry: RealmEntry) =>
     entry.backgroundURL ? `url("${entry.backgroundURL}")` : undefined;
@@ -525,46 +521,21 @@ export default class NavRail extends Component<Signature> {
                 data-test-nav-rail-flyout='agents'
               >
                 <header class='flyout-header'>
-                  <span class='flyout-title'>Boxel AI</span>
-                  <button
-                    type='button'
-                    class='header-action'
-                    {{on 'click' this.startSession}}
-                    data-test-nav-rail-new-session
-                  >
-                    <Plus width='14' height='14' />
-                    New session
-                  </button>
+                  <span class='flyout-title'>Agents</span>
+                  <span class='flyout-hint'>Build with the agent you use</span>
                 </header>
-                {{#each this.recentSessions as |session|}}
+                {{#each this.agentKinds as |kind|}}
                   <button
                     type='button'
-                    class='session-row'
-                    {{on 'click' (fn this.openSession session.roomId)}}
-                    data-test-nav-rail-session={{session.roomId}}
+                    class='agent-row'
+                    {{on 'click' (fn this.pickAgentTask.perform kind.id)}}
+                    data-test-nav-rail-agent={{kind.id}}
                   >
-                    <span class='session-icon'>
-                      <MessageCircle width='14' height='14' />
-                    </span>
-                    <span class='row-title'>{{session.name}}</span>
-                    <span class='row-meta'>{{this.formatWhen
-                        session.lastActiveTimestamp
-                      }}</span>
+                    <AgentLogo class='agent-row-logo' @agent={{kind.id}} />
+                    <span class='row-title'>{{kind.label}}</span>
+                    <span class='row-meta'>{{kind.hint}}</span>
                   </button>
-                {{else}}
-                  <p class='flyout-empty' data-test-nav-rail-sessions-empty>
-                    No sessions yet. Ask Boxel AI to build or change something.
-                  </p>
                 {{/each}}
-                <button
-                  type='button'
-                  class='session-row is-link'
-                  {{on 'click' (fn this.scrollToSection 'agents')}}
-                  data-test-nav-rail-connect-agent
-                >
-                  <span class='row-title'>Connect Claude Code or Codex</span>
-                  <ChevronRight width='14' height='14' />
-                </button>
               </div>
 
             {{/if}}
@@ -763,27 +734,8 @@ export default class NavRail extends Component<Signature> {
         font-size: var(--boxel-font-size-xs);
         color: var(--muted-foreground);
       }
-      .header-action {
-        margin-left: auto;
-        display: inline-flex;
-        align-items: center;
-        gap: var(--boxel-sp-5xs);
-        height: 1.75rem;
-        padding: 0 var(--boxel-sp-xs);
-        border: 0;
-        border-radius: 0.875rem;
-        background-color: var(--boxel-highlight);
-        color: var(--boxel-highlight-foreground);
-        font-size: var(--boxel-font-size-xs);
-        font-weight: 600;
-        cursor: pointer;
-        align-self: center;
-      }
-      .header-action:hover {
-        background-color: var(--boxel-highlight-hover);
-      }
       .realm-row,
-      .session-row {
+      .agent-row {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-sm);
@@ -798,8 +750,8 @@ export default class NavRail extends Component<Signature> {
       }
       .realm-row:hover,
       .realm-row:focus-visible,
-      .session-row:hover,
-      .session-row:focus-visible {
+      .agent-row:hover,
+      .agent-row:focus-visible {
         background-color: var(--rail-hover);
         outline: none;
       }
@@ -853,25 +805,8 @@ export default class NavRail extends Component<Signature> {
         letter-spacing: 0.1em;
         text-transform: uppercase;
       }
-      .session-row.is-link {
-        margin-top: var(--boxel-sp-4xs);
-        border-top: 1px solid var(--rail-line);
-        border-radius: 0 0 0.625rem 0.625rem;
-        color: var(--muted-foreground);
-      }
-      .session-row.is-link:hover {
-        color: var(--foreground);
-      }
-      .session-icon {
-        flex: none;
-        width: 1.75rem;
-        height: 1.75rem;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 50%;
-        background-color: var(--rail-hover);
-        color: var(--muted-foreground);
+      .agent-row-logo {
+        font-size: 1.5rem;
       }
       .catalog-grid {
         display: grid;
@@ -944,23 +879,4 @@ export default class NavRail extends Component<Signature> {
       }
     </style>
   </template>
-}
-
-const relativeTimeFormat = new Intl.RelativeTimeFormat(undefined, {
-  numeric: 'auto',
-  style: 'narrow',
-});
-
-// "2h ago", "yesterday", "3d ago" — coarse on purpose: the list is for
-// recognizing a session, not timing it.
-export function formatRelativeTime(timestamp: number, now = Date.now()) {
-  let minutes = Math.round((timestamp - now) / 60000);
-  if (Math.abs(minutes) < 60) {
-    return relativeTimeFormat.format(minutes, 'minute');
-  }
-  let hours = Math.round(minutes / 60);
-  if (Math.abs(hours) < 24) {
-    return relativeTimeFormat.format(hours, 'hour');
-  }
-  return relativeTimeFormat.format(Math.round(hours / 24), 'day');
 }

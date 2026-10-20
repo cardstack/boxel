@@ -7,12 +7,11 @@ import { tracked } from '@glimmer/tracking';
 
 import Check from '@cardstack/boxel-icons/check';
 import Copy from '@cardstack/boxel-icons/copy';
-import MessageCircle from '@cardstack/boxel-icons/message-circle';
 import Sparkles from '@cardstack/boxel-icons/sparkles';
 import { restartableTask, timeout } from 'ember-concurrency';
 
 import { Button, RealmIcon } from '@cardstack/boxel-ui/components';
-import { cn, eq } from '@cardstack/boxel-ui/helpers';
+import { add, cn, eq } from '@cardstack/boxel-ui/helpers';
 
 import { logger } from '@cardstack/runtime-common';
 
@@ -21,21 +20,31 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
-import AgentScreencast from './agent-screencast';
-import { formatRelativeTime } from './nav-rail';
+import {
+  AGENT_KINDS,
+  AgentLogo,
+  DEFAULT_AGENT,
+  type DashboardAgent,
+} from './agent-kinds';
+import AgentScreencast, { type AgentFlavor } from './agent-screencast';
 
 const log = logger('component:workspace-chooser/agents');
 
-const RECENT_SESSION_COUNT = 3;
 const PICKABLE_WORKSPACE_COUNT = 4;
 const COPIED_FEEDBACK_MS = 2000;
 const STEP_COUNT = 5;
 
-type AgentId = 'claude' | 'codex';
-
-const AGENTS: { id: AgentId; label: string }[] = [
-  { id: 'claude', label: 'Claude' },
-  { id: 'codex', label: 'Codex' },
+// Boxel AI Assistant needs no setup, so its card says how it works instead.
+const BUILT_IN_STEPS = [
+  {
+    title: 'Describe what you want',
+    note: 'In your own words, from any workspace',
+  },
+  {
+    title: 'Boxel AI builds it',
+    note: 'Cards, fields and data, right in the workspace',
+  },
+  { title: 'Refine it in the chat', note: 'Ask for changes as you look' },
 ];
 
 interface SetupStep {
@@ -54,31 +63,45 @@ interface PickableWorkspace {
   info: ReturnType<RealmService['info']>;
 }
 
-// The dashboard's Agents section: how to build in Boxel with the agent app a
-// user already has. Five steps, each typed into the agent's own chat, take
-// them from adding the Boxel plugin to seeing their agent's first change in
-// Boxel, for Claude or Codex; beside them, Boxel AI for anyone without an
-// agent of their own.
+// The dashboard's Agents section: how to build in Boxel with the agent a user
+// picks. For a coding agent (Claude Code, Codex, Grok Bot), five steps, each
+// typed into the agent's own chat, take them from adding the Boxel plugin to
+// seeing its first change in Boxel; for Boxel AI Assistant, which is built
+// in, a short how-to and a way to start. The pick is remembered with the
+// dashboard's account data, and the rail's Agents flyout sets it too.
 export default class Agents extends Component {
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
   @service declare private matrixService: MatrixService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
 
-  @tracked private agent: AgentId = 'claude';
   @tracked private pickedWorkspaceURL: string | null = null;
   // A step the user opened by hand; otherwise the next one to do is open.
   @tracked private openedStep: number | null = null;
   @tracked private copiedStep: number | null = null;
 
-  private agents = AGENTS;
+  private agentKinds = AGENT_KINDS;
   private stepCount = STEP_COUNT;
 
-  private get recentSessions() {
-    return this.aiAssistantPanelService.aiSessionRooms.slice(
-      0,
-      RECENT_SESSION_COUNT,
+  private get agent(): DashboardAgent {
+    return this.matrixService.dashboardState.agent ?? DEFAULT_AGENT;
+  }
+
+  private get agentKind() {
+    return (
+      AGENT_KINDS.find((kind) => kind.id === this.agent) ?? AGENT_KINDS[0]!
     );
+  }
+
+  // Boxel AI Assistant is built in: nothing to install, so no steps.
+  private get isBuiltIn() {
+    return this.agent === 'boxel';
+  }
+
+  // The screencast dresses as the picked agent's app; Boxel AI Assistant
+  // has no app of its own, so it shows Claude Code's.
+  private get screencastAgent(): AgentFlavor {
+    return this.agent === 'boxel' ? 'claude' : this.agent;
   }
 
   // Favorites first, since they're what the user works on, then the rest of
@@ -116,10 +139,11 @@ export default class Agents extends Component {
   // step asks for a terminal.
   private get steps(): SetupStep[] {
     let realmURL = this.workspaceURL ?? '<workspace URL>';
+    // Claude Code resolves the plugin's marketplace itself; the others name it.
     let installCommand =
-      this.agent === 'codex'
-        ? '/plugin install boxel-cli@cardstack-boxel'
-        : '/plugin install boxel-cli';
+      this.agent === 'claude'
+        ? '/plugin install boxel-cli'
+        : '/plugin install boxel-cli@cardstack-boxel';
     let steps: [string, string, string][] = [
       [
         'Add the Boxel marketplace',
@@ -163,9 +187,14 @@ export default class Agents extends Component {
     }));
   }
 
-  @action private pickAgent(agent: AgentId) {
-    this.agent = agent;
-  }
+  private pickAgentTask = restartableTask(async (agent: DashboardAgent) => {
+    this.openedStep = null;
+    try {
+      await this.matrixService.updateDashboardState({ agent });
+    } catch (error) {
+      log.warn(`saving the picked agent failed: ${error}`);
+    }
+  });
 
   @action private pickWorkspace(url: string) {
     this.pickedWorkspaceURL = url;
@@ -206,18 +235,10 @@ export default class Agents extends Component {
     }
   });
 
-  @action private async openSession(roomId: string) {
-    // `openPanel` reselects the persisted room, so enter it first.
-    this.aiAssistantPanelService.enterRoom(roomId);
-    await this.aiAssistantPanelService.openPanel();
-  }
-
   @action private async startSession() {
     await this.aiAssistantPanelService.openPanel();
     await this.aiAssistantPanelService.createNewSession();
   }
-
-  private formatWhen = (timestamp: number) => formatRelativeTime(timestamp);
 
   <template>
     <div class='make' data-theme='dark' data-test-agents>
@@ -225,175 +246,185 @@ export default class Agents extends Component {
         <span class='eyebrow'>Bring your own agent</span>
         <h3 class='pitch-title'>Build with the agent you already pay for</h3>
         <p class='pitch-body'>
-          Add the Boxel plugin to Claude or Codex and your agent builds right in
-          your workspaces. Ask in its chat; Boxel shows the result beside it,
-          live.
+          Add the Boxel plugin to Claude Code, Codex or Grok and your agent
+          builds right in your workspaces, or ask Boxel AI Assistant right here.
+          Pick yours to see how.
         </p>
+      </div>
+
+      <div class='agent-picker' role='group' aria-label='Your agent'>
+        {{#each this.agentKinds as |kind|}}
+          <button
+            type='button'
+            class='agent-choice'
+            aria-pressed={{if (eq this.agent kind.id) 'true' 'false'}}
+            {{on 'click' (fn this.pickAgentTask.perform kind.id)}}
+            data-test-agent-pick={{kind.id}}
+          >
+            <AgentLogo class='agent-choice-logo' @agent={{kind.id}} />
+            <span class='agent-choice-words'>
+              <b>{{kind.label}}</b>
+              <span class='muted'>{{kind.hint}}</span>
+            </span>
+          </button>
+        {{/each}}
       </div>
 
       {{! Watch it on the left, do it on the right. }}
       <div class='hero'>
-        <AgentScreencast />
-        <section class='steps' aria-label='Connect your agent'>
-          <div class='steps-top'>
+        <AgentScreencast @agent={{this.screencastAgent}} />
+        {{#if this.isBuiltIn}}
+          <section
+            class='steps is-built-in'
+            aria-label='Boxel AI Assistant'
+            data-test-agent-built-in
+          >
             <span class='steps-title'>
-              <b>Connect your agent</b>
-              <span
-                class='muted'
-                data-test-agent-setup-progress
-              >{{this.doneCount}} of {{this.stepCount}} copied</span>
+              <AgentLogo class='steps-logo' @agent='boxel' />
+              <b>Build with Boxel AI Assistant</b>
             </span>
-            <span class='agent-pick' role='group' aria-label='Your agent'>
-              {{#each this.agents as |agent|}}
-                <button
-                  type='button'
-                  class='agent-option'
-                  aria-pressed={{if (eq this.agent agent.id) 'true' 'false'}}
-                  {{on 'click' (fn this.pickAgent agent.id)}}
-                  data-test-agent-pick={{agent.id}}
-                >{{agent.label}}</button>
-              {{/each}}
-            </span>
-          </div>
-          <div class='progress' aria-hidden='true'>
-            {{#each this.steps as |step|}}
-              <i class='bar {{stateClass step.state}}'></i>
-            {{/each}}
-          </div>
-          <ol class='step-list'>
-            {{#each this.steps as |step|}}
-              <li
-                class={{cn
-                  'step'
-                  (stateClass step.state)
-                  is-open=(eq this.openIndex step.index)
-                }}
-                data-test-agent-step={{step.number}}
-              >
-                <button
-                  type='button'
-                  class='step-head'
-                  aria-expanded={{if
-                    (eq this.openIndex step.index)
-                    'true'
-                    'false'
-                  }}
-                  {{on 'click' (fn this.openStep step.index)}}
-                >
-                  <span class='step-number'>
-                    {{#if (eq step.state 'done')}}
-                      <Check width='14' height='14' />
-                    {{else}}
-                      {{step.number}}
-                    {{/if}}
-                  </span>
-                  <span class='step-words'>
-                    <b>{{step.title}}</b>
-                    <span class='muted'>{{step.note}}</span>
-                  </span>
-                  <span class='step-state'>{{stateLabel step.state}}</span>
-                </button>
-                {{#if (eq this.openIndex step.index)}}
-                  <div class='step-body'>
-                    {{#if step.isWorkspacePick}}
-                      <span
-                        class='workspace-pick'
-                        role='group'
-                        aria-label='Workspace to open'
-                      >
-                        {{#each this.workspaces key='url' as |workspace|}}
-                          <button
-                            type='button'
-                            class='workspace-option'
-                            aria-pressed={{if
-                              (eq this.workspaceURL workspace.url)
-                              'true'
-                              'false'
-                            }}
-                            {{on 'click' (fn this.pickWorkspace workspace.url)}}
-                            data-test-agent-workspace={{workspace.url}}
-                          >
-                            <RealmIcon
-                              class='workspace-icon'
-                              @realmInfo={{workspace.info}}
-                            />
-                            <span
-                              class='workspace-name'
-                            >{{workspace.name}}</span>
-                          </button>
-                        {{/each}}
-                      </span>
-                    {{/if}}
-                    <span class='command'>
-                      <code
-                        class='command-text'
-                        data-test-agent-command
-                      >{{step.command}}</code>
-                      <button
-                        type='button'
-                        class={{cn
-                          'copy'
-                          is-copied=(eq this.copiedStep step.index)
-                        }}
-                        aria-label='Copy: {{step.command}}'
-                        {{on 'click' (fn this.copyTask.perform step)}}
-                        data-test-agent-copy={{step.number}}
-                      >
-                        {{#if (eq this.copiedStep step.index)}}
-                          <Check width='14' height='14' />
-                          Copied
-                        {{else}}
-                          <Copy width='14' height='14' />
-                          Copy
-                        {{/if}}
-                      </button>
+            <p class='muted built-in-note'>Built into Boxel: nothing to install.
+              Uses credits.</p>
+            <ol class='step-list'>
+              {{#each BUILT_IN_STEPS as |step index|}}
+                <li class='step is-later'>
+                  <span class='step-head is-static'>
+                    <span class='step-number'>{{add index 1}}</span>
+                    <span class='step-words'>
+                      <b>{{step.title}}</b>
+                      <span class='muted'>{{step.note}}</span>
                     </span>
-                  </div>
-                {{/if}}
-              </li>
-            {{/each}}
-          </ol>
-        </section>
+                  </span>
+                </li>
+              {{/each}}
+            </ol>
+            <Button
+              class='built-in-action'
+              @kind='primary'
+              {{on 'click' this.startSession}}
+              data-test-agent-new-session
+            >
+              <Sparkles width='16' height='16' />
+              Describe it
+            </Button>
+          </section>
+        {{else}}
+          <section class='steps' aria-label='Connect {{this.agentKind.label}}'>
+            <div class='steps-top'>
+              <span class='steps-title'>
+                <AgentLogo class='steps-logo' @agent={{this.agent}} />
+                <b>Connect {{this.agentKind.label}}</b>
+                <span
+                  class='muted'
+                  data-test-agent-setup-progress
+                >{{this.doneCount}} of {{this.stepCount}} copied</span>
+              </span>
+            </div>
+            <div class='progress' aria-hidden='true'>
+              {{#each this.steps as |step|}}
+                <i class='bar {{stateClass step.state}}'></i>
+              {{/each}}
+            </div>
+            <ol class='step-list'>
+              {{#each this.steps as |step|}}
+                <li
+                  class={{cn
+                    'step'
+                    (stateClass step.state)
+                    is-open=(eq this.openIndex step.index)
+                  }}
+                  data-test-agent-step={{step.number}}
+                >
+                  <button
+                    type='button'
+                    class='step-head'
+                    aria-expanded={{if
+                      (eq this.openIndex step.index)
+                      'true'
+                      'false'
+                    }}
+                    {{on 'click' (fn this.openStep step.index)}}
+                  >
+                    <span class='step-number'>
+                      {{#if (eq step.state 'done')}}
+                        <Check width='14' height='14' />
+                      {{else}}
+                        {{step.number}}
+                      {{/if}}
+                    </span>
+                    <span class='step-words'>
+                      <b>{{step.title}}</b>
+                      <span class='muted'>{{step.note}}</span>
+                    </span>
+                    <span class='step-state'>{{stateLabel step.state}}</span>
+                  </button>
+                  {{#if (eq this.openIndex step.index)}}
+                    <div class='step-body'>
+                      {{#if step.isWorkspacePick}}
+                        <span
+                          class='workspace-pick'
+                          role='group'
+                          aria-label='Workspace to open'
+                        >
+                          {{#each this.workspaces key='url' as |workspace|}}
+                            <button
+                              type='button'
+                              class='workspace-option'
+                              aria-pressed={{if
+                                (eq this.workspaceURL workspace.url)
+                                'true'
+                                'false'
+                              }}
+                              {{on
+                                'click'
+                                (fn this.pickWorkspace workspace.url)
+                              }}
+                              data-test-agent-workspace={{workspace.url}}
+                            >
+                              <RealmIcon
+                                class='workspace-icon'
+                                @realmInfo={{workspace.info}}
+                              />
+                              <span
+                                class='workspace-name'
+                              >{{workspace.name}}</span>
+                            </button>
+                          {{/each}}
+                        </span>
+                      {{/if}}
+                      <span class='command'>
+                        <code
+                          class='command-text'
+                          data-test-agent-command
+                        >{{step.command}}</code>
+                        <button
+                          type='button'
+                          class={{cn
+                            'copy'
+                            is-copied=(eq this.copiedStep step.index)
+                          }}
+                          aria-label='Copy: {{step.command}}'
+                          {{on 'click' (fn this.copyTask.perform step)}}
+                          data-test-agent-copy={{step.number}}
+                        >
+                          {{#if (eq this.copiedStep step.index)}}
+                            <Check width='14' height='14' />
+                            Copied
+                          {{else}}
+                            <Copy width='14' height='14' />
+                            Copy
+                          {{/if}}
+                        </button>
+                      </span>
+                    </div>
+                  {{/if}}
+                </li>
+              {{/each}}
+            </ol>
+          </section>
+        {{/if}}
       </div>
 
-      <section class='browser' aria-label='Boxel AI'>
-        <div class='browser-words'>
-          <span class='eyebrow'>No agent?</span>
-          <b class='browser-title'>Build in the browser</b>
-          <span class='muted'>Describe what you want and Boxel AI makes it in
-            your workspace. Uses credits.</span>
-        </div>
-        <Button
-          class='browser-action'
-          @kind='primary'
-          @size='small'
-          {{on 'click' this.startSession}}
-          data-test-agent-new-session
-        >
-          <Sparkles width='14' height='14' />
-          Describe it
-        </Button>
-        {{#if this.recentSessions.length}}
-          <ul class='session-list' aria-label='Recent Boxel AI sessions'>
-            {{#each this.recentSessions as |session|}}
-              <li>
-                <button
-                  type='button'
-                  class='session-row'
-                  {{on 'click' (fn this.openSession session.roomId)}}
-                  data-test-agent-session={{session.roomId}}
-                >
-                  <MessageCircle class='session-icon' width='14' height='14' />
-                  <span class='session-name'>{{session.name}}</span>
-                  <span class='muted'>{{this.formatWhen
-                      session.lastActiveTimestamp
-                    }}</span>
-                </button>
-              </li>
-            {{/each}}
-          </ul>
-        {{/if}}
-      </section>
     </div>
 
     <style scoped>
@@ -453,8 +484,7 @@ export default class Agents extends Component {
         }
       }
       /* The dashboard's one surface: a dark panel with a hairline edge. */
-      .steps,
-      .browser {
+      .steps {
         box-sizing: border-box;
         border: 1px solid var(--make-line);
         border-radius: 1.25rem;
@@ -483,31 +513,88 @@ export default class Agents extends Component {
       .steps-title .muted {
         font-size: var(--boxel-font-size-sm);
       }
-      .agent-pick {
-        display: inline-flex;
-        padding: 0.1875rem;
+      .steps-title {
+        align-items: center;
+      }
+      .steps-logo {
+        font-size: 1.375rem;
+        align-self: center;
+      }
+
+      /* The agents, as logos to pick from: the pick sets the steps below. */
+      .agent-picker {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+        gap: var(--boxel-sp-xs);
+      }
+      .agent-choice {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+        min-width: 0;
+        padding: var(--boxel-sp-sm);
+        border: 1px solid var(--make-line);
         border-radius: 1rem;
-        background-color: var(--boxel-800);
-        box-shadow: inset 0 0 0 1px var(--make-line);
-      }
-      .agent-option {
-        height: 1.75rem;
-        padding: 0 var(--boxel-sp-sm);
-        border: 0;
-        border-radius: 0.875rem;
-        background: none;
-        color: var(--make-muted);
-        font-size: var(--boxel-font-size-xs);
-        font-weight: 600;
+        background-color: var(--boxel-700);
+        color: inherit;
+        text-align: left;
         cursor: pointer;
+        transition:
+          border-color var(--boxel-transition),
+          background-color var(--boxel-transition);
       }
-      .agent-option[aria-pressed='true'] {
-        background-color: var(--boxel-highlight);
-        color: var(--boxel-highlight-foreground);
+      .agent-choice:hover {
+        background-color: color-mix(
+          in oklch,
+          var(--boxel-light) 6%,
+          var(--boxel-700)
+        );
       }
-      .agent-option:focus-visible {
+      .agent-choice[aria-pressed='true'] {
+        border-color: var(--boxel-highlight);
+        box-shadow: inset 0 0 0 1px var(--boxel-highlight);
+      }
+      .agent-choice:focus-visible {
         outline: 2px solid var(--boxel-highlight);
         outline-offset: 2px;
+      }
+      .agent-choice-logo {
+        font-size: 2rem;
+      }
+      .agent-choice-words {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        font-size: var(--boxel-font-size-sm);
+      }
+      .agent-choice-words > * {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .agent-choice-words .muted {
+        font-size: var(--boxel-font-size-xs);
+      }
+
+      /* Boxel AI Assistant's card: how it works, and a way to start. */
+      .is-built-in {
+        border-color: color-mix(
+          in oklch,
+          var(--boxel-highlight) 35%,
+          transparent
+        );
+      }
+      .built-in-note {
+        margin: 0;
+        font-size: var(--boxel-font-size-sm);
+      }
+      .step-head.is-static {
+        cursor: default;
+      }
+      .built-in-action {
+        align-self: flex-start;
+        gap: var(--boxel-sp-4xs);
+        margin-top: auto;
       }
       .progress {
         display: grid;
@@ -692,88 +779,7 @@ export default class Agents extends Component {
         outline: 2px solid var(--boxel-light);
         outline-offset: 2px;
       }
-
-      /* Boxel AI, for anyone without an agent: a strip under the row, the
-         same panel with a teal edge saying it's the other way in, not a sixth
-         step. Its words, its action and its recent sessions read across. */
-      .browser {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: var(--boxel-sp-sm) var(--boxel-sp-xl);
-        padding: var(--boxel-sp) var(--boxel-sp-lg);
-        border-color: color-mix(
-          in oklch,
-          var(--boxel-highlight) 35%,
-          transparent
-        );
-        font-size: var(--boxel-font-size-sm);
-        line-height: 1.45;
-      }
-      .browser-words {
-        flex: 1 1 16rem;
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-5xs);
-      }
-      .browser-title {
-        font-size: var(--boxel-font-size);
-      }
-      .browser-action {
-        flex: none;
-        gap: var(--boxel-sp-4xs);
-      }
-      .session-list {
-        flex: 1 1 18rem;
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-6xs);
-        min-width: 0;
-        margin: 0;
-        padding: 0 0 0 var(--boxel-sp-lg);
-        border-left: 1px solid var(--make-line);
-        list-style: none;
-      }
-      .session-row {
-        width: 100%;
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-4xs) var(--boxel-sp-xs);
-        border: 0;
-        border-radius: 0.625rem;
-        background: none;
-        color: inherit;
-        text-align: left;
-        font-size: var(--boxel-font-size-xs);
-        cursor: pointer;
-      }
-      .session-row:hover,
-      .session-row:focus-visible {
-        background-color: color-mix(
-          in oklch,
-          var(--boxel-light) 8%,
-          transparent
-        );
-        outline: none;
-      }
-      .session-icon {
-        flex: none;
-        color: var(--make-muted);
-      }
-      .session-name {
-        flex: 1;
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        font-weight: 600;
-      }
       @media (max-width: 30rem) {
-        .session-list {
-          padding-left: 0;
-          border-left: 0;
-        }
         .pitch-title {
           font-size: 1.375rem;
         }
