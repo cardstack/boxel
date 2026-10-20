@@ -287,6 +287,7 @@ module(basename(import.meta.filename), function () {
         new URL('https://secure-loopback.example.test/secure'),
         {
           matrixURL: new URL(matrixURL),
+          realmServerURL: new URL('https://realms.example.test/'),
           appOrigins: [
             'https://app.example.test',
             'http://localhost:*',
