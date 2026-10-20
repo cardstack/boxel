@@ -22,7 +22,7 @@ When the user wants a browser signed in, run `boxel browse` for them. Don't hand
 | Local or custom host against staging  | `boxel browse [card-path] --profile <id> --host-url http://localhost:<port>/` |
 | Rate-limited                          | add `--wait`                                                           |
 
-`boxel profile list` shows the profiles; match an account the user names ("my tribecaprep account") to its ID there, and pass `--profile` even when it is the active one. A staging profile is `@<user>:stack.cards`, with realm server `https://realms-staging.stack.cards/`. Without `--host-url`, the token is redeemed on the profile's realm-server origin (`https://localhost:4200/` for standard local dev).
+`boxel profile list` shows the profiles; match an account the user names ("my tribecaprep account") to its ID there, and pass `--profile` even when it is the active one. A staging profile is `@<user>:stack.cards`, with realm server `https://realms-staging.stack.cards/`; a production one is `@<user>:boxel.ai`, with `https://app.boxel.ai/`. Without `--host-url`, the token is redeemed on the profile's realm-server origin (`https://localhost:4200/` for standard local dev).
 
 The browser that opens is the user's default browser, not one you drive. You can't see it, so a clean exit ("Opening <host> as <id>") is all the confirmation you get: tell the user which account should be signed in and to say if the page shows otherwise.
 
@@ -35,11 +35,11 @@ Sign in the browser the work happens in. Sessions live in each browser's own sto
 | Browser                                                     | How                                                                                                         |
 | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | The user's default browser                                  | `boxel browse … --profile <id>`, as above                                                                   |
-| A specific browser, such as Chrome for debugging            | macOS: `open -a "Google Chrome" "$(boxel browse … --profile <id> --print-url)"`. Linux: `google-chrome "$(…)"` |
+| A specific browser, such as Chrome for debugging            | macOS: `url=$(boxel browse … --profile <id> --print-url) && open -a "Google Chrome" "$url"`. Linux: `google-chrome` in place of `open -a …` |
 | A browser you drive through the user's Chrome (an extension) | the Chrome row, then drive the tab it opens                                                                 |
 | A browser you drive that is separate from the user's (an in-app browser pane, a headless browser) | the user pastes the URL: see below                                                                          |
 
-In the Chrome row the URL goes from the CLI straight to Chrome inside the command substitution, so it never reaches the output. Run exactly that shape: don't assign it to a variable you print, and don't add `echo`. Chrome opens the URL in its last-used profile; if the user has several Chrome profiles, have them bring the right one forward first.
+In the Chrome row the URL goes from the CLI to Chrome through a shell variable, so it never reaches the output, and `&&` stops Chrome opening when `boxel browse` fails (its error is on stderr). Run exactly that shape: never print `$url`, and don't add `echo`. Don't read the tab's address back to check it either. Chrome opens the URL in its last-used profile; if the user has several Chrome profiles, have them bring the right one forward first.
 
 **A browser you drive that isn't the user's.** You would have to navigate it to the URL yourself, which puts the token in your hands, so don't. Open that browser on the host, run `boxel browse … --profile <id> --print-url | pbcopy` (or the platform's clipboard tool), and ask the user to paste into its address bar within 2 minutes. Pass `--host-url` when that browser is on a local or custom origin.
 
@@ -47,7 +47,7 @@ In the Chrome row the URL goes from the CLI straight to Chrome inside the comman
 
 The login URL is a credential: until it is redeemed, anyone holding it signs in as that account. Running `boxel browse` without `--print-url` keeps it out of your hands, which is why that is the default.
 
-- Never let `--print-url` output reach your terminal output. Send it straight into a browser launcher (`open -a … "$(…)"`) or a clipboard tool (`| pbcopy`), as in the table above.
+- Never let `--print-url` output reach your terminal output. Send it straight into a browser launcher (`url=$(…) && open -a … "$url"`) or a clipboard tool (`| pbcopy`), as in the table above.
 - If the CLI can't launch a browser, it prints the URL as a fallback. Don't repeat it, open it, or paste it anywhere; tell the user to sign in another way or re-run on their machine.
 - It is single-use and expires in about 2 minutes, so mint it when the browser should open, not ahead of time.
 
