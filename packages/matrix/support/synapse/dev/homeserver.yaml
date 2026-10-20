@@ -116,7 +116,7 @@ email:
     email_validation: "%(app)s Email Validation"
 
 templates:
-  custom_template_directory: "/custom/templates/"
+  custom_template_directory: "/data/templates/"
 
 experimental_features:
   msc3575_enabled: true

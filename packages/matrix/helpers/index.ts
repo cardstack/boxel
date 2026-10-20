@@ -128,6 +128,26 @@ export function subjectFor(username: string): string {
   return `google-oauth2|${username}`;
 }
 
+// The OAuth error response an identity provider sends back for the
+// authorization request the browser is on: the request's `redirect_uri`, with
+// `error` and the request's `state`. It's how Google answers a sign-in the user
+// cancels (`access_denied`). The mock identity provider's form has no Cancel
+// control, so tests navigate to this instead.
+export function oauthErrorResponseURL(
+  authorizeRequestURL: string,
+  error: string,
+  errorDescription?: string,
+): string {
+  let request = new URL(authorizeRequestURL);
+  let response = new URL(request.searchParams.get('redirect_uri')!);
+  response.searchParams.set('error', error);
+  if (errorDescription) {
+    response.searchParams.set('error_description', errorDescription);
+  }
+  response.searchParams.set('state', request.searchParams.get('state')!);
+  return response.href;
+}
+
 async function registerRealmRedirect(
   page: Page,
   fromPrefix: string,
