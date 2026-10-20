@@ -7,7 +7,7 @@ import { tracked } from '@glimmer/tracking';
 
 import ArchiveIcon from '@cardstack/boxel-icons/archive';
 import Bot from '@cardstack/boxel-icons/bot';
-import Home from '@cardstack/boxel-icons/home';
+import Globe from '@cardstack/boxel-icons/globe';
 import LayoutGrid from '@cardstack/boxel-icons/layout-grid';
 import Store from '@cardstack/boxel-icons/store';
 import { didCancel, dropTask } from 'ember-concurrency';
@@ -731,7 +731,7 @@ export default class WorkspaceChooser extends Component<Signature> {
                 aria-pressed={{if (eq this.scope 'hosted-only') 'true' 'false'}}
                 {{on 'click' (fn this.setScope 'hosted-only')}}
                 data-test-dashboard-filter='hosted'
-              ><Home
+              ><Globe
                   class='scope-option-icon'
                   width='14'
                   height='14'

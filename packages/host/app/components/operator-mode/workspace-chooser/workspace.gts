@@ -9,7 +9,7 @@ import { cached, tracked } from '@glimmer/tracking';
 import ArchiveIcon from '@cardstack/boxel-icons/archive';
 import CopyIcon from '@cardstack/boxel-icons/copy';
 import FileSettingsIcon from '@cardstack/boxel-icons/file-settings';
-import Home from '@cardstack/boxel-icons/home';
+import Globe from '@cardstack/boxel-icons/globe';
 import RefreshIcon from '@cardstack/boxel-icons/refresh-cw';
 import { format as formatDate } from 'date-fns';
 import { didCancel, dropTask, task } from 'ember-concurrency';
@@ -71,7 +71,7 @@ import type WorkspaceDuplicationService from '@cardstack/host/services/workspace
 
 import focusWhenSelected from './focus-when-selected';
 import ItemContainer from './item-container';
-import PinnedCards from './pinned-cards';
+import PinnedCards, { tilePins } from './pinned-cards';
 import WorkspaceLoadingIndicator from './workspace-loading-indicator';
 
 interface Signature {
@@ -189,6 +189,7 @@ export default class Workspace extends Component<Signature> {
                 class='desk-pins'
                 @realmURL={{@realmIdentifier}}
                 @workspaceName={{this.name}}
+                @homePinIds={{this.homePinIds}}
               />
             {{else}}
               <p class='desk-hint' data-test-favorite-pin-hint>
@@ -349,7 +350,7 @@ export default class Workspace extends Component<Signature> {
             data-test-host-trigger={{@realmIdentifier}}
             {{on 'click' this.toggleHostDropdown}}
           >
-            <span class='trigger-house'><Home width='13' height='13' /></span>
+            <span class='trigger-globe'><Globe width='13' height='13' /></span>
             <span class='trigger-url'>{{this.displayPublishedURL}}</span>
             {{#if (gt this.publishedRealmURLs.length 1)}}
               <span class='trigger-chevron'>&#x25BE;</span>
@@ -404,7 +405,7 @@ export default class Workspace extends Component<Signature> {
                 <Tooltip @placement='top'>
                   <:trigger>
                     <span class='hosted-icon'>
-                      <Home width='13' height='13' />
+                      <Globe width='13' height='13' />
                     </span>
                   </:trigger>
                   <:content>Hosted on the web</:content>
@@ -1294,7 +1295,7 @@ export default class Workspace extends Component<Signature> {
           var(--workspace-chooser-enlarged-tile-width)
         );
       }
-      .trigger-house {
+      .trigger-globe {
         color: var(--boxel-highlight);
         display: flex;
         align-items: center;
@@ -1446,7 +1447,7 @@ export default class Workspace extends Component<Signature> {
         right: 0.375rem;
         transform: translateY(-50%);
       }
-      /* The live-site link folds to its house icon at the row's end. */
+      /* The live-site link folds to its globe icon at the row's end. */
       .is-compact .host-trigger {
         top: 50%;
         left: auto;
@@ -2068,12 +2069,19 @@ export default class Workspace extends Component<Signature> {
     | undefined;
   @tracked private isHostDropdownOpen = false;
   @tracked private reindexError: string | undefined;
+  // The cards pinned on the workspace's own Home, for a favorite's tile.
+  @tracked private homePinIds: string[] = [];
 
   constructor(...args: [any, any]) {
     super(...args);
     this.loadRealmTask
       .perform()
       .catch((error: unknown) => this.reportRealmLoadFailure(error));
+    if (this.args.isFavoritesSection) {
+      this.loadHomePinsTask
+        .perform()
+        .catch((error: unknown) => this.reportRealmLoadFailure(error));
+    }
   }
 
   willDestroy() {
@@ -2087,6 +2095,37 @@ export default class Workspace extends Component<Signature> {
   private loadRealmTask = task(async () => {
     await this.realm.login(this.args.realmIdentifier);
     await this.realm.ensureRealmMeta(this.args.realmIdentifier);
+  });
+
+  // A workspace's Home pins its cards as the `entryPoints` links of its
+  // index card, shared with everyone who opens it. A favorite's tile shows
+  // them alongside the user's own pins. An index that isn't a workspace
+  // Home has none, and the tile just shows the user's.
+  private loadHomePinsTask = task(async () => {
+    await this.realm.login(this.args.realmIdentifier);
+    let indexURL = `${this.args.realmIdentifier}index`;
+    let response = await this.network.authedFetch(indexURL, {
+      headers: { Accept: SupportedMimeType.CardJson },
+    });
+    if (!response.ok) {
+      return;
+    }
+    let doc = await response.json();
+    let relationships: Record<
+      string,
+      { data?: { id?: string }; links?: { self?: string | null } }
+    > = doc?.data?.relationships ?? {};
+    this.homePinIds = Object.keys(relationships)
+      .filter((key) => key.startsWith('entryPoints.'))
+      .sort((a, b) => Number(a.split('.')[1]) - Number(b.split('.')[1]))
+      .map((key) => {
+        let link = relationships[key];
+        let id = link?.data?.id ?? link?.links?.self;
+        return id
+          ? new URL(id, this.network.virtualNetwork.toURL(indexURL)).href
+          : undefined;
+      })
+      .filter((id): id is string => Boolean(id));
   });
 
   // An unconsumed ember-concurrency task instance reports its error through
@@ -2335,8 +2374,12 @@ export default class Workspace extends Component<Signature> {
     ].filter((stat): stat is { label: string; count: number } => !!stat.count);
   }
 
+  // The user's own pins and, on a favorite, the workspace's Home pins.
   private get pinCount() {
-    return this.matrixService.pinnedCardsFor(this.args.realmIdentifier).length;
+    return tilePins(
+      this.matrixService.pinnedCardsFor(this.args.realmIdentifier),
+      this.homePinIds,
+    ).length;
   }
 
   // Favorites lay their pinned cards out on the wallpaper.

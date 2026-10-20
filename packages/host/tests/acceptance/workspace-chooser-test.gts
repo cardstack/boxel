@@ -1385,6 +1385,56 @@ module('Acceptance | workspace-chooser', function (hooks) {
       assert.dom(`[data-test-stack-card="${cardId}"]`).exists();
     });
 
+    test('a favorite’s tile shows the cards pinned on its workspace Home', async function (assert) {
+      let pinnedId = `${realmAURL}about`;
+      await realmA.write(
+        'about.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            attributes: { cardInfo: { name: 'About Workspace A' } },
+            meta: {
+              adoptsFrom: {
+                module: '@cardstack/base/card-api',
+                name: 'CardDef',
+              },
+            },
+          },
+        }),
+      );
+      await realmA.write(
+        'index.json',
+        JSON.stringify({
+          data: {
+            type: 'card',
+            relationships: {
+              'entryPoints.0': { links: { self: './about' } },
+            },
+            meta: {
+              adoptsFrom: {
+                module: '@cardstack/base/workspace',
+                name: 'Workspace',
+              },
+            },
+          },
+        }),
+      );
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      let matrixService = getService('matrix-service') as MatrixService;
+      matrixService.workspaceFavorites = [realmAURL];
+      await settled();
+
+      assert
+        .dom(
+          `[data-test-favorites-list] [data-test-pinned-cards="${realmAURL}"] [data-test-pinned-card="${pinnedId}"]`,
+        )
+        .hasAttribute('data-test-pinned-card-format', 'fitted');
+      assert
+        .dom('[data-test-favorite-pin-hint]')
+        .doesNotExist('a workspace with Home pins needs no hint');
+    });
+
     test('pinning a card favorites its workspace, so the pin has a tile to show on', async function (assert) {
       let cardId = `${realmBURL}index`;
       await visitOperatorMode({ workspaceChooserOpened: true });

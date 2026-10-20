@@ -45,7 +45,26 @@ interface Signature {
   Args: {
     realmURL: string;
     workspaceName: string;
+    // The cards pinned on the workspace's own Home (its index card's
+    // `entryPoints`), which fill the slots the user's own pins leave.
+    homePinIds?: string[];
   };
+}
+
+// What a tile shows: the user's own pins, in the format each chose, then
+// the workspace's Home pins, fitted, up to the tile's four slots. The
+// workspace's pins are shared with everyone who opens it, so a workspace
+// someone has set up shows its picks before the user pins anything.
+export function tilePins(
+  userPins: DashboardPin[],
+  homePinIds: string[] = [],
+): DashboardPin[] {
+  let bare = (id: string) => id.replace(/\.json$/, '');
+  let seen = new Set(userPins.map((pin) => bare(pin.cardId)));
+  let homePins = homePinIds
+    .filter((id) => !seen.has(bare(id)))
+    .map((cardId): DashboardPin => ({ cardId, format: 'fitted' }));
+  return [...userPins, ...homePins].slice(0, MAX_DASHBOARD_PINS_PER_WORKSPACE);
 }
 
 // Zooms the canvas to the tile. Layout sizes (`offsetWidth`) ignore
@@ -85,16 +104,17 @@ export const fitPage = modifier(
   },
 );
 
-// The cards a user pinned to a workspace, collaged on its dashboard tile.
+// The cards pinned to a workspace, collaged on its dashboard tile.
 // Each card is its own control and opens its card.
 export default class PinnedCards extends Component<Signature> {
   @service declare private matrixService: MatrixService;
   @service declare private operatorModeStateService: OperatorModeStateService;
 
   private get pins() {
-    return this.matrixService
-      .pinnedCardsFor(this.args.realmURL)
-      .slice(0, MAX_DASHBOARD_PINS_PER_WORKSPACE);
+    return tilePins(
+      this.matrixService.pinnedCardsFor(this.args.realmURL),
+      this.args.homePinIds,
+    );
   }
 
   private get shape() {
@@ -241,12 +261,12 @@ export default class PinnedCards extends Component<Signature> {
         border: 0;
         border-radius: 18px;
         overflow: hidden;
-        background-color: var(--boxel-light);
-        /* A soft contact shadow: the cards rest on the dimmed wallpaper
-           rather than float above it. */
-        box-shadow:
-          0 2px 6px color-mix(in oklch, var(--boxel-dark) 14%, transparent),
-          0 1px 0 color-mix(in oklch, var(--boxel-light) 6%, transparent) inset;
+        /* Clear until the card's preview paints its own face, with a faint
+           outline holding its place, so a loading pin doesn't flash white
+           over the wallpaper. */
+        background-color: transparent;
+        box-shadow: inset 0 0 0 1px
+          color-mix(in oklch, var(--boxel-light) 18%, transparent);
         text-align: left;
         cursor: pointer;
         pointer-events: auto;
