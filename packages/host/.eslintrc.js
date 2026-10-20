@@ -283,7 +283,6 @@ module.exports = {
         'tests/unit/is-component-declaration-test.ts',
         'tests/unit/plan-install-test.ts',
         'tests/unit/query-canonicalization-test.ts',
-        'tests/unit/realm-utils-test.ts',
         'tests/unit/virtual-network-realm-for-reference-test.ts',
         'tests/unit/virtual-network-retry-test.ts',
       ],
