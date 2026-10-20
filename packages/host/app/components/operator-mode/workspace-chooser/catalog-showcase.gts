@@ -27,15 +27,18 @@ import { fitPage } from './pinned-cards';
 
 const log = logger('component:workspace-chooser/catalog-showcase');
 
-// The lead post's art is the listing's own example card, rendered as a page
-// this wide and zoomed down into the frame.
+// A story's art is the listing's own example card, rendered as a page this
+// wide and zoomed down into the frame.
 const ART_PAGE_WIDTH = 1000;
 
-// The lead story plus this many rows under it.
-const SHELF_ROWS = 4;
-// Listings fetched for the rows: enough to fill them after the featured ones
-// and any without a thumbnail drop out.
+// Stories on the shelf: the lead and the cards after it.
+const STORY_COUNT = 5;
+// Listings fetched for the stories: enough to fill them after the featured
+// ones and any without a thumbnail drop out.
 const LISTINGS_FETCHED = 12;
+// Each story wears its own paper, in turn, the way a store's editorial
+// cards do; the second is the dark one.
+const TINT_COUNT = 5;
 
 // Only these fields of a listing are read, so the search returns them from
 // the index and no card code loads to draw the shelf.
@@ -48,25 +51,24 @@ interface ShelfItem {
   summary: string | undefined;
   art: string | undefined;
   artCss: string | undefined;
-  exampleId: string | undefined;
 }
 
-interface Shelf {
-  lead: ShelfItem | undefined;
-  rows: ShelfItem[];
+interface Story extends ShelfItem {
+  eyebrow: string;
+  tint: number;
+  isLead: boolean;
 }
 
-// The Catalogs section's shelf: the Boxel catalog shown the way an app store
-// shows its own, a featured listing with its art and a short list of more to
-// try. The catalog curates what it features (its index card's `featured`
-// links); the rows are its other listings.
+// The Catalogs section's shelf: the Boxel catalog told as stories, the way
+// an app store's Today tab tells its own. Each story is a tinted editorial
+// card (an eyebrow, a headline, the listing's own example card as art) and
+// opens its listing, which reads as the article. The catalog curates what
+// leads (its index card's `featured` links); its other listings follow.
 export default class CatalogShowcase extends Component {
   @service declare private network: NetworkService;
   @service declare private operatorModeStateService: OperatorModeStateService;
 
   @tracked private featuredIds: string[] = [];
-  // Featured listing → its first example card, the lead post's art.
-  @tracked private examples: Record<string, string> = {};
 
   constructor(owner: unknown, args: object) {
     super(owner as never, args as never);
@@ -108,48 +110,7 @@ export default class CatalogShowcase extends Component {
       .map((key) => relationships[key]?.data?.id)
       .filter((id): id is string => Boolean(id))
       .map(this.toURL);
-
-    let examples: Record<string, string> = {};
-    await Promise.all(
-      this.featuredIds.map(async (listingId) => {
-        let example = await this.firstExampleOf(listingId);
-        if (example) {
-          examples[listingId] = example;
-        }
-      }),
-    );
-    this.examples = examples;
   });
-
-  // A listing links the cards that show it in use; the first one becomes
-  // the post's art. A listing that won't load just goes without.
-  private async firstExampleOf(listingId: string) {
-    try {
-      let response = await this.network.authedFetch(listingId, {
-        headers: { Accept: SupportedMimeType.CardJson },
-      });
-      if (!response.ok) {
-        return undefined;
-      }
-      let doc = await response.json();
-      let id = doc?.data?.relationships?.['examples.0']?.data?.id;
-      return typeof id === 'string' ? this.toURL(id) : undefined;
-    } catch {
-      return undefined;
-    }
-  }
-
-  private exampleQuery = (exampleId: string): SearchEntryWireQuery => {
-    let base = searchEntryWireQueryFromQuery({}, { scope: 'cards' });
-    return {
-      ...base,
-      cardUrls: [`${exampleId}.json`],
-      filter: {
-        ...base.filter,
-        eq: { ...base.filter?.eq, htmlQuery: { eq: { format: 'isolated' } } },
-      },
-    };
-  };
 
   // Links and search results name cards by realm-scoped identifier or by
   // URL; comparing them needs one form.
@@ -183,34 +144,36 @@ export default class CatalogShowcase extends Component {
     };
   }
 
-  // Featured listings lead, in the catalog's order; the rest fill the rows.
-  // A listing without art can't carry the lead, so it only appears as a row.
-  private shelf = (
+  // Featured listings lead, in the catalog's order; the rest follow. A
+  // listing without a thumbnail has nothing to show while its example
+  // loads, so it stays off the shelf.
+  private stories = (
     featured: RenderableSearchEntryLike[],
     listings: RenderableSearchEntryLike[],
-  ): Shelf => {
+  ): Story[] => {
     let order = new Map(this.featuredIds.map((id, index) => [id, index]));
-    let item = (entry: RenderableSearchEntryLike) => {
-      let id = this.toURL(entry.id);
-      return { ...toShelfItem(entry), id, exampleId: this.examples[id] };
-    };
+    let item = (entry: RenderableSearchEntryLike) => ({
+      ...toShelfItem(entry),
+      id: this.toURL(entry.id),
+    });
     let featuredItems = featured
       .map(item)
       .sort(
         (a, b) => (order.get(a.id) ?? Infinity) - (order.get(b.id) ?? Infinity),
       );
     let seen = new Set(featuredItems.map((item) => item.id));
-    let all = [
+    return [
       ...featuredItems,
       ...listings.map(item).filter((listing) => !seen.has(listing.id)),
-    ];
-    // A listing with an example to show leads; failing that, one with art.
-    let lead =
-      all.find((item) => item.exampleId) ?? all.find((item) => item.art);
-    let rows = all
-      .filter((item) => item !== lead && item.art)
-      .slice(0, SHELF_ROWS);
-    return { lead, rows };
+    ]
+      .filter((item) => item.art)
+      .slice(0, STORY_COUNT)
+      .map((item, index) => ({
+        ...item,
+        eyebrow: eyebrowOf(item.kind, index === 0),
+        tint: index % TINT_COUNT,
+        isLead: index === 0,
+      }));
   };
 
   @action private openListing(id: string) {
@@ -237,107 +200,59 @@ export default class CatalogShowcase extends Component {
         @overlays={{false}}
         as |listings|
       >
-        {{#let (this.shelf featured.entries listings.entries) as |shelf|}}
-          {{#if shelf.lead}}
+        {{#let (this.stories featured.entries listings.entries) as |stories|}}
+          {{#if stories.length}}
             <div class='showcase' data-test-catalog-showcase>
-              <article
-                class='story lead'
-                data-test-catalog-story-lead={{shelf.lead.id}}
-              >
-                {{! The whole post opens the listing for a pointer; the Open
-                    button below is the keyboard's way in. }}
-                <button
-                  type='button'
-                  class='story-hit'
-                  tabindex='-1'
-                  aria-hidden='true'
-                  {{on 'click' (fn this.openListing shelf.lead.id)}}
-                ></button>
-                <span class='eyebrow'>Featured · {{shelf.lead.kind}}</span>
-                <h3 class='headline'>{{shelf.lead.name}}</h3>
-                {{#if shelf.lead.exampleId}}
-                  <span
-                    class='art is-live'
-                    style={{cssVar page-width=artPageWidth}}
-                    {{fitPage ART_PAGE_WIDTH}}
-                    data-test-catalog-story-example={{shelf.lead.exampleId}}
-                  >
-                    <span class='art-page' inert>
-                      <SearchResults
-                        @query={{this.exampleQuery shelf.lead.exampleId}}
-                        @mode='none'
-                        @overlays={{false}}
-                        as |example|
-                      >
-                        {{#each example.entries key='id' as |entry|}}
-                          <entry.component />
-                        {{/each}}
-                      </SearchResults>
-                    </span>
-                  </span>
-                {{else}}
-                  <span
-                    class='art'
-                    style={{cssVar story-art=shelf.lead.artCss}}
-                  ></span>
-                {{/if}}
-                {{#if shelf.lead.summary}}
-                  <p class='dek'>{{shelf.lead.summary}}</p>
-                {{/if}}
-                <span class='foot'>
-                  <span
-                    class='app-icon'
-                    style={{cssVar story-art=shelf.lead.artCss}}
-                  ></span>
-                  <span class='app-words'>
-                    <b>{{shelf.lead.name}}</b>
-                    <span>From the Boxel catalog</span>
-                  </span>
-                  <button
-                    type='button'
-                    class='act raised'
-                    aria-label='Open {{shelf.lead.name}}'
-                    {{on 'click' (fn this.openListing shelf.lead.id)}}
-                  >Open</button>
-                </span>
-              </article>
-
-              <div class='story-list'>
-                {{#each shelf.rows key='id' as |item|}}
+              <div class='stories'>
+                {{#each stories key='id' as |story|}}
                   <article
-                    class='story row'
-                    data-test-catalog-story-row={{item.id}}
+                    class='story tint-{{story.tint}} {{if story.isLead "lead"}}'
+                    data-test-catalog-story={{story.id}}
+                    data-test-catalog-story-lead={{if story.isLead story.id}}
                   >
+                    {{! The whole story opens its listing for a pointer; the
+                        Open button below is the keyboard's way in. }}
                     <button
                       type='button'
                       class='story-hit'
                       tabindex='-1'
                       aria-hidden='true'
-                      {{on 'click' (fn this.openListing item.id)}}
+                      {{on 'click' (fn this.openListing story.id)}}
                     ></button>
-                    <span
-                      class='thumb'
-                      style={{cssVar story-art=item.artCss}}
-                    ></span>
-                    <span class='row-words'>
-                      <span class='eyebrow'>{{item.kind}}</span>
-                      <b class='row-title'>{{item.name}}</b>
+                    <span class='eyebrow'>{{story.eyebrow}}</span>
+                    <h3 class='headline'>{{story.name}}</h3>
+                    <StoryArt
+                      @listingId={{story.id}}
+                      @artCss={{story.artCss}}
+                    />
+                    {{#if story.summary}}
+                      <p class='dek'>{{story.summary}}</p>
+                    {{/if}}
+                    <span class='foot'>
+                      <span
+                        class='app-icon'
+                        style={{cssVar story-art=story.artCss}}
+                      ></span>
+                      <span class='app-words'>
+                        <b>{{story.name}}</b>
+                        <span>{{story.kind}} · Boxel catalog</span>
+                      </span>
+                      <button
+                        type='button'
+                        class='act raised'
+                        aria-label='Open {{story.name}}'
+                        {{on 'click' (fn this.openListing story.id)}}
+                      >Open</button>
                     </span>
-                    <button
-                      type='button'
-                      class='act raised'
-                      aria-label='Open {{item.name}}'
-                      {{on 'click' (fn this.openListing item.id)}}
-                    >Open</button>
                   </article>
                 {{/each}}
-                <button
-                  type='button'
-                  class='browse'
-                  {{on 'click' this.browseCatalog}}
-                  data-test-catalog-browse
-                >Browse the whole catalog →</button>
               </div>
+              <button
+                type='button'
+                class='browse'
+                {{on 'click' this.browseCatalog}}
+                data-test-catalog-browse
+              >Browse the whole catalog →</button>
             </div>
           {{/if}}
         {{/let}}
@@ -345,32 +260,110 @@ export default class CatalogShowcase extends Component {
     </SearchResults>
 
     <style scoped>
-      /* The shelf is the store, so it reads as posts rather than as more
-         workspaces: a warm paper lead and a white list, set on the dark page
-         the way the catalog's own pages are. */
+      /* The shelf is the store, so it reads as editorial stories rather than
+         as more workspaces: tinted paper cards on the dark page, the way the
+         catalog's own pages are set. */
       .showcase {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp);
+      }
+      /* At most three columns, so five stories fill whole rows: the lead
+         and one beside it, then three; or, two up, the lead and two pairs. */
+      .stories {
+        --story-gap: var(--boxel-sp-lg);
+        display: grid;
+        grid-template-columns: repeat(
+          auto-fill,
+          minmax(max(17rem, (100% - 2 * var(--story-gap)) / 3), 1fr)
+        );
+        gap: var(--story-gap);
+      }
+      .story {
         --story-ink: var(--boxel-dark);
-        --story-muted: color-mix(in oklch, var(--boxel-dark) 66%, transparent);
-        --story-line: color-mix(in oklch, var(--boxel-dark) 10%, transparent);
         --story-accent: color-mix(
           in oklch,
           var(--boxel-teal) 62%,
           var(--boxel-dark)
         );
+        --story-act: var(--boxel-dark);
+        --story-act-ink: var(--boxel-light);
+        position: relative;
+        box-sizing: border-box;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-sm);
+        min-width: 0;
+        padding: var(--boxel-sp-lg);
+        border-radius: 1.375rem;
+        background-color: var(--story-paper);
+        color: var(--story-ink);
+        box-shadow:
+          0 0 0 1px color-mix(in oklch, var(--story-ink) 12%, transparent),
+          0 0.875rem 1.875rem
+            color-mix(in oklch, var(--boxel-dark) 35%, transparent);
+        transition: transform 0.2s ease;
+      }
+      .story:hover {
+        transform: translateY(-0.125rem);
+      }
+      /* The papers, in turn: warm, ink, mint, lilac, sky. */
+      .tint-0 {
         --story-paper: color-mix(
           in oklch,
           color-mix(in oklch, var(--boxel-light) 90%, var(--boxel-orange)) 95%,
           var(--boxel-dark)
         );
-        display: flex;
-        flex-wrap: wrap;
-        align-items: flex-start;
-        gap: var(--boxel-sp-lg);
-        color: var(--story-ink);
       }
-      .story {
-        position: relative;
-        box-sizing: border-box;
+      .tint-1 {
+        --story-paper: color-mix(
+          in oklch,
+          var(--boxel-purple) 18%,
+          var(--boxel-dark)
+        );
+        --story-ink: var(--boxel-light);
+        --story-accent: var(--boxel-highlight);
+        --story-act: var(--boxel-highlight);
+        --story-act-ink: var(--boxel-dark);
+      }
+      .tint-2 {
+        --story-paper: color-mix(
+          in oklch,
+          var(--boxel-teal) 16%,
+          var(--boxel-light)
+        );
+      }
+      .tint-3 {
+        --story-paper: color-mix(
+          in oklch,
+          var(--boxel-purple) 12%,
+          var(--boxel-light)
+        );
+        --story-accent: color-mix(
+          in oklch,
+          var(--boxel-purple) 80%,
+          var(--boxel-dark)
+        );
+      }
+      .tint-4 {
+        --story-paper: color-mix(
+          in oklch,
+          var(--boxel-blue) 12%,
+          var(--boxel-light)
+        );
+        --story-accent: color-mix(
+          in oklch,
+          var(--boxel-blue) 80%,
+          var(--boxel-dark)
+        );
+      }
+      /* The lead spans two columns and gives its art more room. */
+      .lead {
+        grid-column: span 2;
+        --story-art-height: 18rem;
+      }
+      .lead .headline {
+        font-size: 1.875rem;
       }
       .story-hit {
         position: absolute;
@@ -381,30 +374,9 @@ export default class CatalogShowcase extends Component {
         background: transparent;
         cursor: pointer;
       }
-      .story-hit:focus-visible {
-        outline: 3px solid var(--boxel-highlight);
-        outline-offset: 2px;
-      }
       .raised {
         position: relative;
         z-index: 2;
-      }
-      .lead,
-      .story-list {
-        border-radius: 1.375rem;
-        box-shadow:
-          0 0 0 1px var(--story-line),
-          0 0.875rem 1.875rem
-            color-mix(in oklch, var(--boxel-dark) 35%, transparent);
-      }
-      .lead {
-        flex: 1.15 1 24rem;
-        max-width: 34rem;
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-sm);
-        padding: var(--boxel-sp-lg);
-        background-color: var(--story-paper);
       }
       .eyebrow {
         font-family: var(--boxel-monospace-font-family);
@@ -416,60 +388,41 @@ export default class CatalogShowcase extends Component {
       }
       .headline {
         margin: 0;
-        font-size: 1.5rem;
+        font-size: 1.375rem;
         font-weight: 700;
         line-height: 1.12;
         letter-spacing: -0.015em;
-      }
-      .art {
-        position: relative;
-        display: block;
-        height: 12.5rem;
-        overflow: hidden;
-        border-radius: 0.875rem;
-        background-color: var(--boxel-light);
-        background-image: var(--story-art);
-        background-size: cover;
-        background-position: top center;
-        box-shadow: 0 0 0 1px var(--story-line);
-      }
-      /* The example card, laid out as a page and zoomed into the frame. */
-      .art-page {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: var(--page-width);
-        transform: scale(var(--page-zoom, 0.4));
-        transform-origin: 0 0;
-        pointer-events: none;
       }
       .dek {
         margin: 0;
         display: -webkit-box;
         -webkit-box-orient: vertical;
-        -webkit-line-clamp: 3;
+        -webkit-line-clamp: 2;
         overflow: hidden;
-        font-size: var(--boxel-font-size);
+        font-size: var(--boxel-font-size-sm);
         line-height: 1.45;
-        color: var(--story-muted);
+        color: color-mix(in oklch, var(--story-ink) 66%, transparent);
       }
       .foot {
         display: flex;
         align-items: center;
         gap: var(--boxel-sp-sm);
+        margin-top: auto;
         padding-top: var(--boxel-sp-sm);
-        border-top: 1px solid var(--story-line);
+        border-top: 1px solid
+          color-mix(in oklch, var(--story-ink) 12%, transparent);
       }
       .app-icon {
         flex: none;
-        width: 3rem;
-        height: 3rem;
-        border-radius: 0.75rem;
+        width: 2.5rem;
+        height: 2.5rem;
+        border-radius: 0.625rem;
         background-color: var(--boxel-light);
         background-image: var(--story-art);
         background-size: cover;
         background-position: top left;
-        box-shadow: 0 0 0 1px var(--story-line);
+        box-shadow: 0 0 0 1px
+          color-mix(in oklch, var(--story-ink) 12%, transparent);
       }
       .app-words {
         flex: 1;
@@ -484,16 +437,16 @@ export default class CatalogShowcase extends Component {
         white-space: nowrap;
       }
       .app-words span {
-        color: var(--story-muted);
+        color: color-mix(in oklch, var(--story-ink) 66%, transparent);
       }
       .act {
         flex: none;
-        height: 2.75rem;
-        padding: 0 var(--boxel-sp-lg);
+        height: 2.25rem;
+        padding: 0 var(--boxel-sp);
         border: 0;
-        border-radius: 1.375rem;
-        background-color: var(--story-ink);
-        color: var(--boxel-light);
+        border-radius: 1.125rem;
+        background-color: var(--story-act);
+        color: var(--story-act-ink);
         font-size: var(--boxel-font-size-sm);
         font-weight: 700;
         cursor: pointer;
@@ -501,85 +454,168 @@ export default class CatalogShowcase extends Component {
       .act:hover {
         background-color: color-mix(
           in oklch,
-          var(--story-ink) 82%,
-          var(--boxel-light)
+          var(--story-act) 82%,
+          var(--story-act-ink)
         );
       }
-      .act:focus-visible {
-        outline: 2px solid var(--boxel-highlight);
-        outline-offset: 2px;
-      }
-
-      .story-list {
-        flex: 1 1 22rem;
-        max-width: 30rem;
-        display: flex;
-        flex-direction: column;
-        padding: var(--boxel-sp-xs);
-        background-color: var(--boxel-light);
-      }
-      .row {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-sm);
-        padding: var(--boxel-sp-xs);
-        border-radius: 0.875rem;
-      }
-      .row:hover {
-        background-color: color-mix(in oklch, var(--story-ink) 4%, transparent);
-      }
-      .thumb {
-        flex: none;
-        width: 3.5rem;
-        height: 3.5rem;
-        border-radius: 0.875rem;
-        background-color: var(--boxel-100);
-        background-image: var(--story-art);
-        background-size: cover;
-        background-position: top left;
-        box-shadow: 0 0 0 1px var(--story-line);
-      }
-      .row-words {
-        flex: 1;
-        min-width: 0;
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-6xs);
-      }
-      .row-title {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        font-size: var(--boxel-font-size);
-      }
-      .browse {
-        margin-top: var(--boxel-sp-4xs);
-        padding: var(--boxel-sp-xs);
-        border: 0;
-        border-top: 1px solid var(--story-line);
-        border-radius: 0 0 0.875rem 0.875rem;
-        background: none;
-        color: var(--story-muted);
-        font-size: var(--boxel-font-size-sm);
-        font-weight: 600;
-        text-align: left;
-        cursor: pointer;
-      }
-      .browse:hover {
-        color: var(--story-ink);
-      }
+      .act:focus-visible,
       .browse:focus-visible {
         outline: 2px solid var(--boxel-highlight);
         outline-offset: 2px;
       }
-      @media (max-width: 30rem) {
-        .lead,
-        .story-list {
-          width: 100%;
+      .browse {
+        align-self: flex-start;
+        padding: var(--boxel-sp-xs) 0;
+        border: 0;
+        background: none;
+        color: var(--workspace-chooser-label-color);
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .browse:hover {
+        color: var(--boxel-light);
+      }
+      /* One column: the lead is one story among the rest. */
+      @media (max-width: 40rem) {
+        .lead {
+          grid-column: auto;
+          --story-art-height: 12.5rem;
         }
       }
     </style>
   </template>
+}
+
+interface StoryArtSignature {
+  Args: {
+    listingId: string;
+    artCss: string | undefined;
+  };
+}
+
+// A story's art: the listing's first example card, laid out as a page and
+// zoomed into the frame, so the story shows the thing in use rather than
+// its icon. Until the example arrives, and for a listing without one, the
+// listing's thumbnail stands in.
+class StoryArt extends Component<StoryArtSignature> {
+  @service declare private network: NetworkService;
+
+  @tracked private exampleId: string | undefined;
+
+  constructor(owner: unknown, args: StoryArtSignature['Args']) {
+    super(owner as never, args);
+    this.loadExampleTask.perform().catch((error: unknown) => {
+      if (!didCancel(error)) {
+        log.warn(`loading a story's example failed: ${error}`);
+      }
+    });
+  }
+
+  // A listing links the cards that show it in use; a listing that won't
+  // load just goes without.
+  private loadExampleTask = task(async () => {
+    let response = await this.network.authedFetch(this.args.listingId, {
+      headers: { Accept: SupportedMimeType.CardJson },
+    });
+    if (!response.ok) {
+      return;
+    }
+    let doc = await response.json();
+    let id = doc?.data?.relationships?.['examples.0']?.data?.id;
+    if (typeof id === 'string') {
+      this.exampleId = this.network.virtualNetwork.toURL(id).href;
+    }
+  });
+
+  <template>
+    {{#if this.exampleId}}
+      <span
+        class='art'
+        style={{cssVar page-width=artPageWidth}}
+        {{fitPage ART_PAGE_WIDTH}}
+        data-test-catalog-story-example={{this.exampleId}}
+      >
+        <span class='art-page' inert>
+          <SearchResults
+            @query={{exampleQuery this.exampleId}}
+            @mode='none'
+            @overlays={{false}}
+            as |example|
+          >
+            {{#each example.entries key='id' as |entry|}}
+              <entry.component />
+            {{/each}}
+          </SearchResults>
+        </span>
+      </span>
+    {{else}}
+      <span class='art is-thumb' style={{cssVar story-art=@artCss}}></span>
+    {{/if}}
+    <style scoped>
+      .art {
+        position: relative;
+        display: block;
+        flex: none;
+        height: var(--story-art-height, 11rem);
+        overflow: hidden;
+        border-radius: 0.875rem;
+        background-color: var(--boxel-light);
+        box-shadow: 0 0 0 1px
+          color-mix(in oklch, var(--boxel-dark) 10%, transparent);
+      }
+      /* The thumbnail is an app icon, so it shows whole and centred rather
+         than cropped to fill the frame. */
+      .is-thumb {
+        background-image: var(--story-art);
+        background-size: auto 70%;
+        background-position: center;
+        background-repeat: no-repeat;
+      }
+      /* The example card, laid out as a page and zoomed into the frame. */
+      .art-page {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: var(--page-width);
+        transform: scale(var(--page-zoom, 0.4));
+        transform-origin: 0 0;
+        pointer-events: none;
+      }
+    </style>
+  </template>
+}
+
+function exampleQuery(exampleId: string): SearchEntryWireQuery {
+  let base = searchEntryWireQueryFromQuery({}, { scope: 'cards' });
+  return {
+    ...base,
+    cardUrls: [`${exampleId}.json`],
+    filter: {
+      ...base.filter,
+      eq: { ...base.filter?.eq, htmlQuery: { eq: { format: 'isolated' } } },
+    },
+  };
+}
+
+// The editorial label over a story, from what the listing offers: the lead
+// is the catalog's pick of the week, the rest say what you'd get.
+function eyebrowOf(kind: string, isLead: boolean) {
+  if (isLead) {
+    return `${kind} of the week`;
+  }
+  switch (kind) {
+    case 'App':
+      return 'New app';
+    case 'Theme':
+      return 'New theme';
+    case 'Skill':
+      return 'New skill';
+    case 'Field':
+      return 'Build with it';
+    default:
+      return 'Try it';
+  }
 }
 
 // The search reports a listing's base type, but an instance lives in a
@@ -604,7 +640,6 @@ function toShelfItem(entry: RenderableSearchEntryLike): ShelfItem {
     summary: shelfSummary(text(attributes.summary)),
     art,
     artCss: art ? `url("${art}")` : undefined,
-    exampleId: undefined,
   };
 }
 
