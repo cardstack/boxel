@@ -584,6 +584,13 @@ export default class SubmodeLayout extends Component<Signature> {
           </div>
           {{#if this.workspaceChooserOpened}}
             <WorkspaceChooser />
+            {{! Nearing the left edge summons the rail, as the wordmark does. }}
+            <div
+              class='nav-rail-edge'
+              aria-hidden='true'
+              {{on 'mouseenter' this.summonNavRail}}
+              {{on 'mouseleave' this.scheduleNavRailDismiss}}
+            ></div>
             <NavRail
               @isSummoned={{this.isNavRailOpen}}
               @onPointerEnter={{this.summonNavRail}}
@@ -798,6 +805,24 @@ export default class SubmodeLayout extends Component<Signature> {
         z-index: var(--host-profile-z-index);
       }
 
+      /* A strip along the left edge, under the rail, that summons it while
+         it isn't a standing sidebar (below 80rem, as in nav-rail.gts). */
+      .nav-rail-edge {
+        position: absolute;
+        top: calc(
+          var(--operator-mode-top-bar-item-height) + 2 *
+            var(--operator-mode-spacing)
+        );
+        bottom: 0;
+        left: 0;
+        width: calc(var(--operator-mode-spacing) + 1rem);
+        z-index: var(--host-nav-rail-z-index);
+      }
+      @media (min-width: 80rem) {
+        .nav-rail-edge {
+          display: none;
+        }
+      }
       .workspace-button-wrapper {
         display: flex;
         flex-shrink: 0;

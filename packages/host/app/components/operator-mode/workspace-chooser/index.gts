@@ -835,12 +835,6 @@ export default class WorkspaceChooser extends Component<Signature> {
                     {{/each}}
                   </div>
                   {{#if this.otherUserRealmIdentifiers.length}}
-                    <div class='section-header'>
-                      <span class='workspace-chooser__title'>More</span>
-                      <span
-                        class='section-count'
-                      >{{this.otherUserRealmIdentifiers.length}}</span>
-                    </div>
                     <div
                       class='workspace-list is-compact
                         {{if this.hiddenWorkspaceCount "is-clipped"}}'
@@ -873,8 +867,9 @@ export default class WorkspaceChooser extends Component<Signature> {
                             aria-expanded='false'
                             {{on 'click' this.toggleAllWorkspaces}}
                             data-test-workspace-list-show-all
-                          >Show all
-                            {{this.otherUserRealmIdentifiers.length}}</button>
+                          >Show
+                            {{this.hiddenWorkspaceCount}}
+                            more</button>
                         </div>
                       {{/if}}
                     </div>
@@ -1194,10 +1189,11 @@ export default class WorkspaceChooser extends Component<Signature> {
         grid-template-columns: repeat(auto-fill, minmax(15.5rem, 1fr));
         gap: var(--boxel-sp-sm);
       }
+      /* One list: the compact rows carry straight on from the tiles. */
       .your-workspaces {
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-lg);
+        gap: var(--boxel-sp-xs);
       }
       /* The recent workspaces keep the full wallpaper tile, a size up. */
       .workspace-list.is-recent {

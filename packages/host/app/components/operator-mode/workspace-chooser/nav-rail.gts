@@ -12,6 +12,7 @@ import LayoutGrid from '@cardstack/boxel-icons/layout-grid';
 import MessageCircle from '@cardstack/boxel-icons/message-circle';
 import Plus from '@cardstack/boxel-icons/plus';
 import Store from '@cardstack/boxel-icons/store';
+import { restartableTask, timeout } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
 
 import { RealmIcon } from '@cardstack/boxel-ui/components';
@@ -31,6 +32,36 @@ import { CATALOG_LEADS_BELOW, leadWith } from './index';
 
 const RECENT_SESSION_COUNT = 5;
 const FAVORITES_SHOWN = 6;
+
+// How long a flyout waits before following the pointer to another entry
+// while the pointer is still travelling into the open flyout, and before
+// closing once the pointer has left its entry.
+const FLYOUT_AIM_DELAY_MS = 260;
+const FLYOUT_CLOSE_DELAY_MS = 320;
+
+interface Point {
+  x: number;
+  y: number;
+}
+
+// Whether the pointer, moving from `previous` to `current`, is heading into
+// `target`, a flyout to the right of the rail: the move narrows the angle to
+// both of the flyout's near corners. This is the triangle a pointer may cross
+// on its way to the flyout without the flyout switching to the entries it
+// passes over.
+function isAimingAt(previous: Point, current: Point, target: DOMRect) {
+  if (current.x >= target.left) {
+    return false;
+  }
+  let slope = (from: Point, to: Point) =>
+    (to.y - from.y) / Math.max(to.x - from.x, 1);
+  let top = { x: target.left, y: target.top };
+  let bottom = { x: target.left, y: target.bottom };
+  return (
+    slope(current, top) < slope(previous, top) &&
+    slope(current, bottom) > slope(previous, bottom)
+  );
+}
 
 // The rail's entries are the dashboard's sections, in page order.
 type Section = 'workspaces' | 'catalogs' | 'agents';
@@ -203,8 +234,68 @@ export default class NavRail extends Component<Signature> {
   }
 
   @action private showFlyout(flyout: Section | null) {
+    this.flyoutIntentTask.cancelAll();
     this.openFlyout = flyout;
   }
+
+  // The pointer's last two positions over the rail, for the aim test.
+  private previousPoint: Point | null = null;
+  private currentPoint: Point | null = null;
+  private railElement: HTMLElement | null = null;
+
+  @action private trackPointer(event: Event) {
+    let { clientX, clientY, currentTarget } = event as MouseEvent;
+    this.railElement = currentTarget as HTMLElement;
+    this.previousPoint = this.currentPoint;
+    this.currentPoint = { x: clientX, y: clientY };
+  }
+
+  private get isAimingAtOpenFlyout() {
+    let flyout = this.railElement?.querySelector('[data-nav-rail-flyout]');
+    if (!flyout || !this.previousPoint || !this.currentPoint) {
+      return false;
+    }
+    return isAimingAt(
+      this.previousPoint,
+      this.currentPoint,
+      flyout.getBoundingClientRect(),
+    );
+  }
+
+  // Hovering an entry opens its flyout at once, unless another flyout is
+  // open and the pointer is on its way into it; then the switch waits, and
+  // happens only if the pointer stops short.
+  @action private hoverEntry(section: Section) {
+    if (this.openFlyout === section) {
+      this.flyoutIntentTask.cancelAll();
+      return;
+    }
+    if (this.openFlyout && this.isAimingAtOpenFlyout) {
+      this.flyoutIntentTask.perform(section, FLYOUT_AIM_DELAY_MS);
+      return;
+    }
+    this.showFlyout(section);
+  }
+
+  // Leaving an entry closes its flyout after a grace period; entering the
+  // flyout (part of the entry) or another entry cancels it.
+  @action private leaveEntry() {
+    if (this.openFlyout) {
+      this.flyoutIntentTask.perform(null, FLYOUT_CLOSE_DELAY_MS);
+    }
+  }
+
+  private flyoutIntentTask = restartableTask(
+    async (section: Section | null, delay: number) => {
+      await timeout(delay);
+      if (section && this.isAimingAtOpenFlyout) {
+        // Still travelling into the open flyout: look again shortly.
+        this.flyoutIntentTask.perform(section, delay);
+        return;
+      }
+      this.openFlyout = section;
+    },
+  );
 
   @action private onKeydown(event: Event) {
     if ((event as KeyboardEvent).key !== 'Escape') {
@@ -284,14 +375,15 @@ export default class NavRail extends Component<Signature> {
       {{on 'mouseleave' @onPointerLeave}}
       {{on 'focusin' @onPointerEnter}}
       {{on 'keydown' this.onKeydown}}
+      {{on 'mousemove' this.trackPointer}}
       {{trackSection this.setCurrentSection}}
       ...attributes
     >
       {{#each this.sections key='id' as |section|}}
         <div
           class='rail-item'
-          {{on 'mouseenter' (fn this.showFlyout section.id)}}
-          {{on 'mouseleave' (fn this.showFlyout null)}}
+          {{on 'mouseenter' (fn this.hoverEntry section.id)}}
+          {{on 'mouseleave' this.leaveEntry}}
         >
           <button
             type='button'
@@ -323,6 +415,7 @@ export default class NavRail extends Component<Signature> {
                 class='flyout'
                 role='group'
                 aria-label='Favorite workspaces'
+                data-nav-rail-flyout
                 data-test-nav-rail-flyout='workspaces'
               >
                 <header class='flyout-header'>
@@ -363,6 +456,7 @@ export default class NavRail extends Component<Signature> {
                 class='flyout'
                 role='group'
                 aria-label='Catalogs'
+                data-nav-rail-flyout
                 data-test-nav-rail-flyout='catalogs'
               >
                 <header class='flyout-header'>
@@ -395,6 +489,7 @@ export default class NavRail extends Component<Signature> {
                 class='flyout'
                 role='group'
                 aria-label='Agents'
+                data-nav-rail-flyout
                 data-test-nav-rail-flyout='agents'
               >
                 <header class='flyout-header'>
