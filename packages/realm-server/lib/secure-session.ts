@@ -404,10 +404,22 @@ async function checkPassword(
     registrationToken?: string;
   },
 ): Promise<SignedInSession> {
-  // The admin API mints a token for any user id, so a name that names no
-  // account is caught here, before anything acts as it.
-  if (!user || (await adminRequest(deps, userPath(user))).status !== 200) {
+  if (!user) {
     throw invalidCredentials();
+  }
+  // The admin API mints a token for any user id, so a name that names no
+  // account is caught here, before anything acts as it. Only "no such
+  // account" is the account's answer; any other failure is the Matrix
+  // server's, and isn't counted against the account.
+  let account = await adminRequest(deps, userPath(user));
+  if (account.status === 404) {
+    throw invalidCredentials();
+  }
+  if (account.status !== 200) {
+    log.error(
+      `looking up a secure sign-in's account got HTTP ${account.status}`,
+    );
+    throw unavailable();
   }
   let request = {
     clientSecret: randomBytes(24).toString('hex'),

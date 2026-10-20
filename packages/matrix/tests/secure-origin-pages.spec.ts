@@ -199,8 +199,8 @@ async function fieldLayout(
       );
       return inputs.map((input) => {
         let label = input
-          .closest('.boxel-field')
-          ?.querySelector('.boxel-label');
+          .closest('[data-test-boxel-field]')
+          ?.querySelector('[data-test-boxel-field-label]');
         return {
           name: input.name,
           input: box(input),
@@ -261,7 +261,9 @@ test.describe('The secure origin’s pages', () => {
     await page.locator('[data-test-name-field]').blur();
     let secure = await openSecurePage(page, 'mode=register');
     await expect(
-      secure.locator('[data-test-secure-field="username"] .suffix'),
+      secure.locator(
+        '[data-test-secure-field="username"] [data-test-input-group-suffix]',
+      ),
     ).toHaveText('localhost');
     await secure.getByLabel('Your Name').blur();
     await expect(
@@ -298,7 +300,7 @@ test.describe('The secure origin’s pages', () => {
     await expect(secure.locator('[data-test-secure-google]')).toHaveText(
       'Continue with Google',
     );
-    await expect(secure.locator('.divider-label')).toHaveText(
+    await expect(secure.locator('[data-test-secure-divider-label]')).toHaveText(
       'or use your email',
     );
     let username = secure.getByLabel('Email Address or Username');
@@ -310,9 +312,9 @@ test.describe('The secure origin’s pages', () => {
     await expect(
       secure.locator('[data-test-secure-forgot-password]'),
     ).toHaveText('Forgot password?');
-    await expect(secure.locator('.register-prompt-text')).toHaveText(
-      "Don't have an account?",
-    );
+    await expect(
+      secure.locator('[data-test-secure-register-prompt]'),
+    ).toHaveText("Don't have an account?");
     await expect(secure.locator('[data-test-secure-register]')).toHaveText(
       'Create a new Boxel account',
     );
@@ -373,7 +375,7 @@ test.describe('The secure origin’s pages', () => {
     await expect(secure.locator('[data-test-register-btn]')).toBeDisabled();
     await expect(
       secure.locator(
-        '[data-test-secure-field="username"] .text-accessory.suffix',
+        '[data-test-secure-field="username"] [data-test-input-group-suffix]',
       ),
     ).toHaveText('localhost');
     await snapshot(testInfo, secure, 'secure-register-1-form');
@@ -397,9 +399,39 @@ test.describe('The secure origin’s pages', () => {
       secure.locator(
         '[data-test-secure-field="token"] [data-test-boxel-input-error-message]',
       ),
-    ).toBeVisible();
+    ).toHaveText(
+      'This registration token does not exist or has exceeded its usage limit.',
+    );
     await snapshot(testInfo, secure, 'secure-register-4-bad-invite');
     await token.fill(REGISTRATION_TOKEN);
+    // The account's first sign-in fails once; trying again from the same page
+    // still records the invite code.
+    let failedOnce = false;
+    await secure.route(
+      new URL('/_secure-session', appURL).href,
+      async (route) => {
+        if (!failedOnce && route.request().method() === 'POST') {
+          failedOnce = true;
+          await route.fulfill({
+            status: 503,
+            contentType: 'application/vnd.api+json',
+            headers: { 'Access-Control-Allow-Origin': '*' },
+            json: {
+              errors: [
+                {
+                  status: '503',
+                  code: 'unavailable',
+                  detail:
+                    'signing in is unavailable right now; try again later',
+                },
+              ],
+            },
+          });
+          return;
+        }
+        await route.continue();
+      },
+    );
     await secure.locator('[data-test-next-btn]').click();
 
     await expect(secure.locator('[data-test-email-validation]')).toHaveText(
@@ -420,7 +452,13 @@ test.describe('The secure origin’s pages', () => {
     ).toBeVisible();
     await snapshot(testInfo, validated, 'secure-register-6-email-validated');
 
-    // The page that asked carries on by itself, and ends signed in.
+    // The page that asked carries on by itself, and ends signed in, once the
+    // failed sign-in is tried again.
+    await expect(secure.locator('[data-test-secure-error]')).toHaveText(
+      'Signing in is unavailable right now; try again later.',
+      { timeout: 60000 },
+    );
+    await secure.locator('[data-test-secure-retry-sign-in]').click();
     let user = await signedInUser(secure);
     expect(user).toBe(`@${username}:localhost`);
     await snapshot(testInfo, secure, 'secure-register-7-signed-in');
