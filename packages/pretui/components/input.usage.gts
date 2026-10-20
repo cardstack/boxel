@@ -19,7 +19,7 @@ const INPUT_TYPES = [
 // itself (@helperText / @errorMessage / @required / @optional are boxel
 // machinery surfaced as Pretui args); the wrapping Field still owns the
 // label. Dropped knobs: @readonly / @min / @max (native attrs — splat
-// them), @bottomTreatment (single rounded shape), @size (single 28px
+// them), @bottomTreatment (single rounded shape), @size (single 30px
 // control height), @onKeyPress / @onFocus / @onBlur (use native event
 // splatting), textarea type (separate Textarea component), checkbox type
 // (separate Checkbox component).

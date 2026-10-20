@@ -899,14 +899,14 @@ export class Autocomplete extends Component<AutocompleteSignature> {
           gap: 0.3em;
           min-width: 0;
           /* other sizes keep size m's height-to-text ratio */
-          min-height: var(--pretui-ac-h, calc(7em / 3));
+          min-height: var(--pretui-ac-h, 2.5em);
           padding-inline: 0.625rem;
           border-radius: calc(var(--radius) - 2px);
           box-shadow: 0 0 0 1px var(--pretui-ac-edge);
         }
         /* Select's trigger height, whatever --pretui-size-m is */
         .pretui-ac[data-size='m'] .pretui-ac-field {
-          min-height: var(--pretui-ac-h, 1.75rem);
+          min-height: var(--pretui-ac-h, 1.875rem);
         }
         /* edges are drawn in the tone's -ink: the fill hue misses the 3:1 a
            field boundary needs */

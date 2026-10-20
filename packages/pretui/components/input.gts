@@ -46,10 +46,10 @@ export interface InputSignature {
 // line-height overshoots it, so an Input would sit taller than every other
 // control in the kit. The wrapper token channel cannot reach the UA
 // line-height; the inline constant can. Borders, padding-block and
-// line-height add up to the 1.75rem height. BoxelInput has no end padding,
+// line-height add up to the 1.875rem height. BoxelInput has no end padding,
 // so the end gets Select's inset too.
 const INPUT_FONT = htmlSafe(
-  'font: inherit; letter-spacing: inherit; line-height: calc(1.25rem - 2px); padding-block: 0.25rem; padding-inline-end: calc(0.625rem - 1px);',
+  'font: inherit; letter-spacing: inherit; line-height: calc(1.375rem - 2px); padding-block: 0.25rem; padding-inline-end: calc(0.625rem - 1px);',
 );
 
 export class Input extends Component<InputSignature> {
@@ -109,15 +109,15 @@ export class Input extends Component<InputSignature> {
         /* the kit's field style, Select's trigger the reference, fed into
            BoxelInput via its token channel: the --field face, an --input
            edge, the theme's --ring and --muted-foreground, Button's corner,
-           a 1.75rem height and --boxel-font-size-xs type */
+           a 1.875rem height and --boxel-font-size-xs type */
         .pretui-inputwrap {
           width: 100%;
           font-size: var(--boxel-font-size-xs);
           letter-spacing: var(--boxel-lsp-xs);
           --background: var(--field);
           --border: var(--input);
-          --boxel-form-control-height: 1.75rem;
-          --boxel-input-height: 1.75rem;
+          --boxel-form-control-height: 1.875rem;
+          --boxel-input-height: 1.875rem;
           --boxel-form-control-border-radius: calc(var(--radius) - 2px);
           /* the helper and error rows, a step below the field's text */
           --boxel-font-size-sm: var(--boxel-font-size-2xs);

@@ -50,7 +50,7 @@ Theme tokens: `--field`, `--input`, `--foreground`, `--muted-foreground`, `--rin
 
 Forwarded through BoxelSelect's knobs: `--boxel-form-control-border-radius`, `--boxel-select-trigger-padding`, `--boxel-select-trigger-gap`, `--boxel-select-trigger-content-display`, `--boxel-select-background-color`, `--boxel-select-text-color`, and the `--boxel-dropdown-*` colors. Hovered or keyboard-highlighted, the selected row darkens a shade in both schemes, the same as an accent Button's hover.
 
-Per-instance knob: `--pretui-select-h` (the trigger's height, 1.75rem by default), set on your class.
+Per-instance knob: `--pretui-select-h` (the trigger's height, 1.875rem by default), set on your class.
 
 The dropdown's own geometry (padding, option height, search box) is BoxelSelect's. Select adds two rules there: the search box's icon inset, and the options and search box at the trigger's font size, through an unscoped rule on its dropdown class, since the wormhole is outside Select's subtree and BoxelSelect has no font-size knob. The trigger's height, hairline, placeholder color and caret color have no knob (BoxelSelect's `--boxel-select-placeholder-color` never reaches its placeholder), so `:deep()` rules set them. All of these sit in `@layer PretComponent`, which outranks BoxelSelect's layers.
 
