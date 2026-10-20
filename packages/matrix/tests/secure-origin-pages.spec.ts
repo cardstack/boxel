@@ -1,44 +1,33 @@
-import { randomBytes } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { expect, test } from './fixtures.ts';
-import type { Frame, Page, Route, TestInfo } from '@playwright/test';
+import type { Frame, Page, TestInfo } from '@playwright/test';
 import { appURL, secureOriginURL } from '../support/isolated-realm-server.ts';
 import {
   REGISTRATION_TOKEN,
   createSubscribedUser,
   getSharedSQLExecutor,
-  mailHost,
   updateSynapseUser,
 } from '../helpers/index.ts';
+import {
+  fillRegistration,
+  followEmailLink,
+  openSecurePage,
+  signedInUser,
+  uniqueName,
+} from '../helpers/secure-origin-pages.ts';
 
 // The secure origin's sign-in, account creation and password reset pages:
 // the app's own screens, drawn the same and worded the same, on an origin card
 // code can't reach. These drive them in a real browser against real Synapse,
-// with its email going to smtp4dev.
-
-const STORAGE_KEY = 'boxel-secure-session';
-const MATRIX_URL = 'http://localhost:8008';
+// with its email going to smtp4dev. That Synapse asks for an invite code;
+// creating an account where it asks for none is
+// with-synapse/test-without-registration-token/secure-origin-open-registration.spec.ts.
 
 async function snapshot(testInfo: TestInfo, page: Page, name: string) {
   await testInfo.attach(name, {
     body: await page.screenshot(),
     contentType: 'image/png',
   });
-}
-
-async function openSecurePage(page: Page, query: string): Promise<Page> {
-  let secure = await page.context().newPage();
-  await secure.goto(`${secureOriginURL}?${query}`);
-  return secure;
-}
-
-async function signedInUser(secure: Page): Promise<string> {
-  await expect(secure.locator('[data-test-secure-signed-in]')).toBeVisible({
-    timeout: 60000,
-  });
-  return JSON.parse(
-    (await secure.evaluate((key) => localStorage.getItem(key), STORAGE_KEY))!,
-  ).user;
 }
 
 // How far apart, in any colour channel out of 255, two pixels may be and
@@ -244,55 +233,6 @@ async function settledScreenshot(page: Page): Promise<Buffer> {
     previous = next;
   }
   return previous;
-}
-
-// The newest email to `email` in smtp4dev whose body contains `button`, and
-// clicks that button, which opens a page. Returns it.
-async function followEmailLink(
-  page: Page,
-  email: string,
-  button: string,
-  count = 1,
-): Promise<Page> {
-  let context = page.context();
-  let emailPage = await context.newPage();
-  await emailPage.goto(mailHost);
-  let messages = emailPage
-    .locator('.messagelist .unread')
-    .filter({ hasText: email });
-  await expect(messages).toHaveCount(count);
-  await messages.first().click();
-  let body = emailPage.frameLocator('.messageview iframe');
-  await expect(body.locator('body')).toContainText(button);
-  let opened = context.waitForEvent('page');
-  // smtp4dev needs a moment before the link opens a window.
-  await emailPage.waitForTimeout(500);
-  await body.getByText(button).last().click();
-  let linked = await opened;
-  await linked.waitForLoadState();
-  await emailPage.close();
-  return linked;
-}
-
-function uniqueName(prefix: string) {
-  return `${prefix}-${randomBytes(4).toString('hex')}`;
-}
-
-async function fillRegistration(
-  secure: Page,
-  { name, email, username }: { name: string; email: string; username: string },
-  password = 'mypassword1!',
-) {
-  await secure.getByLabel('Your Name').fill(name);
-  await secure.getByLabel('Email').fill(email);
-  await secure.getByLabel('Username').fill(username);
-  await secure.getByLabel('Username').blur();
-  await expect(secure.locator('[data-test-username-available]')).toBeVisible();
-  await secure.getByLabel('Password', { exact: true }).fill(password);
-  await secure.getByLabel('Confirm Password').fill(password);
-  await secure.getByLabel('Confirm Password').blur();
-  await expect(secure.locator('[data-test-password-valid]')).toBeVisible();
-  await expect(secure.locator('[data-test-passwords-match]')).toBeVisible();
 }
 
 test.describe('The secure origin’s pages', () => {
@@ -597,80 +537,6 @@ test.describe('The secure origin’s pages', () => {
     await expect(error('[data-test-secure-field="email"]')).toHaveText(
       'Email address is already attached to a Boxel account',
     );
-  });
-
-  test('creates an account without an invite step where registration is open', async ({
-    page,
-  }) => {
-    // Production's Matrix server doesn't ask for an invite code. This suite's
-    // does, so here the server is shown to the page as an open one: each
-    // registration request the page makes has its invite stage completed
-    // first, out of the page's sight, and the stage is taken out of every
-    // answer the page sees. The page follows the stages it is given, so it
-    // never shows the invite step.
-    let completedInvite = new Set<string>();
-    await page
-      .context()
-      .route(
-        `${MATRIX_URL}/_matrix/client/v3/register`,
-        async (route: Route) => {
-          let request = route.request();
-          if (request.method() !== 'POST') {
-            await route.continue();
-            return;
-          }
-          let body = request.postDataJSON();
-          let session = body?.auth?.session;
-          if (session && !completedInvite.has(session)) {
-            await fetch(`${MATRIX_URL}/_matrix/client/v3/register`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                username: body.username,
-                password: body.password,
-                auth: {
-                  type: 'm.login.registration_token',
-                  token: REGISTRATION_TOKEN,
-                  session,
-                },
-              }),
-            });
-            completedInvite.add(session);
-          }
-          let response = await route.fetch();
-          let json = await response.json();
-          if (response.status() === 401 && Array.isArray(json.flows)) {
-            json.flows = json.flows.map((flow: { stages: string[] }) => ({
-              ...flow,
-              stages: flow.stages.filter(
-                (stage) => stage !== 'm.login.registration_token',
-              ),
-            }));
-            json.completed = (json.completed ?? []).filter(
-              (stage: string) => stage !== 'm.login.registration_token',
-            );
-          }
-          await route.fulfill({ response, json });
-        },
-      );
-
-    let username = uniqueName('secure-open');
-    let email = `${username}@example.com`;
-    let secure = await openSecurePage(page, 'mode=register');
-    await fillRegistration(secure, {
-      name: 'Open Registrant',
-      email,
-      username,
-    });
-    await secure.locator('[data-test-register-btn]').click();
-    await expect(secure.locator('[data-test-email-validation]')).toBeVisible();
-    await expect(secure.locator('[data-test-token-field]')).toBeHidden();
-    await followEmailLink(secure, email, 'Verify Email');
-    expect(await signedInUser(secure)).toBe(`@${username}:localhost`);
-    let [record] = await getSharedSQLExecutor().executeSQL(
-      `SELECT matrix_registration_token FROM users WHERE matrix_user_id = '@${username}:localhost'`,
-    );
-    expect(record?.matrix_registration_token ?? null).toBeNull();
   });
 
   test('resets a forgotten password', async ({ page }, testInfo) => {

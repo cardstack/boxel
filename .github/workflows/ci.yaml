@@ -763,6 +763,13 @@ jobs:
       matrix:
         shardIndex: [1, 2, 3]
         shardTotal: [3]
+        include:
+          # The specs under packages/matrix/tests/with-synapse/<template>/
+          # need a Synapse configured otherwise than the one the shards share,
+          # so each template's run is a job of its own, unsharded. Its
+          # `shardIndex` is a label naming the job and its artifacts.
+          - shardIndex: without-registration-token
+            synapseTemplate: test-without-registration-token
     concurrency:
       group: matrix-client-test-${{ matrix.shardIndex }}-${{ github.head_ref || github.run_id }}
       cancel-in-progress: true
@@ -813,8 +820,10 @@ jobs:
           MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix | tee -a /tmp/server.log &
           timeout 300 bash -c 'until curl -ksf https://localhost:4200 > /dev/null && curl -sf http://localhost:4206 > /dev/null; do sleep 2; done'
       - name: Run Playwright tests
-        run: pnpm test:group ${{ matrix.shardIndex }}/${{ matrix.shardTotal }}
+        run: pnpm test:group ${{ matrix.shardTotal && format('{0}/{1}', matrix.shardIndex, matrix.shardTotal) || '' }}
         working-directory: packages/matrix
+        env:
+          MATRIX_SYNAPSE_TEMPLATE: ${{ matrix.synapseTemplate }}
       # The services above stream their output into this job's log as the run
       # goes, so the file is a second copy of what is already there — and at
       # tens of thousands of lines it pushes the Playwright run's own output

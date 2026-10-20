@@ -35,7 +35,10 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { discoverSpecFiles } from '../support/shard-spec-files.ts';
+import {
+  SYNAPSE_TEMPLATE_SPECS_DIR,
+  discoverSpecFiles,
+} from '../support/shard-spec-files.ts';
 
 const args = process.argv.slice(2);
 let reportPath: string | undefined;
@@ -138,9 +141,14 @@ try {
   // no existing timings file — first generation
 }
 
+// The shards run the default Synapse template's spec files, so those are the
+// ones timed. The report also carries the runs for other templates, whose
+// spec files are left out without a warning.
 const specFiles = discoverSpecFiles(testsDir);
 const unknownToDisk = Object.keys(observed).filter(
-  (file) => !specFiles.includes(file),
+  (file) =>
+    !specFiles.includes(file) &&
+    !file.startsWith(`${SYNAPSE_TEMPLATE_SPECS_DIR}/`),
 );
 if (unknownToDisk.length) {
   console.warn(
