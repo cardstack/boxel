@@ -58,6 +58,8 @@ import {
 const EMAIL_POLL_INTERVAL_MS = 1000;
 
 const NO_NETWORK_ERROR = 'Could not connect to server';
+const INVALID_INVITE_CODE =
+  'This registration token does not exist or has exceeded its usage limit.';
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -159,7 +161,9 @@ export function registerMode(root) {
       'data-test-username-field': true,
     },
   });
-  let serverNameElement = usernameField.element.querySelector('.suffix');
+  let serverNameElement = usernameField.element.querySelector(
+    '[data-input-group-suffix]',
+  );
   matrixServerName(config).then(
     (name) => (serverNameElement.textContent = name),
     () => undefined,
@@ -438,7 +442,7 @@ export function registerMode(root) {
     if (!passwords.validate()) {
       return;
     }
-    state.name = nameField.input.value;
+    state.name = nameField.input.value.trim();
     state.email = emailField.input.value;
     state.username = usernameField.input.value;
     state.clientSecret = newClientSecret();
@@ -492,8 +496,10 @@ export function registerMode(root) {
           state.session = flows.session;
           let stage = nextStage(flows);
           if (stage === 'm.login.registration_token') {
-            if (flows.error) {
-              tokenField.setError(flows.error);
+            // The invite code was refused: Synapse asks for it again,
+            // and the page says so in the app's words.
+            if (auth?.type === 'm.login.registration_token') {
+              tokenField.setError(INVALID_INVITE_CODE);
             }
             running = false;
             setLoading(nextButton, false);
@@ -532,9 +538,7 @@ export function registerMode(root) {
           show(registrationPage);
         } else if (auth?.type === 'm.login.registration_token') {
           tokenField.setError(
-            e.status === 0
-              ? NO_NETWORK_ERROR
-              : 'This registration token does not exist or has exceeded its usage limit.',
+            e.status === 0 ? NO_NETWORK_ERROR : INVALID_INVITE_CODE,
           );
         } else {
           show(registrationPage);
@@ -555,47 +559,56 @@ export function registerMode(root) {
   // and sign in to Boxel, which sets the account up.
   async function finish(account) {
     show(creationPage);
+    await setDisplayName(
+      account.user_id,
+      account.access_token,
+      state.name,
+    ).catch(() => undefined);
+    await logout(account.access_token).catch(() => undefined);
+    await signInAsNewAccount(account.user_id, passwords.value);
+  }
+
+  // The new account's first sign-in, which records the invite code. When it
+  // fails, it is tried again from here, with the same password and invite
+  // code: the account's first sign-in is the one that records the code.
+  async function signInAsNewAccount(user, password) {
+    let session;
     try {
-      await setDisplayName(
-        account.user_id,
-        account.access_token,
-        state.name,
-      ).catch(() => undefined);
-      await logout(account.access_token).catch(() => undefined);
-      let session = await signInWithPassword(config, {
-        username: account.user_id,
-        password: passwords.value,
+      session = await signInWithPassword(config, {
+        username: user,
+        password,
         client: cli ? 'cli' : 'window',
         registrationToken: state.token,
       });
-      if (cli) {
-        handToCli(root, cli, session);
-      } else {
-        storeSession(session);
-        history.replaceState(null, '', modeURL('sign-in'));
-        renderSignedIn(root);
-      }
     } catch (e) {
       let error = errorLine();
       showError(error, asSentence(e.message));
+      let retry = authButton(
+        {
+          kind: 'primary',
+          'data-test-secure-retry-sign-in': true,
+          async onclick() {
+            retry.disabled = true;
+            setLoading(retry, true);
+            await signInAsNewAccount(user, password);
+          },
+        },
+        'Try again',
+      );
       renderMessage(
         root,
         'Your account was created, but signing in didn’t finish',
         error,
-        h(
-          'div',
-          { class: 'button-wrapper' },
-          h(
-            'a',
-            {
-              class: 'boxel-button auth-btn size-touch kind-primary',
-              href: signInURL,
-              'data-test-secure-start-again': true,
-            },
-            'Sign In to Boxel',
-          ),
-        ),
+        h('div', { class: 'button-wrapper' }, retry),
       );
+      return;
+    }
+    if (cli) {
+      handToCli(root, cli, session);
+    } else {
+      storeSession(session);
+      history.replaceState(null, '', modeURL('sign-in'));
+      renderSignedIn(root);
     }
   }
 }

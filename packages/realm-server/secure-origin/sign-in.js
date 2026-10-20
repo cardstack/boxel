@@ -367,7 +367,14 @@ function renderSignIn(
     h(
       'p',
       { class: 'register-prompt' },
-      h('span', { class: 'register-prompt-text' }, "Don't have an account?"),
+      h(
+        'span',
+        {
+          class: 'register-prompt-text',
+          'data-test-secure-register-prompt': true,
+        },
+        "Don't have an account?",
+      ),
       linkButton(
         {
           kind: 'link-primary',
@@ -433,7 +440,11 @@ function renderSignIn(
       h(
         'div',
         { class: 'divider', 'aria-hidden': 'true' },
-        h('span', { class: 'divider-label' }, 'or use your email'),
+        h(
+          'span',
+          { class: 'divider-label', 'data-test-secure-divider-label': true },
+          'or use your email',
+        ),
       ),
     );
   });

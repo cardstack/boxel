@@ -67,8 +67,9 @@ The secure window MUST keep its session only in the secure origin's own
 storage, and MUST NOT send it to the app page. Secure-origin pages MUST be
 served with `Cross-Origin-Opener-Policy: same-origin`, so the page that opens
 one keeps no handle to it. Their CSP MUST let them connect only to their own
-origin and the realm server, and submit forms only to their own origin and the
-CLI's loopback listener.
+origin, the realm server and the Matrix server the realm server is configured
+with, and submit forms only to their own origin and the CLI's loopback
+listener.
 
 ### 1.5. The CLI
 
@@ -113,6 +114,13 @@ returns to the secure origin. Synapse's own SSO hands the session to whoever
 started the sign-in, so a sign-in link that card code opens would sign in for
 card code [2]. Reusing Synapse's Google client means existing users see no new
 consent screen [2].
+
+Secure-origin pages reach the Matrix server themselves to create an account
+and to reset a password, so the password and the invite code are typed into,
+and sent from, the secure origin alone [3]. The realm server writes the Matrix
+server's URL into the page from its own configuration, so card code can't
+change where those requests go. The credential fields the app frames, on the
+same origin and with the same storage, already connect to it [3].
 
 Signing out of the app has to reach the secure window, or a session the user
 believes ended keeps minting key write tickets for up to a week. Only the
@@ -163,3 +171,5 @@ limit wouldn't stop it, since one call after each sign-in is enough.
    not stop".
 2. #6776, its description and review thread, and
    `.claude/skills/secure-session/SKILL.md`.
+3. #6861, its description and review thread, and
+   `.claude/skills/secure-origin/SKILL.md`.

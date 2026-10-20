@@ -610,7 +610,7 @@ test.describe('the secure window signs in on its own', () => {
       'mode=cli-sign-in&port=not-a-port&state=x',
     );
     await expect(
-      secure.locator('[data-test-secure-sign-in] .title'),
+      secure.locator('[data-test-secure-sign-in] [data-test-secure-title]'),
     ).toHaveText('This sign-in link is not complete');
     await expect(secure.locator('[data-test-secure-username]')).toHaveCount(0);
   });

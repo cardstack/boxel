@@ -136,7 +136,13 @@ export function loadingIndicator(className = '') {
 export function title(attributes, ...children) {
   return h(
     'span',
-    { class: 'title', role: 'heading', 'aria-level': '1', ...attributes },
+    {
+      class: 'title',
+      role: 'heading',
+      'aria-level': '1',
+      'data-test-secure-title': true,
+      ...attributes,
+    },
     ...children,
   );
 }
@@ -226,7 +232,15 @@ export function field({ label, input: inputAttributes, group, testId }) {
         { class: 'boxel-input-group' },
         h('span', { class: 'text-accessory username-prefix' }, group.prefix),
         input,
-        h('span', { class: 'text-accessory suffix' }, group.suffix),
+        h(
+          'span',
+          {
+            class: 'text-accessory',
+            'data-input-group-suffix': '',
+            'data-test-input-group-suffix': '',
+          },
+          group.suffix,
+        ),
       )
     : input;
   let container = h(
@@ -239,12 +253,17 @@ export function field({ label, input: inputAttributes, group, testId }) {
     'div',
     {
       class: 'boxel-field auth-form-field vertical',
+      'data-test-boxel-field': true,
       'data-test-secure-field': testId,
     },
     h(
       'div',
       { class: 'label-container' },
-      h('label', { class: 'boxel-label', for: id }, label),
+      h(
+        'label',
+        { class: 'boxel-label', for: id, 'data-test-boxel-field-label': true },
+        label,
+      ),
     ),
     content,
   );

@@ -181,14 +181,14 @@ port and state wait in session storage). A Google sign-in the user cancels
 `cli-sign-in` page for the same listener, or the window's own sign-in. A
 Google sign-in that fails any other way shows the error, with Start again
 pointing at that same page. The shell's CSP allows that form
-target and `connect-src` to the realm server (ADR 005 §1.4).
+target, and `connect-src` to the realm server and the Matrix server (ADR 005 §1.4).
 
 ## Refusals
 
 | Status, code              | Means                                                                                |
 | ------------------------- | ------------------------------------------------------------------------------------ |
 | 403 `forbidden`           | A sign-in not from the secure origin                                                 |
-| 401 `invalid-credentials` | Any failed password sign-in (no account, no Boxel account, no password, wrong)       |
+| 401 `invalid-credentials` | Any failed password sign-in (no account, no password, wrong)                         |
 | 401 `signed-out`          | `GET /_secure-session` with a session that isn't, or is no longer, secure            |
 | 429 `rate-limited`        | Too many failed password sign-ins for the account; see `meta.retryAfterMs`           |
 | 401 `not-confirmed`       | Google's code didn't redeem, or its ID token didn't fit the sign-in                  |
