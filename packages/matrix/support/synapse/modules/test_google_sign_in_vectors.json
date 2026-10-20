@@ -231,6 +231,23 @@
       }
     },
     {
+      "name": "a leading _ is dropped before the collision check, so its account is never linked into one that merely has the rest",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "_alice@gmail.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": ["alice"],
+      "expected": {
+        "outcome": "new",
+        "localpart": "alice1",
+        "displayName": "Pat",
+        "email": "_alice@gmail.com"
+      }
+    },
+    {
       "name": "a leading run of _ and - is dropped",
       "userinfo": {
         "sub": "g-1",
@@ -316,6 +333,23 @@
       }
     },
     {
+      "name": "digits outside ASCII are forbidden characters, not digits",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "٤٢@gmail.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "user",
+        "displayName": "Pat",
+        "email": "٤٢@gmail.com"
+      }
+    },
+    {
       "name": "a local part of only _ becomes user",
       "userinfo": {
         "sub": "g-1",
@@ -328,6 +362,23 @@
       "expected": {
         "outcome": "new",
         "localpart": "user",
+        "displayName": "Pat",
+        "email": "___@gmail.com"
+      }
+    },
+    {
+      "name": "a taken user fallback is suffixed",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "___@gmail.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": ["user"],
+      "expected": {
+        "outcome": "new",
+        "localpart": "user1",
         "displayName": "Pat",
         "email": "___@gmail.com"
       }

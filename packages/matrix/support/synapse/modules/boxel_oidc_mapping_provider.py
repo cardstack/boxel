@@ -19,10 +19,10 @@ Behaviour:
   - On no match, creates a new account whose localpart derives from the email's
     local part (sanitized to the characters Matrix permits in a user ID, and
     kept clear of the forms Synapse reserves), suffixed until it does not
-    collide with an existing account. The collision
-    check is mandatory here: `allow_existing_users` links the Google identity to
-    any existing localpart we return, so an unchecked derived localpart would be
-    an account-takeover surface.
+    collide with an existing account. The collision check is mandatory here:
+    `allow_existing_users` links the Google identity to any existing localpart
+    we return, so an unchecked derived localpart would be an account-takeover
+    surface.
 
 The realm server's own Google sign-in on the secure origin applies the same
 rules (packages/realm-server/lib/google-account.ts). Change them in both
@@ -57,8 +57,8 @@ def _sanitize_localpart(value: str) -> str:
     # it reserves for application services, so leading `_`s go along with the
     # leading and trailing `-`s.
     sanitized = sanitized.lstrip("_-").rstrip("-")
-    # An email whose local part is nothing but disallowed characters and `_`s
-    # leaves nothing behind.
+    # An email whose local part is nothing but disallowed characters, `_`s and
+    # `-`s leaves nothing behind.
     if not sanitized:
         return "user"
     if _ALL_DIGITS.fullmatch(sanitized):
