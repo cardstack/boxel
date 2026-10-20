@@ -400,7 +400,7 @@ const AGENT_CHROME = {
   codex: {
     newChat: '✎ New task',
     listLabel: 'Tasks',
-    hint: 'Ask Codex anything',
+    hint: 'Work with Codex',
     chips: ['＋', 'Local'],
     model: 'GPT-6',
     steps: { cli: 'Ran', Search: 'Searched', Write: 'Created', Edit: 'Edited' },
@@ -425,6 +425,28 @@ const GROK_BOTS = [
 ];
 
 const botTone = (tone: string) => htmlSafe(`--bot-tone: ${tone}`);
+
+// Codex's rail: home, tasks, history, mentions, more, then the repo's
+// branch and apps. Stroke paths in a 24-unit box.
+const CODEX_RAIL = [
+  {
+    d: 'M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z',
+    active: true,
+  },
+  { d: 'M3 6l1.5 1.5L7 5M3 13l1.5 1.5L7 12M11 6h10M11 13h10M11 20h10' },
+  { d: 'M12 7v5l3 2M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0' },
+  {
+    d: 'M16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0zM16 12v1.5a2.5 2.5 0 0 0 5 0V12a9 9 0 1 0-3.5 7.1',
+  },
+  { d: 'M5 12h.01M12 12h.01M19 12h.01' },
+  { divider: true },
+  {
+    d: 'M6 3v12M18 9a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM6 21a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM18 9a9 9 0 0 1-9 9',
+  },
+  { d: 'M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z' },
+] as { d?: string; active?: boolean; divider?: boolean }[];
+
+const CODEX_SHIELD = 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z';
 
 // Labeled once per agent app, so the thread keeps the same beat objects
 // from tick to tick and its rows aren't rebuilt (and re-animated) each time.
@@ -526,6 +548,10 @@ export default class AgentScreencast extends Component<Signature> {
 
   private get chrome() {
     return AGENT_CHROME[this.args.agent ?? 'claude'];
+  }
+
+  private get isClaude() {
+    return (this.args.agent ?? 'claude') === 'claude';
   }
 
   private get isCodex() {
@@ -690,7 +716,12 @@ export default class AgentScreencast extends Component<Signature> {
       data-test-agent-screencast
     >
       <div
-        class={{cn 'window' is-codex=this.isCodex is-grok=this.isGrok}}
+        class={{cn
+          'window'
+          is-claude=this.isClaude
+          is-codex=this.isCodex
+          is-grok=this.isGrok
+        }}
         aria-hidden='true'
       >
         {{! The agent app: its own window when Boxel sits beside it. }}
@@ -705,6 +736,28 @@ export default class AgentScreencast extends Component<Signature> {
                 </span>
               {{/each}}
               <span class='bot-add'>＋</span>
+            </div>
+          {{else if this.isCodex}}
+            {{! Codex's rail of icons, with no session list. }}
+            <div class='sidebar is-rail'>
+              <span class='traffic'><i></i><i></i><i></i></span>
+              {{#each CODEX_RAIL as |icon|}}
+                {{#if icon.divider}}
+                  <i class='rail-divider'></i>
+                {{else}}
+                  <span class={{cn 'rail-icon' is-active=icon.active}}><svg
+                      viewBox='0 0 24 24'
+                      width='13'
+                      height='13'
+                      fill='none'
+                      stroke='currentColor'
+                      stroke-width='1.8'
+                      stroke-linecap='round'
+                      stroke-linejoin='round'
+                    ><path d={{icon.d}} /></svg></span>
+                {{/if}}
+              {{/each}}
+              <span class='rail-avatar'></span>
             </div>
           {{else}}
             {{! The agent app's own sidebar: a new session, then recent ones. }}
@@ -792,6 +845,9 @@ export default class AgentScreencast extends Component<Signature> {
               {{/if}}
             </div>
             <div class='composer'>
+              {{#if this.isCodex}}
+                <span class='context-chip'>@ Context · 1</span>
+              {{/if}}
               <span class='composer-line'>
                 {{#if this.typing}}
                   <span class='composer-text'>{{this.typing}}</span><i
@@ -823,6 +879,31 @@ export default class AgentScreencast extends Component<Signature> {
                       stroke-width='2.4'
                       stroke-linecap='round'
                     ><path d='M6 10v4M10 7v10M14 5v14M18 9v6' /></svg></span>
+                {{else if this.isCodex}}
+                  <span class='codex-tool'>＋</span>
+                  <span class='codex-tool'><svg
+                      viewBox='0 0 24 24'
+                      width='11'
+                      height='11'
+                      fill='none'
+                      stroke='currentColor'
+                      stroke-width='2'
+                      stroke-linejoin='round'
+                    ><path d={{CODEX_SHIELD}} /></svg></span>
+                  <span class='composer-model'>{{this.chrome.model}}
+                    <span class='composer-effort'>High</span></span>
+                  <span class='codex-tool'><svg
+                      viewBox='0 0 24 24'
+                      width='11'
+                      height='11'
+                      fill='none'
+                      stroke='currentColor'
+                      stroke-width='2'
+                      stroke-linecap='round'
+                    ><rect x='9' y='3' width='6' height='11' rx='3' /><path
+                        d='M5 11a7 7 0 0 0 14 0M12 18v3'
+                      /></svg></span>
+                  <span class='send'>↑</span>
                 {{else}}
                   {{#each this.chrome.chips as |chip|}}
                     <span class='composer-chip'>{{chip}}</span>
@@ -1089,6 +1170,7 @@ export default class AgentScreencast extends Component<Signature> {
         --app-ok: var(--boxel-green);
         --app-line: color-mix(in oklch, var(--boxel-light) 10%, transparent);
         --app-muted: color-mix(in oklch, var(--boxel-light) 50%, transparent);
+        --app-ink: var(--boxel-light);
         margin: 0;
         display: flex;
         flex-direction: column;
@@ -1106,7 +1188,7 @@ export default class AgentScreencast extends Component<Signature> {
         border: 1px solid var(--app-line);
         border-radius: 1rem;
         background-color: var(--app-bg);
-        color: var(--boxel-light);
+        color: var(--app-ink);
         font-size: 0.75rem;
         box-shadow: 0 1rem 2.5rem
           color-mix(in oklch, var(--boxel-dark) 45%, transparent);
@@ -1131,17 +1213,13 @@ export default class AgentScreencast extends Component<Signature> {
         width: 0.5rem;
         height: 0.5rem;
         border-radius: 50%;
-        background-color: color-mix(
-          in oklch,
-          var(--boxel-light) 22%,
-          transparent
-        );
+        background-color: color-mix(in oklch, var(--app-ink) 22%, transparent);
       }
       .new-session {
         margin-bottom: var(--boxel-sp-xs);
         padding: 0.3rem 0.375rem;
         border-radius: 0.375rem;
-        color: var(--boxel-light);
+        color: var(--app-ink);
         font-weight: 500;
       }
       .side-label {
@@ -1158,12 +1236,8 @@ export default class AgentScreencast extends Component<Signature> {
         color: var(--app-muted);
       }
       .side-item.is-active {
-        background-color: color-mix(
-          in oklch,
-          var(--boxel-light) 8%,
-          transparent
-        );
-        color: var(--boxel-light);
+        background-color: color-mix(in oklch, var(--app-ink) 8%, transparent);
+        color: var(--app-ink);
       }
       .side-title,
       .side-meta {
@@ -1187,11 +1261,7 @@ export default class AgentScreencast extends Component<Signature> {
         width: 1rem;
         height: 1rem;
         border-radius: 50%;
-        background-color: color-mix(
-          in oklch,
-          var(--boxel-light) 25%,
-          transparent
-        );
+        background-color: color-mix(in oklch, var(--app-ink) 25%, transparent);
       }
 
       /* The chat: the thread, then the composer. */
@@ -1241,11 +1311,7 @@ export default class AgentScreencast extends Component<Signature> {
         max-width: 85%;
         padding: 0.375rem 0.625rem;
         border-radius: 0.625rem;
-        background-color: color-mix(
-          in oklch,
-          var(--boxel-light) 10%,
-          transparent
-        );
+        background-color: color-mix(in oklch, var(--app-ink) 10%, transparent);
         animation: arrive 0.3s ease-out;
       }
       .attachments {
@@ -1331,11 +1397,7 @@ export default class AgentScreencast extends Component<Signature> {
         padding: 0.5rem 0.5rem 0.375rem 0.625rem;
         border: 1px solid var(--app-line);
         border-radius: 0.75rem;
-        background-color: color-mix(
-          in oklch,
-          var(--boxel-light) 5%,
-          transparent
-        );
+        background-color: color-mix(in oklch, var(--app-ink) 5%, transparent);
       }
       .composer-line {
         display: flex;
@@ -1353,7 +1415,7 @@ export default class AgentScreencast extends Component<Signature> {
         flex: none;
         width: 1px;
         height: 1em;
-        background-color: var(--boxel-light);
+        background-color: var(--app-ink);
         animation: blink 1s steps(1) infinite;
       }
       .composer-bar {
@@ -1379,7 +1441,7 @@ export default class AgentScreencast extends Component<Signature> {
         width: 1.25rem;
         height: 1.25rem;
         border-radius: 50%;
-        background-color: var(--boxel-light);
+        background-color: var(--app-ink);
         color: var(--boxel-dark);
         font-weight: 700;
       }
@@ -2336,14 +2398,154 @@ export default class AgentScreencast extends Component<Signature> {
         color: var(--app-muted);
       }
       .window.is-codex .step-arg {
-        color: var(--boxel-light);
+        color: var(--app-ink);
       }
       .window.is-codex .step-result {
         padding-left: 0;
       }
-      .window.is-codex .send {
-        border-radius: 0.375rem;
+      /* Claude and Codex in their light themes, each in its own shape:
+         Claude soft and round on warm paper, Codex crisp on white. */
+      .window.is-claude,
+      .window.is-codex {
+        --app-ink: #1f1e1d;
+        --app-line: rgba(0, 0, 0, 0.09);
+        --app-muted: rgba(0, 0, 0, 0.5);
+        --app-ok: #2f9e6b;
+        box-shadow: 0 1rem 2.5rem
+          color-mix(in oklch, var(--boxel-dark) 35%, transparent);
       }
+      .window.is-claude {
+        --app-bg: #faf9f5;
+        --app-side: #f0eee6;
+        --app-panel: #f4f2ec;
+        border-radius: 1.375rem;
+      }
+      .window.is-codex {
+        --app-ink: #0d0d0d;
+        --app-bg: #ffffff;
+        --app-side: #f7f7f8;
+        --app-panel: #f5f5f6;
+        grid-template-columns: 2.75rem minmax(0, 1.1fr) minmax(0, 1.2fr);
+        border-radius: 0.625rem;
+      }
+      .window.is-claude .traffic i,
+      .window.is-codex .traffic i {
+        background-color: rgba(0, 0, 0, 0.14);
+      }
+      .window.is-claude .send,
+      .window.is-codex .send {
+        color: white;
+      }
+      .window.is-claude .form-card,
+      .window.is-codex .form-card {
+        background-color: white;
+        box-shadow: 0 0 0 1px var(--app-line);
+      }
+      .window.is-claude .panel,
+      .window.is-codex .panel {
+        background-color: var(--app-panel);
+      }
+      .window.is-claude .panel-head,
+      .window.is-codex .panel-head {
+        background-color: var(--app-bg);
+      }
+
+      /* Claude: rounded bubbles and composer, its serif voice in replies,
+         and a clay send button. */
+      .window.is-claude .bubble {
+        border-radius: 1rem;
+        background-color: #ebe8de;
+      }
+      .window.is-claude .reply {
+        font-family: Georgia, 'Times New Roman', serif;
+        font-size: 0.8125rem;
+      }
+      .window.is-claude .composer {
+        border-radius: 1.125rem;
+        background-color: white;
+        box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.05);
+      }
+      .window.is-claude .composer-chip {
+        border-radius: 0.5rem;
+      }
+      .window.is-claude .send {
+        border-radius: 0.5rem;
+        background-color: #c96442;
+      }
+      .window.is-claude .side-item.is-active {
+        background-color: #e4e1d6;
+      }
+
+      /* Codex: a rail of icons, tight radii, and a pill composer with a
+         context chip and a round black send. */
+      .sidebar.is-rail {
+        align-items: center;
+        gap: 0.3rem;
+        padding: var(--boxel-sp-xs) 0;
+      }
+      .sidebar.is-rail .traffic {
+        flex-direction: column;
+        gap: 0.2rem;
+      }
+      .rail-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.75rem;
+        height: 1.75rem;
+        border-radius: 0.375rem;
+        color: var(--app-muted);
+      }
+      .rail-icon.is-active {
+        background-color: rgba(0, 0, 0, 0.07);
+        color: var(--app-ink);
+      }
+      .rail-divider {
+        width: 1.25rem;
+        height: 1px;
+        margin: 0.125rem 0;
+        background-color: var(--app-line);
+      }
+      .rail-avatar {
+        width: 1.375rem;
+        height: 1.375rem;
+        margin-top: auto;
+        border-radius: 50%;
+        background-color: #f97316;
+      }
+      .window.is-codex .bubble {
+        border-radius: 0.5rem;
+        background-color: #f0f0f1;
+      }
+      .window.is-codex .composer {
+        gap: 0.25rem;
+        padding: 0.375rem 0.375rem 0.375rem 0.75rem;
+        border-radius: 1.25rem;
+        box-shadow: 0 0.0625rem 0.25rem rgba(0, 0, 0, 0.06);
+        background-color: white;
+      }
+      .context-chip {
+        align-self: flex-start;
+        padding: 0.05rem 0.375rem;
+        border: 1px solid var(--app-line);
+        border-radius: 0.375rem;
+        color: var(--app-muted);
+        font-size: 0.5625rem;
+      }
+      .codex-tool {
+        display: inline-flex;
+        align-items: center;
+        color: var(--app-muted);
+      }
+      .composer-effort {
+        color: var(--app-muted);
+        opacity: 0.7;
+      }
+      .window.is-codex .composer-model {
+        color: var(--app-ink);
+        font-weight: 500;
+      }
+
       /* The card form the agent puts in its chat. */
       .form-card {
         display: flex;
@@ -2476,7 +2678,8 @@ export default class AgentScreencast extends Component<Signature> {
       }
       /* Narrow: the sidebar goes and the panel sits under the chat. */
       @media (max-width: 40rem) {
-        .window {
+        .window,
+        .window.is-codex {
           grid-template-columns: minmax(0, 1fr);
           grid-template-rows: 13rem auto;
           height: auto;
