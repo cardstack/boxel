@@ -15,9 +15,9 @@ description: What the secure origin (`secure.boxel.ai` / `secure.stack.cards`, `
 
 - **The credential fields**, at `credentials` beneath the shell's path: `credentials.html`, its entry point `credentials.js` and `credentials.css` (`CREDENTIALS_ASSETS`), and the shell's typeface. See below.
 
-Adding to it means adding a mode to `shell.js`, or a file to `SHELL_ASSETS` or `CREDENTIALS_ASSETS`. Each addition must be code this repo owns and reviews. Never add a proxy, a passthrough to realm routing, a CDN script, an analytics snippet or a host-app import.
+Adding to it means adding a screen, which [ADR 008](../../../docs/adr/008-build-the-secure-origins-pages-as-their-own-ember-app.md) places in `packages/secure-origin`. Until that package exists, a new screen is a mode in `shell.js` with its files in `SHELL_ASSETS` or `CREDENTIALS_ASSETS`, and the change that adds it lists those files under ADR 008's Remediation (§1.10). Each addition must be code this repo owns and reviews. Never add a proxy, a passthrough to realm routing, a CDN script, an analytics snippet or a host-app import.
 
-The pages are deliberately not host components. [ADR 008](../../../docs/adr/008-build-the-secure-origins-pages-as-their-own-ember-app.md) records why, and where they are going: a package of their own, an Ember app with its own components, behind an import allowlist. Until that package exists, the plain pages are the gaps its Remediation section lists: fixing or changing an existing mode in place is fine, but a new screen is new code in that gap (ADR 001 §1.9), so it waits for the package. Don't add a framework, a build step or a dependency to the plain pages.
+The pages are deliberately not host components. ADR 008 records why, and where they are going: a package of their own, an Ember app with its own components, behind an import allowlist. Until that package exists, the plain pages are the gaps its Remediation section lists. Changing an existing mode in place is fine. A new mode is allowed too, but only listed under Remediation, with a ticket to port it. Don't add a framework, a build step or a dependency to the plain pages.
 
 ## The credential fields the app frames
 
