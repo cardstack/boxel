@@ -99,6 +99,7 @@ const ICON_PATHS = {
   shield: ['M12 3l8 3v6c0 4.4-3.4 8.2-8 9-4.6-.8-8-4.6-8-9V6l8-3Z'],
   alert: ['M12 3l10 18H2L12 3Z', 'M12 10v4', 'M12 17.5v.01'],
   arrows: ['M4 9h14l-3-3', 'M20 15H6l3 3'],
+  chevron: ['M9 6l6 6-6 6'],
 };
 
 function icon(name) {
@@ -140,6 +141,124 @@ function boxelMark() {
     svg.append(path);
   }
   return svg;
+}
+
+// The wordmark the app's top bar shows, copied from boxel-ui's
+// BoxelIconWithText (mark on its dark tile, then "boxel").
+const BOXEL_WORDMARK_PATHS = [
+  ['#000000', 'M9 0h4c5 0 9 4 9 9v4c0 5-4 9-9 9H9c-5 0-9-4-9-9V9c0-5 4-9 9-9'],
+  [
+    '#00ffba',
+    'M17 22H5c-2.8 0-5-2.2-5-5V5c0-2.8 2.2-5 5-5h12c2.8 0 5 2.2 5 5v12c0 2.8-2.2 5-5 5M3.3 2.4c-.5 0-.9.4-.9.9 0 .2.1.4.2.6V4l3.2 3.2c.3.3.4.7.4 1v5.6c0 .4-.2.8-.4 1L2.6 18v.1c-.3.4-.3 1 .1 1.3.2.1.4.2.6.2.3 0 .5-.1.7-.3l3.2-3.1c.3-.3.7-.4 1-.4h5.7c.4 0 .8.2 1 .4l3.2 3.2h.1c.2.1.4.2.6.2.5 0 .9-.4.9-.9 0-.2-.1-.4-.2-.6l-3.2-3.2c-.3-.3-.4-.7-.4-1V8.2c0-.4.2-.8.4-1l3.1-3.1c.4-.3.5-.9.1-1.3-.2-.2-.4-.3-.7-.3-.2 0-.3.1-.5.1-.1 0-.1.1-.1.1L15 5.9c-.3.3-.7.4-1 .4H8.2c-.4 0-.8-.2-1-.4L3.9 2.7h-.1c-.1-.2-.3-.3-.5-.3',
+  ],
+  [
+    '#00ffba',
+    'M9.1 8H13c.6 0 1.1.5 1.1 1.1V13c0 .6-.5 1.1-1.1 1.1H9.1c-.6 0-1.1-.5-1.1-1.1V9.1C8 8.5 8.5 8 9.1 8',
+  ],
+  [
+    '#ffffff',
+    'M31.5 7h3C36 7 37 7.9 37 9.2c0 .8-.5 1.4-1.1 1.7.8.2 1.5.8 1.5 1.8 0 1.3-1.1 2.2-2.7 2.2h-3.2zm2.8 3.1c.5 0 .8-.4.8-.7 0-.4-.3-.7-.8-.7h-.9v1.5h.9zm.3 3.2c.5 0 .8-.3.8-.8s-.4-.8-.9-.8h-1.1v1.6zM47.5 11c0 2.3-1.7 4.1-4.1 4.1s-4.1-1.8-4.1-4.1 1.7-4.1 4.1-4.1 4.1 1.8 4.1 4.1m-6.3 0c0 1.3.8 2.3 2.1 2.3s2.1-1 2.1-2.3-.8-2.3-2.1-2.3c-1.2 0-2.1 1-2.1 2.3m9.7 0-2.4-3.9h2.2l1.4 2.5 1.5-2.5h2.2L53.4 11l2.4 3.9h-2.1l-1.5-2.5-1.5 2.5h-2.1zm6.8-4h5.2v1.7h-3.2v1.4h2.6v1.6h-2.6v1.5H63v1.7h-5.3zm7.6 0h1.9v6.1h3v1.7h-4.9z',
+  ],
+];
+
+function boxelWordmark() {
+  let svg = document.createElementNS(SVG_NS, 'svg');
+  svg.setAttribute('viewBox', '0 0 88 22');
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', 'Boxel');
+  svg.setAttribute('class', 'oauth-wordmark');
+  for (let [fill, d] of BOXEL_WORDMARK_PATHS) {
+    let path = document.createElementNS(SVG_NS, 'path');
+    path.setAttribute('fill', fill);
+    path.setAttribute('d', d);
+    svg.append(path);
+  }
+  return svg;
+}
+
+// The account's avatar as the app draws it (boxel-ui's Avatar): the first
+// letter of the user id on a color derived from it by the same formula, so
+// the person sees the same avatar here as in the app.
+function avatarColor(userId) {
+  let hash = 0;
+  for (let i = 0; i < userId.length; i++) {
+    hash = userId.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  hash = Math.abs(hash);
+  let hue = hash % 360;
+  let saturation = 65 + (hash % 15);
+  let rgb = (lightness) => {
+    let c = ((1 - Math.abs((2 * lightness) / 100 - 1)) * saturation) / 100;
+    let x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
+    let m = lightness / 100 - c / 2;
+    let [r, g, b] =
+      hue < 60
+        ? [c, x, 0]
+        : hue < 120
+          ? [x, c, 0]
+          : hue < 180
+            ? [0, c, x]
+            : hue < 240
+              ? [0, x, c]
+              : hue < 300
+                ? [x, 0, c]
+                : [c, 0, x];
+    return [r, g, b].map((v) => Math.round((v + m) * 255));
+  };
+  let luminance = (channels) => {
+    let [r, g, b] = channels.map((v) => {
+      v /= 255;
+      return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+    });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  let lightness = 50;
+  let channels = rgb(lightness);
+  while (lightness <= 100) {
+    let l = luminance(channels);
+    if ((l + 0.05) / 0.05 >= 4.5 || 1.05 / (l + 0.05) >= 4.5) {
+      break;
+    }
+    lightness++;
+    channels = rgb(lightness);
+  }
+  let text = (luminance(channels) + 0.05) / 0.05 >= 4.5 ? '#000000' : '#ffffff';
+  return {
+    background: `#${channels.map((v) => v.toString(16).padStart(2, '0')).join('')}`,
+    text,
+  };
+}
+
+function avatar(userId, size) {
+  let { background, text } = avatarColor(userId);
+  let node = h(
+    'span',
+    { class: `oauth-avatar oauth-avatar--${size}`, 'aria-hidden': 'true' },
+    userId.replace(/^@/, '').slice(0, 1).toUpperCase(),
+  );
+  node.style.setProperty('--oauth-avatar-bg', background);
+  node.style.setProperty('--oauth-avatar-text', text);
+  return node;
+}
+
+// Signs this window out and hands back to the flow that was showing, which
+// then asks for a sign-in. Nothing reaches the application that asked.
+async function switchAccount(onSwitch) {
+  try {
+    await signOut(readConfig());
+  } catch {
+    forgetSession();
+  }
+  onSwitch();
+}
+
+// The shell's own path: the stylesheet is served beside it.
+function connectedAppsURL() {
+  let sheet = document
+    .querySelector('link[rel="stylesheet"]')
+    ?.getAttribute('href');
+  let base = sheet ? sheet.replace(/\/shell\.css$/, '') : '';
+  return `${base}/?mode=connected-apps`;
 }
 
 // The square that stands for an application: its name's first letter on a
@@ -243,49 +362,93 @@ function permissionList(scopes) {
   return list;
 }
 
-// The page around a card: Boxel's bar on top, with the account this window
-// is signed in as and a way to switch it, and Boxel's own footer.
+// The page around a card, laid out like the app's own top bar: the
+// wordmark on the left, the account's avatar on the right opening its menu,
+// and Boxel's own footer.
 function page(root, card, session, onSwitch) {
-  let account;
+  let menu;
   if (session) {
-    let notYou = h(
+    let userId = String(session.user ?? '');
+    let trigger = h(
       'button',
-      { type: 'button', class: 'oauth-link' },
-      'Not you?',
+      {
+        type: 'button',
+        class: 'oauth-avatar-button',
+        'aria-label': `Account: ${userId}`,
+        'aria-haspopup': 'dialog',
+        'aria-expanded': 'false',
+      },
+      avatar(userId, 'small'),
     );
-    notYou.addEventListener('click', async () => {
-      notYou.disabled = true;
-      try {
-        await signOut(readConfig());
-      } catch {
-        forgetSession();
-      }
-      onSwitch();
-    });
-    account = h(
+    let switchButton = h(
+      'button',
+      { type: 'button', class: 'oauth-pill' },
+      'Switch account',
+    );
+    let signOutButton = h(
+      'button',
+      { type: 'button', class: 'oauth-pill oauth-pill--dark' },
+      'Sign Out',
+    );
+    let popover = h(
       'div',
-      { class: 'oauth-topbar-account' },
-      h('span', { class: 'oauth-muted' }, 'Signed in as'),
-      h('span', { class: 'oauth-account-id' }, String(session.user ?? '')),
-      notYou,
+      {
+        class: 'oauth-account-menu',
+        role: 'dialog',
+        'aria-label': 'Account',
+        hidden: true,
+      },
+      h(
+        'div',
+        { class: 'oauth-account-menu-actions' },
+        switchButton,
+        signOutButton,
+      ),
+      h(
+        'div',
+        { class: 'oauth-account-menu-who' },
+        avatar(userId, 'large'),
+        h('span', { class: 'oauth-account-menu-id' }, userId),
+      ),
+      h(
+        'a',
+        { class: 'oauth-account-menu-link', href: connectedAppsURL() },
+        'Connected applications',
+        icon('chevron'),
+      ),
     );
+    let setOpen = (open) => {
+      popover.hidden = !open;
+      trigger.setAttribute('aria-expanded', String(open));
+    };
+    trigger.addEventListener('click', () => setOpen(popover.hidden));
+    let closeOnEscape = (event) => {
+      if (event.key === 'Escape' && !popover.hidden) {
+        setOpen(false);
+        trigger.focus();
+      }
+    };
+    trigger.addEventListener('keydown', closeOnEscape);
+    popover.addEventListener('keydown', closeOnEscape);
+    document.addEventListener('click', (event) => {
+      if (!popover.hidden && !menu.contains(event.target)) {
+        setOpen(false);
+      }
+    });
+    for (let button of [switchButton, signOutButton]) {
+      button.addEventListener('click', () => {
+        switchButton.disabled = signOutButton.disabled = true;
+        switchAccount(onSwitch);
+      });
+    }
+    menu = h('div', { class: 'oauth-account' }, trigger, popover);
   }
   let year = new Date().getFullYear();
   root.replaceChildren(
     h(
       'div',
       { class: 'oauth-page' },
-      h(
-        'header',
-        { class: 'oauth-topbar' },
-        h(
-          'span',
-          { class: 'oauth-brand' },
-          boxelMark(),
-          h('span', {}, 'Boxel'),
-        ),
-        account,
-      ),
+      h('header', { class: 'oauth-topbar' }, boxelWordmark(), menu),
       h('main', { class: 'oauth-main' }, card),
       h(
         'footer',
@@ -490,6 +653,33 @@ function renderRequest(root, card, session, details) {
       ),
     ),
   ];
+
+  if (isLogin) {
+    let userId = String(session.user ?? '');
+    let switchLink = h(
+      'button',
+      { type: 'button', class: 'oauth-link' },
+      'Switch',
+    );
+    switchLink.addEventListener('click', () => {
+      switchLink.disabled = true;
+      switchAccount(() => oauthMode(root));
+    });
+    parts.push(
+      h(
+        'div',
+        { class: 'oauth-whoami' },
+        avatar(userId, 'medium'),
+        h('span', { class: 'oauth-whoami-id oauth-mono' }, userId),
+        switchLink,
+      ),
+      h(
+        'p',
+        { class: 'oauth-note oauth-note--center' },
+        'Continuing signs it in with this Boxel account. Not the right account? Switch first.',
+      ),
+    );
+  }
 
   let choices = [];
   let remember;
@@ -855,6 +1045,7 @@ function grantRow(root, grant, error) {
     .filter(Boolean)
     .join(' · ');
 
+  let host = grant.client_host ? String(grant.client_host) : undefined;
   let revoke = h(
     'button',
     { type: 'button', class: 'oauth-button oauth-button--danger' },
@@ -862,28 +1053,43 @@ function grantRow(root, grant, error) {
   );
   let keep = h(
     'button',
-    { type: 'button', class: 'oauth-button oauth-button--quiet', hidden: true },
+    { type: 'button', class: 'oauth-button oauth-button--quiet' },
     'Keep',
   );
-  let confirming = false;
-  keep.addEventListener('click', () => {
-    confirming = false;
-    keep.hidden = true;
-    revoke.replaceChildren('Revoke');
-    revoke.removeAttribute('aria-label');
-    revoke.focus();
-  });
-  revoke.addEventListener('click', async () => {
-    if (!confirming) {
-      // A second press confirms, so one stray click can't disconnect.
-      confirming = true;
-      keep.hidden = false;
-      revoke.replaceChildren('Revoke access');
-      revoke.setAttribute('aria-label', `Confirm: revoke access for ${name}`);
-      return;
-    }
-    revoke.disabled = keep.disabled = true;
-    revoke.replaceChildren(spinner(), 'Revoking…');
+  let confirmRevoke = h(
+    'button',
+    { type: 'button', class: 'oauth-button oauth-button--destructive' },
+    'Revoke access',
+  );
+  // A second, explicit step, so one stray click can't disconnect.
+  let confirm = h(
+    'div',
+    {
+      class: 'oauth-confirm',
+      role: 'group',
+      'aria-label': `Revoke access for ${name}`,
+      hidden: true,
+    },
+    h(
+      'span',
+      { class: 'oauth-confirm-text' },
+      'Revoke access? It stops working right away.',
+    ),
+    keep,
+    confirmRevoke,
+  );
+  let row;
+  let setConfirming = (on) => {
+    confirm.hidden = !on;
+    revoke.hidden = on;
+    row.toggleAttribute('data-confirming', on);
+    (on ? keep : revoke).focus();
+  };
+  revoke.addEventListener('click', () => setConfirming(true));
+  keep.addEventListener('click', () => setConfirming(false));
+  confirmRevoke.addEventListener('click', async () => {
+    confirmRevoke.disabled = keep.disabled = true;
+    confirmRevoke.replaceChildren(spinner(), 'Revoking…');
     error.textContent = '';
     try {
       let answer = await fetch('/oauth/grants', {
@@ -901,26 +1107,35 @@ function grantRow(root, grant, error) {
       oauthGrantsMode(root);
     } catch {
       error.textContent = `Access for ${name} couldn’t be revoked. Try again.`;
-      revoke.disabled = keep.disabled = false;
-      revoke.replaceChildren('Revoke access');
+      confirmRevoke.disabled = keep.disabled = false;
+      confirmRevoke.replaceChildren('Revoke access');
     }
   });
 
-  return h(
+  row = h(
     'li',
     { class: 'oauth-grant' },
-    monogram(name, clientId),
     h(
       'div',
-      { class: 'oauth-grant-body' },
-      h('h2', { class: 'oauth-grant-name' }, name),
-      name !== clientId
-        ? h('p', { class: 'oauth-mono oauth-muted oauth-small' }, clientId)
-        : undefined,
-      h('p', { class: 'oauth-muted oauth-small' }, meta),
-      access,
-      workspaces,
+      { class: 'oauth-grant-main' },
+      monogram(name, clientId),
+      h(
+        'div',
+        { class: 'oauth-grant-body' },
+        h('h2', { class: 'oauth-grant-name' }, name),
+        h(
+          'p',
+          { class: 'oauth-muted oauth-small' },
+          host ? h('span', { class: 'oauth-mono' }, host) : undefined,
+          host ? ' · ' : undefined,
+          meta,
+        ),
+        access,
+        workspaces,
+      ),
+      revoke,
     ),
-    h('div', { class: 'oauth-grant-actions' }, keep, revoke),
+    confirm,
   );
+  return row;
 }

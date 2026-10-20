@@ -756,18 +756,27 @@ export function createBoxelOAuthProvider(config: BoxelOAuthConfig, deps: Deps) {
         );
         let owned = grants.filter((grant) => grant?.user === user);
         // The registered name is the client's own, untrusted metadata; the
-        // page shows it as text beside the client id, never as markup.
-        let names = new Map<string, string | undefined>();
+        // page shows it as text, never as markup, beside the host of its
+        // registered redirect, which the provider does check.
+        let clients = new Map<string, { name?: string; host?: string }>();
         for (let grant of owned) {
-          if (!names.has(grant!.clientId)) {
+          if (!clients.has(grant!.clientId)) {
             let client = await provider.Client.find(grant!.clientId);
-            names.set(grant!.clientId, client?.clientName);
+            let redirect = client?.redirectUris?.[0];
+            let host: string | undefined;
+            try {
+              host = redirect ? new URL(redirect).host : undefined;
+            } catch {
+              host = undefined;
+            }
+            clients.set(grant!.clientId, { name: client?.clientName, host });
           }
         }
         ctx.body = owned.map((grant) => ({
           id: grant!.id,
           client_id: grant!.clientId,
-          client_name: names.get(grant!.clientId),
+          client_name: clients.get(grant!.clientId)?.name,
+          client_host: clients.get(grant!.clientId)?.host,
           resource: grant!.resource,
           realms: grant!.realms,
           scopes: grant!.scopes,

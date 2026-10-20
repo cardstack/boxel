@@ -87,10 +87,17 @@ connected-applications page on the secure origin, styled in `shell.css`.
 - No workspace starts selected; Allow stays disabled until the user picks at
   least one. Renewal is offered as an unchecked choice unless the client asked
   for `offline_access`, and both say where to revoke.
-- Focus lands on the request's title, never on Allow. The page carries Boxel's
-  own top bar (the signed-in account, with "Not you?") and footer (Boxel's
-  privacy, terms and support links). Nothing a client registered appears there.
-- `/oauth/grants` returns each grant's `client_name` for the management page.
+- Focus lands on the request's title, never on Allow. Allow is lime, the
+  colour the app reserves for a decision someone is waiting on; everything
+  else uses the teal highlight.
+- The page carries the app's top bar: the wordmark on the left, and the
+  account's avatar on the right (the same letter and colour as the app's)
+  opening a menu to switch account, sign out, or manage connected
+  applications. The footer holds Boxel's privacy, terms and support links.
+  Nothing a client registered appears in either.
+- `/oauth/grants` returns each grant's `client_name` and `client_host` (its
+  registered redirect's host) for the management page, which revokes after
+  an inline confirmation.
 
 ## Endpoints and client setup
 
