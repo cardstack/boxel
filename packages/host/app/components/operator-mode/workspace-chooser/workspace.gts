@@ -1279,15 +1279,13 @@ export default class Workspace extends Component<Signature> {
         gap: var(--boxel-sp-2xs);
         padding: 0 var(--boxel-sp-xs) 0 var(--boxel-sp-sm);
         cursor: pointer;
-        opacity: 0;
-        transition: opacity 0.5s ease;
         z-index: 7;
         overflow: hidden;
       }
-      .workspace-card:hover .host-trigger,
-      .workspace-card.is-open .host-trigger {
-        opacity: 1;
-        transition: none;
+      /* A hosted workspace always wears its site's address as the tile's
+         chin, so where it's live reads without a hover. */
+      .host-trigger:hover {
+        background: var(--boxel-dark-50);
       }
       .workspace-card.is-enlarged .host-trigger {
         width: var(
