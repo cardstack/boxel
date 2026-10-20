@@ -257,6 +257,12 @@ module.exports = {
       },
       // `typeof import('…')` in a type position.
       TSImportType(node) {
+        // `source` is the specifier itself; parsers that predate it wrap the
+        // specifier in a literal type under `argument`.
+        if (node.source) {
+          check(node.source);
+          return;
+        }
         let argument = node.argument;
         check(
           argument && argument.type === 'TSLiteralType'
