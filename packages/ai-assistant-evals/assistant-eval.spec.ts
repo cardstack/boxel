@@ -864,6 +864,9 @@ async function runModel(
 ): Promise<RunResult> {
   let slug = slugify(requestedModel);
   let startedAt = Date.now();
+  // When the first prompt went out: the time target covers the prompts, not
+  // logging in and creating the workspace.
+  let promptStartedAt: number | undefined;
   let consoleErrors: string[] = [];
   page.on('console', (message) => {
     if (message.type() === 'error') {
@@ -995,6 +998,7 @@ async function runModel(
         prompt,
         skillFeatures.length + index + 1,
       );
+      promptStartedAt ??= Date.now();
       result.promptsSent = index + 1;
       setStep(
         index === 0
@@ -1103,6 +1107,9 @@ async function runModel(
   } finally {
     result.endedAt = new Date().toISOString();
     result.durationSeconds = Math.round((Date.now() - startedAt) / 1000);
+    if (promptStartedAt !== undefined) {
+      result.promptSeconds = Math.round((Date.now() - promptStartedAt) / 1000);
+    }
     result.consoleErrors = consoleErrors.slice(0, 50);
     // Read the workspace back before writing the result, so a judge scores
     // what the assistant left behind rather than what it said it did. A run

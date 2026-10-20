@@ -23,7 +23,10 @@ export interface RunResult {
   reasons: string[];
   cardRendered: string | undefined;
   renderedIn: 'stack' | 'preview' | undefined;
+  // The whole run, login and workspace setup included.
   durationSeconds: number;
+  // From the first prompt to the end of the run: what the time target grades.
+  promptSeconds?: number;
   startedAt: string;
   endedAt: string | undefined;
   prompts: string[];
@@ -104,8 +107,9 @@ export function grade(result: RunResult): { grade: Grade; misses: string[] } {
       `${switches} mode switches (target ≤ ${BENCHMARKS.maxModeSwitches})`,
     );
   }
-  if (result.durationSeconds > maxSeconds) {
-    misses.push(`${result.durationSeconds}s (target ≤ ${maxSeconds}s)`);
+  let seconds = result.promptSeconds ?? result.durationSeconds;
+  if (seconds > maxSeconds) {
+    misses.push(`${seconds}s (target ≤ ${maxSeconds}s)`);
   }
   let failures = a.failedToolCalls.length;
   if (failures > BENCHMARKS.maxFailedToolCalls) {
