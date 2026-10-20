@@ -17,12 +17,21 @@ import { PagePool } from '../prerender/page-pool.ts';
 import { RenderRunner } from '../prerender/render-runner.ts';
 import { BrowserManager } from '../prerender/browser-manager.ts';
 import type { RealmHttpServer } from '../server.ts';
+import Koa from 'koa';
+import Router from '@koa/router';
+import supertest from 'supertest';
+import type { Prerenderer as RuntimePrerenderer } from '@cardstack/runtime-common';
+import type { PgAdapter } from '@cardstack/postgres/pg-adapter';
+import handlePrerenderProxy from '../handlers/handle-prerender-proxy.ts';
+import { jwtMiddleware } from '../middleware/index.ts';
+import { createJWT } from '../utils/jwt.ts';
 
 import {
   setupPermissionedRealmsCached,
   cleanWhiteSpace,
   testCreatePrerenderAuth,
   getPrerendererForTesting,
+  realmSecretSeed,
 } from './helpers/index.ts';
 import { prerenderCard, prerenderFileExtract } from './helpers/prerender.ts';
 import '@cardstack/runtime-common/helpers/code-equality-assertion';
@@ -371,6 +380,7 @@ module(basename(import.meta.filename), function () {
     let realmAdapter: RealmAdapter;
     let realmHttpServer: RealmHttpServer;
     let realm: RuntimeRealm;
+    let dbAdapter: PgAdapter;
     let auth = () => {
       let sessions = JSON.parse(
         testCreatePrerenderAuth(testUserId, permissions),
@@ -435,8 +445,9 @@ module(basename(import.meta.filename), function () {
           },
         },
       ],
-      onRealmSetup({ realms: setupRealms }) {
+      onRealmSetup({ dbAdapter: setupDbAdapter, realms: setupRealms }) {
         ({ realm, realmAdapter, realmHttpServer } = setupRealms[0]);
+        dbAdapter = setupDbAdapter;
         permissions = {
           [realmURL]: ['read', 'write', 'realm-owner'],
         };
@@ -788,6 +799,125 @@ module(basename(import.meta.filename), function () {
         'syntax error surfaces as 406',
       );
       assert.false(result.pool.evicted, 'page not evicted for syntax error');
+    });
+
+    // A user's module check (the AI assistant's correctness check) goes
+    // through the `/_prerender-module` proxy and lands on the warm tab of the
+    // realm's affinity, which keeps every module it has evaluated. Checking a
+    // module, fixing it through the realm, and checking it again has to
+    // report the fixed module, not the copy the tab evaluated first.
+    test('module proxy reports a module rewritten through the realm on the same warm tab', async function (assert) {
+      const modulePath = 'proxy-import-check.gts';
+      const moduleURL = `${realmURL}${modulePath}`;
+      const moduleSource = (cardApi: string) => `
+        import { CardDef, field, contains, StringField, Component } from '${cardApi}';
+        export class ProxyImportCheck extends CardDef {
+          static displayName = "Proxy Import Check";
+          @field name = contains(StringField);
+          static isolated = class extends Component<typeof this> {
+            <template>{{@model.name}}</template>
+          }
+        }
+      `;
+
+      // The proxy takes the runtime-common Prerenderer, which answers with the
+      // module response alone. Record the pool metadata beside it so the test
+      // can show both checks ran in the same tab.
+      let pools: { reused: boolean; pageId: string }[] = [];
+      let proxiedPrerenderer: RuntimePrerenderer = {
+        async prerenderModule(args) {
+          let result = await prerenderer.prerenderModule(args);
+          pools.push({
+            reused: result.pool.reused,
+            pageId: result.pool.pageId,
+          });
+          return result.response;
+        },
+        async prerenderVisit() {
+          throw new Error('not used by the module proxy');
+        },
+        async runCommand() {
+          throw new Error('not used by the module proxy');
+        },
+      };
+      let app = new Koa();
+      let router = new Router();
+      router.post(
+        '/_prerender-module',
+        jwtMiddleware(realmSecretSeed, dbAdapter),
+        handlePrerenderProxy({
+          kind: 'module',
+          prerenderer: proxiedPrerenderer,
+          dbAdapter,
+          matrixURL: 'http://localhost:8008/',
+          // The same origin-level session `auth()` adds for this realm.
+          createPrerenderAuth: (userId, realmPermissions) => {
+            let sessions = JSON.parse(
+              testCreatePrerenderAuth(userId, realmPermissions),
+            ) as Record<string, string>;
+            let token = sessions[realmURL];
+            if (token) {
+              sessions[new URL(realmURL).origin + '/'] = token;
+            }
+            return JSON.stringify(sessions);
+          },
+        }),
+      );
+      app.use(router.routes());
+      let token = createJWT(
+        { user: testUserId, sessionRoom: '!room:localhost' },
+        realmSecretSeed,
+      );
+      let checkModule = async () => {
+        let response = await supertest(app.callback())
+          .post('/_prerender-module')
+          .set('Authorization', `Bearer ${token}`)
+          .send({
+            data: {
+              type: 'prerender-module-request',
+              attributes: { realm: realmURL, url: moduleURL },
+            },
+          })
+          .expect(201);
+        return response.body.data.attributes as ModuleRenderResponse;
+      };
+
+      await realm.write(
+        modulePath,
+        moduleSource('@cardstack/base/card-api-broken'),
+      );
+      await realm.indexing();
+
+      let broken = await checkModule();
+      assert.strictEqual(broken.status, 'error', 'the broken module errors');
+      assert.true(
+        String(broken.error?.error.message).includes('card-api-broken'),
+        `the error names the missing import: ${broken.error?.error.message}`,
+      );
+
+      await realm.write(modulePath, moduleSource('@cardstack/base/card-api'));
+      await realm.indexing();
+
+      let fixed = await checkModule();
+
+      assert.strictEqual(pools.length, 2, 'both checks rendered');
+      assert.true(pools[1].reused, 'the second check reused a pooled tab');
+      assert.strictEqual(
+        pools[1].pageId,
+        pools[0].pageId,
+        'the second check ran in the tab that evaluated the broken module',
+      );
+      assert.strictEqual(
+        fixed.status,
+        'ready',
+        `the fixed module renders: ${fixed.error?.error.message}`,
+      );
+      let key = `${trimExecutableExtension(rri(moduleURL))}/ProxyImportCheck`;
+      assert.strictEqual(
+        fixed.definitions[key]?.type,
+        'definition',
+        'the fixed module carries its definition',
+      );
     });
 
     test('file extract surfaces broken FileDef module error without remote prerender timeout', async function (assert) {

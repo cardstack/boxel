@@ -497,6 +497,8 @@ module('Acceptance | host mode tests', function (hooks) {
             },
           },
         },
+        'spring-guide.md':
+          '# Spring Guide\n\nSprings settle toward their target.\n',
         'realm.json': realmConfigCardJSON({
           name: 'Test Workspace B',
           backgroundURL:
@@ -646,6 +648,35 @@ module('Acceptance | host mode tests', function (hooks) {
       headStart.remove();
       headEnd.remove();
     }
+  });
+
+  test('visiting a Markdown file in host mode renders it', async function (assert) {
+    let fileURL = `${testHostModeRealmURL}spring-guide.md`;
+
+    await visit('/test/spring-guide.md');
+
+    assert.dom(`[data-test-host-mode-card="${fileURL}"]`).exists();
+    assert
+      .dom(`[data-test-host-mode-card="${fileURL}"]`)
+      .containsText('Springs settle toward their target.');
+    assert.dom('.host-mode-card').doesNotContainText('Loading card…');
+  });
+
+  test('a Markdown file in the stack renders and is named in the breadcrumbs', async function (assert) {
+    let fileURL = `${testHostModeRealmURL}spring-guide.md`;
+    let hostModeStackValue = encodeURIComponent(JSON.stringify([fileURL]));
+
+    await visit(`/test/Pet/mango.json?hostModeStack=${hostModeStackValue}`);
+
+    assert
+      .dom(`[data-test-host-mode-stack-item="${fileURL}"]`)
+      .containsText('Springs settle toward their target.');
+    assert
+      .dom(`[data-test-host-mode-stack-item="${fileURL}"]`)
+      .doesNotContainText('Loading card…');
+    assert
+      .dom(`[data-test-host-mode-breadcrumb="${fileURL}"]`)
+      .containsText('spring-guide.md');
   });
 
   test('visiting a non-existent card shows an error', async function (assert) {

@@ -23,7 +23,10 @@ export interface RunResult {
   reasons: string[];
   cardRendered: string | undefined;
   renderedIn: 'stack' | 'preview' | undefined;
+  // The whole run, login and workspace setup included.
   durationSeconds: number;
+  // From the first prompt to the end of the run: what the time target grades.
+  promptSeconds?: number;
   startedAt: string;
   endedAt: string | undefined;
   prompts: string[];
@@ -36,6 +39,11 @@ export interface RunResult {
   initialFiles: string[];
   // Source URLs of the skill files the room had enabled.
   skillsUsed: string[];
+  // Skill features enabled in the room before the first prompt
+  // (EVAL_SKILL_FEATURES).
+  skillFeatures: string[];
+  // The evaluation's own time budget per prompt, when it sets one.
+  secondsPerPrompt?: number;
   username: string;
   stoppedBy:
     | 'idle'
@@ -43,9 +51,13 @@ export interface RunResult {
     | 'stuck'
     | 'stalled'
     | 'no-reply'
+    | 'approval'
     | 'irregularity'
     | 'error';
   irregularities: string[];
+  // How often a tool (listing-remix, for one) moved the assistant panel to a
+  // room of its own and the runner reopened the evaluation's room.
+  roomReturns: number;
   // File name, next to this result, of what the workspace held when the run
   // ended: every source file and every indexed card document.
   workspaceSnapshot?: string;
@@ -80,9 +92,11 @@ export function grade(result: RunResult): { grade: Grade; misses: string[] } {
   let a = result.analysis;
   let misses: string[] = [];
   // Every prompt after the first gets the same turn and time budget again.
+  // An evaluation with a bigger task than hello-world sets its own time
+  // budget per prompt.
   let prompts = Math.max(1, result.prompts.length);
   let maxTurns = BENCHMARKS.maxTurns * prompts;
-  let maxSeconds = BENCHMARKS.maxSeconds * prompts;
+  let maxSeconds = (result.secondsPerPrompt ?? BENCHMARKS.maxSeconds) * prompts;
   if (a.turns > maxTurns) {
     misses.push(`${a.turns} turns (target ≤ ${maxTurns})`);
   }
@@ -94,8 +108,9 @@ export function grade(result: RunResult): { grade: Grade; misses: string[] } {
       `${switches} mode switches (target ≤ ${BENCHMARKS.maxModeSwitches})`,
     );
   }
-  if (result.durationSeconds > maxSeconds) {
-    misses.push(`${result.durationSeconds}s (target ≤ ${maxSeconds}s)`);
+  let seconds = result.promptSeconds ?? result.durationSeconds;
+  if (seconds > maxSeconds) {
+    misses.push(`${seconds}s (target ≤ ${maxSeconds}s)`);
   }
   let failures = a.failedToolCalls.length;
   if (failures > BENCHMARKS.maxFailedToolCalls) {

@@ -44,32 +44,32 @@ import {
 } from '../lib/realm-routing.ts';
 import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.ts';
 
-// The prerendered formats the host-mode page for `cardURL` serves data-only,
-// asked of the realm holding the card: the one the request was routed to where
-// it holds the card, and otherwise the one a routing rule pointed into. A card
-// no realm holds is served no markup at all, since nothing can say which of
-// its formats its type withholds.
+// The prerendered formats the host-mode page for the card or file at `readURL`
+// serves data-only, asked of the realm holding it: the one the request was
+// routed to where it holds it, and otherwise the one a routing rule pointed
+// into. A card no realm holds is served no markup at all, since nothing can say
+// which of its formats its type withholds.
 async function unshareableFormatsForPage(
-  cardURL: URL,
+  readURL: URL,
   routedRealm: Realm | undefined,
   routingDeps: RealmRoutingDeps,
 ): Promise<PrerenderedHtmlFormat[]> {
   let holds = (realm: Realm) => {
     let realmURL = new URL(realm.url);
-    realmURL.protocol = cardURL.protocol;
-    return new RealmPaths(realmURL).inRealm(cardURL);
+    realmURL.protocol = readURL.protocol;
+    return new RealmPaths(realmURL).inRealm(readURL);
   };
   let realm =
     routedRealm && holds(routedRealm)
       ? routedRealm
-      : await findOrMountRealm(cardURL, routingDeps);
+      : await findOrMountRealm(readURL, routingDeps);
   if (!realm) {
     return [...PRERENDERED_HTML_FORMATS];
   }
   // The request may arrive under a different protocol than the realm is
   // mounted with, and the declaration is resolved against the realm's own
-  // spelling of the card's URL.
-  let url = new URL(cardURL);
+  // spelling of the URL.
+  let url = new URL(readURL);
   url.protocol = new URL(realm.url).protocol;
   return await realm.unshareableFormatsFor(url);
 }
@@ -654,17 +654,17 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
     // definition lookup.
     let formatsFor = new Map<string, Promise<PrerenderedHtmlFormat[]>>();
     let withheld = async (
-      markup: { html: string | null; cardURL: URL | null },
+      markup: { html: string | null; readURL: URL | null },
       format: PrerenderedHtmlFormat,
     ) => {
-      if (markup.html == null || !markup.cardURL) {
+      if (markup.html == null || !markup.readURL) {
         return false;
       }
-      let key = markup.cardURL.href;
+      let key = markup.readURL.href;
       let formats = formatsFor.get(key);
       if (!formats) {
         formats = unshareableFormatsForPage(
-          markup.cardURL,
+          markup.readURL,
           routedRealm,
           routingDeps,
         );

@@ -16,6 +16,12 @@ This rule flags (and auto-fixes) the URL-form specifier in:
 - static `import`/`export … from` declarations
 - dynamic `import(…)` expressions
 - loader-style dynamic imports (`loader.import(…)`, any `.import(…)` call)
+- `importResource(this, () => …)`, whose thunk returns the specifier
+
+A specifier written as a template literal is flagged when its leading spelling is
+the URL form: the text before the first interpolation, a string literal
+interpolated first (`` `${'https://cardstack.com/base/'}card-api` ``), or
+`baseRealm.url` interpolated first (`` `${baseRealm.url}card-api` ``).
 
 It deliberately ignores the URL in other positions — fetch targets, alias
 registration (e.g. `VirtualNetwork` mappings), and test assertions about served
@@ -28,6 +34,7 @@ Incorrect:
 ```js
 import { CardDef } from 'https://cardstack.com/base/card-api';
 let api = await loader.import('https://cardstack.com/base/card-api');
+let mod = await import(`https://cardstack.com/base/${name}`);
 ```
 
 Correct:
@@ -35,4 +42,5 @@ Correct:
 ```js
 import { CardDef } from '@cardstack/base/card-api';
 let api = await loader.import('@cardstack/base/card-api');
+let mod = await import(`@cardstack/base/${name}`);
 ```

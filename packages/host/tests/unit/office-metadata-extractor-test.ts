@@ -13,7 +13,7 @@
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, type Loader } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common';
 
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -130,13 +130,13 @@ module('Unit | office metadata extractor', function (hooks) {
   hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
     ({ extractDocxMetadata } = await loader.import<typeof DocxModule>(
-      `${baseRealm.url}docx-meta-extractor`,
+      `@cardstack/base/docx-meta-extractor`,
     ));
     ({ extractPptxMetadata } = await loader.import<typeof PptxModule>(
-      `${baseRealm.url}pptx-meta-extractor`,
+      `@cardstack/base/pptx-meta-extractor`,
     ));
     ({ extractXlsxMetadata } = await loader.import<typeof XlsxModule>(
-      `${baseRealm.url}xlsx-meta-extractor`,
+      `@cardstack/base/xlsx-meta-extractor`,
     ));
   });
 

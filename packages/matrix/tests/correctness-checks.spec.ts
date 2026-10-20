@@ -690,7 +690,10 @@ export class ImportCheck extends CardDef {
       expectCorrect: boolean,
     ) {
       let resultJson: any;
+      let attempt = 0;
+      let startedAt = Date.now();
       await expect(async () => {
+        attempt++;
         let commandRequestId = `check-module-${Date.now()}-${Math.random()
           .toString(36)
           .slice(2, 6)}`;
@@ -768,6 +771,18 @@ export class ImportCheck extends CardDef {
         }).toPass();
 
         resultJson = await response!.json();
+        // One line per attempt. When the check keeps returning the wrong
+        // answer, these show whether each attempt saw the same errors (a
+        // stale module render) or different ones, and how long it took.
+        console.log(
+          `[correctness-check] "${description}" attempt=${attempt} elapsedMs=${
+            Date.now() - startedAt
+          } request=${commandRequestId} expectCorrect=${expectCorrect} correct=${
+            resultJson.data.attributes.correct
+          } errors=${JSON.stringify(
+            resultJson.data.attributes.errors ?? [],
+          ).slice(0, 1_000)}`,
+        );
         expect(resultJson.data.attributes.correct).toBe(expectCorrect);
         await expect(
           commandContainer.locator(

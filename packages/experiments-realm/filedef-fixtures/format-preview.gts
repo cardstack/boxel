@@ -4,9 +4,9 @@ import {
   field,
   contains,
   linksToMany,
-} from 'https://cardstack.com/base/card-api';
-import { FileDef } from 'https://cardstack.com/base/file-api';
-import StringField from 'https://cardstack.com/base/string';
+} from '@cardstack/base/card-api';
+import { FileDef } from '@cardstack/base/file-api';
+import StringField from '@cardstack/base/string';
 import LayoutDashboardIcon from '@cardstack/boxel-icons/layout-dashboard';
 import { tracked } from '@glimmer/tracking';
 import { on } from '@ember/modifier';

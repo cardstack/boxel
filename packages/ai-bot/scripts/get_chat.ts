@@ -54,7 +54,9 @@ import { writeFileSync } from 'fs';
     process.exit(1);
   }
   console.log(`Joined room ${joinedRoom.name}`);
-  let eventList = await getRoomEvents(roomId, client);
+  let eventList = await getRoomEvents(roomId, client, undefined, {
+    wholeRoom: true,
+  });
 
   console.log('Total event list', eventList.length);
   writeFileSync(

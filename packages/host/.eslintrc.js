@@ -256,8 +256,7 @@ module.exports = {
       // are outside `tsconfig.json`, where asking for a program is a parse
       // error rather than a lint result. Tests are left out for signal: they
       // build URLs by interpolating the test realm's identifier, which is
-      // always a URL there, so the rule has 342 things to say about them and
-      // 8 about the app.
+      // always a URL there, so the rule has 476 things to say about them.
       //
       // The parser for each file still comes from the overrides above —
       // `@typescript-eslint/parser` for `.ts`, `ember-eslint-parser` for
@@ -270,6 +269,15 @@ module.exports = {
       },
       rules: {
         '@cardstack/boxel/no-url-from-realm-identifier': 'error',
+      },
+    },
+    {
+      // A prefix realm is named by its prefix rather than the URL one
+      // environment serves it at. Tests are left out: they spell those URLs on
+      // purpose, to check how they are resolved and mapped.
+      files: ['app/**/*.{js,ts,gts,gjs}'],
+      rules: {
+        '@cardstack/boxel/no-literal-realm-urls': 'error',
       },
     },
   ],

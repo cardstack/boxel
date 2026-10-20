@@ -5,6 +5,7 @@ scope:
   - packages/realm-server/lib/secure-origin.ts
   - packages/realm-server/lib/secure-session.ts
   - packages/realm-server/lib/google-sign-in.ts
+  - packages/realm-server/lib/google-account.ts
   - packages/realm-server/lib/sign-in-limiter.ts
   - packages/realm-server/handlers/handle-secure-session.ts
   - packages/realm-server/handlers/handle-user-keys.ts
