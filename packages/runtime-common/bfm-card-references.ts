@@ -1,6 +1,9 @@
 import { escapeHtml } from './helpers/html.ts';
 import { resolveRRIReference, trimJsonExtension } from './url.ts';
-import type { RealmResourceIdentifier } from './realm-identifiers.ts';
+import {
+  isPrefixForm,
+  type RealmResourceIdentifier,
+} from './realm-identifiers.ts';
 import { FITTED_FORMATS } from './formats.ts';
 import type { TokenizerAndRendererExtension } from './marked.mts';
 
@@ -38,7 +41,7 @@ function resolveUrl(ref: string, baseUrl: string | undefined): string | null {
   // unmatchable query value.
   return resolved.startsWith('http://') ||
     resolved.startsWith('https://') ||
-    resolved.startsWith('@')
+    isPrefixForm(resolved)
     ? resolved
     : null;
 }

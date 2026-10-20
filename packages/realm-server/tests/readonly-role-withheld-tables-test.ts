@@ -104,12 +104,12 @@ module(basename(import.meta.filename), function () {
 
     test('stops when PUBLIC can read a column', async function (assert) {
       await dbAdapter.execute(
-        `GRANT SELECT (api_key) ON TABLE proxy_endpoints TO PUBLIC`,
+        `GRANT SELECT (api_key_ciphertext) ON TABLE proxy_endpoints TO PUBLIC`,
       );
 
       await assert.rejects(
         runUp(),
-        /can read proxy_endpoints\.api_key, which is withheld from readonly_role/,
+        /can read proxy_endpoints\.api_key_ciphertext, which is withheld from readonly_role/,
       );
     });
 

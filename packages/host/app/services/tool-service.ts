@@ -155,6 +155,12 @@ type GenericCommand = Command<
 >;
 
 const toolProcessingWaiter = buildWaiter('tool-service:command-processing');
+// The drain starts a tool's run without awaiting it, and ember-concurrency
+// carries no test-waiter integration, so a run is held by its own waiter from
+// claiming the request to sending its result. The tool's execution inside the
+// run is bounded by its execute timeout, and the waiter ends in the run's
+// `finally`, on success, failure or cancellation alike.
+const toolRunWaiter = buildWaiter('tool-service:tool-run');
 
 // Converts, where the schema asks for an object, an array or a number, a
 // string value that parses to one. Nothing else changes.
@@ -980,6 +986,7 @@ export default class ToolService extends Service {
       ) {
         return; // already executing this command
       }
+      let waiterToken = toolRunWaiter.beginAsync();
       try {
         this.matrixService.failedToolState.delete(commandRequestId!);
         this.currentlyExecutingToolRequestIds.add(commandRequestId!);
@@ -1185,6 +1192,7 @@ export default class ToolService extends Service {
         }
       } finally {
         this.currentlyExecutingToolRequestIds.delete(commandRequestId!);
+        toolRunWaiter.endAsync(waiterToken);
       }
     },
   );

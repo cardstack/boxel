@@ -1,9 +1,10 @@
 import type { LooseCardResource, FileMetaResource } from './index.ts';
 import { relationshipEntries } from './relationship-utils.ts';
 import { RealmPaths } from './paths.ts';
-import type {
-  RealmIdentifier,
-  RealmResourceIdentifier,
+import {
+  isPrefixForm,
+  type RealmIdentifier,
+  type RealmResourceIdentifier,
 } from './realm-identifiers.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 
@@ -163,7 +164,7 @@ export function isScopedReference(
   virtualNetwork: VirtualNetwork,
 ): boolean {
   return (
-    reference.startsWith('@') || virtualNetwork.isRegisteredPrefix(reference)
+    isPrefixForm(reference) || virtualNetwork.isRegisteredPrefix(reference)
   );
 }
 
@@ -172,7 +173,7 @@ export function resolveRRIReference(
   relativeTo: RealmResourceIdentifier | URL | undefined,
 ): string {
   if (
-    reference.startsWith('@') ||
+    isPrefixForm(reference) ||
     // Any absolute-URL scheme (`http:`/`https:`, but also `data:`, `blob:`,
     // `mailto:`, …) is already canonical — return it unchanged rather than
     // treating it as a relative reference to join against the base. Matches an
@@ -192,7 +193,7 @@ export function resolveRRIReference(
   if (reference.startsWith('$REALM/')) {
     let path = reference.slice('$REALM/'.length);
     let parts = base.split('/');
-    if (parts.length >= 2 && parts[0].startsWith('@')) {
+    if (parts.length >= 2 && isPrefixForm(base)) {
       return `${parts[0]}/${parts[1]}/${path}`;
     }
     return reference;
@@ -204,7 +205,7 @@ export function resolveRRIReference(
   // (`@scope/name`), matching `sharedNamespace`; the remainder is the in-realm
   // path the reference resolves against.
   let parts = base.split('/');
-  if (parts.length >= 2 && parts[0].startsWith('@')) {
+  if (parts.length >= 2 && isPrefixForm(base)) {
     let namespace = `${parts[0]}/${parts[1]}`;
     let path = base.slice(namespace.length) || '/';
     let resolved = new URL(reference, `${RRI_SYNTHETIC_ORIGIN}${path}`);

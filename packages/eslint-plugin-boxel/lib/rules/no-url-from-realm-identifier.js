@@ -64,7 +64,7 @@ module.exports = {
       urlBaseFromIdentifier:
         '`new URL()` with a {{brand}} as its base throws for a prefix-form identifier — a prefix is not a valid base URL. Join the path in identifier space with `new RealmPaths(ri(x))` and pass the result to `virtualNetwork.fetch()`. Disable this rule on the line only where a guard on the same path admits nothing but URL form, and name that guard in the reason; a `catch` is not a guard.',
       urlProbeOnIdentifier:
-        '`URL.{{method}}()` on a {{brand}} answers as though a prefix-form identifier were not a URL — {{method}} returns {{falsy}} rather than throwing, so the misclassification propagates silently. Ask whether the value is a registered prefix (`virtualNetwork.isRegisteredPrefix(x)`) before asking whether it parses. Disable this rule on the line only where a guard on the same path admits nothing but URL form, and name that guard in the reason; a `catch` is not a guard.',
+        '`URL.{{method}}()` on a {{brand}} answers as though a prefix-form identifier were not a URL — {{method}} returns {{falsy}} rather than throwing, so the misclassification propagates silently. Test which form it has with `isPrefixForm(x)` from `@cardstack/runtime-common`, the one form test for an identifier. Disable this rule on the line only where a guard on the same path admits nothing but URL form, and name that guard in the reason; a `catch` is not a guard.',
     },
   },
 

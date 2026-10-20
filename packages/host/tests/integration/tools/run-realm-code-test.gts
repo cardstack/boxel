@@ -1810,7 +1810,7 @@ for (const title of ['Pet', 'Unicorn']) {
   const { entries, total, truncated, incomplete } = await realm.entries.search(
     {
       filter: {
-        on: { module: 'https://cardstack.com/base/spec', name: 'Spec' },
+        on: { module: '@cardstack/base/spec', name: 'Spec' },
         eq: { cardTitle: title },
       },
     },

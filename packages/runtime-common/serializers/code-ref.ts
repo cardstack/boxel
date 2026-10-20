@@ -10,7 +10,11 @@ import {
   executableExtensions,
   resolveRRIReference,
 } from '../index.ts';
-import { rri, type RealmResourceIdentifier } from '../realm-identifiers.ts';
+import {
+  isPrefixForm,
+  rri,
+  type RealmResourceIdentifier,
+} from '../realm-identifiers.ts';
 // We only use a subset of SerializeOpts here; accept any to align with the
 // serializer interface without surfacing unused properties.
 import type { SerializeOpts } from '@cardstack/base/card-api';
@@ -53,7 +57,7 @@ export function serialize(
     typeof opts.relativeTo === 'string' &&
     (opts.relativeTo.startsWith('http://') ||
       opts.relativeTo.startsWith('https://') ||
-      opts.relativeTo.startsWith('@'))
+      isPrefixForm(opts.relativeTo))
   ) {
     base = rri(opts.relativeTo);
   } else if (
@@ -61,7 +65,7 @@ export function serialize(
     typeof doc.data.id === 'string' &&
     (doc.data.id.startsWith('http://') ||
       doc.data.id.startsWith('https://') ||
-      doc.data.id.startsWith('@'))
+      isPrefixForm(doc.data.id))
   ) {
     base = rri(doc.data.id);
   }
@@ -138,7 +142,7 @@ function codeRefAdjustments(
     // environment-specific (and possibly cross-origin) URL into the stored
     // card and defeat the portability the RRI exists to provide. (No
     // `maybeRelativeReference` — a scoped RRI is already portable.)
-    if (codeRef.module.startsWith('@')) {
+    if (isPrefixForm(codeRef.module)) {
       let module: string = codeRef.module;
       if (opts?.trimExecutableExtension) {
         module = trimExecutableExtension(rri(module));

@@ -89,7 +89,7 @@ module('Acceptance | workspace card', function (hooks) {
             },
             meta: {
               adoptsFrom: {
-                module: 'https://cardstack.com/base/remix-card',
+                module: '@cardstack/base/remix-card',
                 name: 'RemixCard',
               },
             },

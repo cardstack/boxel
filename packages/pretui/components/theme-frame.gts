@@ -142,7 +142,7 @@ export class ThemeFrame extends Component<ThemeFrameSignature> {
         // search API does not resolve re-export aliases, so `base/theme`/`default`
         // (which re-exports this very class) matches zero cards rather than
         // erroring — the selector then silently falls back to one theme forever.
-        type: { module: 'https://cardstack.com/base/card-api', name: 'Theme' },
+        type: { module: '@cardstack/base/card-api', name: 'Theme' },
       },
     }),
     () => {

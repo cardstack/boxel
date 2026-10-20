@@ -14,6 +14,7 @@ import {
   isCodeRef,
 } from './index.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
+import { isPrefixForm } from './realm-identifiers.ts';
 import { isMeta, type CardFields, type Meta } from './resource-types.ts';
 import type { DefinitionLookup } from './definition-lookup.ts';
 import { serialize as serializeCodeRef } from './serializers/code-ref.ts';
@@ -357,10 +358,7 @@ export function storedRelationshipLink(
   // `@scope/name/x` comes back as a URL *inside* the writing realm and then
   // relativizes to `./@scope/name/x`. It is absolute and cross-realm by
   // construction, so store it exactly as sent.
-  if (
-    !virtualNetwork.isRegisteredPrefix(selfLink) &&
-    selfLink.startsWith('@')
-  ) {
+  if (!virtualNetwork.isRegisteredPrefix(selfLink) && isPrefixForm(selfLink)) {
     return selfLink;
   }
   let resolved: URL;

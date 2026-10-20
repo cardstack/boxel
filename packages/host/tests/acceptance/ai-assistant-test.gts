@@ -1275,9 +1275,7 @@ module('Acceptance | AI Assistant tests', function (hooks) {
     assert.dom('[data-test-attached-card]').doesNotExist();
     await click('[data-test-boxel-filter-list-button="All Cards"]');
     await click('[data-test-create-new-card-button]');
-    await click(
-      `[data-test-item-button="https://cardstack.com/base/types/card"]`,
-    );
+    await click(`[data-test-item-button="${baseRealm.url}types/card"]`);
 
     await click(`[data-test-card-chooser-go-button]`);
 

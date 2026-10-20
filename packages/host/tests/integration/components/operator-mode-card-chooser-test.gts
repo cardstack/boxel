@@ -584,10 +584,7 @@ module('Integration | operator-mode | card chooser', function (hooks) {
     await waitFor(`[data-test-cards-grid-item]`);
     await click(`[data-test-create-new-card-button]`);
     await waitFor(`[data-test-item-button]`);
-    await fillIn(
-      `[data-test-search-field]`,
-      `https://cardstack.com/base/types/card`,
-    );
+    await fillIn(`[data-test-search-field]`, `${baseRealm.url}types/card`);
 
     await waitFor('[data-test-item-button]', {
       count: 1,
@@ -1474,9 +1471,7 @@ module('Integration | operator-mode | card chooser', function (hooks) {
     await click('[data-test-create-new-card-button]');
     await waitFor(`[data-test-item-button]`);
     await fillIn(`[data-test-search-field]`, `Skill`);
-    await click(
-      '[data-test-item-button="https://cardstack.com/base/cards/skill"]',
-    );
+    await click(`[data-test-item-button="${baseRealm.url}cards/skill"]`);
     await click('[data-test-card-chooser-go-button]');
 
     await fillIn('[data-test-field="cardTitle"] input', 'New Skill');

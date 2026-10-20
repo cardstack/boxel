@@ -4,6 +4,7 @@ import { type DBAdapter, logger } from '@cardstack/runtime-common';
 import {
   PROXY_ENDPOINT_KEY_COLUMNS,
   readProxyEndpointKey,
+  UnreadableProxyEndpointKeyError,
   type ProxyEndpointKeyRow,
 } from './proxy-endpoint-keys.ts';
 
@@ -125,21 +126,33 @@ export class AllowedProxyDestinations {
     endpoints: ProxyEndpointRow[],
   ): Record<string, AllowedProxyDestination> {
     const destinations: Record<string, AllowedProxyDestination> = {};
+    // Each endpoint is built on its own, so one that can't be (a sealed key
+    // that doesn't open, or a credit strategy its key doesn't satisfy) is
+    // refused while every other destination stays allowed.
     for (const endpoint of endpoints) {
-      // A row with no key passes its null through, as the column allows.
-      const apiKey = readProxyEndpointKey(endpoint) as string;
-      destinations[endpoint.url] = {
-        url: endpoint.url,
-        apiKey,
-        creditStrategy: CreditStrategyFactory.create(
-          endpoint.credit_strategy as 'openrouter' | 'no-credit',
+      try {
+        // A row with no key passes its null through.
+        const apiKey = readProxyEndpointKey(endpoint) as string;
+        destinations[endpoint.url] = {
+          url: endpoint.url,
           apiKey,
-          systemKeyName(endpoint.url),
-        ),
-        supportsStreaming: endpoint.supports_streaming,
-        authMethod: (endpoint.auth_method || 'header') as AuthMethod, // Default to header for backward compatibility
-        authParameterName: endpoint.auth_parameter_name,
-      };
+          creditStrategy: CreditStrategyFactory.create(
+            endpoint.credit_strategy as 'openrouter' | 'no-credit',
+            apiKey,
+            systemKeyName(endpoint.url),
+          ),
+          supportsStreaming: endpoint.supports_streaming,
+          authMethod: (endpoint.auth_method || 'header') as AuthMethod, // Default to header for backward compatibility
+          authParameterName: endpoint.auth_parameter_name,
+        };
+      } catch (error) {
+        // An unreadable key was already reported, once per sealed value.
+        if (!(error instanceof UnreadableProxyEndpointKeyError)) {
+          log.error(
+            `proxy endpoint ${endpoint.url} could not be loaded, so it is refused: ${(error as Error)?.message ?? error}`,
+          );
+        }
+      }
     }
     return destinations;
   }
