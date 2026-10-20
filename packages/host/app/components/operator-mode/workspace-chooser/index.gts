@@ -6,6 +6,10 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
 import ArchiveIcon from '@cardstack/boxel-icons/archive';
+import Bot from '@cardstack/boxel-icons/bot';
+import Home from '@cardstack/boxel-icons/home';
+import LayoutGrid from '@cardstack/boxel-icons/layout-grid';
+import Store from '@cardstack/boxel-icons/store';
 import { didCancel, dropTask } from 'ember-concurrency';
 import { modifier } from 'ember-modifier';
 
@@ -165,7 +169,7 @@ export default class WorkspaceChooser extends Component<Signature> {
     }
   }
 
-  // Everything, or only workspaces published to the web. It narrows every
+  // All, or only workspaces published to the web. It narrows every
   // section, so it sits beside the greeting at the head of the page.
   @tracked private scope: 'default' | 'hosted-only' = 'default';
 
@@ -709,21 +713,30 @@ export default class WorkspaceChooser extends Component<Signature> {
               class='greeting'
               data-test-dashboard-greeting
             >{{this.greeting}}</h1>
-            <div class='scope-filter' role='group' aria-label='Show'>
+            <div
+              class='scope-filter'
+              role='group'
+              aria-label='Filter workspaces'
+            >
               <button
                 type='button'
                 class='scope-option'
                 aria-pressed={{if (eq this.scope 'default') 'true' 'false'}}
                 {{on 'click' (fn this.setScope 'default')}}
                 data-test-dashboard-filter='all'
-              >Everything</button>
+              >All</button>
               <button
                 type='button'
                 class='scope-option'
                 aria-pressed={{if (eq this.scope 'hosted-only') 'true' 'false'}}
                 {{on 'click' (fn this.setScope 'hosted-only')}}
                 data-test-dashboard-filter='hosted'
-              >Live only</button>
+              ><Home
+                  class='scope-option-icon'
+                  width='14'
+                  height='14'
+                  aria-hidden='true'
+                />Hosted</button>
             </div>
           </div>
           <GetStarted />
@@ -738,7 +751,12 @@ export default class WorkspaceChooser extends Component<Signature> {
                 <h2
                   id='dashboard-section-catalogs'
                   class='dashboard-section-title'
-                >Start from the catalog</h2>
+                ><Store
+                    class='section-header-icon'
+                    width='20'
+                    height='20'
+                    aria-hidden='true'
+                  />Start from the catalog</h2>
                 <p class='dashboard-section-hint'>New here? Pick something
                   ready-made and make it yours.</p>
               </div>
@@ -755,7 +773,12 @@ export default class WorkspaceChooser extends Component<Signature> {
               <h2
                 id='dashboard-section-workspaces'
                 class='dashboard-section-title'
-              >Workspaces</h2>
+              ><LayoutGrid
+                  class='section-header-icon'
+                  width='20'
+                  height='20'
+                  aria-hidden='true'
+                />Workspaces</h2>
               <p class='dashboard-section-hint'>Where your cards live. Pin a
                 card from its menu and it shows on its workspace here.</p>
             </div>
@@ -957,7 +980,12 @@ export default class WorkspaceChooser extends Component<Signature> {
               <h2
                 id='dashboard-section-catalog-list'
                 class='dashboard-section-title'
-              >Catalogs</h2>
+              ><Store
+                  class='section-header-icon'
+                  width='20'
+                  height='20'
+                  aria-hidden='true'
+                />Catalogs</h2>
               {{#if this.filteredCatalogRealmIdentifiers.length}}
                 <span
                   class='section-count'
@@ -1006,7 +1034,12 @@ export default class WorkspaceChooser extends Component<Signature> {
               <h2
                 id='dashboard-section-agents'
                 class='dashboard-section-title'
-              >Agents</h2>
+              ><Bot
+                  class='section-header-icon'
+                  width='20'
+                  height='20'
+                  aria-hidden='true'
+                />Agents</h2>
               <p class='dashboard-section-hint'>Boxel AI works here; your own
                 agent works through the Boxel CLI.</p>
             </div>
@@ -1059,8 +1092,33 @@ export default class WorkspaceChooser extends Component<Signature> {
           100vw - 2 * var(--workspace-chooser-gutter)
         );
       }
+      /* Frosted glass under the top bar, the rail's own blur, so the page
+         blurs out as it scrolls under the wordmark instead of colliding
+         with it. It stops short of the scrollbar and fades at its foot. */
+      .workspace-chooser::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0.5rem;
+        height: calc(
+          var(--operator-mode-top-bar-item-height) + 2 *
+            var(--operator-mode-spacing) + var(--boxel-sp-sm)
+        );
+        background-color: color-mix(
+          in oklch,
+          var(--boxel-800) 55%,
+          transparent
+        );
+        backdrop-filter: blur(18px) saturate(140%);
+        mask-image: linear-gradient(to bottom, black 65%, transparent);
+        pointer-events: none;
+        z-index: 1;
+      }
       .workspace-chooser__content {
         display: flex;
+        /* One layer, so the frosted band above sits over every tile. */
+        isolation: isolate;
         flex-direction: column;
         align-items: center;
         gap: var(--boxel-sp-lg);
@@ -1150,28 +1208,41 @@ export default class WorkspaceChooser extends Component<Signature> {
         align-items: center;
         gap: var(--boxel-sp);
       }
+      /* Quiet filter chips: the first of the filters the page can grow, so
+         they sit back from the greeting rather than compete with it. */
       .scope-filter {
         margin-left: auto;
         display: inline-flex;
-        padding: 0.1875rem;
-        border-radius: 0.75rem;
-        background-color: var(--boxel-700);
-        box-shadow: inset 0 0 0 1px
-          color-mix(in oklch, var(--boxel-light) 10%, transparent);
+        gap: var(--boxel-sp-4xs);
       }
       .scope-option {
-        height: 2rem;
-        padding: 0 var(--boxel-sp-sm);
-        border: 0;
-        border-radius: 0.5625rem;
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-5xs);
+        height: 1.75rem;
+        padding: 0 var(--boxel-sp-xs);
+        border: 1px solid transparent;
+        border-radius: 0.875rem;
         background: none;
-        color: var(--workspace-chooser-label-color);
-        font: 600 var(--boxel-font-sm);
+        color: var(--workspace-chooser-count-color);
+        font: 500 var(--boxel-font-xs);
         cursor: pointer;
       }
+      .scope-option:hover {
+        color: var(--workspace-chooser-label-color);
+      }
       .scope-option[aria-pressed='true'] {
-        background-color: var(--boxel-light);
-        color: var(--boxel-dark);
+        border-color: color-mix(in oklch, var(--boxel-light) 14%, transparent);
+        background-color: color-mix(
+          in oklch,
+          var(--boxel-light) 6%,
+          transparent
+        );
+        color: var(--boxel-light);
+      }
+      .scope-option-icon {
+        --icon-color: currentColor;
+        flex-shrink: 0;
       }
       .scope-option:focus-visible {
         outline: 2px solid var(--boxel-highlight);
@@ -1285,6 +1356,9 @@ export default class WorkspaceChooser extends Component<Signature> {
           color-mix(in oklch, var(--boxel-light) 10%, transparent);
       }
       .dashboard-section-title {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
         margin: 0;
         font-size: 1.375rem;
         font-weight: 700;

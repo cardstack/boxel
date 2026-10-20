@@ -472,7 +472,7 @@ export default class NavRail extends Component<Signature> {
                     </span>
                     <span class='row-title'>{{entry.name}}</span>
                     {{#if entry.isLive}}
-                      <span class='live-chip'>Live</span>
+                      <span class='live-chip'>Hosted</span>
                     {{/if}}
                   </button>
                 {{else}}

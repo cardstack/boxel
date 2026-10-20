@@ -181,7 +181,7 @@ export default class Workspace extends Component<Signature> {
                 >{{this.name}}</span>
               </button>
               {{#if this.hasPublishedRealms}}
-                <span class='desk-live'>Live</span>
+                <span class='desk-live'>Hosted</span>
               {{/if}}
             </div>
             {{#if this.hasPins}}
@@ -228,7 +228,7 @@ export default class Workspace extends Component<Signature> {
             {{#if this.hasPublishedRealms}}
               <div class='desk-host-line'>
                 <span class='desk-host-dot' aria-hidden='true'></span>
-                <span>Live at</span>
+                <span>Hosted at</span>
                 <button
                   type='button'
                   class='desk-host-link'

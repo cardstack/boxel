@@ -949,7 +949,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
         .hasAttribute('aria-pressed', 'true');
     });
 
-    test('can switch to the Live only filter', async function (assert) {
+    test('can switch to the Hosted filter', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
 
       await click('[data-test-dashboard-filter="hosted"]');
@@ -959,7 +959,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
         .hasAttribute('aria-pressed', 'true');
     });
 
-    test('can switch back to Everything', async function (assert) {
+    test('can switch back to All', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
 
       await click('[data-test-dashboard-filter="hosted"]');
