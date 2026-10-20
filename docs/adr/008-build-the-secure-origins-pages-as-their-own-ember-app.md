@@ -120,14 +120,6 @@ screens from the package's presentational components, so that one
 implementation serves both origins. The host MAY import from the package. The
 package MUST NOT import from the host (§1.3).
 
-### 1.10. New screens before the package exists
-
-Until `packages/secure-origin` exists, a new screen MAY be added as a mode of
-the plain shell in `packages/realm-server/secure-origin/`. The change that
-adds it MUST list its files under Remediation as gaps against §1.1, and MUST
-NOT add a framework, a build step or a dependency to the plain pages. The
-screen MUST then be ported to the package like the rest.
-
 ## 2. Rationale
 
 The rest of the UI is the host app, and new screens are expected to follow
@@ -180,8 +172,11 @@ keep it readable without knowing the framework, and testable on its own.
 
 ## 4. Consequences
 
-Until the host renders its screens from the package (§1.9), a change to the
-host's sign-in screens still needs the same change in the package.
+Until the package exists, a new secure-origin screen waits for it, since
+adding one to the plain pages would add a gap. That orders new secure-window
+screens, such as key management, after the package scaffold. Until the host
+renders its screens from the package (§1.9), a change to the host's sign-in
+screens still needs the same change in the package.
 
 ## 5. Sources
 
