@@ -45,6 +45,7 @@ import {
 import {
   absolutizeSkillLinks,
   buildPromptForModel,
+  CHECK_CORRECTNESS_SUMMARY_INSTRUCTION,
   constructHistory,
   currentTurnToolResultMedia,
   MAX_CURRENT_TURN_TOOL_RESULT_MEDIA,
@@ -4983,9 +4984,7 @@ ${patchedFileSource}
     );
     assert.notOk(
       messages?.some((message) =>
-        messageText(message).includes(
-          'The automated correctness checks have finished',
-        ),
+        messageText(message).includes(CHECK_CORRECTNESS_SUMMARY_INSTRUCTION),
       ),
       'The limit instruction is the last one the model reads: no trailing summary follows it',
     );
@@ -5645,7 +5644,7 @@ ${patchedFileSource}
     assert.equal(trailingMessage?.role, 'user');
     assert.false(
       messageText(trailingMessage).includes(
-        'The automated correctness checks have finished',
+        CHECK_CORRECTNESS_SUMMARY_INSTRUCTION,
       ),
       'The trailing message carries no summary to compete with the fix instruction',
     );
@@ -5841,11 +5840,13 @@ ${patchedFileSource}
   // A user message, a bot message asking for one check per result, and the
   // results in order. Each result is a card's attributes, `'no-output'` for a
   // result with no card, or `'unreadable'` for a card whose download failed.
+  // A result with warnings checks a card instance (a .json file), the only
+  // target whose warnings ask for a fix; every other result checks a module.
   function correctnessBatchHistory(
     results: (
       | 'no-output'
       | 'unreadable'
-      | { correct: boolean; errors: string[] }
+      | { correct: boolean; errors: string[]; warnings?: string[] }
     )[],
   ): DiscreteMatrixEvent[] {
     const roomId = '!room:localhost';
@@ -5879,14 +5880,17 @@ ${patchedFileSource}
           format: 'org.matrix.custom.html',
           isStreamingFinished: true,
           data: { context: { tools: [], functions: [] } },
-          [APP_BOXEL_TOOL_REQUESTS_KEY]: results.map((_result, index) => ({
+          [APP_BOXEL_TOOL_REQUESTS_KEY]: results.map((result, index) => ({
             id: `check-${index}`,
             name: 'checkCorrectness',
             arguments: JSON.stringify({
               description: `Check file ${index}`,
               attributes: {
                 targetType: 'file',
-                targetRef: `http://localhost/file-${index}.gts`,
+                targetRef:
+                  typeof result === 'object' && result.warnings?.length
+                    ? `http://localhost/Card/${index}.json`
+                    : `http://localhost/file-${index}.gts`,
                 roomId,
                 correctnessCheckAttempt: 1,
               },
@@ -5929,7 +5933,7 @@ ${patchedFileSource}
                           : {
                               content: JSON.stringify({
                                 data: {
-                                  attributes: { ...result, warnings: [] },
+                                  attributes: { warnings: [], ...result },
                                 },
                               }),
                             }),
@@ -5947,8 +5951,7 @@ ${patchedFileSource}
   }
 
   const SUCCESS_NOTE_START = 'The write above passed its checks.';
-  const TRAILING_SUMMARY_START =
-    'The automated correctness checks have finished';
+  const TRAILING_SUMMARY_START = CHECK_CORRECTNESS_SUMMARY_INSTRUCTION;
 
   function userMessagesWith(
     messages: Parameters<typeof messageText>[0][] | undefined,
@@ -6026,10 +6029,13 @@ ${patchedFileSource}
     // vanishes on the next request would defeat the prompt cache.
     let trailingMessage = messages?.at(-1);
     assert.equal(trailingMessage?.role, 'user');
-    let trailingText = messageText(trailingMessage);
-    let noteStart = trailingText.indexOf(TRAILING_SUMMARY_START);
-    assert.true(noteStart !== -1, 'The trailing message ends with the note');
-    let note = trailingText.slice(noteStart);
+    assert.true(
+      messageText(trailingMessage).endsWith(
+        CHECK_CORRECTNESS_SUMMARY_INSTRUCTION,
+      ),
+      'The trailing message ends with the note',
+    );
+    let note = CHECK_CORRECTNESS_SUMMARY_INSTRUCTION;
     assert.true(
       note.includes('finish your answer to the user'),
       'The note sends the model back to the user',
@@ -6077,6 +6083,50 @@ ${patchedFileSource}
       userMessagesWith(messages, 'one short sentence').length,
       0,
       'Nothing sizes the reply at one sentence',
+    );
+  });
+
+  test('a warnings fix next to an unreadable check still gets the trailing note', async function () {
+    const { messages } = await getPromptParts(
+      correctnessBatchHistory([
+        { correct: true, errors: [], warnings: ['title: undeclared field'] },
+        'unreadable',
+      ]),
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, 'the warnings above may point at mistakes')
+        .length,
+      1,
+      'The card with warnings asks for them to be fixed',
+    );
+    assert.true(
+      messageText(messages?.at(-1)).endsWith(
+        CHECK_CORRECTNESS_SUMMARY_INSTRUCTION,
+      ),
+      'The warnings note says the write passed, so the trailing note still says one check did not come back clean',
+    );
+  });
+
+  test('a fix instruction next to an unreadable check is the only instruction', async function () {
+    const { messages } = await getPromptParts(
+      correctnessBatchHistory([
+        { correct: false, errors: ['file-0.gts: unknown field type'] },
+        'unreadable',
+      ]),
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, 'Fix the errors above').length,
+      1,
+      'The failing check asks for a fix',
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, TRAILING_SUMMARY_START).length,
+      0,
+      'The fix instruction is the last one the model reads, and the next round re-checks',
     );
   });
 

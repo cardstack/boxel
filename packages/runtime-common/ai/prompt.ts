@@ -405,15 +405,15 @@ function shouldPromptCheckCorrectnessSummary(
     return false;
   }
   // A batch that passed has its own note, sent after the tool results, and
-  // it is the only one the model should get: this summary sizes the reply
-  // at one sentence, which would cut short the answer that note asks for.
+  // it is the only one the model should get: a second note about the same
+  // results would only repeat it, read last and in different words.
   if (checkCorrectnessBatchPassed(batch, history)) {
     return false;
   }
-  // The same holds for a batch that already asks for a fix, or says the
-  // attempts are used up: that instruction is the one to act on, and a
-  // summary read after it would end the reply instead.
-  if (checkCorrectnessBatchHasFailureInstruction(batch, history)) {
+  // A batch with errors to fix, or with the attempts used up, already ends
+  // on that instruction. This note asks the model to note the outcome and
+  // finish its answer, which read after a fix instruction competes with it.
+  if (checkCorrectnessBatchHasFixOrLimitInstruction(batch, history)) {
     return false;
   }
   let lastNonResultIndex = findLastIndex(
@@ -460,47 +460,57 @@ function checkCorrectnessBatchFor(
   return { sourceIndex, requests };
 }
 
-// Whether every check in the batch passed. Results come after the message
-// that asked for them, so only those events are searched.
+// Each check in the batch with its latest terminal result, if it has one.
+// Results come after the message that asked for them, so only those events
+// are searched.
+function checkCorrectnessBatchResults(
+  batch: CheckCorrectnessBatch,
+  history: DiscreteMatrixEvent[],
+): { request: ToolRequest; result: ToolResultEvent | undefined }[] {
+  let laterEvents = history.slice(batch.sourceIndex + 1);
+  return batch.requests.map((request) => ({
+    request,
+    result: findLast(laterEvents, (event) =>
+      isTerminalToolResultEventFor(event, request.id!),
+    ) as ToolResultEvent | undefined,
+  }));
+}
+
+// Whether every check in the batch passed.
 function checkCorrectnessBatchPassed(
   batch: CheckCorrectnessBatch,
   history: DiscreteMatrixEvent[],
 ): boolean {
-  let laterEvents = history.slice(batch.sourceIndex + 1);
-  return batch.requests.every((request) => {
-    let result = findLast(laterEvents, (event) =>
-      isTerminalToolResultEventFor(event, request.id!),
-    ) as ToolResultEvent | undefined;
-    return result !== undefined && correctnessCheckPassed(result);
-  });
+  return checkCorrectnessBatchResults(batch, history).every(
+    ({ result }) => result !== undefined && correctnessCheckPassed(result),
+  );
 }
 
-// Whether any check in the batch is followed by an instruction about its
-// failure (fix the errors, fix the warnings, or stop at the attempt limit).
-// Derived from the same per-result content the tool messages are built from,
-// so the two cannot disagree.
-function checkCorrectnessBatchHasFailureInstruction(
+// Whether any check in the batch is followed by an instruction to fix its
+// errors, or to stop because the attempts are used up. Derived from the same
+// per-result content the tool messages are built from, so the two cannot
+// disagree. A request to fix warnings does not count: it opens by saying the
+// write passed, so next to a check that did not come back clean it would be
+// the only word on the batch, and a wrong one.
+function checkCorrectnessBatchHasFixOrLimitInstruction(
   batch: CheckCorrectnessBatch,
   history: DiscreteMatrixEvent[],
 ): boolean {
-  let laterEvents = history.slice(batch.sourceIndex + 1);
-  return batch.requests.some((request) => {
-    let result = findLast(laterEvents, (event) =>
-      isTerminalToolResultEventFor(event, request.id!),
-    ) as ToolResultEvent | undefined;
-    if (!result) {
-      return false;
-    }
-    let { followUpUserMessage } = buildCheckCorrectnessResultContent(
-      request,
-      result,
-    );
-    return (
-      followUpUserMessage === CODE_FIX_INSTRUCTION ||
-      followUpUserMessage === CORRECTNESS_WARNINGS_FIX_INSTRUCTION ||
-      followUpUserMessage === CORRECTNESS_FAILURE_LIMIT_INSTRUCTION
-    );
-  });
+  return checkCorrectnessBatchResults(batch, history).some(
+    ({ request, result }) => {
+      if (!result) {
+        return false;
+      }
+      let { followUpUserMessage } = buildCheckCorrectnessResultContent(
+        request,
+        result,
+      );
+      return (
+        followUpUserMessage === CODE_FIX_INSTRUCTION ||
+        followUpUserMessage === CORRECTNESS_FAILURE_LIMIT_INSTRUCTION
+      );
+    },
+  );
 }
 
 function getCheckCorrectnessToolRequests(
@@ -1815,16 +1825,17 @@ const CORRECTNESS_WARNINGS_FIX_INSTRUCTION =
 const CORRECTNESS_FAILURE_LIMIT_INSTRUCTION = `Automated correctness fixes have already been attempted ${MAX_CORRECTNESS_FIX_ATTEMPTS} times and the target is still failing validation. Stop proposing further automated patches; instead, summarize the remaining errors and ask the user how they want to proceed. Do not mention correctness or automated checks or tool calls.`;
 
 // Rides the trailing context message after a batch with a check that did
-// not pass and carries no instruction of its own: a card that says it is
+// not come back clean and no fix or limit instruction: a card that says it is
 // incorrect without naming an error, a result card that could not be read, or
-// a check marked failed or rejected. (A clean batch gets the success note, and
-// a batch with errors to fix gets the fix or limit instruction, instead.)
+// a check marked failed, invalid or canceled. (A clean batch gets the success
+// note, and a batch with errors to fix gets the fix or limit instruction,
+// instead.)
 // It is the last thing the model reads before replying, right after a file
 // is written, so it sizes the note at one line and sends the model back to
 // the user's message: an instruction that only asks for a summary reads as
 // the end of the work, and nothing resumes a plan across turns.
-const CHECK_CORRECTNESS_SUMMARY_INSTRUCTION =
-  'The automated correctness checks have finished, and at least one did not come back clean. Note the outcome in at most one line of your reply, based on the tool output above; if it leaves something open, say what. Then finish your answer to the user: cover everything their last message asked for that you have not yet answered. If work you already described remains unfinished, carry straight on with it in the same reply. This is a note on what just landed, not a request to stop. Do not mention correctness, automated checks or tool calls.';
+export const CHECK_CORRECTNESS_SUMMARY_INSTRUCTION =
+  'The automated correctness checks have finished, and at least one did not come back clean. Note the outcome in at most one line of your reply, based on the tool output above; if it leaves something open, say what. Then finish your answer to the user: cover everything their last message asked for that you have not yet answered, any closing line your skills require, and any change you made that they did not ask for. If work you already described remains unfinished, carry straight on with it in the same reply. This is a note on what just landed, not a request to stop. Do not mention correctness, automated checks or tool calls.';
 
 // What a check result carries: no result card at all (a result with no
 // output), a card whose content could not be read (its download failed, or
