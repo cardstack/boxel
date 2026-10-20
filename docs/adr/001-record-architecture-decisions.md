@@ -60,11 +60,12 @@ MUST follow the title directly. Sections MUST be numbered, in this order:
 | Rationale          | REQUIRED.                                                |
 | Considered options | REQUIRED when viable alternatives existed.               |
 | Consequences       | OPTIONAL. Omit unless it adds value beyond the Decision. |
-| Remediation        | `proposed` ADRs only, while any known gap remains.       |
 | Open questions     | Retroactive ADRs only, while any question remains.       |
 | Sources            | REQUIRED for retroactive ADRs. OPTIONAL otherwise.       |
+| Remediation        | REQUIRED while `proposed` (§1.6).                        |
 
-Section numbers follow the order of the sections present.
+Section numbers follow the order of the sections present. Remediation comes
+last, so deleting it on acceptance does not renumber other sections.
 
 ### 1.4. Language
 
@@ -100,15 +101,20 @@ An ADR MAY merge with status `proposed` before the code conforms to it.
 Merging a proposed ADR records that the team agrees with its Decision.
 Accepting it records that the code conforms.
 
-A proposed ADR MUST list, under Remediation, each known gap: a place where the
-code does not meet a MUST or MUST NOT of its Decision. Each entry names the
-path or glob and the requirement it breaks. A change that closes a gap MUST
-remove its entry. A person SHOULD set `accepted` when no entries remain, and
-MUST delete the Remediation section when they do.
+A proposed ADR MUST have a Remediation section that lists each known gap: a
+place where the code does not meet a MUST or MUST NOT of its Decision. Each
+entry MUST name a file and the requirement it breaks. It SHOULD also name the
+symbol when the gap is narrower than the file. When no gaps are known, the
+section MUST say so. A change that closes a gap MUST remove its entry.
+
+A person SHOULD set `accepted` when no gaps remain. The change that sets
+`accepted` MUST also delete the Remediation section.
 
 The Decision of a proposed ADR MAY change in a reviewed PR, for example when
-remediation shows that a requirement is wrong. The Decision of an accepted ADR
-MUST NOT be edited. A changed decision MUST be
+remediation shows that a requirement is wrong. Such an edit MUST NOT renumber
+existing subsections. A new subsection takes the next unused number.
+
+The Decision of an accepted ADR MUST NOT be edited. A changed decision MUST be
 a new ADR that supersedes the old one. Fixes to typos, links, and `scope` globs
 after a file moves MAY be made in place. An ADR that no longer applies, with
 nothing to replace it, is `deprecated`.
@@ -139,10 +145,12 @@ superseding ADR, is a blocking review finding. A change that departs from a
 SHOULD or SHOULD NOT needs a stated reason, and a missing reason is a
 non-blocking review finding.
 
-These rules also apply to a proposed ADR that has merged, with one exception.
-A gap listed under its Remediation section is not a review finding, and a
-change MAY touch that code without closing the gap. A listed gap is not a
-precedent: new code MUST NOT copy it.
+These rules also apply to a proposed ADR, including in the PR that adds it,
+with one exception. A gap listed under its Remediation section is not a review
+finding, and a change MAY touch that code without closing the gap. A listed
+gap is not a precedent: new code MUST NOT copy it. A change that adds a gap,
+or closes one and leaves its entry, is a blocking review finding. An existing
+gap that is not listed is a non-blocking finding, fixed by listing it.
 
 ## 2. Rationale
 
@@ -186,3 +194,7 @@ list of work, and acceptance marks the end of that list.
   the repository is public, and agents in a checkout cannot reach it reliably.
 - **Rationale inside skills.** Skills are procedures loaded on demand. History
   makes them longer and blurs which parts are rules.
+
+## 4. Remediation
+
+No known gaps.
