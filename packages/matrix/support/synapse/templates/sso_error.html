@@ -3,8 +3,8 @@ most often when the identity provider sends the browser back to the OIDC
 callback with an `error` instead of a code. The client that started the sign-in
 is unknown at that point (Synapse holds its redirect URL in an HttpOnly session
 cookie it never reads on the error path), so every way out of this page leads to
-the Boxel host below. A cancel carries `ssoCancelled=1`, and the host returns it
-to the page that started the sign-in (the web login, or the CLI's `/cli-auth`),
+the Boxel host below, carrying `ssoReturn=1`. The host returns the browser to
+the page that started the sign-in (the web login, or the CLI's `/cli-auth`),
 which it remembered before handing the browser to Synapse. `boxel_login_url` is
 the Boxel host for the environment this Synapse serves. The Synapse launcher in
 ../index.ts and the Synapse asset sync workflow rewrite the literal to the
@@ -19,12 +19,12 @@ or choose another way to sign in. #}
   Taking you back to the Boxel sign-in page…
 </p>
 <p style="margin: 0">
-  <a href="{{ boxel_login_url }}?ssoCancelled=1" data-test-sso-return-link>
+  <a href="{{ boxel_login_url }}?ssoReturn=1" data-test-sso-return-link>
     Return to Boxel sign-in
   </a>
 </p>
 <script type="text/javascript">
-  window.location.replace({{ (boxel_login_url ~ "?ssoCancelled=1") | tojson }});
+  window.location.replace({{ (boxel_login_url ~ "?ssoReturn=1") | tojson }});
 </script>
 {% else %} {% if error == "unauthorised" %}
 <p style="margin: 0; margin-bottom: 15px" data-test-sso-error>
@@ -53,7 +53,7 @@ if error_description %}
 <p style="margin: 0; margin-bottom: 15px">Error code: {{ error }}</p>
 {% endif %}
 <p style="margin: 0">
-  <a href="{{ boxel_login_url }}" data-test-sso-return-link>
+  <a href="{{ boxel_login_url }}?ssoReturn=1" data-test-sso-return-link>
     Return to Boxel sign-in
   </a>
 </p>

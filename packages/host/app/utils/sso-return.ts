@@ -2,21 +2,22 @@ import window from 'ember-window-mock';
 
 import { CLI_AUTH_TIMEOUT_MS } from '@cardstack/runtime-common/cli-auth';
 
-// A Google sign-in leaves the host for Synapse and Google. When the user
-// cancels at Google, Synapse's SSO error page can't tell which page started
-// the sign-in, so it sends the browser to the host's root with
-// `SSO_CANCELLED_PARAM`. The page that starts a sign-in remembers itself here,
-// in this tab's session storage, so a cancelled sign-in can be returned to it:
-// `/cli-auth` for the CLI, or whatever page a web sign-in started on.
+// A Google sign-in leaves the host for Synapse and Google. When it doesn't
+// finish (the user cancels at Google, or the sign-in fails), Synapse's SSO
+// error page can't tell which page started it, so every way out of that page
+// leads to the host's root with `SSO_RETURN_PARAM`. The page that starts a
+// sign-in remembers itself here, in this tab's session storage, so the browser
+// can be returned to it: `/cli-auth` for the CLI, or whatever page a web
+// sign-in started on.
 //
 // Only a landing that carries the param reads the entry, so an entry left
 // behind by a sign-in that went on to succeed (the CLI's lands on its loopback
 // listener, never back here) can't redirect a later visit.
 
-export const SSO_CANCELLED_PARAM = 'ssoCancelled';
+export const SSO_RETURN_PARAM = 'ssoReturn';
 const STORAGE_KEY = 'boxel-sso-return';
 // As long as the longest wait on a sign-in, the CLI's on its loopback listener;
-// past that, a cancel lands on the root page instead.
+// past that, the error page's landing stays on the root page.
 export const SSO_RETURN_TTL_MS = CLI_AUTH_TIMEOUT_MS;
 
 interface SsoReturn {
@@ -35,8 +36,8 @@ export function rememberSsoReturn(url: string = window.location.href) {
       } satisfies SsoReturn),
     );
   } catch {
-    // Without session storage a cancel lands on the root page, which still
-    // offers sign-in.
+    // Without session storage the error page's landing stays on the root
+    // page, which still offers sign-in.
   }
 }
 
@@ -48,17 +49,17 @@ export function forgetSsoReturn() {
   }
 }
 
-// On a cancelled sign-in's landing, strips the param from the URL and returns
+// On a landing from the SSO error page, strips the param from the URL and returns
 // the page the sign-in started from, when it is on this origin, unexpired, and
 // not the page the browser is already on (ignoring the fragment, which a
 // replace wouldn't reload for). Returns undefined otherwise, and on any other
 // page.
-export function takeCancelledSsoReturn(): string | undefined {
+export function takeSsoReturn(): string | undefined {
   let current = new URL(window.location.href);
-  if (!current.searchParams.has(SSO_CANCELLED_PARAM)) {
+  if (!current.searchParams.has(SSO_RETURN_PARAM)) {
     return undefined;
   }
-  current.searchParams.delete(SSO_CANCELLED_PARAM);
+  current.searchParams.delete(SSO_RETURN_PARAM);
   window.history.replaceState(
     {},
     '',

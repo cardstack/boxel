@@ -191,7 +191,7 @@ test.describe('Google sign-in that does not complete (mock OIDC)', () => {
   test('a failed Google sign-in explains the failure and links back to the Boxel login page', async ({
     page,
   }) => {
-    await returnFromGoogleWithError(page, 'server_error', {
+    let startedFrom = await returnFromGoogleWithError(page, 'server_error', {
       errorDescription: 'The identity provider is unavailable',
     });
 
@@ -205,10 +205,11 @@ test.describe('Google sign-in that does not complete (mock OIDC)', () => {
     );
     await expect(page.locator('[data-test-sso-return-link]')).toHaveAttribute(
       'href',
-      `${appURL}/`,
+      `${appURL}/?ssoReturn=1`,
     );
+    // The host takes the link back to the page the sign-in started from.
     await page.locator('[data-test-sso-return-link]').click();
-    await page.waitForURL((url) => url.href.startsWith(`${appURL}/`));
+    await page.waitForURL(startedFrom);
     await expect(page.locator('[data-test-google-login-btn]')).toBeVisible();
   });
 });

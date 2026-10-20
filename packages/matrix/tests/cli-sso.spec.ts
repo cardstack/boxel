@@ -195,6 +195,41 @@ test.describe('boxel-cli browser authorization', () => {
     expect(auth.userId).toBe(`@${username}:localhost`);
   });
 
+  // Any other failure shows Synapse's SSO error page, whose link back to Boxel
+  // returns the browser to /cli-auth the same way.
+  test('the link back from a failed Google sign-in returns to the CLI page', async ({
+    page,
+  }) => {
+    const { matrixUrl } = getMatrixTestContext();
+    const { username, password } = await createSubscribedUser('cli-fail');
+
+    const auth = await browserLogin({
+      matrixUrl: matrixUrl!,
+      hostUrl: HOST_URL,
+      log: () => {},
+      openBrowserFn: async (authUrl) => {
+        await page.goto(authUrl);
+        const cliAuthPage = page.url();
+        await page.locator('[data-test-cli-auth-google]').click();
+        await expect(page.locator('input[name="username"]')).toBeVisible();
+        await page.goto(oauthErrorResponseURL(page.url(), 'server_error'));
+        await page.locator('[data-test-sso-return-link]').click();
+
+        await page.waitForURL(cliAuthPage);
+        await credentialFields(page)
+          .locator('[data-test-cli-auth-username]')
+          .fill(username);
+        await credentialFields(page)
+          .locator('[data-test-cli-auth-password]')
+          .fill(password);
+        await page.locator('[data-test-cli-auth-submit]').click();
+        return true;
+      },
+    });
+
+    expect(auth.userId).toBe(`@${username}:localhost`);
+  });
+
   // A Google identity whose verified email matches no account gets a brand-new
   // one, minted by Synapse's mapping provider with no Boxel page in the loop —
   // the browser goes IdP → Synapse → the CLI's listener, so the web signup
