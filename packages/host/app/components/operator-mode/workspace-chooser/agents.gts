@@ -45,7 +45,7 @@ interface SetupStep {
   note: string;
   command: string;
   state: 'done' | 'now' | 'later';
-  isPull: boolean;
+  isWorkspacePick: boolean;
 }
 
 interface PickableWorkspace {
@@ -159,7 +159,7 @@ export default class Agents extends Component {
           : index === this.doneCount
             ? 'now'
             : 'later',
-      isPull: index === 2,
+      isWorkspacePick: index === 2,
     }));
   }
 
@@ -175,7 +175,7 @@ export default class Agents extends Component {
     this.openedStep = index;
   }
 
-  // The dashboard cannot see a terminal, so a copied command is all it can
+  // The dashboard cannot see the agent's chat, so a copied step is all it can
   // count: it marks the step copied (never "done") and opens the next.
   // A copy the browser refuses (no clipboard permission, an unfocused page)
   // leaves the step as it was rather than raising.
@@ -296,11 +296,11 @@ export default class Agents extends Component {
                 </button>
                 {{#if (eq this.openIndex step.index)}}
                   <div class='step-body'>
-                    {{#if step.isPull}}
+                    {{#if step.isWorkspacePick}}
                       <span
                         class='workspace-pick'
                         role='group'
-                        aria-label='Workspace to pull'
+                        aria-label='Workspace to open'
                       >
                         {{#each this.workspaces key='url' as |workspace|}}
                           <button

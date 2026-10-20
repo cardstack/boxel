@@ -204,11 +204,7 @@ export default class AgentScreencast extends Component {
 
   @action private jumpTo(chapter: ChapterId) {
     let first = TIMELINE.find((beat) => beat.chapter === chapter);
-    this.elapsed = first
-      ? first.kind === 'user'
-        ? first.start
-        : first.start
-      : 0;
+    this.elapsed = first?.start ?? 0;
   }
 
   <template>
