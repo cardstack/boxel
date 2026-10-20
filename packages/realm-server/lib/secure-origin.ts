@@ -4,6 +4,7 @@ import { createRequire } from 'module';
 import { dirname, join } from 'path';
 import { logger } from '@cardstack/runtime-common';
 import { registerSecureOriginHost } from './request-telemetry.ts';
+import { parseListedOrigin } from '../secure-origin/app-origins.js';
 
 // The secure origin is where a user types a credential: a page on an origin
 // that card code can't reach, so the same-origin policy keeps what is typed
@@ -331,13 +332,7 @@ function addCredentialFieldRoutes(
   shellBase: string,
   { matrixURL, appOrigins }: CredentialFieldsOptions,
 ) {
-  let origins = appOrigins.map((origin) => {
-    let parsed = new URL(origin).origin;
-    if (parsed === 'null') {
-      throw new Error(`secure origin: ${origin} is not an app origin`);
-    }
-    return parsed;
-  });
+  let origins = appOrigins.map(appOrigin);
   if (origins.length === 0) {
     throw new Error(`secure origin: credential fields need an app origin`);
   }
@@ -362,6 +357,33 @@ function addCredentialFieldRoutes(
       contentType,
     });
   }
+}
+
+// An app origin as the credential fields' page and `frame-ancestors` name
+// it. A host starting with `*.` stands for every subdomain of the rest, and a
+// port of `*` for every port of the host, such as `http://localhost:*` for a
+// host app served from this machine on whatever port it was started on.
+// Anything that isn't a single origin of that shape, such as a bare `*`, a
+// scheme alone, or a path, is refused rather than widened.
+export function appOrigin(origin: string): string {
+  let anyPort = origin.endsWith(':*');
+  let rest = anyPort ? origin.slice(0, -2) : origin;
+  let url: URL;
+  try {
+    url = new URL(rest);
+  } catch {
+    throw new Error(`secure origin: ${origin} is not an app origin`);
+  }
+  // Compared as written, so a port or a slash before the `*` is refused even
+  // where the URL parser would drop it as the scheme's default.
+  if (url.origin === 'null' || (anyPort && rest.toLowerCase() !== url.origin)) {
+    throw new Error(`secure origin: ${origin} is not an app origin`);
+  }
+  let normalized = anyPort ? `${url.origin}:*` : url.origin;
+  if (normalized.includes('*') && !parseListedOrigin(normalized)) {
+    throw new Error(`secure origin: ${origin} is not an app origin`);
+  }
+  return normalized;
 }
 
 function escapeAttribute(value: string): string {

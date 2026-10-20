@@ -359,7 +359,7 @@ let {
     },
     secureOriginAppOrigin: {
       description:
-        "An origin, besides --serverURL's, whose app pages may frame the secure origin's credential fields. Repeatable. A host starting with `*.` stands for every subdomain of the rest. For the host's dev server and test runner in development, and the host PR previews on staging.",
+        "An origin, besides --serverURL's, whose app pages may frame the secure origin's credential fields. Repeatable. A host starting with `*.` stands for every subdomain of the rest, and a port of `*` for every port of the host. For the host's dev server and test runner in development, the host PR previews on staging, and a host app served from the developer's own machine (`https://localhost:*`, `http://localhost:*` and the same for `127.0.0.1`) on staging and production.",
       type: 'array',
       string: true,
     },

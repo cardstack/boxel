@@ -215,6 +215,37 @@ export class CredentialFields {
 
 // The error the Matrix SDK would have thrown for a failed request, so a form
 // handles a failure from the frame exactly as it handled one from the SDK.
+// Where the frame for `form` is loaded from, on the secure origin at
+// `secureOriginURL`, for a page on `pageOrigin`. The form and the page's
+// origin ride in the fragment, which is never sent to the server: a filter in
+// front of a deployed secure origin refuses a query string naming a loopback
+// origin, so a host app on this machine would otherwise get no frame at all.
+// A page anywhere else passes them in the query as well, so a secure origin
+// that reads only the query still starts the frame for it.
+export function credentialFieldsURL(
+  secureOriginURL: string,
+  form: CredentialForm,
+  pageOrigin: string,
+): string {
+  let base = secureOriginURL.endsWith('/')
+    ? secureOriginURL
+    : `${secureOriginURL}/`;
+  let url = new URL('credentials', base);
+  let params = new URLSearchParams({ form, origin: pageOrigin }).toString();
+  if (!isOnThisMachine(pageOrigin)) {
+    url.search = params;
+  }
+  url.hash = params;
+  return url.href;
+}
+
+// Whether an origin names the user's own machine, as the filter in front of a
+// deployed secure origin sees it: any mention of `localhost` or `127.0.0.1`,
+// including a `*.localhost` host, and the IPv6 loopback address.
+function isOnThisMachine(origin: string): boolean {
+  return /localhost|127\.0\.0\.1|\[::1\]/i.test(origin);
+}
+
 export function credentialFieldsError(result: CredentialFieldsResult): Error & {
   httpStatus: number;
   errcode: string | undefined;
