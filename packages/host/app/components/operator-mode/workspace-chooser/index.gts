@@ -203,7 +203,7 @@ export default class WorkspaceChooser extends Component<Signature> {
     return this.realmServer.userRealmIdentifiers.length < CATALOG_LEADS_BELOW;
   }
 
-  // "Good morning, Chris" — first name only, and no name rather than a
+  // "Good morning, <first name>" — first name only, and no name rather than a
   // Matrix id while the profile loads.
   private get greeting() {
     let hour = new Date().getHours();

@@ -4,7 +4,7 @@ The workspace chooser becomes a dashboard: one scrolling page in three sections 
 
 - Design review canvas (as built, critique, revised): https://claude.ai/artifact/2xdSSTT5rMZVaLNcfJJgQK
 - Original exploration (rail options, first visit, phone): https://claude.ai/artifact/4ASxkjED7hHERxqW8pfD8H
-- Source of the onboarding and catalog patterns: the Boxel Home preview card, staging `ctse/home-preview/Home/home`.
+- Source of the onboarding and catalog patterns: the Boxel Home preview card, a design prototype in a staging realm.
 
 ## Goals
 
@@ -16,7 +16,7 @@ The workspace chooser becomes a dashboard: one scrolling page in three sections 
 
 Top to bottom, inside `workspace-chooser/index.gts`:
 
-1. **Page head.** A greeting ("Good morning, Chris") and the scope filter, quiet **All / Hosted** chips, the first of the filters the page can grow. Hosted keeps workspaces published to the web, in every section. It replaces the View All / Hosted Only dropdown, which sat in the top bar.
+1. **Page head.** A greeting ("Good morning, <first name>") and the scope filter, quiet **All / Hosted** chips, the first of the filters the page can grow. Hosted keeps workspaces published to the web, in every section. It replaces the View All / Hosted Only dropdown, which sat in the top bar.
 2. **Get started** (`get-started.gts`). A checklist whose ticks come from real signals: a card opened, a Boxel AI session, a published workspace, an agent command copied. Dismissible; collapses once a step is done.
 3. **Start from the catalog** — only for a user with fewer than three workspaces of their own (`CATALOG_LEADS_BELOW`). The catalog shelf moves here, ahead of Workspaces.
 4. **Workspaces.**
