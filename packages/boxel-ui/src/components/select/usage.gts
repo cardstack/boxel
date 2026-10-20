@@ -70,6 +70,12 @@ export default class BoxelSelectUsage extends Component {
   @cssVariable({ cssClassName: 'header-freestyle-container' })
   declare boxelSelectTriggerGap: CSSVariableInfo;
   @cssVariable({ cssClassName: 'header-freestyle-container' })
+  declare boxelSelectTriggerFontSize: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'header-freestyle-container' })
+  declare boxelSelectTriggerLineHeight: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'header-freestyle-container' })
+  declare boxelSelectTriggerLetterSpacing: CSSVariableInfo;
+  @cssVariable({ cssClassName: 'header-freestyle-container' })
   declare boxelDropdownBackgroundColor: CSSVariableInfo;
   @cssVariable({ cssClassName: 'header-freestyle-container' })
   declare boxelDropdownBorderColor: CSSVariableInfo;
@@ -107,6 +113,9 @@ export default class BoxelSelectUsage extends Component {
         boxel-select-focus-border-color=this.boxelSelectFocusBorderColor.value
         boxel-select-trigger-padding=this.boxelSelectTriggerPadding.value
         boxel-select-trigger-gap=this.boxelSelectTriggerGap.value
+        boxel-select-trigger-font-size=this.boxelSelectTriggerFontSize.value
+        boxel-select-trigger-line-height=this.boxelSelectTriggerLineHeight.value
+        boxel-select-trigger-letter-spacing=this.boxelSelectTriggerLetterSpacing.value
         boxel-dropdown-background-color=this.boxelDropdownBackgroundColor.value
         boxel-dropdown-border-color=this.boxelDropdownBorderColor.value
         boxel-dropdown-text-color=this.boxelDropdownTextColor.value
@@ -254,6 +263,27 @@ export default class BoxelSelectUsage extends Component {
             @description='Gap between the trigger content and the caret icon (defaults to var(--boxel-sp))'
             @value={{this.boxelSelectTriggerGap.value}}
             @onInput={{this.boxelSelectTriggerGap.update}}
+          />
+          <Css.Basic
+            @name='boxel-select-trigger-font-size'
+            @type='font-size'
+            @description='Text size of the trigger and its placeholder (defaults to var(--boxel-font-size-sm))'
+            @value={{this.boxelSelectTriggerFontSize.value}}
+            @onInput={{this.boxelSelectTriggerFontSize.update}}
+          />
+          <Css.Basic
+            @name='boxel-select-trigger-line-height'
+            @type='number'
+            @description='Line height of the trigger and its placeholder (defaults to var(--boxel-line-height-sm))'
+            @value={{this.boxelSelectTriggerLineHeight.value}}
+            @onInput={{this.boxelSelectTriggerLineHeight.update}}
+          />
+          <Css.Basic
+            @name='boxel-select-trigger-letter-spacing'
+            @type='letter-spacing'
+            @description='Letter spacing of the trigger and its placeholder (defaults to var(--boxel-lsp-sm))'
+            @value={{this.boxelSelectTriggerLetterSpacing.value}}
+            @onInput={{this.boxelSelectTriggerLetterSpacing.update}}
           />
           <Css.Basic
             @name='boxel-dropdown-background-color'

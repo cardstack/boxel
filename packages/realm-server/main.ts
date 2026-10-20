@@ -53,6 +53,7 @@ import { ModuleCacheCoordinator } from './lib/module-cache-coordination.ts';
 import { JobsFinishedListener } from './lib/jobs-finished-listener.ts';
 import { JobScopedSearchCache } from './job-scoped-search-cache.ts';
 import { startHealthSampler } from './health-sampler.ts';
+import { healthCheckUserAgents } from './middleware/index.ts';
 import {
   isDeployedServerURL,
   startOutboundGuard,
@@ -358,7 +359,7 @@ let {
     },
     secureOriginAppOrigin: {
       description:
-        "An origin, besides --serverURL's, whose app pages may frame the secure origin's credential fields. Repeatable. A host starting with `*.` stands for every subdomain of the rest. For the host's dev server and test runner in development, and the host PR previews on staging.",
+        "An origin, besides --serverURL's, whose app pages may frame the secure origin's credential fields. Repeatable. A host starting with `*.` stands for every subdomain of the rest, and a port of `*` for every port of the host. For the host's dev server and test runner in development, the host PR previews on staging, and a host app served from the developer's own machine (`https://localhost:*`, `http://localhost:*` and the same for `127.0.0.1`) on staging and production.",
       type: 'array',
       string: true,
     },
@@ -602,6 +603,16 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   } catch (e: any) {
     console.error(`Secrets-at-rest self-check failed: ${e.message}`);
     process.exit(-1);
+  }
+  // Without it, the load balancer's probe on `/` falls through to the host app,
+  // which is slower and can fail the probe under load or during boot.
+  if (
+    isDeployedServerURL(String(serverURL)) &&
+    healthCheckUserAgents().length === 0
+  ) {
+    console.warn(
+      `HEALTH_CHECK_USER_AGENTS is not set, so no health check is answered from memory. Set it to your load balancer's health-check user-agent prefix (see docs/realm-server-health-signals.md).`,
+    );
   }
   try {
     await smokeTestHostApp();

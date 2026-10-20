@@ -1,11 +1,13 @@
 import { defineConfig, devices } from '@playwright/test';
 import { join } from 'path';
 import {
+  DEFAULT_SYNAPSE_TEMPLATE,
   assignSpecFiles,
   discoverSpecFiles,
   loadSpecTimings,
   parseShardCoordinates,
   specFileMatchers,
+  synapseTemplateOf,
 } from './support/shard-spec-files.ts';
 
 /**
@@ -14,26 +16,37 @@ import {
 
 const testDir = join(import.meta.dirname, 'tests');
 
+// A run is for one Synapse template, named by MATRIX_SYNAPSE_TEMPLATE, and
+// runs the spec files written for it: those outside `with-synapse/` for
+// the default, those under `with-synapse/<template>/` for any other. The
+// global setup starts the run's Synapse from the same template.
+const synapseTemplate = synapseTemplateOf(process.env.MATRIX_SYNAPSE_TEMPLATE);
+const specFiles = discoverSpecFiles(testDir, synapseTemplate);
+
 // CI splits the suite across shards by cost rather than by test count, so
 // `--shard` is not used: each shard is handed its coordinates as
 // MATRIX_TEST_SHARD (`<index>/<total>`) and narrows `testMatch` to the spec
 // files bin-packed onto it. See support/shard-spec-files.ts. Unset — a local
-// `pnpm test` — runs the whole suite.
+// `pnpm test` — runs every spec file for the run's template.
 const shard = parseShardCoordinates(process.env.MATRIX_TEST_SHARD);
-const shardSpecFiles = shard
+const runSpecFiles = shard
   ? assignSpecFiles(
-      discoverSpecFiles(testDir),
+      specFiles,
       shard.index,
       shard.total,
       loadSpecTimings(join(testDir, 'spec-timings.json')),
     )
-  : undefined;
+  : specFiles;
+
+const blobReportName = shard
+  ? `report-${shard.index}.zip`
+  : synapseTemplate === DEFAULT_SYNAPSE_TEMPLATE
+    ? 'report.zip'
+    : `report-${synapseTemplate}.zip`;
 
 export default defineConfig({
   testDir,
-  ...(shardSpecFiles
-    ? { testMatch: specFileMatchers(testDir, shardSpecFiles) }
-    : {}),
+  testMatch: specFileMatchers(testDir, runSpecFiles),
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
@@ -56,8 +69,9 @@ export default defineConfig({
   // `blob` is the machine-readable one: the merge job downloads every shard's
   // and builds the published HTML report from them, and the shard-timings job
   // reads the per-spec durations out of the same files. Without `--shard`,
-  // every shard's blob report would default to the same `report.zip`, and the
-  // merge job downloads all of them into one directory — hence the name.
+  // every job's blob report would default to the same `report.zip`, and the
+  // merge job downloads all of them into one directory — hence
+  // `blobReportName`, which names each after its shard or its template.
   //
   // `github` is what makes a red shard readable without that report. The test
   // services stream their request logs into this job's log for the whole run,
@@ -76,13 +90,7 @@ export default defineConfig({
   // step's stdout — a `tail`, a `grep`, a redirect to a file — destroys the
   // annotations silently. Bound the output of the steps around it instead.
   reporter: process.env.CI
-    ? [
-        [
-          'blob',
-          { fileName: shard ? `report-${shard.index}.zip` : 'report.zip' },
-        ],
-        ['github'],
-      ]
+    ? [['blob', { fileName: blobReportName }], ['github']]
     : 'html',
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {

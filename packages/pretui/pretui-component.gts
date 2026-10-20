@@ -13,7 +13,6 @@ import {
   containsMany,
   field,
   linksTo,
-  realmURL,
 } from '@cardstack/base/card-api';
 import { Spec } from '@cardstack/base/spec';
 import { MarkdownDef } from '@cardstack/base/markdown-file-def';
@@ -30,7 +29,6 @@ import { modifier } from 'ember-modifier';
 import { fn } from '@ember/helper';
 import { not } from '@cardstack/boxel-ui/helpers';
 import StarIcon from '@cardstack/boxel-icons/star';
-import type { Query, RealmResourceIdentifier } from '@cardstack/runtime-common';
 import { ThemeFrame } from './components/theme-frame';
 import { EmptyState } from './components/empty-state';
 import { LoadingState } from './components/loading-state';
@@ -39,55 +37,15 @@ import { Chip } from './components/chip';
 import { Token } from './components/token';
 import { Button } from './components/button';
 import { Switch } from './components/switch';
-import { noteExcerpt, noteSummary } from './note-text';
 import { Tooltip } from './components/tooltip';
 import { VisuallyHidden } from './components/visually-hidden';
-import { Textarea } from './components/textarea';
 import { StepList } from './components/step-list';
-import { toIsoDate } from './components/known-date';
 import type { StepItem, StepState } from './components/step-list';
-import { Popover } from './components/popover';
-import {
-  demoModuleFor,
-  loadDemo,
-  loadExamples,
-  siblingHref,
-} from './demo-locations';
+import { demoModuleFor, loadDemo, loadExamples } from './demo-locations';
 import type { DemoSubject } from './demo-locations';
 import { iconFor } from './icon-registry';
 import { ExampleGallery } from './example-gallery';
 import type { ExampleSpec } from './examples-kit';
-
-// Structural shape of a PretuiNote instance as read off a getCards result.
-// Declared rather than imported: pretui-note.gts imports THIS module for its
-// linksTo target, so importing it back would make the pair circular. The
-// query names the type by module + name strings instead.
-interface NoteLike {
-  id?: string;
-  note?: string;
-  status?: string;
-}
-
-// The host supplies `context.actions.createCard` at runtime — the base
-// library and the CRM app both call it — but the CardContext type shipped
-// with the CLI does not declare it. A narrow structural cast, with the shape
-// written out, rather than reaching for `any`.
-type CreateCardAction = (
-  ref: { module: string; name: string },
-  realmURL: URL,
-  opts: { realmURL: URL; doc: unknown },
-) => unknown;
-
-function createCardAction(context: unknown): CreateCardAction | undefined {
-  return (
-    context as { actions?: { createCard?: CreateCardAction } } | undefined
-  )?.actions?.createCard;
-}
-
-// The note card lives beside this module, not beside the Spec instance: an
-// instance can sit in any realm, and a note must adopt from a module that
-// resolves wherever it is written.
-const NOTE_REF = { module: siblingHref('./pretui-note'), name: 'PretuiNote' };
 
 // A stored enum value as shown, from its option label; '—' when unset.
 function optionLabel(
@@ -141,8 +99,8 @@ function nameParts(name: string): string[] {
 
 // The write-up shows its first lines under a fade, with a centered toggle
 // over the fade; opening it grows the region to the content's height. Its own
-// component for the same reason as NoteComposer: the open state can't live in
-// the format class.
+// component because reactive state can't live in a format-class expression
+// (`static isolated = class …`).
 interface WriteupFoldSignature {
   Args: { writeup: MarkdownDef };
   Element: HTMLDivElement;
@@ -258,102 +216,6 @@ class WriteupFold extends GlimmerComponent<WriteupFoldSignature> {
         .wb-fold-region {
           transition: none;
         }
-      }
-    </style>
-  </template>
-}
-
-// ── The sticky-note composer ─────────────────────────────────────────────
-// A top-level component, not an inline block in the page: reactive state
-// cannot live in a format-class expression (`static isolated = class …`),
-// so the draft belongs here. Also the right seam — the composer owns
-// nothing but the text, and hands a finished body to the page.
-interface NoteComposerSignature {
-  Args: {
-    /** the component being annotated, for the composer's own label */
-    componentName?: string;
-    /** called with the trimmed body when the author commits */
-    onSave: (body: string) => void;
-  };
-  Element: HTMLDivElement;
-}
-
-class NoteComposer extends GlimmerComponent<NoteComposerSignature> {
-  @tracked draft = '';
-  fieldId = `${guidFor(this)}-note`;
-  hintId = `${guidFor(this)}-hint`;
-  setDraft = (v: string) => (this.draft = v);
-  get draftEmpty(): boolean {
-    return this.draft.trim().length === 0;
-  }
-  save = () => {
-    let body = this.draft.trim();
-    if (!body) return;
-    this.args.onSave(body);
-    this.draft = '';
-  };
-  <template>
-    <div class='note-compose' data-test-pretui-note-compose ...attributes>
-      <label class='note-compose-cap' for={{this.fieldId}}>Note on
-        {{if @componentName @componentName 'this component'}}</label>
-      <Textarea
-        class='note-compose-field'
-        @controlId={{this.fieldId}}
-        @value={{this.draft}}
-        @onInput={{this.setDraft}}
-        @placeholder='What should change? Markdown welcome.'
-        aria-describedby={{this.hintId}}
-        data-test-pretui-note-draft
-      />
-      <div class='note-compose-foot'>
-        <span class='note-compose-hint' id={{this.hintId}}>Picked up by the next
-          triage pass.</span>
-        <Button
-          @tone='primary'
-          @size='s'
-          @disabled={{this.draftEmpty}}
-          {{on 'click' this.save}}
-          data-test-pretui-note-save
-        >Save note</Button>
-      </div>
-    </div>
-    <style scoped>
-      .note-compose {
-        /* the composer sits on --popover, where --muted-foreground isn't a
-           guaranteed pair (4.2:1 in dark); a softer mix of its own ink is */
-        --_note-compose-dim: color-mix(
-          in oklch,
-          var(--popover-foreground) 75%,
-          var(--popover)
-        );
-
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-2xs);
-      }
-      .note-compose-cap {
-        font-family: var(--boxel-eyebrow-font-family);
-        font-size: var(--boxel-eyebrow-font-size);
-        font-weight: var(--boxel-eyebrow-font-weight);
-        line-height: var(--boxel-eyebrow-line-height);
-        letter-spacing: var(--boxel-eyebrow-letter-spacing);
-        text-transform: uppercase;
-      }
-      .note-compose-field {
-        width: 100%;
-      }
-      .note-compose-foot {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: var(--boxel-sp-xs);
-      }
-      .note-compose-cap,
-      .note-compose-hint {
-        color: var(--_note-compose-dim);
-      }
-      .note-compose-hint {
-        font-size: var(--boxel-font-size-2xs);
       }
     </style>
   </template>
@@ -620,107 +482,6 @@ export class PretUISpec extends Spec {
       if (!d || d < 1) return undefined;
       return Math.min(5, Math.round(d));
     }
-    // ── Sticky notes ───────────────────────────────────────────────────
-    // Notes are their own cards (pretui-note.gts) that LINK to this one, so
-    // the page finds its annotations by querying that edge. This file does
-    // NOT import PretuiNote: the query names the type by module + name
-    // strings, which keeps the dependency one-directional (note → component)
-    // and avoids a cycle.
-    notesResource = this.args.context?.getCards?.(
-      this,
-      (): Query | undefined => {
-        let id = this.args.model.id;
-        if (!id) return undefined;
-        return {
-          filter: {
-            on: {
-              // A CodeRef module is a branded URL type: a string LITERAL
-              // satisfies it, but a runtime-computed href is plain `string`.
-              module: NOTE_REF.module as RealmResourceIdentifier,
-              name: NOTE_REF.name,
-            },
-            // The id stays in its branded RealmResourceIdentifier form —
-            // that is exactly what an `.id` query value is typed as.
-            eq: { 'target.id': id },
-          },
-        };
-      },
-      () => {
-        // the card id may be prefix-form (@cardstack/catalog/…), which is
-        // not a URL base, so the realm comes from the card itself
-        let realm = this.args.model[realmURL];
-        return realm ? [realm.href] : undefined;
-      },
-    );
-
-    get notes(): NoteLike[] {
-      return (this.notesResource?.instances ?? []) as NoteLike[];
-    }
-    get openNotes(): NoteLike[] {
-      return this.notes.filter(
-        (n) => (n.status ?? '').toLowerCase() !== 'addressed',
-      );
-    }
-    // the rail shows the first few open notes; the rest sit in a disclosure
-    get firstNotes(): NoteLike[] {
-      return this.openNotes.slice(0, 3);
-    }
-    get moreNotes(): NoteLike[] {
-      return this.openNotes.slice(3);
-    }
-    get addressedCount(): number {
-      return this.notes.length - this.openNotes.length;
-    }
-    get canAddNote(): boolean {
-      return Boolean(createCardAction(this.args.context));
-    }
-    // Nothing to show is nothing to render: without this the aside would
-    // still occupy a grid row (and its gap) on every page in a prerender or
-    // test context, where createCard is absent and there are no notes.
-    get showNotes(): boolean {
-      return this.openNotes.length > 0 || this.canAddNote;
-    }
-
-    openNote = (id: string | undefined) => {
-      if (!id) return;
-      this.args.viewCard?.(id as RealmResourceIdentifier, 'isolated');
-    };
-
-    // The composer is a popover, so leaving a note never takes you off the
-    // page you are annotating. The note card is created only on save — an
-    // abandoned composer leaves nothing behind, where create-then-edit would
-    // strew empty notes through the realm.
-    saveNote = (close: () => void, body: string) => {
-      let id = this.args.model.id;
-      let realm = this.args.model[realmURL];
-      let create = createCardAction(this.args.context);
-      if (!id || !realm || !create || !body) return;
-      let ref = NOTE_REF;
-      // The timestamp is stamped HERE, in an event handler, not in a getter.
-      // The no-clock rule exists so that RENDER is deterministic (the same
-      // card must prerender identically); recording when a note was written
-      // is data capture at the moment of a user action, which is exactly
-      // what a timestamp is for.
-      // the author's local date, not toISOString()'s UTC one
-      let now = new Date();
-      let noted = toIsoDate(
-        now.getFullYear(),
-        now.getMonth() + 1,
-        now.getDate(),
-      );
-      create(ref, realm, {
-        realmURL: realm,
-        doc: {
-          data: {
-            type: 'card',
-            attributes: { note: body, status: 'open', noted },
-            relationships: { target: { links: { self: id } } },
-            meta: { adoptsFrom: ref },
-          },
-        },
-      });
-      close();
-    };
 
     <template>
       <ThemeFrame
@@ -785,121 +546,21 @@ export class PretUISpec extends Spec {
             <ThemeControls />
           </header>
 
-          <div class='wb-head'>
-            <h1 class='wb-title'>
-              {{#let (iconFor @model.icon) as |TitleIcon|}}
-                {{#if TitleIcon}}
-                  <span class='wb-title-frame'>
-                    <TitleIcon width='22' height='22' role='presentation' />
-                  </span>
-                {{/if}}
-              {{/let}}
-              <span class='wb-title-text'>{{#each
-                  (nameParts
-                    (if @model.componentName @model.componentName 'Component')
-                  )
-                  as |part i|
-                }}{{#if i}}<wbr />{{/if}}{{part}}{{/each}}</span>
-            </h1>
-            {{! Sticky notes sit beside the title, where you left them, and
-                the first few stay visible: an annotation hidden behind a
-                disclosure is an annotation nobody reads. }}
-            {{#if this.showNotes}}
-              <aside
-                class='notes'
-                aria-label='Sticky notes on this component'
-                data-test-pretui-notes
-              >
-                {{! The trigger sits FIRST — directly under the theme control and
-                  above the artboard — so leaving a note is a fixed target on
-                  every page, not something that moves as notes accumulate. }}
-                <div class='notes-foot'>
-                  {{#if this.canAddNote}}
-                    <Popover
-                      class='note-popover'
-                      @placement='bottom-end'
-                      @label='Leave a sticky note'
-                    >
-                      <:trigger as |open toggle|>
-                        <Button
-                          @tone='neutral'
-                          @appearance='outlined'
-                          @size='xs'
-                          aria-expanded={{if open 'true' 'false'}}
-                          aria-haspopup='dialog'
-                          {{on 'click' toggle}}
-                          data-test-pretui-note-add
-                        >Add note</Button>
-                      </:trigger>
-                      <:default as |close|>
-                        <NoteComposer
-                          @componentName={{@model.componentName}}
-                          @onSave={{fn this.saveNote close}}
-                        />
-                      </:default>
-                    </Popover>
-                  {{/if}}
-                  {{#if this.addressedCount}}
-                    <span class='notes-done'>{{this.addressedCount}}
-                      addressed</span>
-                  {{/if}}
-                </div>
-                {{#if this.openNotes}}
-                  <ul class='notes-list'>
-                    {{#each this.firstNotes key='id' as |n|}}
-                      <li>
-                        <button
-                          type='button'
-                          class='note'
-                          {{on 'click' (fn this.openNote n.id)}}
-                          data-test-pretui-note
-                        >
-                          <span class='note-title'>{{noteSummary n.note}}</span>
-                          {{#let (noteExcerpt n.note) as |excerpt|}}
-                            {{#if excerpt}}
-                              <span class='note-excerpt'>{{excerpt}}</span>
-                            {{/if}}
-                          {{/let}}
-                        </button>
-                      </li>
-                    {{/each}}
-                  </ul>
-                  {{#if this.moreNotes.length}}
-                    {{! buttons in a details' content, outside its summary, are
-                        valid; the rule counts details itself as interactive }}
-                    {{! template-lint-disable no-nested-interactive }}
-                    <details class='notes-more' data-test-pretui-notes-more>
-                      <summary>Show
-                        {{this.moreNotes.length}}
-                        more</summary>
-                      <ul class='notes-list'>
-                        {{#each this.moreNotes key='id' as |n|}}
-                          <li>
-                            <button
-                              type='button'
-                              class='note'
-                              {{on 'click' (fn this.openNote n.id)}}
-                              data-test-pretui-note
-                            >
-                              <span class='note-title'>{{noteSummary
-                                  n.note
-                                }}</span>
-                              {{#let (noteExcerpt n.note) as |excerpt|}}
-                                {{#if excerpt}}
-                                  <span class='note-excerpt'>{{excerpt}}</span>
-                                {{/if}}
-                              {{/let}}
-                            </button>
-                          </li>
-                        {{/each}}
-                      </ul>
-                    </details>
-                    {{! template-lint-enable no-nested-interactive }}
-                  {{/if}}
-                {{/if}}
-              </aside>
-            {{/if}}
-          </div>
+          <h1 class='wb-title'>
+            {{#let (iconFor @model.icon) as |TitleIcon|}}
+              {{#if TitleIcon}}
+                <span class='wb-title-frame'>
+                  <TitleIcon width='22' height='22' role='presentation' />
+                </span>
+              {{/if}}
+            {{/let}}
+            <span class='wb-title-text'>{{#each
+                (nameParts
+                  (if @model.componentName @model.componentName 'Component')
+                )
+                as |part i|
+              }}{{#if i}}<wbr />{{/if}}{{part}}{{/each}}</span>
+          </h1>
           {{#if this.showBrief}}
             <p class='brief'>{{@model.brief}}</p>
           {{/if}}
@@ -1014,8 +675,6 @@ export class PretUISpec extends Spec {
           --_wb-topbar-h: 2.75rem;
           --_wb-panel-h: 2.25rem;
           --_wb-title-frame-size: 3rem;
-          --_wb-notes-w: 17.5rem;
-          --_wb-notes-max-h: 20rem;
           --_wb-writeup-min-w: 48rem;
           /* StepList's track turns vertical at 24rem; with the panel's
              padding, provenance needs 26rem to keep it horizontal */
@@ -1117,114 +776,6 @@ export class PretUISpec extends Spec {
         }
         .wb-work {
           min-width: 0;
-        }
-        /* the title and the notes rail share a row; the rail wraps under
-           the title when the row is too narrow for both */
-        .wb-head {
-          display: flex;
-          flex-wrap: wrap;
-          align-items: flex-start;
-          gap: var(--boxel-sp) var(--boxel-sp-lg);
-        }
-        .wb-head > .wb-title {
-          flex: 1 1 18rem;
-          min-width: 0;
-        }
-        /* ── Sticky notes ── */
-        .notes {
-          flex: 0 1 var(--_wb-notes-w);
-          display: flex;
-          flex-direction: column;
-          align-items: flex-end;
-          gap: var(--boxel-sp-2xs);
-          min-width: 0;
-        }
-        /* a note wants room to write: Popover reads its width knob on the
-           panel, which inherits it from the Popover root */
-        .note-popover {
-          --pretui-popover-width: 20rem;
-        }
-        /* a long run of notes scrolls instead of pushing the page down; the
-           padding keeps the notes' focus rings inside the scroller */
-        .notes-list {
-          display: flex;
-          flex-direction: column;
-          gap: var(--boxel-sp-2xs);
-          width: 100%;
-          max-block-size: var(--_wb-notes-max-h);
-          overflow-y: auto;
-          margin: 0;
-          padding: var(--boxel-sp-3xs);
-          list-style: none;
-        }
-        .note {
-          /* a tint of --attention over --card, so the sticky holds
-             contrast in light and dark */
-          width: 100%;
-          text-align: start;
-          padding: var(--boxel-sp-xs);
-          /* a real border, so the clickable edge survives forced colors */
-          border: 1px solid var(--border);
-          border-radius: var(--boxel-border-radius);
-          /* oklab, so the tint stays warm over a cool dark card */
-          background-color: color-mix(
-            in oklab,
-            var(--attention) 14%,
-            var(--card)
-          );
-          color: var(--card-foreground);
-          box-shadow: var(--shadow-sm);
-          font-size: var(--boxel-caption-font-size);
-          line-height: 1.5;
-        }
-        .note:focus-visible {
-          outline: 2px solid var(--ring);
-          outline-offset: 2px;
-        }
-        .note:hover {
-          box-shadow: var(--shadow-md);
-        }
-        .notes-more {
-          width: 100%;
-        }
-        .notes-more > summary {
-          width: fit-content;
-          margin-inline-start: auto;
-          font-size: var(--boxel-ui-label-font-size);
-          font-weight: var(--boxel-ui-label-font-weight);
-          color: var(--muted-foreground);
-          cursor: pointer;
-        }
-        .notes-more[open] > summary {
-          margin-block-end: var(--boxel-sp-2xs);
-        }
-        /* each note reads as a small card: its title, then the start of
-           its body; clicking opens the whole note */
-        .note {
-          display: grid;
-          gap: var(--boxel-sp-6xs);
-        }
-        .note-title {
-          font-weight: 600;
-          overflow-wrap: break-word;
-        }
-        .note-excerpt {
-          display: -webkit-box;
-          -webkit-line-clamp: 2;
-          -webkit-box-orient: vertical;
-          overflow: hidden;
-          overflow-wrap: break-word;
-          color: var(--muted-foreground);
-        }
-        .notes-foot {
-          display: flex;
-          align-items: center;
-          gap: var(--boxel-sp-xs);
-        }
-        .notes-done {
-          font-family: var(--font-mono);
-          font-size: var(--boxel-font-size-2xs);
-          color: var(--muted-foreground);
         }
         /* the write-up and provenance share a row when both fit, and stack
            otherwise; provenance stops at its cap and the write-up takes the

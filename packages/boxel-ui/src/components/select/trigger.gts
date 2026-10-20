@@ -70,7 +70,18 @@ export class BoxelTriggerWrapper<
           padding: var(--boxel-select-trigger-padding, var(--boxel-sp-xs));
           font: var(--boxel-font-sm);
           font-family: inherit;
-          letter-spacing: var(--boxel-lsp-sm);
+          font-size: var(
+            --boxel-select-trigger-font-size,
+            var(--boxel-font-size-sm)
+          );
+          line-height: var(
+            --boxel-select-trigger-line-height,
+            var(--boxel-line-height-sm)
+          );
+          letter-spacing: var(
+            --boxel-select-trigger-letter-spacing,
+            var(--boxel-lsp-sm)
+          );
           outline: none;
           cursor: pointer;
         }
@@ -82,9 +93,6 @@ export class BoxelTriggerWrapper<
         }
         .boxel-trigger-placeholder {
           color: var(--boxel-450);
-          font: var(--boxel-font-sm);
-          font-family: inherit;
-          letter-spacing: var(--boxel-lsp-sm);
         }
       }
     </style>

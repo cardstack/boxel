@@ -486,9 +486,9 @@ document at `<realm server>/_standby`, over plain HTTP, with no AWS session:
   (`assets/main-<hash>.js`) and the host's own build version from its config
   meta (`0.0.0+<sha>`). Either moving means the client half of a measurement
   changed underneath it.
-- **Which replica answered** — the container id in
-  `X-ECS-Container-Metadata-URI-v4`. A fleet that turned over is visible even
-  when the task definition did not change, and a replaced task is a cold one.
+- **Which replica answered** — the digest of its instance id in
+  `X-Boxel-Instance-Id`. A fleet that turned over is visible even when the build did not change, and a
+  replaced replica is a cold one.
 
 A run opens with the reading printed:
 

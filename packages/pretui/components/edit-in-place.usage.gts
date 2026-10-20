@@ -193,7 +193,7 @@ class EditInPlaceUsage extends Component {
         color: var(--muted-foreground);
       }
       .pretui-demo-value {
-        font-size: var(--text-ui-md, 12.5px);
+        font-size: var(--boxel-font-size-xs);
       }
       .pretui-demo-readout {
         margin: var(--space-4, 12px) 0 0;

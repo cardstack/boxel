@@ -12,6 +12,7 @@ import {
   type Query,
   type Loader,
   getAncestor,
+  rri,
 } from '@cardstack/runtime-common';
 
 import {
@@ -265,7 +266,7 @@ export default class CreateSpecTool extends HostBaseTool<
 
     let url: string;
     if (codeRef) {
-      let relativeTo = new URL(targetRealm);
+      let relativeTo = rri(targetRealm);
       let maybeAbsoluteRef = codeRefWithAbsoluteIdentifier(
         codeRef,
         relativeTo,
@@ -393,7 +394,7 @@ async function getSpecClassFromDeclaration(
     };
     const loadedSpec = await loadCardDef(specCodeRef, {
       loader,
-      relativeTo: new URL(targetRealm),
+      relativeTo: rri(targetRealm),
     });
 
     if (

@@ -2718,6 +2718,32 @@ return updated;`);
       );
     });
 
+    test('saves the update to a realm named by a prefix-form identifier', async function (assert) {
+      let { virtualNetwork } = getService('network');
+      let testRealmPrefix = '@test/cards-update/';
+      virtualNetwork.addRealmMapping(testRealmPrefix, testRealmURL);
+      try {
+        let toolService = getService('tool-service');
+        let result = await new RunRealmCodeTool(
+          toolService.toolContext,
+        ).execute({
+          realm: testRealmPrefix,
+          roomId: '!room:example.com',
+          code: `await realm.cards.update('Recipe/pancakes', { cuisine: 'Belgian' });`,
+        });
+
+        assert.deepEqual(
+          result.files.map((file) => file.status),
+          ['saved'],
+          'the update is saved',
+        );
+        let { data } = await cardJSON('Recipe/pancakes.json');
+        assert.strictEqual(data.attributes.cuisine, 'Belgian');
+      } finally {
+        virtualNetwork.removeRealmMapping(testRealmPrefix);
+      }
+    });
+
     test('edits a long text field in the script without cutting it', async function (assert) {
       let long = Array.from(
         { length: 40 },

@@ -176,6 +176,50 @@ module('Integration | tools | copy-file-to-realm', function (hooks) {
     }
   });
 
+  test('copies a file named by prefix-form identifiers', async function (assert) {
+    let toolService = getService('tool-service');
+    let { virtualNetwork } = getService('network');
+    let sourcePrefix = '@test/copy-source/';
+    let targetPrefix = '@test/copy-target/';
+    virtualNetwork.addRealmMapping(sourcePrefix, testRealmURL);
+    virtualNetwork.addRealmMapping(targetPrefix, testRealm2URL);
+    try {
+      let result = await new CopyFileToRealmTool(
+        toolService.toolContext,
+      ).execute({
+        sourceFileIdentifier: `${sourcePrefix}hello.txt`,
+        targetRealm: targetPrefix,
+      });
+
+      assert.strictEqual(
+        result.newFileIdentifier,
+        `${targetPrefix}hello.txt`,
+        'the new file identifier keeps the prefix form',
+      );
+      let response = await fetch(new URL('hello.txt', testRealm2URL));
+      assert.strictEqual(response.status, 200, 'copied file exists');
+      assert.strictEqual(
+        await response.text(),
+        'Hello World!',
+        'content matches',
+      );
+    } finally {
+      virtualNetwork.removeRealmMapping(sourcePrefix);
+      virtualNetwork.removeRealmMapping(targetPrefix);
+    }
+  });
+
+  test('refuses a source identifier that names a directory', async function (assert) {
+    let toolService = getService('tool-service');
+    await assert.rejects(
+      new CopyFileToRealmTool(toolService.toolContext).execute({
+        sourceFileIdentifier: `${testRealmURL}nested/`,
+        targetRealm: testRealm2URL,
+      }),
+      /does not name a file/,
+    );
+  });
+
   test('errors when user does not have write permissions to target realm', async function (assert) {
     let toolService = getService('tool-service');
     let copyFileCommand = new CopyFileToRealmTool(toolService.toolContext);

@@ -115,7 +115,7 @@ Prefer the headless `vite build --mode development && pnpm exec ember test --pat
 
 #### Signing a browser into a host
 
-- A host on any origin other than the environment's own (for example `http://localhost:<port>/` against staging) can't use the email/password sign-in form: the form is a secure-origin frame those origins may not embed, so it shows up blank. When the user wants a browser signed in, run `boxel browse --profile <id> --host-url <host origin>` for them: it opens their default browser already signed in, as a one-time login whose token never reaches the terminal or the chat. To sign in a specific browser such as Chrome, or a browser you drive, follow the skill: `--print-url` prints the token, so its output only ever goes straight into a browser launcher or the clipboard. The `boxel-cli:browser-sign-in` skill (`packages/boxel-cli/plugin/skills/browser-sign-in/SKILL.md`) has the details.
+- A local host (`https://localhost:<port>/`, `http://localhost:<port>/` or the same on `127.0.0.1`) against staging or production can use the email/password sign-in form: the secure origin lets loopback origins frame it. The `local-host-against-remote` skill covers pointing the host at the environment and a blank password frame. Any other origin that isn't the environment's own, such as a Railway deployment against staging, can't, until it is added to staging's `--secureOriginAppOrigin` by name; production lists only loopback origins. When the user wants a browser signed in without typing a password, run `boxel browse --profile <id> --host-url <host origin>` for them: it opens their default browser already signed in, as a one-time login whose token never reaches the terminal or the chat. To sign in a specific browser such as Chrome, or a browser you drive, follow the skill: `--print-url` prints the token, so its output only ever goes straight into a browser launcher or the clipboard. The `boxel-cli:browser-sign-in` skill (`packages/boxel-cli/plugin/skills/browser-sign-in/SKILL.md`) has the details.
 
 #### CSS Guidance
 
@@ -144,6 +144,9 @@ Prefer the headless `vite build --mode development && pnpm exec ember test --pat
     `MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix`
   - Run tests:
     `pnpm test`
+  - `pnpm test` starts Synapse from the `test` template, which asks for an invite code at registration. A spec that needs a Synapse configured otherwise goes under `tests/with-synapse/<template>/`, named for a template in `support/synapse/`, and runs in a pass of its own against a Synapse from that template:
+    `MATRIX_SYNAPSE_TEMPLATE=test-without-registration-token pnpm test`
+    In CI each such template needs its own `include` entry in `ci.yaml`'s `matrix-client-test` job, which runs it beside the shards. A template other than `test` differs from it only by the settings `TEMPLATE_DIFFERENCES` in `support/shard-spec-files.test.ts` declares. `pnpm test:shard-assignment` checks both.
 - Focusing on single test or module:
 - make sure to kill previously running matrix tests if they are still running before starting a new test run.
   Add `--grep` flag to command (`--grep 'it can register a user with a registration token'`)

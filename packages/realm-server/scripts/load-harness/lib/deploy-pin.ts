@@ -18,10 +18,11 @@
 //     its config meta (`0.0.0+<sha>`). Either one moving means the client half
 //     of any measurement changed underneath it.
 //
-//   - WHICH REPLICAS ANSWERED. `X-ECS-Container-Metadata-URI-v4` carries the
-//     answering container's id. A fleet that turned over mid-run is then
-//     visible even when the task definition did not change, and a replaced
-//     task is a cold one, which invalidates the window on its own.
+//   - WHICH REPLICAS ANSWERED. `X-Boxel-Instance-Id` names the answering
+//     process, and a restarted or replaced process answers with a new id. A
+//     fleet that turned over mid-run is then visible even when the build did
+//     not change, and a replaced replica is a cold one, which invalidates the
+//     window on its own.
 //
 // The realm server fetches the boot document once per process and caches it
 // for that process's life, so what a replica serves is pinned to when that
@@ -51,7 +52,7 @@ export interface ServedBuild {
 }
 
 export interface FleetReading {
-  // Which replicas answered at all, by container id — including the ones whose
+  // Which replicas answered at all, by instance id — including the ones whose
   // answer was unusable, because a replica that says "502" has still said it is
   // there, and dropping it would report it as departed. A replica that answered
   // no probe is absent, so this is what was SEEN and never the whole fleet.
@@ -66,9 +67,10 @@ export interface FleetReading {
   responses: number;
 }
 
-// The key a response with no container id is filed under. A deployment that
-// identifies no replicas — a local stack, anything not on ECS — collapses into
-// this single entry, so its readings compare builds and never turnover.
+// The key a response with no instance id is filed under. A target that
+// identifies no replicas — a proxy that strips the header, a server that
+// predates it — collapses into this single entry, so its readings compare
+// builds and never turnover.
 export const UNIDENTIFIED_REPLICA = 'unidentified';
 
 // `_standby` is the cheapest document that names the bundle: it serves the
@@ -136,15 +138,9 @@ function hostVersion(html: string): string | undefined {
 }
 
 export function replicaIdFromHeaders(headers: Headers): string | undefined {
-  // The header carries the task metadata endpoint, `…/v4/<container id>`,
-  // which is reachable only from inside the container. The id is the useful
-  // part: it changes when the task is replaced, which a deploy always does and
-  // a recycle does too.
-  let uri = headers.get('x-ecs-container-metadata-uri-v4');
-  if (!uri) {
-    return undefined;
-  }
-  return uri.split('/').filter(Boolean).pop() || undefined;
+  // The id changes when the process restarts or is replaced, which a deploy
+  // always does and a recycle does too.
+  return headers.get('x-boxel-instance-id')?.trim() || undefined;
 }
 
 export interface ReadFleetOptions {

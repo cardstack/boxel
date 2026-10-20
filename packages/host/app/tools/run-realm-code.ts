@@ -14,6 +14,7 @@ import {
   isResolvedCodeRef,
   logger,
   resourceIdentity,
+  ri,
   rri,
   searchEntryWireQueryFromQuery,
   SupportedMimeType,
@@ -23,6 +24,8 @@ import {
   type Format,
   type LooseSingleCardDocument,
   type Query,
+  type RealmIdentifier,
+  type RealmResourceIdentifier,
   type Relationship,
   type Saved,
   type SearchEntryWireQuery,
@@ -1835,7 +1838,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
     }
     // Resolve to the realm's own identifier: the fallback realm URL can come
     // without the trailing slash a realm root has.
-    let realmURL = this.realm.realmOf(
+    let realmURL = this.realmOfInput(
       rri(realmInput.endsWith('/') ? realmInput : `${realmInput}/`),
     );
     // Read and write are separate grants, and either one is enough to run:
@@ -2139,11 +2142,11 @@ export default class RunRealmCodeTool extends HostBaseTool<
     let cardId: string;
     try {
       cardId = session.cardURL((value as { show: unknown }).show);
-      let source = await this.cardService.getSource(new URL(`${cardId}.json`));
+      let source = await this.cardService.getSource(rri(`${cardId}.json`));
       if (source.status !== 200) {
         // A path that names another file, such as an image or a module,
         // opens that file in code mode.
-        let file = await this.cardService.getSource(new URL(cardId));
+        let file = await this.cardService.getSource(rri(cardId));
         if (file.status !== 200) {
           throw new Error(`Not found: ${cardId}`);
         }
@@ -2284,7 +2287,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
       roomId,
       fileUrl: url,
     });
-    await this.cardService.saveSource(new URL(url), content, 'bot-patch', {
+    await this.cardService.saveSource(rri(url), content, 'bot-patch', {
       resetLoader: /\.(gts|ts)$/.test(url),
       clientRequestId,
     });
@@ -2332,7 +2335,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
         href: url,
         data: { type: 'source' as const, attributes: { content }, meta: {} },
       })),
-      new URL(realmURL),
+      ri(realmURL),
       { clientRequestId },
     );
     if (!Array.isArray(response?.['atomic:results'])) {
@@ -2466,7 +2469,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
     if (!unchanged) {
       throw new Error(`File changed while the script ran: ${url}`);
     }
-    await this.cardService.deleteSource(new URL(url));
+    await this.cardService.deleteSource(rri(url));
   }
 
   // The SHA-256 of a binary file's bytes, or undefined for a file that does
@@ -2589,6 +2592,24 @@ export default class RunRealmCodeTool extends HostBaseTool<
         kind: info.meta?.kind === 'directory' ? 'directory' : 'file',
       })),
     };
+  }
+
+  // realmOf matches an identifier only in the form the realm is keyed by, and
+  // the input may name the realm by its prefix or by its URL, so a miss is
+  // retried with the identifier resolved to its URL.
+  private realmOfInput(
+    realmId: RealmResourceIdentifier,
+  ): RealmIdentifier | undefined {
+    let realm = this.realm.realmOf(realmId);
+    if (realm) {
+      return realm;
+    }
+    try {
+      return this.realm.realmOf(this.network.virtualNetwork.toURL(realmId));
+    } catch {
+      // resolves nowhere, so it names no known realm
+      return undefined;
+    }
   }
 
   // The sandbox resolves relative paths against the realm root, and file URLs

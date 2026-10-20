@@ -1274,10 +1274,7 @@ module(basename(import.meta.filename), function () {
     } = {}): Response {
       let headers = new Headers({ 'content-type': 'text/html' });
       if (replicaId) {
-        headers.set(
-          'x-ecs-container-metadata-uri-v4',
-          `http://169.254.170.2/v4/${replicaId}`,
-        );
+        headers.set('x-boxel-instance-id', replicaId);
       }
       return new Response(bootDocument(build), { status, headers });
     }
@@ -1372,15 +1369,14 @@ module(basename(import.meta.filename), function () {
       assert.true(pinIsReadable(reading({ 'task-a': served })));
     });
 
-    test('the replica id comes off the container metadata header', function (assert) {
+    test('the replica id comes off the instance id header', function (assert) {
       assert.strictEqual(
         replicaIdFromHeaders(
           new Headers({
-            'x-ecs-container-metadata-uri-v4':
-              'http://169.254.170.2/v4/6654a7425d164a77803fe13a88ae21ab-3236013547',
+            'x-boxel-instance-id': 'ip-10-0-1-23.ec2.internal-9f3c2a1b',
           }),
         ),
-        '6654a7425d164a77803fe13a88ae21ab-3236013547',
+        'ip-10-0-1-23.ec2.internal-9f3c2a1b',
       );
       assert.strictEqual(
         replicaIdFromHeaders(new Headers()),
@@ -1566,7 +1562,7 @@ module(basename(import.meta.filename), function () {
           status: 200,
           headers: new Headers({
             'content-type': 'text/html',
-            'x-ecs-container-metadata-uri-v4': 'http://169.254.170.2/v4/task-b',
+            'x-boxel-instance-id': 'task-b',
           }),
         },
       );

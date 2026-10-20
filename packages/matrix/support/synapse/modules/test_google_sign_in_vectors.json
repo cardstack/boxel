@@ -180,6 +180,210 @@
       }
     },
     {
+      "name": "an all-digit local part is prefixed, since Synapse reserves it for guests",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "12345@example.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "user-12345",
+        "displayName": "Pat",
+        "email": "12345@example.com"
+      }
+    },
+    {
+      "name": "an all-digit local part that is taken suffixes after the prefix",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "12345@example.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": ["user-12345"],
+      "expected": {
+        "outcome": "new",
+        "localpart": "user-123451",
+        "displayName": "Pat",
+        "email": "12345@example.com"
+      }
+    },
+    {
+      "name": "a leading _ is dropped, since Synapse reserves it for application services",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "_alice@example.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "alice",
+        "displayName": "Pat",
+        "email": "_alice@example.com"
+      }
+    },
+    {
+      "name": "a leading _ is dropped before the collision check, so its account is never linked into one that merely has the rest",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "_alice@example.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": ["alice"],
+      "expected": {
+        "outcome": "new",
+        "localpart": "alice1",
+        "displayName": "Pat",
+        "email": "_alice@example.com"
+      }
+    },
+    {
+      "name": "a leading run of _ and - is dropped",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "_-_alice@example.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "alice",
+        "displayName": "Pat",
+        "email": "_-_alice@example.com"
+      }
+    },
+    {
+      "name": "an _ after the first character is kept",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "a_lice_@example.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "a_lice_",
+        "displayName": "Pat",
+        "email": "a_lice_@example.com"
+      }
+    },
+    {
+      "name": "digits left after dropping a leading _ are prefixed",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "__42@example.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "user-42",
+        "displayName": "Pat",
+        "email": "__42@example.com"
+      }
+    },
+    {
+      "name": "digits left after dropping forbidden characters are prefixed",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "#42!@example.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "user-42",
+        "displayName": "Pat",
+        "email": "#42!@example.com"
+      }
+    },
+    {
+      "name": "digits with other allowed characters are not prefixed",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "42.7@example.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "42.7",
+        "displayName": "Pat",
+        "email": "42.7@example.com"
+      }
+    },
+    {
+      "name": "digits outside ASCII are forbidden characters, not digits",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "٤٢@example.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "user",
+        "displayName": "Pat",
+        "email": "٤٢@example.com"
+      }
+    },
+    {
+      "name": "a local part of only _ becomes user",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "___@example.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "user",
+        "displayName": "Pat",
+        "email": "___@example.com"
+      }
+    },
+    {
+      "name": "a taken user fallback is suffixed",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "___@example.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": ["user"],
+      "expected": {
+        "outcome": "new",
+        "localpart": "user1",
+        "displayName": "Pat",
+        "email": "___@example.com"
+      }
+    },
+    {
       "name": "a new account is never linked into an account that merely has its localpart",
       "userinfo": {
         "sub": "g-1",

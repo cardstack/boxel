@@ -24,7 +24,7 @@ import {
   type CapturePrerenderResponse,
 } from '@cardstack/runtime-common';
 import {
-  ecsMetadata,
+  instanceIdHeader,
   fullRequestURL,
   livenessCheck,
   fetchRequestFromContext,
@@ -1771,7 +1771,7 @@ export function buildPrerenderApp(options: {
       });
       return next();
     })
-    .use(ecsMetadata)
+    .use(instanceIdHeader)
     .use(router.routes());
 
   app.on('error', (err: any) => {

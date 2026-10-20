@@ -305,8 +305,8 @@ export class AutocompleteUsage extends Component {
       <:cssVars as |Css|>
         <Css.Basic
           @name='pretui-ac-h'
-          @description='Minimum field height, em-scaled off the resolved size.'
-          @defaultValue='2.24em'
+          @description='Minimum field height: --boxel-form-control-height-sm at size m, scaled off the text size at the others.'
+          @defaultValue='var(--boxel-form-control-height-sm)'
         />
       </:cssVars>
     </FreestyleUsage>
