@@ -283,6 +283,13 @@ module.exports = {
           node.quasis.map((quasi) => quasi.value.raw).join(''),
         );
       },
+      // A `<template>`'s text and attribute values, and its string arguments.
+      GlimmerTextNode(node) {
+        checkOtherPosition(node, node.chars);
+      },
+      GlimmerStringLiteral(node) {
+        checkOtherPosition(node, node.value);
+      },
     };
   },
 };

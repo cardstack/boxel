@@ -29,7 +29,8 @@ interpolated first (`` `${'https://cardstack.com/base/'}card-api` ``), or
 ## Every other position
 
 Anywhere else, a string or template literal that contains the alias is flagged,
-without a fix, unless it sits in one of the positions that define the alias or
+as is a `<template>`'s text, attribute value or string argument that contains it.
+These are reported without a fix, unless it sits in one of the positions that define the alias or
 recognize data written in it:
 
 - the initializer of `baseRealm`;

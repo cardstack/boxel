@@ -199,3 +199,30 @@ typeScriptRuleTester.run('no-url-form-base-imports (TypeScript)', rule, {
     },
   ],
 });
+
+// `<template>` content needs the Ember parser.
+const templateRuleTester = new RuleTester({
+  parser: require.resolve('ember-eslint-parser'),
+  parserOptions: { ecmaVersion: 2022, sourceType: 'module' },
+});
+
+templateRuleTester.run('no-url-form-base-imports (templates)', rule, {
+  valid: [
+    `<template><a href="https://example.com/base/x">Docs</a></template>`,
+    `<template>{{concat "@cardstack/base/" "card-api"}}</template>`,
+  ],
+  invalid: [
+    {
+      code: `<template><a href="https://cardstack.com/base/cards/skill">Skill</a></template>`,
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
+    },
+    {
+      code: `<template>Served from https://cardstack.com/base/ today</template>`,
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
+    },
+    {
+      code: `<template>{{concat "https://cardstack.com/base/" "card-api"}}</template>`,
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
+    },
+  ],
+});
