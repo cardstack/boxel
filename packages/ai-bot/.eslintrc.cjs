@@ -8,7 +8,7 @@ const {
   CJS_GLOBALS_IN_ESM,
 } = require('../../eslint/erasable-syntax-selectors.cjs');
 const {
-  CLOUD_PROVIDER_SDK_IMPORTS,
+  CLOUD_PROVIDER_SDK_RULE,
 } = require('../../eslint/cloud-provider-sdk-imports.cjs');
 
 module.exports = {
@@ -24,7 +24,7 @@ module.exports = {
       legacyDecorators: true,
     },
   },
-  plugins: ['ember'],
+  plugins: ['ember', '@cardstack/boxel'],
   extends: [
     'eslint:recommended',
     'plugin:@typescript-eslint/recommended',
@@ -65,7 +65,7 @@ module.exports = {
     ],
     'no-restricted-syntax': ['error', ...NO_COMPILATION_REQUIRED_TS_SELECTORS],
     // Re-declared from the root config (ADR 003 §1.2).
-    'no-restricted-imports': ['error', CLOUD_PROVIDER_SDK_IMPORTS],
+    '@cardstack/boxel/no-cloud-provider-sdk': CLOUD_PROVIDER_SDK_RULE,
   },
   overrides: [
     {

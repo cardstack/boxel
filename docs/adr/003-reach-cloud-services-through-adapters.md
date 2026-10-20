@@ -9,6 +9,9 @@ scope:
   - packages/ai-bot/**
   - packages/bot-runner/**
   - packages/host/app/**
+  - packages/base/**
+  - packages/bxl/**
+  - packages/boxel-ui/**
 ---
 
 # 003. Reach proprietary cloud services only through adapters

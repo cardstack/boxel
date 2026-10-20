@@ -775,6 +775,9 @@ importers:
       '@babel/traverse':
         specifier: 'catalog:'
         version: 7.27.0(supports-color@8.1.1)
+      '@cardstack/eslint-plugin-boxel':
+        specifier: workspace:*
+        version: link:packages/eslint-plugin-boxel
       '@glimmer/component':
         specifier: ^2.0.0
         version: 2.1.1(supports-color@8.1.1)
@@ -923,6 +926,9 @@ importers:
         specifier: 'catalog:'
         version: 7.30.0
     devDependencies:
+      '@cardstack/eslint-plugin-boxel':
+        specifier: workspace:*
+        version: link:../eslint-plugin-boxel
       '@cardstack/local-types':
         specifier: workspace:*
         version: link:../local-types

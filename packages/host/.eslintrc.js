@@ -3,7 +3,7 @@
 const MISSING_INVOKABLES_CONFIG = require('../runtime-common/etc/eslint/missing-invokables-config');
 const { DATA_TEST_SELECTORS } = require('../../eslint/data-test-selectors.cjs');
 const {
-  CLOUD_PROVIDER_SDK_IMPORTS,
+  CLOUD_PROVIDER_SDK_RULE,
 } = require('../../eslint/cloud-provider-sdk-imports.cjs');
 
 // Applies to all of JS, TS, GJS, and GTS in the browser context.
@@ -84,7 +84,7 @@ module.exports = {
       // not inherit (ADR 003 §1.2).
       files: ['app/**/*'],
       rules: {
-        'no-restricted-imports': ['error', CLOUD_PROVIDER_SDK_IMPORTS],
+        '@cardstack/boxel/no-cloud-provider-sdk': CLOUD_PROVIDER_SDK_RULE,
       },
     },
     {
