@@ -138,6 +138,7 @@ let {
   fromUrl: fromUrls,
   toUrl: toUrls,
   migrateDB,
+  indexingDashboard,
   prerendererUrl,
   serviceName = 'worker',
   skipPrerenderHtmlRealm: skipPrerenderHtmlRealms = [],
@@ -167,6 +168,11 @@ let {
     migrateDB: {
       description:
         'When this flag is set the database will automatically migrate when server is started',
+      type: 'boolean',
+    },
+    indexingDashboard: {
+      description:
+        'Serve the indexing dashboard at /_indexing-dashboard. It shows pending jobs, their realms and their args, so only the development worker manager passes this flag.',
       type: 'boolean',
     },
     fromUrl: {
@@ -205,11 +211,10 @@ let {
 let isReady = false;
 let isExiting = false;
 let workers: ChildProcess[] = [];
-// The indexing dashboard is for development. A worker manager is deployed when
-// any realm it serves is mapped to a deployed origin, the same test that the
-// secrets-at-rest startup check uses.
+// The indexing dashboard is for development, so it is off unless the start
+// command asks for it.
 function isIndexingDashboardEnabled(): boolean {
-  return !toUrls.some((to) => isDeployedServerURL(String(to)));
+  return indexingDashboard === true;
 }
 
 // Always create the sink — its in-memory state is small, and the
