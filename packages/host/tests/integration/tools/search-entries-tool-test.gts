@@ -191,7 +191,7 @@ module('Integration | tools | search-entries', function (hooks) {
     let result = await runSearch({
       query: {
         filter: {
-          on: { module: rri('https://cardstack.com/base/spec'), name: 'Spec' },
+          on: { module: rri('@cardstack/base/spec'), name: 'Spec' },
           eq: { specType: 'card', cardTitle: 'Author' },
         },
       },

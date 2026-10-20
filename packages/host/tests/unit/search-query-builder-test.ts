@@ -137,8 +137,7 @@ module('Unit | search/query-builder', function () {
 
     test('a picked type strips the root baseFilter and skips the dedup', function (assert) {
       let markdownRef = {
-        module:
-          'https://cardstack.com/base/markdown-file-def' as RealmResourceIdentifier,
+        module: '@cardstack/base/markdown-file-def' as RealmResourceIdentifier,
         name: 'MarkdownDef',
       };
       let typeKey = `${markdownRef.module}/${markdownRef.name}`;

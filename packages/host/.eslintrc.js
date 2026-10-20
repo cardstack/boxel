@@ -272,6 +272,29 @@ module.exports = {
       },
     },
     {
+      // Tests of alias tolerance, canonicalization or migration, which spell
+      // the `https://cardstack.com/base/` alias as data. It stays out of their
+      // import specifiers.
+      files: [
+        'tests/integration/tools/sanitize-module-list-test.gts',
+        'tests/unit/code-ref-test.ts',
+        'tests/unit/index-query-engine-test.ts',
+        'tests/unit/internal-key-canonicalization-test.ts',
+        'tests/unit/is-component-declaration-test.ts',
+        'tests/unit/plan-install-test.ts',
+        'tests/unit/query-canonicalization-test.ts',
+        'tests/unit/realm-utils-test.ts',
+        'tests/unit/virtual-network-realm-for-reference-test.ts',
+        'tests/unit/virtual-network-retry-test.ts',
+      ],
+      rules: {
+        '@cardstack/boxel/no-url-form-base-imports': [
+          'error',
+          { allowAliasOutsideImports: true },
+        ],
+      },
+    },
+    {
       // A prefix realm is named by its prefix rather than the URL one
       // environment serves it at. Tests are left out: they spell those URLs on
       // purpose, to check how they are resolved and mapped.
