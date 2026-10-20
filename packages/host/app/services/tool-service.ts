@@ -20,6 +20,7 @@ import {
   delay,
   getClass,
   identifyCard,
+  localId,
   rri,
   stringifyErrorForLog,
   type PatchData,
@@ -54,6 +55,7 @@ import type SessionService from './session';
 import type StoreService from './store';
 import type MessageTool from '../lib/matrix-classes/message-tool';
 import type { RoomResource } from '../resources/room';
+import type * as CardAPI from '@cardstack/base/card-api';
 import type { CardDef } from '@cardstack/base/card-api';
 import type { FileDef } from '@cardstack/base/file-api';
 import type { IEvent } from 'matrix-js-sdk';
@@ -93,6 +95,15 @@ const VALIDATE_TIMEOUT_MS = isTesting() ? 3_000 : 60_000;
 // When a validation is still running after this long, log the step it is on
 // and what the loader and store are waiting for.
 const VALIDATE_WATCHDOG_MS = isTesting() ? 1_000 : 20_000;
+// Upper bound on waiting for a tool input's linked cards to load. A link load
+// that has not settled by then is a hung fetch, so the call fails naming the
+// fields still loading instead of running into the tool timeout.
+const LINKED_INPUT_SETTLE_MS = isTesting() ? 3_000 : 30_000;
+
+// A tool call whose arguments the model must correct (a linked card that does
+// not exist, a required link left out). The call ends as `invalid` rather than
+// `failed`, since running it again unchanged cannot succeed.
+class ToolInputError extends Error {}
 
 // Promise.race with a cleared timer: the losing execute keeps running (we
 // cannot cancel it), but the run task settles and reports. That means a
@@ -975,6 +986,11 @@ export default class ToolService extends Service {
         ) ?? command.eventId;
       let resultCard: CardDef | undefined;
       let toolToRun: Command<any, any> | undefined;
+      // The tool input holds a store reference from creation until the call is
+      // answered, so the garbage collector keeps it and the linked cards it
+      // loaded resident while the tool waits and runs.
+      let pinnedInputId: string | undefined;
+      let answered = false;
       // Distinguishes "the tool never ran" from "the tool ran, the aftermath
       // failed" — the catch below must not tell the room a committed write
       // failed.
@@ -1042,6 +1058,19 @@ export default class ToolService extends Service {
               attributes,
               payload?.relationships,
             );
+            if (typedInput) {
+              // A call that timed out is already answered, and its `finally`
+              // has run; a pin taken now would never be released.
+              if (!answered) {
+                pinnedInputId = typedInput[localId];
+                this.store.addReference(pinnedInputId);
+              }
+              await this.settleLinkedInputs(
+                toolToRun,
+                typedInput,
+                payload?.relationships,
+              );
+            }
             return (await toolToRun.execute(typedInput as any)) as
               | CardDef
               | undefined;
@@ -1129,6 +1158,32 @@ export default class ToolService extends Service {
             : e instanceof Error
               ? e
               : new Error('Tool call failed.');
+        if (error instanceof ToolInputError && !didExecute) {
+          // The model's arguments need fixing; nothing failed in the host, so
+          // this is a warning and the result is `invalid`. No failedToolState:
+          // the UI offers Try Anyway on an invalid result, not Retry.
+          console.warn(
+            `tool call ${command.name} (${commandRequestId}) has invalid input: ${error.message}`,
+          );
+          await timeout(DELAY_FOR_APPLYING_UI); // leave a beat for the "applying" state of the UI to be shown
+          try {
+            await this.matrixService.sendToolResultEvent({
+              roomId: command.message.roomId,
+              invokedToolFromEventId: eventId,
+              toolCallId: commandRequestId!,
+              status: 'invalid',
+              failureReason: error.message,
+              context: await this.operatorModeStateService.getSummaryForAIBot(),
+              resumesAssistant: !auto,
+            });
+          } catch (sendError) {
+            console.error(
+              'could not send invalid tool result event to the room',
+              sendError,
+            );
+          }
+          return;
+        }
         // The detail goes in as a string, from what was actually thrown: test
         // runners that capture the browser console render a bare Error argument
         // as "[object Object]". The Error follows for the devtools view.
@@ -1191,6 +1246,13 @@ export default class ToolService extends Service {
           );
         }
       } finally {
+        answered = true;
+        // Resetting the store replaces its reference counts, so only drop a
+        // reference the store still holds. At zero the store also drops the
+        // autosave listener it attached to the input.
+        if (pinnedInputId && this.store.getReferenceCount(pinnedInputId) > 0) {
+          this.store.dropReference(pinnedInputId);
+        }
         this.currentlyExecutingToolRequestIds.delete(commandRequestId!);
         toolRunWaiter.endAsync(waiterToken);
       }
@@ -1368,39 +1430,151 @@ export default class ToolService extends Service {
     return true;
   }
 
-  // Construct a new instance of the input type with the
-  // The input is undefined if the command has no input type
+  // Builds the tool's input card from the call's arguments. The input is
+  // undefined when the tool takes no input.
   private async instantiateToolInput(
     command: GenericCommand,
     attributes: Record<string, any> | undefined,
     relationships: Record<string, any> | undefined,
-  ) {
-    // Get the input type and validate/construct the payload
-    let typedInput;
+  ): Promise<CardDef | undefined> {
     let InputType = await command.getInputType();
-    if (InputType) {
-      let adoptsFrom = identifyCard(InputType);
-      if (adoptsFrom) {
-        let inputDoc = {
-          type: 'card',
-          data: {
-            meta: {
-              adoptsFrom,
-            },
-            attributes: attributes ?? {},
-            relationships: relationships ?? {},
-          },
-        };
-        typedInput = await this.store.addWithoutPersisting(inputDoc);
-      } else {
-        // identifyCard can fail in some circumstances where the input type is not exported
-        // in that case, we'll fall back to this less reliable method of constructing the input type
-        typedInput = new InputType({ ...attributes, ...relationships });
-      }
-    } else {
-      typedInput = undefined;
+    if (!InputType) {
+      return undefined;
     }
-    return typedInput;
+    let data = {
+      type: 'card' as const,
+      attributes: attributes ?? {},
+      relationships: relationships ?? {},
+    };
+    let adoptsFrom = identifyCard(InputType);
+    if (adoptsFrom) {
+      return await this.store.addWithoutPersisting({
+        data: { ...data, meta: { adoptsFrom } },
+      });
+    }
+    // An input class that is not exported from its module has no code ref, so
+    // the call's arguments are deserialized into an instance of the class
+    // itself. The document names the class's nearest identifiable ancestor,
+    // which keeps it a well-formed card document; the instance's own class
+    // decides how its fields deserialize.
+    let ancestor = Reflect.getPrototypeOf(InputType) as typeof CardDef | null;
+    let ancestorRef = undefined;
+    while (ancestor && !(ancestorRef = identifyCard(ancestor))) {
+      ancestor = Reflect.getPrototypeOf(ancestor) as typeof CardDef | null;
+    }
+    if (!ancestorRef) {
+      throw new Error(
+        `${command.constructor.name} has an input type that cannot be identified`,
+      );
+    }
+    return await this.store.addWithoutPersistingFromSerialized(
+      new InputType(),
+      { data: { ...data, meta: { adoptsFrom: ancestorRef } } },
+    );
+  }
+
+  // A tool call's linked inputs arrive as bare links, and a link to a card the
+  // store doesn't hold yet reads as `undefined` while it loads. Reading each
+  // linked field that has an unloaded slot starts its load, and the tool runs
+  // once those loads finish. Only the input's own links are waited for: a
+  // linked card's links, and its query fields, load as they would for any
+  // card.
+  //
+  // A link to a card that does not exist, or a required link the call left
+  // out, is the model's to fix and ends the call as `invalid`. A link that
+  // failed to load for another reason, or did not finish loading in time,
+  // ends it as `failed`. Every bad slot is named in one message.
+  private async settleLinkedInputs(
+    command: GenericCommand,
+    input: CardDef,
+    relationships: Record<string, any> | undefined,
+  ) {
+    let api = this.matrixService.cardAPI;
+    let fields: Record<string, CardAPI.Field | undefined> = api.getFields(
+      input,
+      { includeComputeds: false },
+    );
+    // A query-backed field is skipped: reading its membership starts a search.
+    let isDeclaredLink = (name: string) => {
+      let field = fields[name];
+      return (
+        (field?.fieldType === 'linksTo' ||
+          field?.fieldType === 'linksToMany') &&
+        !field.queryDefinition
+      );
+    };
+    // Relationship keys name the field, or a slot or nested path inside it
+    // (`skills.0`, `cardInfo.theme`); only top-level link fields are settled.
+    let required = command.requireInputFields.filter(isDeclaredLink);
+    let names = [
+      ...new Set([
+        ...Object.keys(relationships ?? {})
+          .map((key) => key.split('.')[0])
+          .filter(isDeclaredLink),
+        ...required,
+      ]),
+    ];
+    let slotsOf = (name: string) =>
+      api.getRelationshipMembershipState(input, name).membership ?? [];
+
+    let loading = names.filter((name) =>
+      slotsOf(name).some((slot) => slot.kind === 'not-loaded'),
+    );
+    for (let name of loading) {
+      void (input as unknown as Record<string, unknown>)[name];
+    }
+    let deadline = Date.now() + LINKED_INPUT_SETTLE_MS;
+    let stillLoading = () =>
+      loading.filter(
+        (name) => api.getRelationshipMembershipState(input, name).isLoading,
+      );
+    while (stillLoading().length > 0) {
+      if (this.isDestroying || this.isDestroyed) {
+        return;
+      }
+      if (Date.now() > deadline) {
+        throw new Error(
+          `Linked inputs did not finish loading within ${LINKED_INPUT_SETTLE_MS}ms: ${stillLoading().join(', ')}`,
+        );
+      }
+      await delay(10);
+    }
+
+    let invalid: string[] = [];
+    let failed: string[] = [];
+    for (let name of names) {
+      let slots = slotsOf(name);
+      if (
+        required.includes(name) &&
+        slots.every((slot) => slot.kind === 'not-set')
+      ) {
+        invalid.push(
+          `Missing ${name}: it is required, so pass the card's id in relationships.${name}`,
+        );
+        continue;
+      }
+      for (let slot of slots) {
+        if (slot.kind === 'present' || slot.kind === 'not-set') {
+          continue;
+        }
+        let reference =
+          api.resolveInstanceURL(input, slot.reference)?.href ?? slot.reference;
+        let detail =
+          slot.kind === 'not-loaded'
+            ? slot.kind
+            : `${slot.kind}: ${[slot.errorDoc?.status, slot.errorDoc?.message]
+                .filter(Boolean)
+                .join(' ')}`;
+        let message = `Could not load ${name} "${reference}" (${detail})`;
+        (slot.kind === 'not-found' ? invalid : failed).push(message);
+      }
+    }
+    if (invalid.length > 0) {
+      throw new ToolInputError([...invalid, ...failed].join('\n'));
+    }
+    if (failed.length > 0) {
+      throw new Error(failed.join('\n'));
+    }
   }
 
   isPerformingAcceptAllForRoom(roomId: string): boolean {
