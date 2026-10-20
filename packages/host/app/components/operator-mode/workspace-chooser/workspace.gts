@@ -102,9 +102,6 @@ export default class Workspace extends Component<Signature> {
     {{#if this.loadRealmTask.isRunning}}
       <WorkspaceLoadingIndicator />
     {{else}}
-      {{! A compact row opens its workspace from anywhere on it; the
-          wallpaper button inside stays the keyboard's way in. }}
-      {{! template-lint-disable no-invalid-interactive }}
       <div
         class='workspace-card
           {{if this.isHostDropdownOpen "is-open"}}
@@ -114,7 +111,6 @@ export default class Workspace extends Component<Signature> {
         style={{cssVar favorite-tile-width=@enlargedWidth}}
         data-theme='dark'
         {{on 'mouseleave' this.closeHostDropdown}}
-        {{on 'click' this.openFromRow}}
         data-test-workspace={{this.name}}
         data-test-workspace-selected={{if @isSelected this.name}}
         ...attributes
@@ -243,6 +239,22 @@ export default class Workspace extends Component<Signature> {
               </div>
             {{/if}}
           </div>
+        {{else if @compact}}
+          {{! A compact row's wallpaper is decoration; its name (below) is
+              the button. }}
+          <span
+            class='tile-icon row-thumb'
+            style={{cssVar
+              workspace-background-image-url=this.backgroundImageURL
+            }}
+          >
+            <span class='realm-icon-wrapper'>
+              <RealmIcon
+                class='workspace-realm-icon'
+                @realmInfo={{this.realmInfo}}
+              />
+            </span>
+          </span>
         {{else}}
           <ItemContainer
             aria-describedby={{this.realmURLDescriptionId}}
@@ -362,7 +374,23 @@ export default class Workspace extends Component<Signature> {
 
         {{#unless @isFavoritesSection}}
           <div class='info {{if this.isHostDropdownOpen "info--hidden"}}'>
-            <span class='name' data-test-workspace-name>{{this.name}}</span>
+            {{#if @compact}}
+              {{! The row's one button: it opens the workspace, carries the
+                  keyboard selection and stretches over the whole row. The
+                  star, menu and live link sit above it as their own controls. }}
+              <button
+                type='button'
+                class='name row-open'
+                aria-describedby={{this.realmURLDescriptionId}}
+                data-test-workspace-button={{this.name}}
+                data-test-workspace-name
+                data-nav-index={{@navIndex}}
+                {{on 'click' this.openWorkspace}}
+                {{focusWhenSelected @isSelected}}
+              >{{this.name}}</button>
+            {{else}}
+              <span class='name' data-test-workspace-name>{{this.name}}</span>
+            {{/if}}
             <span class='visibility' data-test-workspace-visibility>
               {{#if this.hasPublishedRealms}}
                 <Tooltip @placement='top'>
@@ -1299,12 +1327,40 @@ export default class Workspace extends Component<Signature> {
       .workspace-card.is-compact.is-selected {
         box-shadow: inset 0 0 0 2px var(--boxel-highlight);
       }
-      .workspace-card.is-compact :deep(.workspace) {
+      .row-thumb {
         flex: none;
+        width: var(--workspace-chooser-tile-width);
+        height: var(--workspace-chooser-tile-height);
         border-radius: 0.75rem;
+        box-shadow: inset 0 0 0 1px rgba(255 255 255 / 15%);
       }
-      .workspace-card.is-compact :deep(.workspace)::after {
-        border-radius: 0.75rem;
+      /* A button ignores line-clamp, so the name truncates on one line. */
+      .is-compact .info > .row-open {
+        position: static;
+        display: block;
+        width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        padding: 0;
+        border: 0;
+        background: none;
+        text-align: left;
+        cursor: pointer;
+      }
+      /* The name's hit area covers the row; the controls sit above it. */
+      .row-open::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        border-radius: inherit;
+      }
+      .row-open:focus-visible {
+        outline: none;
+      }
+      .workspace-card.is-compact:has(.row-open:focus-visible) {
+        box-shadow: inset 0 0 0 2px var(--boxel-highlight);
       }
       .is-compact .workspace-realm-icon {
         --boxel-realm-icon-size: 1.5rem;
@@ -2267,18 +2323,6 @@ export default class Workspace extends Component<Signature> {
 
   private get hasPublishedRealms() {
     return this.publishedRealmURLs.length > 0;
-  }
-
-  // A click on the row's own surface, not on one of its controls.
-  @action openFromRow(event: Event) {
-    if (!this.args.compact) {
-      return;
-    }
-    let target = event.target as HTMLElement;
-    if (target.closest('button, a, [role="menu"], [role="dialog"]')) {
-      return;
-    }
-    this.openWorkspace();
   }
 
   @action async openWorkspace() {

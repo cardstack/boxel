@@ -162,8 +162,8 @@ export default class Agents extends Component {
     this.openedStep = index;
   }
 
-  // Copying a step's command is as close as the dashboard can get to seeing
-  // it run, so it ticks the step and opens the next.
+  // The dashboard cannot see a terminal, so a copied command is all it can
+  // count: it marks the step copied (never "done") and opens the next.
   private copyTask = restartableTask(async (step: SetupStep) => {
     await navigator.clipboard.writeText(step.command);
     this.copiedStep = step.index;
@@ -217,7 +217,7 @@ export default class Agents extends Component {
               <span
                 class='muted'
                 data-test-agent-setup-progress
-              >{{this.doneCount}} of 5 done</span>
+              >{{this.doneCount}} of 5 copied</span>
             </span>
             <span class='agent-pick' role='group' aria-label='Your agent'>
               {{#each this.agents as |agent|}}
@@ -758,7 +758,7 @@ export default class Agents extends Component {
 const stateClass = (state: SetupStep['state']) => `is-${state}`;
 
 const stateLabel = (state: SetupStep['state']) =>
-  state === 'done' ? 'Done' : state === 'now' ? 'Next' : '';
+  state === 'done' ? 'Copied' : state === 'now' ? 'Next' : '';
 
 // "…/ctse/studio/" → "studio": the folder the pull lands in.
 function localDirFor(url: string) {

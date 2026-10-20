@@ -505,12 +505,13 @@ export default class NavRail extends Component<Signature> {
         background-color: var(--rail-hover);
         color: var(--foreground);
       }
+      /* The section being read. The filled wordmark above already says
+         which screen this is; the rail is that screen's outline, so the
+         current section is marked with a ring, never a second fill. */
       .rail-button.is-current {
-        /* The section being read. */
-        background-color: var(--boxel-highlight);
-        color: var(--boxel-highlight-foreground);
-        box-shadow: 0 0 1.25rem
-          color-mix(in oklch, var(--boxel-highlight) 35%, transparent);
+        color: var(--boxel-highlight);
+        box-shadow: inset 0 0 0 1.5px
+          color-mix(in oklch, var(--boxel-highlight) 70%, transparent);
       }
       .rail-button:focus-visible {
         outline: 2px solid var(--ring);

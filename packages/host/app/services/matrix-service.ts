@@ -1220,6 +1220,9 @@ export default class MatrixService extends Service {
     );
   }
 
+  // Pins show only on a favorite's tile, so pinning a card also favorites its
+  // workspace; otherwise the pin would be stored and shown nowhere. Unstarring
+  // later keeps the pins for when the workspace is starred again.
   async pinCard(realmURL: string, cardId: string): Promise<void> {
     if (this.isCardPinned(realmURL, cardId) || !this.canPinTo(realmURL)) {
       return;
@@ -1228,6 +1231,7 @@ export default class MatrixService extends Service {
       ...this.pinnedCardsFor(realmURL),
       { cardId, format: 'fitted' },
     ]);
+    await this.addWorkspaceFavorite(realmURL);
   }
 
   async unpinCard(realmURL: string, cardId: string): Promise<void> {
