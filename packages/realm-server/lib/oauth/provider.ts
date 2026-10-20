@@ -754,17 +754,26 @@ export function createBoxelOAuthProvider(config: BoxelOAuthConfig, deps: Deps) {
         let grants = await Promise.all(
           rows.map((row) => readOAuthGrant(db, String(row.id))),
         );
-        ctx.body = grants
-          .filter((grant) => grant?.user === user)
-          .map((grant) => ({
-            id: grant!.id,
-            client_id: grant!.clientId,
-            resource: grant!.resource,
-            realms: grant!.realms,
-            scopes: grant!.scopes,
-            issued_at: grant!.issuedAt,
-            renewable_until: grant!.renewableUntil,
-          }));
+        let owned = grants.filter((grant) => grant?.user === user);
+        // The registered name is the client's own, untrusted metadata; the
+        // page shows it as text beside the client id, never as markup.
+        let names = new Map<string, string | undefined>();
+        for (let grant of owned) {
+          if (!names.has(grant!.clientId)) {
+            let client = await provider.Client.find(grant!.clientId);
+            names.set(grant!.clientId, client?.clientName);
+          }
+        }
+        ctx.body = owned.map((grant) => ({
+          id: grant!.id,
+          client_id: grant!.clientId,
+          client_name: names.get(grant!.clientId),
+          resource: grant!.resource,
+          realms: grant!.realms,
+          scopes: grant!.scopes,
+          issued_at: grant!.issuedAt,
+          renewable_until: grant!.renewableUntil,
+        }));
       } else if (ctx.method === 'DELETE') {
         let input = await body(ctx);
         if (typeof input.id !== 'string') {

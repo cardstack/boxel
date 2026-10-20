@@ -667,6 +667,11 @@ module('oauth-provider-test', function (hooks) {
       Authorization: auth,
     });
     assert.strictEqual(grants.status, 200);
+    assert.strictEqual(
+      grants.body[0].client_name,
+      '<script>untrusted</script>',
+      'the listing names the client by its registered name, as data',
+    );
     let revoked = await request(
       '/oauth/grants',
       'delete',

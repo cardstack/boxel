@@ -72,6 +72,26 @@ This entry point supports existing Boxel password accounts. Google sign-in is
 available through the embedded realm-server provider when that server's Google
 client is configured. The separate service does not infer or copy a Google client.
 
+## Consent screen
+
+`secure-origin/oauth.js` renders the authorization dialog and the
+connected-applications page on the secure origin, styled in `shell.css`.
+
+- The requesting application is named by its registered `client_name`, which
+  is self-chosen and untrusted: it is set as text only, shortened in the
+  title past 60 characters, and marked "Unverified". The redirect host, the one
+  fact the provider checks, sits beside it. The client ID and resource are under
+  "Application details".
+- Scopes are listed in plain language. `boxel:write` is marked as a caution,
+  and a request without it says the application can't save changes.
+- No workspace starts selected; Allow stays disabled until the user picks at
+  least one. Renewal is offered as an unchecked choice unless the client asked
+  for `offline_access`, and both say where to revoke.
+- Focus lands on the request's title, never on Allow. The page carries Boxel's
+  own top bar (the signed-in account, with "Not you?") and footer (Boxel's
+  privacy, terms and support links). Nothing a client registered appears there.
+- `/oauth/grants` returns each grant's `client_name` for the management page.
+
 ## Endpoints and client setup
 
 Discovery is served at `/.well-known/oauth-authorization-server` and
