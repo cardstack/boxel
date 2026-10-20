@@ -120,7 +120,8 @@ function base64url(bytes) {
 
 // Sends this window to Google. The state, nonce and PKCE verifier stay in this
 // origin's session storage; `resume` is whatever the callback needs to carry
-// on with (which client, and the CLI's listener).
+// on with, or to start again from (which client, the CLI's listener, and the
+// username the CLI named).
 export async function beginGoogleSignIn(google, resume) {
   let state = randomToken();
   let nonce = randomToken();
@@ -151,7 +152,8 @@ export async function beginGoogleSignIn(google, resume) {
 
 // Finishes a Google sign-in on the callback page: checks that Google answered
 // the sign-in this window started, and exchanges the code for a session.
-// Returns the session and the `resume` the sign-in began with.
+// Returns the session and the `resume` the sign-in began with. An error thrown
+// once the sign-in is recognised carries that `resume` too.
 export async function finishGoogleSignIn(config) {
   let params = new URL(window.location.href).searchParams;
   let pending;
@@ -171,31 +173,42 @@ export async function finishGoogleSignIn(config) {
       'This sign-in wasn’t started here. Start again.',
     );
   }
-  let code = params.get('code');
-  if (!code) {
-    throw new SecureSessionError(
-      401,
-      'google-cancelled',
-      'Google sign-in didn’t finish. Start again.',
-    );
-  }
-  let json = await request(
-    new URL('_secure-session/google', config.realmServerURL),
-    {
-      body: {
-        data: {
-          type: 'google-sign-in',
-          attributes: {
-            code,
-            codeVerifier: pending.codeVerifier,
-            nonce: pending.nonce,
-            client: pending.resume?.client ?? 'window',
+  // From here on, a failure carries the `resume` the sign-in began with, so the
+  // page can send the user back to where they started.
+  try {
+    let code = params.get('code');
+    if (!code) {
+      // Google answers a sign-in the user declined, by pressing Cancel, with
+      // `error=access_denied`.
+      throw new SecureSessionError(
+        401,
+        params.get('error') === 'access_denied'
+          ? 'google-cancelled'
+          : 'google-failed',
+        'Google sign-in didn’t finish. Start again.',
+      );
+    }
+    let json = await request(
+      new URL('_secure-session/google', config.realmServerURL),
+      {
+        body: {
+          data: {
+            type: 'google-sign-in',
+            attributes: {
+              code,
+              codeVerifier: pending.codeVerifier,
+              nonce: pending.nonce,
+              client: pending.resume?.client ?? 'window',
+            },
           },
         },
       },
-    },
-  );
-  return { session: json.data.attributes, resume: pending.resume };
+    );
+    return { session: json.data.attributes, resume: pending.resume };
+  } catch (e) {
+    e.resume = pending.resume;
+    throw e;
+  }
 }
 
 // The window's session, while it lasts.

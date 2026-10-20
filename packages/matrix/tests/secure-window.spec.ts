@@ -9,6 +9,7 @@ import {
   createSubscribedUserAndLogin,
   getExternalIdsForIdp,
   logout,
+  oauthErrorResponseURL,
   setupPermissions,
   subjectFor,
   updateSynapseUser,
@@ -70,6 +71,40 @@ async function openSecureWindow(page: Page, query: string): Promise<Page> {
   let secure = await page.context().newPage();
   await secure.goto(`${secureOriginURL}?${query}`);
   return secure;
+}
+
+// Stands in for the CLI's loopback listener: resolves `received` with the
+// form the secure window posts to it.
+async function startCliListener() {
+  let resolveReceived!: (body: URLSearchParams) => void;
+  let received = new Promise<URLSearchParams>(
+    (resolve) => (resolveReceived = resolve),
+  );
+  let server = createServer((req, res) => {
+    let body = '';
+    req.on('data', (chunk) => (body += chunk));
+    req.on('end', () => {
+      res.writeHead(200, {
+        'Content-Type': 'text/html',
+        Connection: 'close',
+      });
+      res.end('<h1>You’re signed in</h1>', () =>
+        resolveReceived(new URLSearchParams(body)),
+      );
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  let { port } = server.address() as AddressInfo;
+  return { port, received, close: () => server.close() };
+}
+
+// Starts a Google sign-in from the secure window and, from the identity
+// provider's login page, returns the window to its callback with an OAuth
+// error response, as Google does when the user presses Cancel.
+async function returnFromGoogleWithError(secure: Page, error: string) {
+  await secure.locator('[data-test-secure-google]').click();
+  await expect(secure.locator('input[name="username"]')).toBeVisible();
+  await secure.goto(oauthErrorResponseURL(secure.url(), error));
 }
 
 // Signs in on the mock identity provider's form, as the given Google account.
@@ -402,28 +437,7 @@ test.describe('the secure window signs in on its own', () => {
       await createSubscribedUserAndLogin(page, 'secure-cli');
     await expectAppSignedIn(page);
 
-    // Stands in for the CLI's loopback listener.
-    let resolveReceived!: (body: URLSearchParams) => void;
-    let received = new Promise<URLSearchParams>(
-      (resolve) => (resolveReceived = resolve),
-    );
-    let server = createServer((req, res) => {
-      let body = '';
-      req.on('data', (chunk) => (body += chunk));
-      req.on('end', () => {
-        res.writeHead(200, {
-          'Content-Type': 'text/html',
-          Connection: 'close',
-        });
-        res.end('<h1>You’re signed in</h1>', () =>
-          resolveReceived(new URLSearchParams(body)),
-        );
-      });
-    });
-    await new Promise<void>((resolve) =>
-      server.listen(0, '127.0.0.1', resolve),
-    );
-    let { port } = server.address() as AddressInfo;
+    let { port, received, close } = await startCliListener();
     let state = randomBytes(16).toString('hex');
 
     let secure = await openSecureWindow(
@@ -438,7 +452,7 @@ test.describe('the secure window signs in on its own', () => {
     await secure.locator('[data-test-secure-password-submit]').click();
 
     let posted = await received;
-    server.close();
+    close();
     expect(posted.get('state')).toBe(state);
     expect(posted.get('user_id')).toBe(credentials.userId);
     let claims = JSON.parse(
@@ -457,6 +471,82 @@ test.describe('the secure window signs in on its own', () => {
       await check.evaluate((key) => localStorage.getItem(key), STORAGE_KEY),
       "the CLI's session is not kept in the window",
     ).toBeNull();
+  });
+
+  test('cancelling at Google returns the window to its sign-in', async ({
+    page,
+  }) => {
+    let secure = await openSecureWindow(page, 'mode=sign-in');
+    await returnFromGoogleWithError(secure, 'access_denied');
+
+    await secure.waitForURL(
+      (url) => url.searchParams.get('mode') === 'sign-in',
+    );
+    await expect(secure.locator('[data-test-secure-google]')).toBeVisible();
+    await expect(secure.locator('[data-test-secure-error]')).toBeHidden();
+  });
+
+  test('cancelling at Google returns a CLI sign-in to its own page, and the CLI still gets its session', async ({
+    page,
+  }) => {
+    let { username, password, credentials } =
+      await createSubscribedUserAndLogin(page, 'secure-cli-cancel');
+    await expectAppSignedIn(page);
+    let { port, received, close } = await startCliListener();
+    let state = randomBytes(16).toString('hex');
+
+    let secure = await openSecureWindow(
+      page,
+      `mode=cli-sign-in&port=${port}&state=${state}&user=${username}`,
+    );
+    await returnFromGoogleWithError(secure, 'access_denied');
+
+    // Back on the CLI's sign-in, for the same listener and username.
+    await secure.waitForURL(
+      (url) =>
+        url.searchParams.get('mode') === 'cli-sign-in' &&
+        url.searchParams.get('port') === String(port) &&
+        url.searchParams.get('state') === state &&
+        url.searchParams.get('user') === username,
+    );
+    await expect(secure.locator('[data-test-secure-username]')).toHaveValue(
+      username,
+    );
+
+    // The CLI has kept waiting, and signing in with a password reaches it.
+    await secure.locator('[data-test-secure-password]').fill(password);
+    await secure.locator('[data-test-secure-password-submit]').click();
+    let posted = await received;
+    close();
+    expect(posted.get('state')).toBe(state);
+    expect(posted.get('user_id')).toBe(credentials.userId);
+  });
+
+  test('a Google sign-in that fails during a CLI sign-in starts again on the CLI’s page', async ({
+    page,
+  }) => {
+    let state = randomBytes(16).toString('hex');
+    let secure = await openSecureWindow(
+      page,
+      `mode=cli-sign-in&port=4999&state=${state}&user=someone`,
+    );
+    await returnFromGoogleWithError(secure, 'server_error');
+
+    await expect(secure.locator('[data-test-secure-error]')).toContainText(
+      'Google sign-in didn’t finish',
+    );
+    let startAgain = new URL(
+      (await secure
+        .locator('[data-test-secure-start-again]')
+        .getAttribute('href'))!,
+      secure.url(),
+    );
+    expect(Object.fromEntries(startAgain.searchParams)).toEqual({
+      mode: 'cli-sign-in',
+      port: '4999',
+      state,
+      user: 'someone',
+    });
   });
 
   test('refuses a CLI sign-in link that names no listener on this machine', async ({
