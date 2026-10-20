@@ -126,7 +126,7 @@ module(
       // `aria-disabled="true"` — this is the reliable signal for
       // "the realm picker is locked". A custom dynamic data-test
       // attribute bound through Picker's `...attributes` does not
-      // round-trip its reactivity through the BoxelMultiSelectBasic →
+      // round-trip its reactivity through the BoxelMultiSelect →
       // PowerSelect → ember-basic-dropdown chain.
       assert
         .dom('[data-test-card-chooser-modal] [data-test-realm-picker]')
