@@ -32,9 +32,24 @@ or choose another way to sign in. #}
 </p>
 {% else %}
 <p style="margin: 0; margin-bottom: 15px" data-test-sso-error>
-  {% if error_description %}{{ error_description }}{% else %}Something went
-  wrong while signing you in.{% endif %}
+  Something went wrong while signing you in.
 </p>
+{# `error_description` comes from the callback URL, which anyone can link to, so
+it is shown only as the sign-in service's quoted words, never as Boxel's. #} {%
+if error_description %}
+<blockquote
+  style="
+    margin: 0;
+    margin-bottom: 15px;
+    padding-left: 12px;
+    border-left: 3px solid #d3d3d3;
+    color: #555;
+  "
+  data-test-sso-error-detail
+>
+  The sign-in service reported: “{{ error_description }}”
+</blockquote>
+{% endif %}
 <p style="margin: 0; margin-bottom: 15px">Error code: {{ error }}</p>
 {% endif %}
 <p style="margin: 0">

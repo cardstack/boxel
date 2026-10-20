@@ -195,8 +195,13 @@ test.describe('Google sign-in that does not complete (mock OIDC)', () => {
       errorDescription: 'The identity provider is unavailable',
     });
 
-    await expect(page.locator('[data-test-sso-error]')).toContainText(
-      'The identity provider is unavailable',
+    // The provider's description is shown only as its quoted words, apart
+    // from Boxel's own sentence, since anyone can put it in a callback link.
+    await expect(page.locator('[data-test-sso-error]')).toHaveText(
+      'Something went wrong while signing you in.',
+    );
+    await expect(page.locator('[data-test-sso-error-detail]')).toContainText(
+      'The sign-in service reported: “The identity provider is unavailable”',
     );
     await expect(page.locator('[data-test-sso-return-link]')).toHaveAttribute(
       'href',
