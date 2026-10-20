@@ -10,7 +10,7 @@ Wraps `boxel browse`, which mints a Matrix login token from a saved profile and 
 
 - **A host on another origin.** A host served from `http://localhost:<port>/`, a preview, or any origin other than the environment's own can't use the email/password form: that form is a frame from the secure origin (`secure.stack.cards`, `secure.boxel.ai`), which only the environment's own app origins may frame. The symptom is a sign-in page whose email/password area is blank. `boxel browse --host-url` skips the form entirely. (Google SSO also works there.)
 - **Showing the user a change.** They want to see it signed in, and a profile already has the account.
-- **Opening a card signed in.** Pass the card's path on the realm server, for example `ctse/my-realm/Person/1` (owner, realm, then the card), not a path inside one realm. With no card path the app opens on the workspace chooser.
+- **Opening a card signed in.** Pass the card's path on the realm server, for example `alice/my-realm/Person/1` (owner, realm, then the card), not a path inside one realm. With no card path the app opens on the workspace chooser.
 
 ## Run it yourself
 
@@ -22,7 +22,7 @@ When the user wants a browser signed in, run `boxel browse` for them. Don't hand
 | Local or custom host against staging  | `boxel browse [card-path] --profile <id> --host-url http://localhost:<port>/` |
 | Rate-limited                          | add `--wait`                                                           |
 
-`boxel profile list` shows the profiles; match an account the user names ("my tribecaprep account") to its ID there, and pass `--profile` even when it is the active one. A staging profile is `@<user>:stack.cards`, with realm server `https://realms-staging.stack.cards/`; a production one is `@<user>:boxel.ai`, with `https://app.boxel.ai/`. Without `--host-url`, the token is redeemed on the profile's realm-server origin (`https://localhost:4200/` for standard local dev).
+`boxel profile list` shows the profiles; match an account the user names ("my test account") to its ID there, and pass `--profile` even when it is the active one. A staging profile is `@<user>:stack.cards`, with realm server `https://realms-staging.stack.cards/`; a production one is `@<user>:boxel.ai`, with `https://app.boxel.ai/`. Without `--host-url`, the token is redeemed on the profile's realm-server origin (`https://localhost:4200/` for standard local dev).
 
 The browser that opens is the user's default browser, not one you drive. You can't see it, so a clean exit ("Opening <host> as <id>") is all the confirmation you get: tell the user which account should be signed in and to say if the page shows otherwise.
 
