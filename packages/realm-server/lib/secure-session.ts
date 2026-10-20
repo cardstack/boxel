@@ -243,16 +243,20 @@ async function userByEmail(
   return typeof body.user_id === 'string' ? body.user_id : undefined;
 }
 
-// The Matrix user a password sign-in names: a full Matrix id as given, an
-// email address by the account it is bound to, or a bare username on this
-// realm server's Matrix server. Undefined when there is no such account.
+// The Matrix user a password sign-in names: a full Matrix id on this realm
+// server's Matrix server, an email address by the account it is bound to, or a
+// bare username on that server. Undefined when there is no such account,
+// including for an id on another server, which no account here can be.
 async function resolveMatrixUser(
   deps: SecureSessionDeps,
   username: string,
 ): Promise<string | undefined> {
   let name = username.trim();
   if (name.startsWith('@')) {
-    return /^@[^:\s]+:\S+$/.test(name) ? name : undefined;
+    let match = /^@[^:\s]+:(\S+)$/.exec(name);
+    return match && match[1] === (await matrixServerName(deps))
+      ? name
+      : undefined;
   }
   if (name.includes('@')) {
     return await userByEmail(deps, name.toLowerCase());

@@ -110,7 +110,11 @@ function checkMarkIcon() {
 export function loadingIndicator(className = '') {
   return h(
     'span',
-    { class: `loading-indicator ${className}`.trim(), role: 'presentation' },
+    {
+      class: `loading-indicator ${className}`.trim(),
+      role: 'presentation',
+      'data-loading-indicator': true,
+    },
     svg(
       'svg',
       { width: '15.5', height: '15.5', viewBox: '0 0 15.5 15.5' },
@@ -187,7 +191,7 @@ export function authButton(
 // `setLoading(button, false)`.
 export function setLoading(button, loading) {
   button.classList.toggle('loading', loading);
-  button.querySelector(':scope > .loading-indicator')?.remove();
+  button.querySelector(':scope > [data-loading-indicator]')?.remove();
   if (loading) {
     button.prepend(loadingIndicator());
   }

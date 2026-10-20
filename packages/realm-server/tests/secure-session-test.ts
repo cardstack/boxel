@@ -496,7 +496,11 @@ module(basename(import.meta.filename), function () {
         `${randomBytes(6).toString('hex')}@nowhere.test`,
         password,
       );
-      for (let refusal of [noSuchUser, noSuchEmail]) {
+      let otherServer = await passwordSignIn(
+        `@${username}:elsewhere.test`,
+        password,
+      );
+      for (let refusal of [noSuchUser, noSuchEmail, otherServer]) {
         assert.strictEqual(refusal.status, 401);
         assert.deepEqual(
           refusal.body,
@@ -508,6 +512,45 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         wrongPassword.body.errors[0].code,
         'invalid-credentials',
+      );
+    });
+
+    test("a sign-in the Matrix server can't look up is unavailable, not a wrong password", async function (assert) {
+      let { username, password, userId } =
+        await registerPasswordUser(dbAdapter);
+      // The Matrix server fails the admin lookup of this one account.
+      let lookup = `/_synapse/admin/v2/users/${encodeURIComponent(userId)}`;
+      let originalFetch = globalThis.fetch;
+      globalThis.fetch = (async (
+        input: RequestInfo | URL,
+        init?: RequestInit,
+      ) => {
+        let url = new URL(input instanceof Request ? input.url : String(input));
+        if (url.pathname === lookup && (init?.method ?? 'GET') === 'GET') {
+          return new Response(JSON.stringify({ errcode: 'M_UNKNOWN' }), {
+            status: 502,
+          });
+        }
+        return await originalFetch(input, init);
+      }) as typeof fetch;
+      let attempts;
+      try {
+        attempts = [];
+        for (let attempt = 0; attempt < 4; attempt++) {
+          attempts.push(await passwordSignIn(username, password));
+        }
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+      for (let response of attempts) {
+        assert.strictEqual(response.status, 503, response.text);
+        assert.strictEqual(response.body.errors[0].code, 'unavailable');
+      }
+      let recovered = await passwordSignIn(username, password);
+      assert.strictEqual(
+        recovered.status,
+        201,
+        'the failures were not counted against the account',
       );
     });
 
