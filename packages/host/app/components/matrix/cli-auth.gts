@@ -19,6 +19,7 @@ import {
 import ENV from '@cardstack/host/config/environment';
 import { cliAuthLoopbackUrl } from '@cardstack/host/lib/cli-auth-loopback';
 import { CredentialFields } from '@cardstack/host/lib/credential-fields';
+import { resetPasswordParamsFrom } from '@cardstack/host/lib/reset-password-link';
 import type MatrixService from '@cardstack/host/services/matrix-service';
 
 import AuthButton from './auth-button';
@@ -299,11 +300,20 @@ export default class CliAuth extends Component {
     // nonce it was requested with — so finishing a reset can hand the waiting
     // CLI its session without the user starting over.
     let params = new URLSearchParams(window.location.search);
-    let sid = params.get('sid');
-    let clientSecret = params.get('clientSecret');
-    if (sid && clientSecret) {
-      this.resetPasswordParams = { sid, clientSecret };
+    let reset = resetPasswordParamsFrom(
+      Object.fromEntries(params),
+      window.location.hash,
+    );
+    if (reset.params) {
+      this.resetPasswordParams = reset.params;
       this.resumedFromEmail = true;
+    }
+    if (reset.inFragment) {
+      window.history.replaceState(
+        {},
+        '',
+        window.location.pathname + window.location.search,
+      );
     }
 
     // The far side of the reload enterRegister() performs: come back up in

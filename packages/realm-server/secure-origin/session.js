@@ -20,6 +20,11 @@ const EXPIRY_MARGIN_MS = 60 * 1000;
 // How long the window waits to learn whether its session is still signed in
 // before it carries on with the session it has.
 const SESSION_CHECK_TIMEOUT_MS = 10 * 1000;
+// How long ending a changed password's sessions keeps trying while the
+// account's limit on failed password attempts refuses it, and how long it
+// waits between tries when the server doesn't say.
+const PASSWORD_CHANGE_RETRY_MS = 60 * 1000;
+const PASSWORD_CHANGE_RETRY_WAIT_MS = 6 * 1000;
 
 export class SecureSessionError extends Error {
   // `retryAfterMs`: for a 429, how long until the next attempt may be made,
@@ -111,18 +116,39 @@ export async function signInWithPassword(
 // account goes by, and `password` the new password, which the realm server
 // checks before it ends anything. The password is already changed, so a
 // failure here is reported to the caller, which carries on regardless.
+//
+// The check shares the account's limit on failed password attempts with
+// signing in, which whoever knows the old password can keep full. So a 429 is
+// tried again, when the server says it may be, for up to a minute: a correct
+// password never counts against the limit, so each try competes only for the
+// next free attempt.
 export async function endSessionsForNewPassword(
   config,
   { username, password },
 ) {
-  await request(
-    new URL('_secure-sessions/password-change', config.realmServerURL),
-    {
-      body: {
-        data: { type: 'password-change', attributes: { username, password } },
-      },
-    },
-  );
+  let deadline = Date.now() + PASSWORD_CHANGE_RETRY_MS;
+  for (;;) {
+    try {
+      await request(
+        new URL('_secure-sessions/password-change', config.realmServerURL),
+        {
+          body: {
+            data: {
+              type: 'password-change',
+              attributes: { username, password },
+            },
+          },
+        },
+      );
+      return;
+    } catch (e) {
+      let wait = e.retryAfterMs ?? PASSWORD_CHANGE_RETRY_WAIT_MS;
+      if (e.status !== 429 || Date.now() + wait > deadline) {
+        throw e;
+      }
+      await new Promise((resolve) => setTimeout(resolve, wait));
+    }
+  }
 }
 
 // The name of the Matrix server Boxel's accounts are on, which a username is

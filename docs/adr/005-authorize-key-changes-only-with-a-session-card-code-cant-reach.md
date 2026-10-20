@@ -168,7 +168,14 @@ sent to in its fragment, because the page it lands on otherwise knows only
 the validation session, which names no account.
 
 Like sign-out, the request is best effort. When it fails, a session signed in
-with the old password lasts until it expires, at most a week. A password set
+with the old password lasts until it expires, at most a week. Whoever holds
+the old password can try to make it fail by keeping the account's limit on
+failed attempts full with wrong passwords, so the pages try again for a
+minute when the limit refuses them. A correct password never counts against
+the limit, so each try competes only for the next free attempt. The limit
+stays because the route would otherwise answer guesses at the new password
+without limit to whoever still holds a session: that session ending is the
+answer. A password set
 outside Boxel, such as by an operator through Synapse's admin API, ends no
 session.
 
@@ -201,6 +208,10 @@ session.
   change logs out.** Card code holds the user's access token and can log all
   of the account's tokens out, which would end the CLI's sessions too. And the
   realm server would hold a live Matrix token for every session.
+- **Answering alike whether or not the password checks out, with no limit on
+  failed attempts.** The answer would say nothing, but whoever still holds a
+  session learns from it: it ends only when they guess the new password. With
+  no limit, that is a password oracle without a rate.
 - **Letting the app's session ask, as sign-out does.** Card code could then
   end the CLI's sessions. While card code keeps the windows signed out, the
   CLI is the only way left to replace a key.

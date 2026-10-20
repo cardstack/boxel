@@ -7,15 +7,14 @@ import { tracked } from '@glimmer/tracking';
 
 import { bool, eq, or } from '@cardstack/boxel-ui/helpers';
 
+import { resetPasswordParamsFrom } from '@cardstack/host/lib/reset-password-link';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 
 import AuthContainer from './auth-container';
 
-import ForgotPassword from './forgot-password';
+import ForgotPassword, { type ResetPasswordParams } from './forgot-password';
 import Login from './login';
 import RegisterUser from './register-user';
-
-import type { ResetPasswordParams } from './forgot-password';
 
 export type AuthMode = 'login' | 'register' | 'forgot-password';
 
@@ -46,24 +45,12 @@ export default class Auth extends Component {
   constructor(owner: Owner, args: any) {
     super(owner, args);
 
-    // A reset link carries the email address it was sent to in its
-    // fragment, and the Matrix server adds the validation session's id after
-    // it, so the id is in the fragment unless the link had none. The
-    // fragment is taken out of the address bar once read.
-    let fragment = new URLSearchParams(window.location.hash.slice(1));
-    let sid =
-      this.router.currentRoute?.queryParams['sid'] ??
-      fragment.get('sid') ??
-      undefined;
-    let clientSecret = this.router.currentRoute?.queryParams['clientSecret'];
-    if (sid && clientSecret) {
-      this.resetPasswordParams = {
-        sid: sid as string,
-        clientSecret: clientSecret as string,
-        email: fragment.get('email') ?? undefined,
-      };
-    }
-    if (fragment.has('sid') || fragment.has('email')) {
+    let { params, inFragment } = resetPasswordParamsFrom(
+      this.router.currentRoute?.queryParams ?? {},
+      window.location.hash,
+    );
+    this.resetPasswordParams = params;
+    if (inFragment) {
       window.history.replaceState(
         window.history.state,
         '',

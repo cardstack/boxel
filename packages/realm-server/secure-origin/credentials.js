@@ -24,6 +24,10 @@
 
 import { isListedOrigin } from './app-origins.js';
 import { redactResponse } from './redact.js';
+import {
+  endSessionsForNewPassword,
+  readConfig as readRealmServer,
+} from './session.js';
 
 const MATRIX_CLIENT_PREFIX = '_matrix/client/v3/';
 const MIN_PASSWORD_LENGTH = 8;
@@ -200,7 +204,6 @@ function readConfig() {
     '';
   return {
     matrixURL: new URL(meta('boxel-matrix-url')),
-    realmServerURL: new URL(meta('boxel-realm-server-url')),
     appOrigins: meta('boxel-app-origins').split(/\s+/).filter(Boolean),
   };
 }
@@ -539,7 +542,17 @@ function start(form) {
         },
       });
       if (result.ok && typeof account === 'string' && account) {
-        await endSessionsForNewPassword(account);
+        try {
+          await endSessionsForNewPassword(readRealmServer(), {
+            username: account,
+            password: value('password'),
+          });
+        } catch {
+          // The password is changed whatever the answer, so a failure is not
+          // the app's to see; a session the realm server couldn't end runs out
+          // within its week. The app can name any account, but only the new
+          // password, which it never sees, gets a session ended.
+        }
       }
       return result;
     },
@@ -584,37 +597,6 @@ function start(form) {
       },
     });
     return byEmail.ok ? byEmail : byUsername;
-  }
-
-  // Asks the realm server to end every secure session of the account whose
-  // password was just changed, proving it with the new password. The password
-  // is changed whatever the answer, so a failure is not the app's to see; a
-  // session the realm server couldn't end runs out within its week. The app
-  // can name any account, but only the new password, which it never sees,
-  // gets a session ended.
-  async function endSessionsForNewPassword(account) {
-    try {
-      await fetch(
-        new URL('_secure-sessions/password-change', config.realmServerURL),
-        {
-          method: 'POST',
-          headers: {
-            Accept: 'application/vnd.api+json',
-            'Content-Type': 'application/vnd.api+json',
-          },
-          body: JSON.stringify({
-            data: {
-              type: 'password-change',
-              attributes: { username: account, password: value('password') },
-            },
-          }),
-          credentials: 'omit',
-          referrerPolicy: 'no-referrer',
-        },
-      );
-    } catch {
-      // See above: the password is changed either way.
-    }
   }
 
   // An interactive-auth dict for the password stage carries the account's

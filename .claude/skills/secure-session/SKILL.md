@@ -91,7 +91,12 @@ answers only the secure origin, with the sign-in refusals below, and 204
 whether or not a row ended. Card code never sees the new password, so it
 can't end the CLI's sessions this way (ADR 005 §1.6). The call is best
 effort: the password stays changed when it fails, and a session signed in with
-the old password then lasts until it expires. A password set any other way,
+the old password then lasts until it expires. Whoever holds the old password
+can keep the account's failure limit full to make it fail, so
+`endSessionsForNewPassword` in `secure-origin/session.js` (which the credential
+fields import too) tries a 429 again, after `retryAfterMs`, for up to a
+minute. Don't drop the limit on this route: a caller holding a session would
+learn the new password from their session ending. A password set any other way,
 such as by an operator through Synapse's admin `reset_password`, ends no
 secure session. To end them, expire the rows.
 
