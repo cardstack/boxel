@@ -400,6 +400,59 @@ test.describe('the secure window signs in on its own', () => {
     ).toBeNull();
   });
 
+  test('says when to try again after too many failed sign-ins, as the app does', async ({
+    page,
+  }) => {
+    let { username, password } = await createSubscribedUserAndLogin(
+      page,
+      'secure-window-limit',
+    );
+    await expectAppSignedIn(page);
+    let secure = await openSecureWindow(page, 'mode=sign-in');
+    let error = secure.locator('[data-test-secure-error]');
+    await expect(secure.locator('[data-test-secure-username]')).toBeVisible();
+    // An account may fail three times in a row; the fourth attempt waits for
+    // the first failure to drain, which takes a few seconds. The failures are
+    // sent together from the window, so they all land well within that time.
+    let statuses = await secure.evaluate(async (username) => {
+      let realmServerURL = document
+        .querySelector('meta[name="boxel-realm-server-url"]')!
+        .getAttribute('content')!;
+      return await Promise.all(
+        [0, 1, 2].map(async (attempt) => {
+          let response = await fetch(
+            new URL('_secure-session', realmServerURL),
+            {
+              method: 'POST',
+              headers: {
+                Accept: 'application/vnd.api+json',
+                'Content-Type': 'application/vnd.api+json',
+              },
+              body: JSON.stringify({
+                data: {
+                  type: 'secure-session',
+                  attributes: {
+                    username,
+                    password: `not-the-password-${attempt}`,
+                    client: 'window',
+                  },
+                },
+              }),
+            },
+          );
+          return response.status;
+        }),
+      );
+    }, username);
+    expect(statuses).toEqual([401, 401, 401]);
+    await secure.locator('[data-test-secure-username]').fill(username);
+    await secure.locator('[data-test-secure-password]').fill(password);
+    await secure.locator('[data-test-secure-password-submit]').click();
+    await expect(error).toHaveText(
+      'Sign-in failed. Too many failed attempts, try again in a few seconds.',
+    );
+  });
+
   test('cancelling at Google returns the window to its sign-in', async ({
     page,
   }) => {

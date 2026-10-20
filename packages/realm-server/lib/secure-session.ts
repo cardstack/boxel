@@ -45,6 +45,7 @@ import {
 } from './google-account.ts';
 import { GOOGLE_CALLBACK_PATH } from './secure-origin.ts';
 import { ensureSessionRoom } from './session-room.ts';
+import type { SignInLimiter } from './sign-in-limiter.ts';
 
 // A session signed in on the secure origin: the credential that minting a key
 // write ticket requires, which card code can't reach.
@@ -87,14 +88,18 @@ export type SecureSessionClient = 'window' | 'cli';
 export class SecureSessionError extends Error {
   readonly status: 400 | 401 | 403 | 409 | 429 | 503;
   readonly code: string;
+  // For a 429, how long until the caller may try again, when that's known.
+  readonly retryAfterMs?: number;
   constructor(
     status: SecureSessionError['status'],
     code: string,
     message: string,
+    opts: { retryAfterMs?: number } = {},
   ) {
     super(message);
     this.status = status;
     this.code = code;
+    this.retryAfterMs = opts.retryAfterMs;
   }
 }
 
@@ -128,11 +133,21 @@ function invalidCredentials() {
   );
 }
 
-function rateLimited() {
+// Too many failed sign-ins for the account, refused by this server's limit or
+// the Matrix server's.
+function rateLimited(retryAfterMs: unknown) {
   return new SecureSessionError(
     429,
     'rate-limited',
-    'too many attempts; wait a moment and try again',
+    'too many failed attempts; try again later',
+    {
+      retryAfterMs:
+        typeof retryAfterMs === 'number' &&
+        Number.isFinite(retryAfterMs) &&
+        retryAfterMs >= 0
+          ? Math.ceil(retryAfterMs)
+          : undefined,
+    },
   );
 }
 
@@ -245,6 +260,21 @@ async function resolveMatrixUser(
 interface MatrixResult {
   status: number;
   body: Record<string, any>;
+  // For a 429, how long the Matrix server asks the caller to wait: the body's
+  // `retry_after_ms`, or else the standard `Retry-After` header, which a
+  // Matrix server may send on its own (the body field is deprecated).
+  retryAfterMs?: number;
+}
+
+function matrixRetryAfterMs(
+  response: Response,
+  body: Record<string, any>,
+): number | undefined {
+  if (typeof body.retry_after_ms === 'number') {
+    return body.retry_after_ms;
+  }
+  let seconds = Number(response.headers.get('Retry-After') ?? NaN);
+  return Number.isFinite(seconds) ? seconds * 1000 : undefined;
 }
 
 // The request whose UIA check confirms a password. It adds a third-party
@@ -277,7 +307,12 @@ async function attemptThreepidAdd(
   } catch {
     // A response that isn't JSON is judged by its status alone.
   }
-  return { status: response.status, body };
+  return {
+    status: response.status,
+    body,
+    retryAfterMs:
+      response.status === 429 ? matrixRetryAfterMs(response, body) : undefined,
+  };
 }
 
 // Runs `fn` with a Matrix access token for `user` minted through the admin
@@ -311,19 +346,42 @@ async function asUser<T>(
 }
 
 // Signs in with a password, checked by the Matrix server's UIA check as
-// described above.
+// described above. Only failures count against the account's limit (see
+// `sign-in-limiter.ts`), and an account over it is refused before its
+// password is checked. Failures are counted as the Matrix server counts failed
+// logins: against the Matrix user id the account resolves to, however it was
+// named, or against the name itself when it names no account.
 export async function signInWithPassword(
   deps: SecureSessionDeps,
-  {
-    username,
-    password,
-    client,
-  }: { username: string; password: string; client: SecureSessionClient },
+  limiter: SignInLimiter,
+  attempt: { username: string; password: string; client: SecureSessionClient },
 ): Promise<SignedInSession> {
-  if (!username.trim() || !password) {
+  if (!attempt.username.trim() || !attempt.password) {
     throw invalidCredentials();
   }
-  let user = await resolveMatrixUser(deps, username);
+  let user = await resolveMatrixUser(deps, attempt.username);
+  let account = (user ?? attempt.username.trim()).toLowerCase();
+  let check = limiter.start(account);
+  if (!check.allowed) {
+    throw rateLimited(check.retryAfterMs);
+  }
+  let failed = false;
+  try {
+    return await checkPassword(deps, user, attempt);
+  } catch (e) {
+    failed =
+      e instanceof SecureSessionError && e.code === 'invalid-credentials';
+    throw e;
+  } finally {
+    limiter.finish(account, { failed });
+  }
+}
+
+async function checkPassword(
+  deps: SecureSessionDeps,
+  user: string | undefined,
+  { password, client }: { password: string; client: SecureSessionClient },
+): Promise<SignedInSession> {
   if (!user || !(await fetchSessionRoom(deps.dbAdapter, user))) {
     throw invalidCredentials();
   }
@@ -339,7 +397,7 @@ export async function signInWithPassword(
     throw invalidCredentials();
   }
   if (started.status === 429) {
-    throw rateLimited();
+    throw rateLimited(started.retryAfterMs);
   }
   let uiaSession = started.body.session;
   if (started.status !== 401 || typeof uiaSession !== 'string') {
@@ -367,7 +425,7 @@ export async function signInWithPassword(
     throw invalidCredentials();
   }
   if (completed.status === 429) {
-    throw rateLimited();
+    throw rateLimited(completed.retryAfterMs);
   }
   if (completed.status === 401) {
     throw invalidCredentials();

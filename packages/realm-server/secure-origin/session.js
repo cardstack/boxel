@@ -19,10 +19,13 @@ const JSON_API = 'application/vnd.api+json';
 const EXPIRY_MARGIN_MS = 60 * 1000;
 
 export class SecureSessionError extends Error {
-  constructor(status, code, message) {
+  // `retryAfterMs`: for a 429, how long until the next attempt may be made,
+  // when the server says.
+  constructor(status, code, message, retryAfterMs) {
     super(message);
     this.status = status;
     this.code = code;
+    this.retryAfterMs = retryAfterMs;
   }
 }
 
@@ -61,11 +64,14 @@ async function request(url, { method = 'POST', body, token } = {}) {
   }
   if (!response.ok) {
     let error = json?.errors?.[0];
+    let retryAfterMs =
+      typeof error === 'object' ? error?.meta?.retryAfterMs : undefined;
     throw new SecureSessionError(
       response.status,
       typeof error === 'object' ? error.code : undefined,
       (typeof error === 'object' ? error.detail : error) ||
         'Something went wrong. Try again.',
+      typeof retryAfterMs === 'number' ? retryAfterMs : undefined,
     );
   }
   return json;
