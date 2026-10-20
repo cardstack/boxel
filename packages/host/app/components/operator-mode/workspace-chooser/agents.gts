@@ -9,7 +9,6 @@ import Check from '@cardstack/boxel-icons/check';
 import Copy from '@cardstack/boxel-icons/copy';
 import MessageCircle from '@cardstack/boxel-icons/message-circle';
 import Sparkles from '@cardstack/boxel-icons/sparkles';
-import SquareTerminal from '@cardstack/boxel-icons/square-terminal';
 import { restartableTask, timeout } from 'ember-concurrency';
 
 import { Button, RealmIcon } from '@cardstack/boxel-ui/components';
@@ -23,72 +22,50 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import { formatRelativeTime } from './nav-rail';
 
 const RECENT_SESSION_COUNT = 3;
-const PULLABLE_WORKSPACE_COUNT = 4;
+const PICKABLE_WORKSPACE_COUNT = 4;
 const COPIED_FEEDBACK_MS = 2000;
+const STEP_COUNT = 5;
 
-const INSTALL_CLI = 'npm install -g @cardstack/boxel-cli';
-const SIGN_IN = 'boxel profile add';
+type AgentId = 'claude' | 'codex';
 
-// A line of a setup recipe: typed into the shell, or into the agent itself.
-interface SetupLine {
-  text: string;
-  where: 'shell' | 'agent';
-}
-
-interface Harness {
-  id: 'claude-code' | 'codex';
-  name: string;
-  lede: string;
-  lines: SetupLine[];
-}
-
-// The commands come from the boxel-cli plugin README, which owns them.
-const HARNESSES: Harness[] = [
-  {
-    id: 'claude-code',
-    name: 'Claude Code',
-    lede: 'Install the CLI, sign in, then add the Boxel plugin.',
-    lines: [
-      { text: INSTALL_CLI, where: 'shell' },
-      { text: SIGN_IN, where: 'shell' },
-      { text: '/plugin marketplace add cardstack/boxel', where: 'agent' },
-      { text: '/plugin install boxel-cli', where: 'agent' },
-    ],
-  },
-  {
-    id: 'codex',
-    name: 'Codex',
-    lede: 'Codex has no plugin dependencies, so install both plugins.',
-    lines: [
-      { text: INSTALL_CLI, where: 'shell' },
-      { text: SIGN_IN, where: 'shell' },
-      { text: '/plugin marketplace add cardstack/boxel', where: 'agent' },
-      { text: '/plugin install boxel-cli@cardstack-boxel', where: 'agent' },
-      { text: '/plugin install boxel-skills@cardstack-boxel', where: 'agent' },
-    ],
-  },
+const AGENTS: { id: AgentId; label: string }[] = [
+  { id: 'claude', label: 'Claude Code' },
+  { id: 'codex', label: 'Codex' },
 ];
 
-interface PullableWorkspace {
+interface SetupStep {
+  index: number;
+  number: number;
+  title: string;
+  note: string;
+  command: string;
+  state: 'done' | 'now' | 'later';
+  isPull: boolean;
+}
+
+interface PickableWorkspace {
   url: string;
   name: string;
   info: ReturnType<RealmService['info']>;
-  command: string;
 }
 
-// The dashboard's Agents section: Boxel AI, which works inside Boxel, and
-// the agents a user runs on their own machine through the Boxel CLI. Nothing
-// here reports what an agent is doing; it gets one connected and hands it a
-// workspace.
+// The dashboard's Agents section: how to build in Boxel with the agent a
+// user already has. Five steps take them from installing the Boxel CLI to
+// pushing their agent's first change, for Claude Code or Codex; beside them,
+// Boxel AI for anyone without an agent of their own.
 export default class Agents extends Component {
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
   @service declare private matrixService: MatrixService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
 
-  @tracked private copiedId: string | null = null;
+  @tracked private agent: AgentId = 'claude';
+  @tracked private pickedWorkspaceURL: string | null = null;
+  // A step the user opened by hand; otherwise the next one to do is open.
+  @tracked private openedStep: number | null = null;
+  @tracked private copiedStep: number | null = null;
 
-  private harnesses = HARNESSES;
+  private agents = AGENTS;
 
   private get recentSessions() {
     return this.aiAssistantPanelService.aiSessionRooms.slice(
@@ -98,45 +75,114 @@ export default class Agents extends Component {
   }
 
   // Favorites first, since they're what the user works on, then the rest of
-  // their own workspaces. Catalogs are left out: they're read-only to most.
-  private get pullableWorkspaces(): PullableWorkspace[] {
+  // their own workspaces. Catalogs are left out: most users can't push there.
+  private get workspaces(): PickableWorkspace[] {
     let own = this.realmServer.userRealmIdentifiers as string[];
     let ownSet = new Set(own);
     let favorites = this.matrixService.workspaceFavorites.filter((url) =>
       ownSet.has(url),
     );
-    let ordered = [...new Set([...favorites, ...own])];
-    return ordered.slice(0, PULLABLE_WORKSPACE_COUNT).map((url) => {
-      let info = this.realm.info(url);
-      return {
-        url,
-        name: info.name,
-        info,
-        command: `boxel realm pull ${url} ./${localDirFor(url)}`,
-      };
-    });
+    return [...new Set([...favorites, ...own])]
+      .slice(0, PICKABLE_WORKSPACE_COUNT)
+      .map((url) => {
+        let info = this.realm.info(url);
+        return { url, name: info.name, info };
+      });
   }
 
-  private copyTask = restartableTask(async (id: string, text: string) => {
-    await navigator.clipboard.writeText(text);
-    this.copiedId = id;
-    if (!this.matrixService.dashboardState.agentCommandCopied) {
+  private get workspaceURL() {
+    return this.pickedWorkspaceURL ?? this.workspaces[0]?.url;
+  }
+
+  private get doneCount() {
+    let done = this.matrixService.dashboardState.agentSetupDone ?? 0;
+    return Math.min(Math.max(done, 0), STEP_COUNT);
+  }
+
+  private get openIndex() {
+    return this.openedStep ?? Math.min(this.doneCount, STEP_COUNT - 1);
+  }
+
+  private get steps(): SetupStep[] {
+    let realmURL = this.workspaceURL ?? '<workspace URL>';
+    let folder = localDirFor(realmURL);
+    let agentName = this.agent === 'codex' ? 'Codex' : 'Claude Code';
+    let steps: [string, string, string][] = [
+      [
+        'Install the Boxel CLI',
+        'One command, once per computer',
+        'npm install -g @cardstack/boxel-cli',
+      ],
+      [
+        'Sign in from the terminal',
+        'Opens a browser to confirm it’s you',
+        'boxel profile add',
+      ],
+      [
+        'Pull a workspace to work on',
+        'Any workspace you can edit',
+        `boxel realm pull ${realmURL} ./${folder}`,
+      ],
+      [
+        `Open ${agentName} in that folder`,
+        'The workspace’s skills come along as your agent’s',
+        `cd ${folder} && ${this.agent}`,
+      ],
+      [
+        'Make a change and push it',
+        'Your agent’s edits land in Boxel as cards',
+        `boxel realm push ./${folder} ${realmURL}`,
+      ],
+    ];
+    return steps.map(([title, note, command], index) => ({
+      index,
+      number: index + 1,
+      title,
+      note,
+      command,
+      state:
+        index < this.doneCount
+          ? 'done'
+          : index === this.doneCount
+            ? 'now'
+            : 'later',
+      isPull: index === 2,
+    }));
+  }
+
+  @action private pickAgent(agent: AgentId) {
+    this.agent = agent;
+  }
+
+  @action private pickWorkspace(url: string) {
+    this.pickedWorkspaceURL = url;
+  }
+
+  @action private openStep(index: number) {
+    this.openedStep = index;
+  }
+
+  // Copying a step's command is as close as the dashboard can get to seeing
+  // it run, so it ticks the step and opens the next.
+  private copyTask = restartableTask(async (step: SetupStep) => {
+    await navigator.clipboard.writeText(step.command);
+    this.copiedStep = step.index;
+    let done = Math.max(this.doneCount, step.index + 1);
+    if (
+      done !== this.doneCount ||
+      !this.matrixService.dashboardState.agentCommandCopied
+    ) {
       await this.matrixService.updateDashboardState({
+        agentSetupDone: done,
         agentCommandCopied: true,
       });
     }
     await timeout(COPIED_FEEDBACK_MS);
-    this.copiedId = null;
+    this.copiedStep = null;
+    if (this.openedStep === step.index) {
+      this.openedStep = null;
+    }
   });
-
-  @action private copySetup(harness: Harness) {
-    let text = harness.lines.map((line) => line.text).join('\n');
-    this.copyTask.perform(harness.id, text);
-  }
-
-  @action private copyPull(workspace: PullableWorkspace) {
-    this.copyTask.perform(workspace.url, workspace.command);
-  }
 
   @action private async openSession(roomId: string) {
     // `openPanel` reselects the persisted room, so enter it first.
@@ -152,229 +198,513 @@ export default class Agents extends Component {
   private formatWhen = (timestamp: number) => formatRelativeTime(timestamp);
 
   <template>
-    <div class='agent-list' data-theme='dark' data-test-agents-list>
-      <article class='agent-tile is-boxel-ai' data-test-agent-tile='boxel-ai'>
-        <div class='agent-head'>
-          <span class='agent-mark'>
-            <Sparkles width='16' height='16' />
-          </span>
-          <span class='agent-name'>Boxel AI</span>
-          <span class='agent-where'>in Boxel</span>
-        </div>
-        <p class='agent-lede'>
-          Builds and changes cards in whichever workspace you have open.
+    <div class='make' data-theme='dark' data-test-agents>
+      <div class='pitch'>
+        <span class='eyebrow'>Bring your own agent</span>
+        <h3 class='pitch-title'>Build with the agent you already pay for</h3>
+        <p class='pitch-body'>
+          The Boxel CLI puts a workspace on your computer as files. Claude Code
+          or Codex edits its cards like any other code, and a push puts them
+          back in Boxel, live.
         </p>
-        {{#if this.recentSessions.length}}
-          <ul class='session-list'>
-            {{#each this.recentSessions as |session|}}
-              <li>
+      </div>
+
+      <div class='bench'>
+        <section class='steps' aria-label='Connect your agent'>
+          <div class='steps-top'>
+            <span class='steps-title'>
+              <b>Connect your agent</b>
+              <span
+                class='muted'
+                data-test-agent-setup-progress
+              >{{this.doneCount}} of 5 done</span>
+            </span>
+            <span class='agent-pick' role='group' aria-label='Your agent'>
+              {{#each this.agents as |agent|}}
                 <button
                   type='button'
-                  class='session-row'
-                  {{on 'click' (fn this.openSession session.roomId)}}
-                  data-test-agent-session={{session.roomId}}
+                  class='agent-option'
+                  aria-pressed={{if (eq this.agent agent.id) 'true' 'false'}}
+                  {{on 'click' (fn this.pickAgent agent.id)}}
+                  data-test-agent-pick={{agent.id}}
+                >{{agent.label}}</button>
+              {{/each}}
+            </span>
+          </div>
+          <div class='progress' aria-hidden='true'>
+            {{#each this.steps as |step|}}
+              <i class='bar {{stateClass step.state}}'></i>
+            {{/each}}
+          </div>
+          <ol class='step-list'>
+            {{#each this.steps as |step|}}
+              <li
+                class={{cn
+                  'step'
+                  (stateClass step.state)
+                  is-open=(eq this.openIndex step.index)
+                }}
+                data-test-agent-step={{step.number}}
+              >
+                <button
+                  type='button'
+                  class='step-head'
+                  aria-expanded={{if
+                    (eq this.openIndex step.index)
+                    'true'
+                    'false'
+                  }}
+                  {{on 'click' (fn this.openStep step.index)}}
                 >
-                  <MessageCircle class='session-icon' width='14' height='14' />
-                  <span class='session-name'>{{session.name}}</span>
-                  <span class='session-when'>{{this.formatWhen
-                      session.lastActiveTimestamp
-                    }}</span>
+                  <span class='step-number'>
+                    {{#if (eq step.state 'done')}}
+                      <Check width='14' height='14' />
+                    {{else}}
+                      {{step.number}}
+                    {{/if}}
+                  </span>
+                  <span class='step-words'>
+                    <b>{{step.title}}</b>
+                    <span class='muted'>{{step.note}}</span>
+                  </span>
+                  <span class='step-state'>{{stateLabel step.state}}</span>
                 </button>
+                {{#if (eq this.openIndex step.index)}}
+                  <div class='step-body'>
+                    {{#if step.isPull}}
+                      <span
+                        class='workspace-pick'
+                        role='group'
+                        aria-label='Workspace to pull'
+                      >
+                        {{#each this.workspaces key='url' as |workspace|}}
+                          <button
+                            type='button'
+                            class='workspace-option'
+                            aria-pressed={{if
+                              (eq this.workspaceURL workspace.url)
+                              'true'
+                              'false'
+                            }}
+                            {{on 'click' (fn this.pickWorkspace workspace.url)}}
+                            data-test-agent-workspace={{workspace.url}}
+                          >
+                            <RealmIcon
+                              class='workspace-icon'
+                              @realmInfo={{workspace.info}}
+                            />
+                            <span
+                              class='workspace-name'
+                            >{{workspace.name}}</span>
+                          </button>
+                        {{/each}}
+                      </span>
+                    {{/if}}
+                    <span class='command'>
+                      <code
+                        class='command-text'
+                        data-test-agent-command
+                      >{{step.command}}</code>
+                      <button
+                        type='button'
+                        class={{cn
+                          'copy'
+                          is-copied=(eq this.copiedStep step.index)
+                        }}
+                        aria-label='Copy: {{step.command}}'
+                        {{on 'click' (fn this.copyTask.perform step)}}
+                        data-test-agent-copy={{step.number}}
+                      >
+                        {{#if (eq this.copiedStep step.index)}}
+                          <Check width='14' height='14' />
+                          Copied
+                        {{else}}
+                          <Copy width='14' height='14' />
+                          Copy
+                        {{/if}}
+                      </button>
+                    </span>
+                  </div>
+                {{/if}}
               </li>
             {{/each}}
-          </ul>
-        {{/if}}
-        <div class='agent-actions'>
+          </ol>
+        </section>
+
+        <section class='browser' aria-label='Boxel AI'>
+          <span class='eyebrow'>No agent?</span>
+          <b class='browser-title'>Build in the browser</b>
+          <span class='muted'>Describe what you want and Boxel AI makes it in
+            your workspace. Uses credits.</span>
           <Button
+            class='browser-action'
             @kind='primary'
             @size='small'
             {{on 'click' this.startSession}}
             data-test-agent-new-session
-          >New session</Button>
-        </div>
-      </article>
-
-      {{#each this.harnesses as |harness|}}
-        <article class='agent-tile' data-test-agent-tile={{harness.id}}>
-          <div class='agent-head'>
-            <span class='agent-mark'>
-              <SquareTerminal width='16' height='16' />
-            </span>
-            <span class='agent-name'>{{harness.name}}</span>
-            <span class='agent-where'>on your machine</span>
-          </div>
-          <p class='agent-lede'>{{harness.lede}}</p>
-          <ol class='setup-lines' aria-label='{{harness.name}} setup'>
-            {{#each harness.lines as |line|}}
-              <li class={{cn 'setup-line' (whereClass line.where)}}>
-                <code>{{#each (words line.text) as |word|}}<span
-                      class='word'
-                    >{{word}}</span>
-                  {{/each}}</code>
-              </li>
-            {{/each}}
-          </ol>
-          <div class='agent-actions'>
-            <Button
-              @size='small'
-              @kind='secondary'
-              {{on 'click' (fn this.copySetup harness)}}
-              data-test-agent-copy-setup={{harness.id}}
-            >
-              {{#if (eq this.copiedId harness.id)}}
-                <Check width='14' height='14' />
-                Copied
-              {{else}}
-                <Copy width='14' height='14' />
-                Copy setup
-              {{/if}}
-            </Button>
-          </div>
-        </article>
-      {{/each}}
-
-      {{#if this.pullableWorkspaces.length}}
-        <article class='agent-tile is-handoff' data-test-agent-tile='pull'>
-          <div class='agent-head'>
-            <span class='agent-name'>Hand a workspace over</span>
-          </div>
-          <p class='agent-lede'>
-            Pull a workspace into a folder, point your agent at it, and its
-            edits sync back as cards.
-          </p>
-          <ul class='pull-list'>
-            {{#each this.pullableWorkspaces key='url' as |workspace|}}
-              <li class='pull-row'>
-                <RealmIcon class='pull-icon' @realmInfo={{workspace.info}} />
-                <span class='pull-name'>{{workspace.name}}</span>
-                <button
-                  type='button'
-                  class={{cn
-                    'pull-copy'
-                    is-copied=(eq this.copiedId workspace.url)
-                  }}
-                  aria-label='Copy pull command for {{workspace.name}}'
-                  title={{workspace.command}}
-                  {{on 'click' (fn this.copyPull workspace)}}
-                  data-test-agent-copy-pull={{workspace.url}}
-                >
-                  {{#if (eq this.copiedId workspace.url)}}
-                    <Check width='14' height='14' />
-                    Copied
-                  {{else}}
-                    <Copy width='14' height='14' />
-                    Pull
-                  {{/if}}
-                </button>
-              </li>
-            {{/each}}
-          </ul>
-        </article>
-      {{/if}}
+          >
+            <Sparkles width='14' height='14' />
+            Describe it
+          </Button>
+          {{#if this.recentSessions.length}}
+            <ul class='session-list' aria-label='Recent Boxel AI sessions'>
+              {{#each this.recentSessions as |session|}}
+                <li>
+                  <button
+                    type='button'
+                    class='session-row'
+                    {{on 'click' (fn this.openSession session.roomId)}}
+                    data-test-agent-session={{session.roomId}}
+                  >
+                    <MessageCircle
+                      class='session-icon'
+                      width='14'
+                      height='14'
+                    />
+                    <span class='session-name'>{{session.name}}</span>
+                    <span class='muted'>{{this.formatWhen
+                        session.lastActiveTimestamp
+                      }}</span>
+                  </button>
+                </li>
+              {{/each}}
+            </ul>
+          {{/if}}
+        </section>
+      </div>
     </div>
 
     <style scoped>
-      .agent-list {
-        --agent-tile-width: 19rem;
-        --agent-line: color-mix(in oklch, var(--boxel-light) 10%, transparent);
-        --agent-muted: color-mix(in oklch, var(--boxel-light) 58%, transparent);
+      .make {
+        --make-line: color-mix(in oklch, var(--boxel-light) 10%, transparent);
+        --make-muted: color-mix(in oklch, var(--boxel-light) 58%, transparent);
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
+        color: var(--boxel-light);
+      }
+      .muted {
+        color: var(--make-muted);
+      }
+      .eyebrow {
+        font-family: var(--boxel-monospace-font-family);
+        font-size: var(--boxel-font-size-2xs);
+        font-weight: 700;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--boxel-highlight);
+      }
+
+      /* The pitch: why, before how. */
+      .pitch {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+        max-width: 38rem;
+      }
+      .pitch-title {
+        margin: 0;
+        font-size: 1.75rem;
+        font-weight: 700;
+        line-height: 1.1;
+        letter-spacing: -0.02em;
+      }
+      .pitch-body {
+        margin: 0;
+        font-size: var(--boxel-font-size);
+        line-height: 1.5;
+        color: var(--make-muted);
+      }
+
+      .bench {
         display: flex;
         flex-wrap: wrap;
-        align-items: stretch;
+        align-items: flex-start;
         gap: var(--boxel-sp-lg);
       }
-      .agent-tile {
-        width: var(--agent-tile-width);
+      .steps,
+      .browser {
+        box-sizing: border-box;
+        border: 1px solid var(--make-line);
+        border-radius: 1.375rem;
+      }
+      .steps {
+        flex: 1.6 1 30rem;
+        max-width: 40rem;
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-sm);
         padding: var(--boxel-sp-lg);
-        border: 1px solid var(--agent-line);
-        border-radius: 1.5rem;
         background-color: var(--boxel-700);
         box-shadow:
-          0 0.75rem 1.75rem
+          0 0.875rem 1.875rem
             color-mix(in oklch, var(--boxel-dark) 35%, transparent),
           inset 0 1px 0 color-mix(in oklch, var(--boxel-light) 6%, transparent);
-        color: var(--boxel-light);
       }
-      /* Boxel AI is the agent already here, so its tile carries the glow. */
-      .agent-tile.is-boxel-ai {
-        background-image: radial-gradient(
-          120% 80% at 0% 0%,
-          color-mix(in oklch, var(--boxel-highlight) 18%, transparent),
-          transparent 60%
-        );
-      }
-      .agent-tile.is-handoff {
-        background-color: transparent;
-        border-style: dashed;
-        box-shadow: none;
-      }
-      .agent-head {
+      .steps-top {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
+        justify-content: space-between;
         gap: var(--boxel-sp-xs);
       }
-      .agent-mark {
-        flex: none;
-        width: 2rem;
-        height: 2rem;
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        border-radius: 0.625rem;
-        background-color: color-mix(
-          in oklch,
-          var(--boxel-light) 10%,
-          transparent
-        );
+      .steps-title {
+        display: flex;
+        align-items: baseline;
+        gap: var(--boxel-sp-xs);
+        font-size: var(--boxel-font-size);
       }
-      .is-boxel-ai .agent-mark {
+      .steps-title .muted {
+        font-size: var(--boxel-font-size-sm);
+      }
+      .agent-pick {
+        display: inline-flex;
+        padding: 0.1875rem;
+        border-radius: 1rem;
+        background-color: var(--boxel-800);
+        box-shadow: inset 0 0 0 1px var(--make-line);
+      }
+      .agent-option {
+        height: 1.75rem;
+        padding: 0 var(--boxel-sp-sm);
+        border: 0;
+        border-radius: 0.875rem;
+        background: none;
+        color: var(--make-muted);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .agent-option[aria-pressed='true'] {
         background-color: var(--boxel-highlight);
         color: var(--boxel-highlight-foreground);
       }
-      .agent-name {
-        font-size: var(--boxel-font-size);
-        font-weight: 700;
-        letter-spacing: -0.01em;
+      .agent-option:focus-visible {
+        outline: 2px solid var(--boxel-highlight);
+        outline-offset: 2px;
       }
-      .agent-where {
-        margin-left: auto;
-        font-size: var(--boxel-font-size-xs);
-        color: var(--agent-muted);
+      .progress {
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        gap: var(--boxel-sp-5xs);
       }
-      .agent-lede {
-        margin: 0;
-        font-size: var(--boxel-font-size-sm);
-        line-height: 1.45;
-        color: var(--agent-muted);
+      .bar {
+        height: 0.25rem;
+        border-radius: 0.125rem;
+        background-color: var(--make-line);
       }
-      .agent-actions {
-        margin-top: auto;
-        display: flex;
-        gap: var(--boxel-sp-xs);
-        padding-top: var(--boxel-sp-4xs);
+      .bar.is-done {
+        background-color: var(--boxel-highlight);
       }
-      .agent-actions :deep(button) {
-        gap: var(--boxel-sp-4xs);
-      }
-      .agent-actions :deep(svg) {
-        flex: none;
+      .bar.is-now {
+        background-color: color-mix(
+          in oklch,
+          var(--boxel-highlight) 40%,
+          transparent
+        );
       }
 
-      .session-list,
-      .pull-list,
-      .setup-lines {
+      .step-list {
+        display: flex;
+        flex-direction: column;
         margin: 0;
         padding: 0;
         list-style: none;
       }
-      .session-list,
-      .pull-list {
+      .step + .step {
+        border-top: 1px solid var(--make-line);
+      }
+      .step-head {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+        padding: var(--boxel-sp-xs) 0;
+        border: 0;
+        background: none;
+        color: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+      .step-head:focus-visible {
+        outline: 2px solid var(--boxel-highlight);
+        outline-offset: 2px;
+        border-radius: 0.5rem;
+      }
+      .step-number {
+        flex: none;
+        width: 1.75rem;
+        height: 1.75rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        box-shadow: inset 0 0 0 1px var(--make-line);
+        font-family: var(--boxel-monospace-font-family);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 700;
+        color: var(--make-muted);
+      }
+      .step.is-now .step-number {
+        background-color: var(--boxel-highlight);
+        box-shadow: none;
+        color: var(--boxel-highlight-foreground);
+      }
+      .step.is-done .step-number {
+        box-shadow: inset 0 0 0 1px var(--boxel-highlight);
+        color: var(--boxel-highlight);
+      }
+      .step-words {
+        flex: 1;
+        min-width: 0;
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-6xs);
+        font-size: var(--boxel-font-size-sm);
+      }
+      .step-words .muted {
+        font-size: var(--boxel-font-size-xs);
+      }
+      .step.is-later .step-words b {
+        color: var(--make-muted);
+      }
+      .step-state {
+        flex: none;
+        font-family: var(--boxel-monospace-font-family);
+        font-size: var(--boxel-font-size-2xs);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--make-muted);
+      }
+      .step.is-now .step-state {
+        color: var(--boxel-highlight);
+      }
+      .step-body {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+        padding: 0 0 var(--boxel-sp-sm) calc(1.75rem + var(--boxel-sp-sm));
+      }
+      .workspace-pick {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-5xs);
+      }
+      .workspace-option {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-5xs);
+        max-width: 12rem;
+        height: 1.875rem;
+        padding: 0 var(--boxel-sp-xs) 0 0.25rem;
+        border: 1px solid var(--make-line);
+        border-radius: 0.9375rem;
+        background: none;
+        color: var(--make-muted);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+        cursor: pointer;
+      }
+      .workspace-option[aria-pressed='true'] {
+        border-color: var(--boxel-highlight);
+        color: var(--boxel-light);
+      }
+      .workspace-option:focus-visible {
+        outline: 2px solid var(--boxel-highlight);
+        outline-offset: 2px;
+      }
+      .workspace-icon {
+        --boxel-realm-icon-size: 1.375rem;
+        --boxel-realm-icon-border-radius: 50%;
+        --boxel-realm-icon-background-color: var(--boxel-light);
+        flex: none;
+      }
+      .workspace-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .command {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-4xs) var(--boxel-sp-4xs) var(--boxel-sp-4xs)
+          var(--boxel-sp-sm);
+        border-radius: 0.75rem;
+        background-color: var(--boxel-800);
+        box-shadow: inset 0 0 0 1px var(--make-line);
+      }
+      .command-text {
+        flex: 1;
+        min-width: 0;
+        overflow-x: auto;
+        white-space: nowrap;
+        font-family: var(--boxel-monospace-font-family);
+        font-size: var(--boxel-font-size-xs);
+        color: color-mix(in oklch, var(--boxel-light) 88%, transparent);
+        scrollbar-width: none;
+      }
+      .command-text::before {
+        content: '$ ';
+        color: var(--boxel-highlight);
+      }
+      .copy {
+        flex: none;
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-5xs);
+        height: 1.75rem;
+        padding: 0 var(--boxel-sp-xs);
+        border: 0;
+        border-radius: 0.875rem;
+        background-color: var(--boxel-highlight);
+        color: var(--boxel-highlight-foreground);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 700;
+        cursor: pointer;
+      }
+      .copy:hover {
+        background-color: var(--boxel-highlight-hover);
+      }
+      .copy:focus-visible {
+        outline: 2px solid var(--boxel-light);
+        outline-offset: 2px;
+      }
+
+      /* Boxel AI, for anyone without an agent: the dashed edge says it's
+         the other way in, not a sixth step. */
+      .browser {
+        flex: 1 1 16rem;
+        max-width: 22rem;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+        padding: var(--boxel-sp-lg);
+        border-style: dashed;
+        background-image: radial-gradient(
+          120% 80% at 0% 0%,
+          color-mix(in oklch, var(--boxel-highlight) 14%, transparent),
+          transparent 60%
+        );
+        font-size: var(--boxel-font-size-sm);
+        line-height: 1.45;
+      }
+      .browser-title {
+        font-size: var(--boxel-font-size-lg);
+      }
+      .browser-action {
+        align-self: flex-start;
+        gap: var(--boxel-sp-4xs);
+        margin-top: var(--boxel-sp-4xs);
+      }
+      .session-list {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-6xs);
+        margin: var(--boxel-sp-xs) 0 0;
+        padding: var(--boxel-sp-xs) 0 0;
+        border-top: 1px solid var(--make-line);
+        list-style: none;
       }
       .session-row {
         width: 100%;
@@ -387,6 +717,7 @@ export default class Agents extends Component {
         background: none;
         color: inherit;
         text-align: left;
+        font-size: var(--boxel-font-size-xs);
         cursor: pointer;
       }
       .session-row:hover,
@@ -400,123 +731,41 @@ export default class Agents extends Component {
       }
       .session-icon {
         flex: none;
-        color: var(--agent-muted);
+        color: var(--make-muted);
       }
-      .session-name,
-      .pull-name {
+      .session-name {
         flex: 1;
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-        font-size: var(--boxel-font-size-sm);
         font-weight: 600;
-      }
-      .session-when {
-        flex: none;
-        font-size: var(--boxel-font-size-xs);
-        color: var(--agent-muted);
-      }
-
-      /* The recipe reads like a terminal: a prompt for the shell, a chevron
-         for what is typed into the agent. */
-      .setup-lines {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-5xs);
-        padding: var(--boxel-sp-sm);
-        border-radius: 0.875rem;
-        background-color: var(--boxel-800);
-        box-shadow: inset 0 0 0 1px var(--agent-line);
-      }
-      .setup-line {
-        display: flex;
-        gap: var(--boxel-sp-xs);
-        font-family: var(--boxel-monospace-font-family);
-        font-size: var(--boxel-font-size-xs);
-        line-height: 1.5;
-      }
-      .setup-line::before {
-        flex: none;
-        width: 0.75rem;
-        color: var(--boxel-highlight);
-      }
-      .setup-line.where-shell::before {
-        content: '$';
-      }
-      .setup-line.where-agent::before {
-        content: '›';
-        color: var(--boxel-lime);
-      }
-      .setup-line code {
-        min-width: 0;
-        font: inherit;
-        color: color-mix(in oklch, var(--boxel-light) 86%, transparent);
-      }
-
-      /* Commands wrap between words only, never inside a package name. */
-      .setup-line .word {
-        white-space: nowrap;
-      }
-      .pull-row {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-        min-height: 2.5rem;
-      }
-      .pull-icon {
-        --boxel-realm-icon-size: 1.5rem;
-        --boxel-realm-icon-border-radius: 0.4375rem;
-        --boxel-realm-icon-background-color: var(--boxel-light);
-        flex: none;
-      }
-      .pull-copy {
-        flex: none;
-        display: inline-flex;
-        align-items: center;
-        gap: var(--boxel-sp-5xs);
-        height: 1.75rem;
-        padding: 0 var(--boxel-sp-xs);
-        border: 1px solid var(--agent-line);
-        border-radius: 0.875rem;
-        background: none;
-        color: var(--boxel-light);
-        font-size: var(--boxel-font-size-xs);
-        font-weight: 600;
-        cursor: pointer;
-        transition:
-          background-color var(--boxel-transition),
-          border-color var(--boxel-transition);
-      }
-      .pull-copy:hover {
-        background-color: color-mix(
-          in oklch,
-          var(--boxel-light) 8%,
-          transparent
-        );
-      }
-      .pull-copy:focus-visible {
-        outline: 2px solid var(--boxel-highlight);
-        outline-offset: 2px;
-      }
-      .pull-copy.is-copied {
-        border-color: var(--boxel-highlight);
-        color: var(--boxel-highlight);
       }
       @media (max-width: 30rem) {
-        .agent-list {
-          --agent-tile-width: 100%;
+        .steps,
+        .browser {
+          flex-basis: 100%;
+          max-width: none;
+        }
+        .pitch-title {
+          font-size: 1.375rem;
         }
       }
     </style>
   </template>
 }
 
-const words = (text: string) => text.split(' ');
-const whereClass = (where: SetupLine['where']) => `where-${where}`;
+const stateClass = (state: SetupStep['state']) => `is-${state}`;
+
+const stateLabel = (state: SetupStep['state']) =>
+  state === 'done' ? 'Done' : state === 'now' ? 'Next' : '';
 
 // "…/ctse/studio/" → "studio": the folder the pull lands in.
 function localDirFor(url: string) {
-  let segments = new URL(url).pathname.split('/').filter(Boolean);
-  return segments[segments.length - 1] ?? 'workspace';
+  try {
+    let segments = new URL(url).pathname.split('/').filter(Boolean);
+    return segments[segments.length - 1] ?? 'workspace';
+  } catch {
+    return 'workspace';
+  }
 }

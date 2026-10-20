@@ -243,8 +243,7 @@ export default class AddWorkspace extends Component<Signature> {
       data-test-add-workspace-selected={{if @isSelected 'selected'}}
     >
       <div class='content'>
-        <IconPlus width='32px' height='32px' role='presentation' class='icon' />
-        <br />
+        <IconPlus width='20px' height='20px' role='presentation' class='icon' />
         New Workspace
       </div>
     </ItemContainer>
@@ -267,6 +266,7 @@ export default class AddWorkspace extends Component<Signature> {
     <style scoped>
       .container {
         border-style: none;
+        border-radius: 1rem;
         background: transparent;
         display: flex;
         justify-content: center;
@@ -279,8 +279,11 @@ export default class AddWorkspace extends Component<Signature> {
         stroke: none;
       }
       .content {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
         color: var(--boxel-light);
-        text-align: center;
+        font: 600 var(--boxel-font-sm);
       }
       .content .icon {
         color: var(--boxel-highlight);

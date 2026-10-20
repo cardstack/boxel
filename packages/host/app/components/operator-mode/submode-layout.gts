@@ -112,7 +112,6 @@ const NAV_RAIL_DISMISS_DELAY_MS = 250;
 export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
   @tracked private profileSummaryOpened = false;
-  @tracked private topBarCenterElement: Element | null = null;
   @tracked private currentWindowWidth = 0;
 
   private get topBarButtonsCollapsed(): boolean {
@@ -152,11 +151,6 @@ export default class SubmodeLayout extends Component<Signature> {
   private storeExpandedCardHeaderElement(element: Element) {
     this.operatorModeStateService.expandedCardHeaderElement =
       element as HTMLElement;
-  }
-
-  @action
-  private storeTopBarCenterElement(element: Element) {
-    this.topBarCenterElement = element;
   }
 
   @action
@@ -543,12 +537,6 @@ export default class SubmodeLayout extends Component<Signature> {
                 data-test-workspace-chooser-toggle
               />
             </div>
-            {{#if this.workspaceChooserOpened}}
-              <div
-                class='submode-layout-top-bar-center'
-                {{captureElement this.storeTopBarCenterElement}}
-              ></div>
-            {{/if}}
             {{#if (not this.workspaceChooserOpened)}}
               <SubmodeSwitcher
                 class='submode-switcher'
@@ -595,9 +583,7 @@ export default class SubmodeLayout extends Component<Signature> {
             </button>
           </div>
           {{#if this.workspaceChooserOpened}}
-            <WorkspaceChooser
-              @topBarCenterElement={{this.topBarCenterElement}}
-            />
+            <WorkspaceChooser />
             {{#if this.isNavRailOpen}}
               <NavRail
                 @onPointerEnter={{this.summonNavRail}}
@@ -755,30 +741,6 @@ export default class SubmodeLayout extends Component<Signature> {
         display: flex;
         align-items: center;
         gap: var(--operator-mode-spacing);
-      }
-
-      .submode-layout-top-bar-center {
-        /* Narrow default: stay in flow as a flex child. `flex: 1` reserves the
-           middle track between the workspace button and the profile controls,
-           so the content can neither slide under those controls nor intercept
-           clicks meant for them — it just sits on the one line between them. */
-        flex: 1;
-        display: flex;
-        justify-content: center;
-        min-width: 0;
-      }
-      /* Wider top bars have room to center the content within the whole bar
-         rather than only within the asymmetric middle track (the 160px
-         workspace button makes the flex track off-centre). Take it out of flow
-         and pin it to the bar's centre; the breakpoint is high enough that the
-         centred content clears the workspace button on the left. */
-      @container (min-width: 60rem) {
-        .submode-layout-top-bar-center {
-          position: absolute;
-          top: 50%;
-          left: 50%;
-          transform: translate(-50%, -50%);
-        }
       }
 
       /* Slot for the expanded stack-item's CardHeader pill. When a

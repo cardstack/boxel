@@ -180,6 +180,10 @@ export interface DashboardPin {
 export interface AppBoxelDashboardContent {
   onboardingDismissed?: boolean;
   agentCommandCopied?: boolean;
+  // How many of the Agents section's setup steps the user has copied
+  // through. Nothing can see a terminal, so copying a step's command is
+  // what counts as doing it.
+  agentSetupDone?: number;
   // Realm URL → the cards pinned to that workspace's tile, in pin order.
   pinnedCards?: Record<string, DashboardPin[]>;
 }

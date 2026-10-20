@@ -32,6 +32,7 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 import AddWorkspace from './add-workspace';
 import Agents from './agents';
 import ArchivedWorkspace from './archived-workspace';
+import CatalogShowcase from './catalog-showcase';
 import GetStarted from './get-started';
 import ManageCatalogs from './manage-catalogs';
 import Workspace from './workspace';
@@ -58,9 +59,6 @@ interface SortOption {
 
 interface Signature {
   Element: HTMLDivElement;
-  Args: {
-    topBarCenterElement: Element | null;
-  };
 }
 
 const log = logger('component:workspace-chooser');
@@ -370,7 +368,9 @@ export default class WorkspaceChooser extends Component<Signature> {
   private measureWorkspaceGrid = modifier((el: HTMLElement) => {
     let measure = () => {
       this.workspaceGridWidth = el.clientWidth;
-      let tile = el.querySelector('.workspace-card button.workspace');
+      // Every tile in the list is the same width, the New Workspace tile
+      // first among them.
+      let tile = el.firstElementChild;
       if (tile) {
         this.workspaceTileWidth = tile.getBoundingClientRect().width;
       }
@@ -614,26 +614,6 @@ export default class WorkspaceChooser extends Component<Signature> {
       {{on 'keydown' this.onKeydown}}
       {{on 'focusin' this.onFocusIn}}
     >
-      {{#if @topBarCenterElement}}
-        {{#in-element @topBarCenterElement}}
-          <div class='sort-controls'>
-            <BoxelSelect
-              class='sort-select'
-              @dropdownClass='workspace-chooser-sort-dropdown'
-              @options={{this.sortOptions}}
-              @selected={{this.selectedSortOption}}
-              @onChange={{this.onSortChange}}
-              @matchTriggerWidth={{false}}
-              aria-label='Filter workspaces'
-              data-test-sort-dropdown-trigger
-              as |option|
-            >
-              <option.icon width='16' height='16' />
-              <span class='sort-label'>{{option.label}}</span>
-            </BoxelSelect>
-          </div>
-        {{/in-element}}
-      {{/if}}
       <div
         class='workspace-chooser__content boxel-dark-scrollbar'
         data-workspace-chooser-scroller
@@ -678,6 +658,22 @@ export default class WorkspaceChooser extends Component<Signature> {
                 id='dashboard-section-workspaces'
                 class='dashboard-section-title'
               >Workspaces</h2>
+              <div class='sort-controls'>
+                <BoxelSelect
+                  class='sort-select'
+                  @dropdownClass='workspace-chooser-sort-dropdown'
+                  @options={{this.sortOptions}}
+                  @selected={{this.selectedSortOption}}
+                  @onChange={{this.onSortChange}}
+                  @matchTriggerWidth={{false}}
+                  aria-label='Filter workspaces'
+                  data-test-sort-dropdown-trigger
+                  as |option|
+                >
+                  <option.icon width='16' height='16' />
+                  <span class='sort-label'>{{option.label}}</span>
+                </BoxelSelect>
+              </div>
               <p class='dashboard-section-hint'>Where your cards live. Star one
                 to keep it at the top.</p>
             </div>
@@ -761,6 +757,7 @@ export default class WorkspaceChooser extends Component<Signature> {
                       <Workspace
                         @realmIdentifier={{realmIdentifier}}
                         @showMenu={{true}}
+                        @compact={{true}}
                         @navIndex={{navIndex}}
                         @isSelected={{eq this.currentIndex navIndex}}
                         @selectionActive={{this.isSelectionActive}}
@@ -836,6 +833,10 @@ export default class WorkspaceChooser extends Component<Signature> {
               <p class='dashboard-section-hint'>Apps, fields and themes to use
                 in your workspaces.</p>
             </div>
+            <CatalogShowcase />
+            <div class='section-header'>
+              <span class='workspace-chooser__title'>Catalog workspaces</span>
+            </div>
             {{#if this.catalogEmptyMessage}}
               <span
                 class='section-empty'
@@ -851,6 +852,7 @@ export default class WorkspaceChooser extends Component<Signature> {
                     <Workspace
                       @realmIdentifier={{realmIdentifier}}
                       @navIndex={{navIndex}}
+                      @compact={{true}}
                       @isSelected={{eq this.currentIndex navIndex}}
                       @selectionActive={{this.isSelectionActive}}
                     />
@@ -922,9 +924,13 @@ export default class WorkspaceChooser extends Component<Signature> {
           100vw - 2 * var(--workspace-chooser-gutter)
         );
       }
+      /* The filter narrows every section, so it sits with the page's first
+         heading rather than in the top bar. */
       .sort-controls {
         display: flex;
         align-items: center;
+        margin-left: auto;
+        align-self: center;
         white-space: nowrap;
       }
       .sort-select {
@@ -936,22 +942,6 @@ export default class WorkspaceChooser extends Component<Signature> {
         --boxel-select-border-color: var(--boxel-light-25);
         --boxel-select-focus-border-color: var(--boxel-light-50);
         --icon-color: var(--boxel-light);
-      }
-      /* Below this top-bar width the label would push the trigger over the
-         profile button, so show the icon only and keep the label for screen
-         readers. */
-      @container (width <= 20rem) {
-        .sort-select {
-          --boxel-select-trigger-gap: var(--boxel-sp-2xs);
-        }
-        .sort-select .sort-label {
-          position: absolute;
-          width: 1px;
-          height: 1px;
-          margin: -1px;
-          overflow: hidden;
-          clip-path: inset(50%);
-        }
       }
       :global(.boxel-select__dropdown.workspace-chooser-sort-dropdown) {
         --boxel-dropdown-background-color: var(--boxel-650);
@@ -996,7 +986,10 @@ export default class WorkspaceChooser extends Component<Signature> {
         opacity: 0;
         animation: fadeIn 0.5s ease-in forwards;
       }
+      /* The page's width, not its widest row: lists wrap inside it. */
       .sections-wrapper {
+        width: 100%;
+        max-width: 90rem;
         display: flex;
         flex-direction: column;
         gap: calc(var(--boxel-sp-xl) * 2);
@@ -1065,7 +1058,12 @@ export default class WorkspaceChooser extends Component<Signature> {
         padding: var(--boxel-sp-xs) 0;
       }
       .workspace-list.is-compact {
-        gap: var(--boxel-sp-lg) var(--boxel-sp);
+        --workspace-chooser-row-width: 100%;
+        --workspace-chooser-tile-width: var(--workspace-chooser-row-width);
+        --workspace-chooser-tile-height: 3.75rem;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(15.5rem, 1fr));
+        gap: var(--boxel-sp-sm);
       }
       /* The three places the rail jumps to. Each opens with a real heading so
          the single scroll reads as chapters rather than one long grid. */

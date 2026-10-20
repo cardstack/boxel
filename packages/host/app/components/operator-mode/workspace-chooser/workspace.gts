@@ -88,6 +88,9 @@ interface Signature {
     selectionActive?: boolean;
     isFavoritesSection?: boolean;
     enlargedWidth?: string;
+    // A row rather than a tile: a small wallpaper, then the name and what
+    // changed when. For the long lists, where names are what you scan.
+    compact?: boolean;
     navIndex?: number;
   };
 }
@@ -99,14 +102,19 @@ export default class Workspace extends Component<Signature> {
     {{#if this.loadRealmTask.isRunning}}
       <WorkspaceLoadingIndicator />
     {{else}}
+      {{! A compact row opens its workspace from anywhere on it; the
+          wallpaper button inside stays the keyboard's way in. }}
+      {{! template-lint-disable no-invalid-interactive }}
       <div
         class='workspace-card
           {{if this.isHostDropdownOpen "is-open"}}
           {{if this.showSelectionRing "is-selected"}}
-          {{if @isFavoritesSection "is-enlarged"}}'
+          {{if @isFavoritesSection "is-enlarged"}}
+          {{if @compact "is-compact"}}'
         style={{cssVar favorite-tile-width=@enlargedWidth}}
         data-theme='dark'
         {{on 'mouseleave' this.closeHostDropdown}}
+        {{on 'click' this.openFromRow}}
         data-test-workspace={{this.name}}
         data-test-workspace-selected={{if @isSelected this.name}}
         ...attributes
@@ -376,6 +384,14 @@ export default class Workspace extends Component<Signature> {
               </Tooltip>
               <span class='visibility-label'>{{this.visibility}}</span>
             </span>
+            {{#if @compact}}
+              {{#if this.updatedAtLabel}}
+                <span
+                  class='updated'
+                  data-test-workspace-updated
+                >{{this.updatedAtLabel}}</span>
+              {{/if}}
+            {{/if}}
           </div>
         {{/unless}}
       </div>
@@ -1247,6 +1263,102 @@ export default class Workspace extends Component<Signature> {
         padding: var(--boxel-sp-xs) 0 var(--boxel-sp-2xs);
         display: flex;
         flex-direction: column;
+      }
+      /* A compact row: the wallpaper shrinks to a thumbnail at the start and
+         the name, visibility and last change read beside it. */
+      .workspace-card.is-compact {
+        --workspace-chooser-tile-width: 4.5rem;
+        --workspace-chooser-tile-height: 3rem;
+        width: var(--workspace-chooser-row-width, 16rem);
+        box-sizing: border-box;
+        flex-direction: row;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+        padding: var(--boxel-sp-5xs) 2.25rem var(--boxel-sp-5xs)
+          var(--boxel-sp-5xs);
+        border-radius: 1rem;
+        background-color: color-mix(
+          in oklch,
+          var(--boxel-light) 4%,
+          transparent
+        );
+        box-shadow: inset 0 0 0 1px
+          color-mix(in oklch, var(--boxel-light) 8%, transparent);
+        transition: background-color var(--boxel-transition);
+      }
+      .workspace-card.is-compact:hover {
+        background-color: color-mix(
+          in oklch,
+          var(--boxel-light) 9%,
+          transparent
+        );
+      }
+      .workspace-card.is-compact::after {
+        display: none;
+      }
+      .workspace-card.is-compact.is-selected {
+        box-shadow: inset 0 0 0 2px var(--boxel-highlight);
+      }
+      .workspace-card.is-compact :deep(.workspace) {
+        flex: none;
+        border-radius: 0.75rem;
+      }
+      .workspace-card.is-compact :deep(.workspace)::after {
+        border-radius: 0.75rem;
+      }
+      .is-compact .workspace-realm-icon {
+        --boxel-realm-icon-size: 1.5rem;
+        --boxel-realm-icon-border-radius: 0.4375rem;
+      }
+      .is-compact .info {
+        flex: 1;
+        min-width: 0;
+        max-width: none;
+        align-items: flex-start;
+        gap: 0;
+        padding-top: 0;
+      }
+      .is-compact .info > span {
+        text-align: left;
+      }
+      .is-compact .info > .name {
+        -webkit-line-clamp: 1;
+        font-weight: 600;
+      }
+      .is-compact .visibility {
+        justify-content: flex-start;
+      }
+      .is-compact .updated {
+        color: var(--boxel-450);
+        font: 400 var(--boxel-font-xs);
+      }
+      .is-compact .tile-favorite-btn {
+        top: 0.5rem;
+        left: 0.5rem;
+      }
+      .is-compact .tile-menu-btn {
+        top: 50%;
+        right: 0.375rem;
+        transform: translateY(-50%);
+      }
+      /* The live-site link folds to its house icon at the row's end. */
+      .is-compact .host-trigger {
+        top: 50%;
+        left: auto;
+        right: 2.25rem;
+        width: 1.75rem;
+        height: 1.75rem;
+        padding: 0;
+        justify-content: center;
+        transform: translateY(-50%);
+        border-radius: 50%;
+      }
+      .is-compact .host-trigger .trigger-url,
+      .is-compact .host-trigger .trigger-chevron {
+        display: none;
+      }
+      .is-compact .host-dropdown {
+        top: 100%;
       }
       .dropdown-header {
         font-size: var(--boxel-font-size-2xs);
@@ -2155,6 +2267,18 @@ export default class Workspace extends Component<Signature> {
 
   private get hasPublishedRealms() {
     return this.publishedRealmURLs.length > 0;
+  }
+
+  // A click on the row's own surface, not on one of its controls.
+  @action openFromRow(event: Event) {
+    if (!this.args.compact) {
+      return;
+    }
+    let target = event.target as HTMLElement;
+    if (target.closest('button, a, [role="menu"], [role="dialog"]')) {
+      return;
+    }
+    this.openWorkspace();
   }
 
   @action async openWorkspace() {
