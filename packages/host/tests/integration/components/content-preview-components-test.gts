@@ -4,7 +4,7 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, type Loader } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common';
 
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -36,23 +36,23 @@ module('Integration | content-only file preview components', function (hooks) {
     // The one stable import path for embedding authors:
     // `https://cardstack.com/base/file-formats/index`.
     fileFormats = await loader.import<typeof FileFormatsModule>(
-      `${baseRealm.url}file-formats/index`,
+      `@cardstack/base/file-formats/index`,
     );
     ({ MarkdownDef } = await loader.import<typeof MarkdownDefModule>(
-      `${baseRealm.url}markdown-file-def`,
+      `@cardstack/base/markdown-file-def`,
     ));
     ({ ImageDef } = await loader.import<typeof CardApiModule>(
-      `${baseRealm.url}card-api`,
+      `@cardstack/base/card-api`,
     ));
     ({ AudioDef } = await loader.import<typeof AudioDefModule>(
-      `${baseRealm.url}audio-file-def`,
+      `@cardstack/base/audio-file-def`,
     ));
     ({ VideoDef } = await loader.import<typeof VideoDefModule>(
-      `${baseRealm.url}video-file-def`,
+      `@cardstack/base/video-file-def`,
     ));
     ({ WaveformMetadataField } = await loader.import<
       typeof MetadataFieldsModule
-    >(`${baseRealm.url}file-formats/metadata-fields`));
+    >(`@cardstack/base/file-formats/metadata-fields`));
   });
 
   function makeMarkdownFile() {
@@ -555,7 +555,7 @@ module('Integration | content-only file preview components', function (hooks) {
   test('PdfViewer hands its fetched document to the object as a blob URL in live renders', async function (assert) {
     let loader: Loader = getService('loader-service').loader;
     let { PdfViewer } = await loader.import<any>(
-      `${baseRealm.url}file-formats/pdf-viewer`,
+      `@cardstack/base/file-formats/pdf-viewer`,
     );
     // A native <object>'s own fetch bypasses service workers, so the viewer
     // fetches the bytes itself and hands the object a blob URL. A data: URL
@@ -593,7 +593,7 @@ module('Integration | content-only file preview components', function (hooks) {
   test('PdfViewer falls back to the plain URL when its fetch cannot get the bytes', async function (assert) {
     let loader: Loader = getService('loader-service').loader;
     let { PdfViewer } = await loader.import<any>(
-      `${baseRealm.url}file-formats/pdf-viewer`,
+      `@cardstack/base/file-formats/pdf-viewer`,
     );
     // An anonymous visitor on a public realm has no session for the viewer's
     // fetch to ride; the plain URL is the working path there, so a failed

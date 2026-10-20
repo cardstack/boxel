@@ -29,6 +29,7 @@ import {
   baseRRI,
   codeRefWithAbsoluteIdentifier,
   maybeRelativeReference,
+  resolveModuleHref,
   trimExecutableExtension,
   type CodeRef,
   type RealmResourceIdentifier,
@@ -97,14 +98,18 @@ export class ModuleSyntax {
       declarations: [],
     };
     let preprocessedSrc = gjsToPlaceholderJS(src);
+    // The schema analysis recognizes card-api by its file name, so the module
+    // is named by its RRI: the same whether it was loaded from its served URL
+    // or a virtual alias.
+    let sourceFileName = this.virtualNetwork.unresolveURL(this.url.href);
     let ast: Babel.types.Node = parse(preprocessedSrc, {
       parser: {
         parse: (source: string) => {
-          const options = getBabelOptions({ sourceFilename: this.url.href });
+          const options = getBabelOptions({ sourceFilename: sourceFileName });
           return babelParse(source, options);
         },
       },
-      sourceFileName: this.url.href,
+      sourceFileName,
     });
 
     let r = Babel.transformFromAstSync(ast, preprocessedSrc, {
@@ -121,6 +126,46 @@ export class ModuleSyntax {
     this.ast = r!.ast!;
     this.possibleCardsOrFields = moduleAnalysis.possibleCardsOrFields;
     this.declarations = moduleAnalysis.declarations;
+    this.canonicalizeExternalReferences();
+  }
+
+  // The schema analysis records each external reference's module as the
+  // import specifier written in the source: relative, URL-shaped, or prefix
+  // form. Consumers compare these references against code refs, so a
+  // reference to a realm module is rewritten to its RRI here, once. A bare
+  // package specifier (`@glimmer/component`) names no realm module and is
+  // left as written.
+  private canonicalizeExternalReferences() {
+    let canonicalize = (ref: ClassReference) => {
+      if (ref.type === 'external') {
+        ref.module = this.canonicalModule(ref.module);
+      }
+    };
+    for (let declaration of new Set<Declaration>([
+      ...this.declarations,
+      ...this.possibleCardsOrFields,
+    ])) {
+      if ('super' in declaration && declaration.super) {
+        canonicalize(declaration.super);
+      }
+      if ('possibleFields' in declaration) {
+        for (let field of declaration.possibleFields.values()) {
+          canonicalize(field.card);
+          canonicalize(field.type);
+          canonicalize(field.decorator);
+        }
+      }
+    }
+  }
+
+  private canonicalModule(specifier: string): string {
+    let href: string;
+    try {
+      href = resolveModuleHref(specifier, this.url, this.virtualNetwork);
+    } catch {
+      return specifier;
+    }
+    return this.virtualNetwork.unresolveURL(trimExecutableExtension(rri(href)));
   }
 
   code(): string {
@@ -288,7 +333,15 @@ export class ModuleSyntax {
         typescriptPlugin,
         [decoratorsPlugin, { legacy: true }],
         classPropertiesPlugin,
-        [removeFieldPlugin, { card, field } as RemoveOptions],
+        [
+          removeFieldPlugin,
+          {
+            card,
+            field,
+            canonicalModule: (specifier: string) =>
+              this.canonicalModule(specifier),
+          } as RemoveOptions,
+        ],
       ],
     })!.ast!;
 
@@ -342,11 +395,7 @@ export class ModuleSyntax {
     classRef: ClassReference,
   ): PossibleCardOrFieldDeclaration | undefined {
     if (classRef.type === 'external') {
-      let resolvedModule = this.virtualNetwork.resolveURL(
-        classRef.module,
-        this.url,
-      ).href;
-      if (trimExecutableExtension(rri(resolvedModule)) === this.url.href) {
+      if (classRef.module === this.virtualNetwork.unresolveURL(this.url.href)) {
         return this.possibleCardsOrFields.find(
           (c) => c.exportName === classRef.name,
         );

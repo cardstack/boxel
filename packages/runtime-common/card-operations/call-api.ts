@@ -279,6 +279,7 @@ export function lowerCallApi(
           );
         }
         checkScalar(value, `path.${name}`, fail);
+        checkLiteralSegment(value, `path.${name}`, fail);
         path[name] = lowerValue(value, `path.${name}`, 'path');
       }
     }
@@ -640,6 +641,33 @@ function checkScalar(
   }
 }
 
+// A path value written as text is sent as that text on every invocation, so a
+// value `encodeSegment` refuses would refuse every call. It is refused here
+// instead, where the declaration is what is wrong. A slot in the text is
+// filled with a token of letters, digits and `_`, which changes none of the
+// answers `segmentProblem` gives, so the text is judged as written.
+function checkLiteralSegment(
+  value: unknown,
+  path: string,
+  fail: (
+    code: OperationLoweringIssueCode,
+    path: string,
+    message: string,
+  ) => void,
+) {
+  if (typeof value !== 'string') {
+    return;
+  }
+  let why = segmentProblem(value);
+  if (why) {
+    fail(
+      'invalid-request',
+      path,
+      `\`${path}\` ${why}, so no request can send it — write a fixed part of the path into \`url\` as it is sent`,
+    );
+  }
+}
+
 function walkStrings(
   node: OperationTemplate,
   path: string,
@@ -848,39 +876,46 @@ function slotToken(index: number): string {
 }
 
 // One path segment, whatever the value holds, to the URL and to the vendor
-// alike. `encodeURIComponent` keeps a `/` from adding a segment to the URL as
-// written, but a vendor that decodes `%2F` (or reads `%5C` as a separator)
-// before routing would split the segment and could step out of the approved
-// destination, so a value holding `/` or `\` is refused. A value that is a dot
-// segment would be resolved away by the URL, so it is refused rather than sent
-// somewhere else.
-function encodeSegment(name: string, segment: string, value: string): string {
-  if (value === '' || value === '.' || value === '..') {
-    throw invalidValue(
-      name,
-      `path.${segment}`,
-      value === ''
-        ? 'is empty, and fills no segment'
-        : `is "${value}", which a URL resolves as a step through the path rather than a segment`,
-    );
+// alike, or why a value can't be one. `encodeURIComponent` keeps a `/` from
+// adding a segment to the URL as written, but a vendor that decodes `%2F` (or
+// reads `%5C` as a separator) before routing would split the segment and could
+// step out of the approved destination, so a value holding `/` or `\` is
+// refused. A value that is a dot segment would be resolved away by the URL, so
+// it is refused rather than sent somewhere else. Lowering asks the same
+// question of a value written as text, so the two can't disagree.
+function segmentProblem(value: string): string | undefined {
+  if (value === '') {
+    return 'is empty, and fills no segment';
+  }
+  if (value === '.' || value === '..') {
+    return `is "${value}", which a URL resolves as a step through the path rather than a segment`;
   }
   if (/[/\\]/.test(value)) {
-    throw invalidValue(
-      name,
-      `path.${segment}`,
-      'a path separator (`/` or `\\`), which a vendor that decodes the segment reads as more than one segment',
-    );
+    return 'holds a path separator (`/` or `\\`), which a vendor that decodes the segment reads as more than one segment';
   }
-  try {
-    return encodeURIComponent(value);
-  } catch {
-    // A lone surrogate has no UTF-8 encoding.
-    throw invalidValue(
-      name,
-      `path.${segment}`,
-      'text that is not valid Unicode',
-    );
+  if (LONE_SURROGATE.test(value)) {
+    return 'holds text that is not valid Unicode';
   }
+  return undefined;
+}
+
+// A surrogate without its pair has no UTF-8 encoding, so `encodeURIComponent`
+// throws on it.
+const LONE_SURROGATE =
+  /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+function encodeSegment(name: string, segment: string, value: string): string {
+  let why = segmentProblem(value);
+  if (why) {
+    throw new OperationFailure({
+      status: 400,
+      code: 'invalid-params',
+      title: 'Invalid request value',
+      detail: `the value for \`path.${segment}\` in the request operation "${name}" ${why}`,
+      meta: { operation: name, path: `path.${segment}` },
+    });
+  }
+  return encodeURIComponent(value);
 }
 
 function invalidValue(

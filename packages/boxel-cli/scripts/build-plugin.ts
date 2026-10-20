@@ -71,6 +71,10 @@ const SKILL_SPECS: SkillSpec[] = [
     skill: 'profile',
     commands: ['profile'],
   },
+  {
+    skill: 'browser-sign-in',
+    commands: ['browse'],
+  },
 ];
 
 const START_MARKER = '<!-- generated:commands:start -->';

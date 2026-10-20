@@ -327,12 +327,14 @@ be retired.
 Two lint rules keep the URL form from creeping back into source:
 
 - `@cardstack/boxel/no-url-form-base-imports` flags (and auto-fixes)
-  `https://cardstack.com/base/…` in static imports, dynamic `import()`, and
-  `loader.import()`. It deliberately ignores the URL in fetch targets, alias
+  `https://cardstack.com/base/…` in static imports, dynamic `import()`,
+  `loader.import()` and `importResource()`, including a template literal that
+  starts with it. It deliberately ignores the URL in fetch targets, alias
   registration, and tests that assert on served content — those are legitimate.
 - `@cardstack/boxel/no-literal-realm-urls` flags environment-specific realm
-  URLs (`http://localhost:4201/catalog/`, `https://app.boxel.ai/catalog/`, …)
-  that should be written as the prefix instead.
+  URLs for every registered prefix realm (`http://localhost:4201/catalog/`,
+  `https://app.boxel.ai/skills/`, …) that should be written as the prefix
+  instead.
 
 ## Migrating existing realm data
 

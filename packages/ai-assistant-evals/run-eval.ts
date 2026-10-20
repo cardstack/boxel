@@ -170,9 +170,13 @@ function toolCallsText(result: RunResult) {
   if (!a) {
     return '';
   }
-  return Object.entries(a.toolCalls)
+  let tools = Object.entries(a.toolCalls)
     .map(([name, count]) => `${name.replace(/_[0-9a-f]{4}$/, '')} ×${count}`)
     .join(', ');
+  let searches = Object.entries(a.realmSearches ?? {})
+    .map(([realm, count]) => `${realm} ×${count}`)
+    .join(', ');
+  return searches ? `${tools} (realm searches: ${searches})` : tools;
 }
 
 async function createReportCard(
@@ -260,10 +264,12 @@ async function createResultCard(
         toolCalls: toolCallsText(result),
         notes: [
           `grade ${graded.grade}`,
+          // The two arms of an A/B run differ only here.
+          `skill features: ${result.skillFeatures.length ? result.skillFeatures.join(', ') : 'none'}`,
           ...result.reasons,
           ...graded.misses,
-          ...(a && a.realmCodeWrites
-            ? [`${a.realmCodeWrites} realm write(s)`]
+          ...(a && a.realmCodeWrites + a.toolWrites
+            ? [`${a.realmCodeWrites + a.toolWrites} realm write(s)`]
             : []),
           ...(result.cardRendered
             ? [`rendered ${result.cardRendered} in the ${result.renderedIn}`]

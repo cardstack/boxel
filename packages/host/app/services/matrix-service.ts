@@ -415,12 +415,12 @@ export default class MatrixService extends Service {
 
   private cardAPIModule = importResource(
     this,
-    () => 'https://cardstack.com/base/card-api',
+    () => '@cardstack/base/card-api',
   );
 
   private fileAPIModule = importResource(
     this,
-    () => 'https://cardstack.com/base/file-api',
+    () => '@cardstack/base/file-api',
   );
 
   private loadState = task(async () => {

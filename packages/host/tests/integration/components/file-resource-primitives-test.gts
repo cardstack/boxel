@@ -14,7 +14,7 @@ import { render, waitUntil } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, type Loader } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common';
 
 import { setupRenderingTest } from '../../helpers/setup';
 
@@ -38,7 +38,7 @@ module('Integration | FileDef resource primitives', function (hooks) {
   hooks.beforeEach(async function () {
     loader = getService('loader-service').loader;
     FileDef = (
-      await loader.import<typeof CardApiModule>(`${baseRealm.url}card-api`)
+      await loader.import<typeof CardApiModule>(`@cardstack/base/card-api`)
     ).FileDef;
     ({
       FileResource,

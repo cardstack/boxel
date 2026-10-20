@@ -118,7 +118,7 @@ export default class AiAssistantPanelService extends Service {
 
   private commandModuleResource = importResource(
     this,
-    () => 'https://cardstack.com/base/command',
+    () => '@cardstack/base/command',
   );
 
   get commandModule() {

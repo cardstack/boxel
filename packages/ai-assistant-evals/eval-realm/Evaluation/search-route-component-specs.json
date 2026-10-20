@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "Build me a newsletter signup card for my personal blog: a heading, an email input and a Subscribe button. Light and minimal. I already know what I want, so just build it — create one and show it.",
+      "followUpPrompts": [],
+      "successCriteria": "1. Before writing the template, the assistant searches component Specs inside a `run-realm-code` script, with `realm.entries.search` or `realm.cards.search`, a `specType: 'component'` condition and a `matches` term per primitive — not with `search-entries` and not with a `search-cards` tool (`SearchCardsByQueryCommand`, `SearchCardsByTypeAndTitleCommand`).\n2. The search reaches the catalog's realm root. With `realm.entries.search`, the call passes no `realms` option or one that names the catalog's root in any form: `realm.current.url` of a script run in the catalog, the catalog's URL, or `@cardstack/catalog/`. With `realm.cards.search`, the query carries no `realm` or `realms` key and the script's `realm` is the catalog's realm root, not a module folder inside it.\n3. It searches for each primitive it uses (at least the button and the email or text input), in one script.\n4. The template uses the Pret UI components its search returned — `Button` from `@cardstack/pretui/components/button` and the Pret UI input (`email-input` or `input`) — not a raw `<button>` or `<input>`.\n5. It does not import a component name that was not in its search results.\n6. One instance is shown on screen and renders with no error boundary.",
+      "cardInfo": {
+        "name": "Search route: component Specs for a small template",
+        "summary": "A one-prompt template build that needs a button and an email input, both of which the catalog has as Pret UI component Specs. With the catalog-reuse feature off, this eval tests whether `boxel-ui-component-discovery` leads the assistant to search component Specs in a `run-realm-code` script, with `realm.entries.search` or `realm.cards.search`, rather than with `search-entries` or a `search-cards` tool.",
+        "notes": "A deliberately small, one-prompt eval: the expected run is one component-search script, one write of the definition and an instance, and a show-card.\n\nThe catalog-reuse feature is off on purpose: `boxel-ui-component-discovery` is read on every template build whether or not the feature is on, so this measures what every room gets.",
+        "cardThumbnailURL": null
+      },
+      "skillFeatures": []
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}

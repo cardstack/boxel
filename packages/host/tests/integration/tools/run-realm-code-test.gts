@@ -416,7 +416,7 @@ return { show: 'Pet/biscuit' };`,
     assert.notOk(result.showError);
     assert.strictEqual(operatorModeStateService.state.submode, 'code');
     assert.strictEqual(
-      operatorModeStateService.state.codePath?.href,
+      operatorModeStateService.state.codePath,
       `${testRealmURL}notes/first.md`,
     );
   });
@@ -1626,6 +1626,19 @@ throw new Error('stop here');`,
     assert.strictEqual(source.status, 200);
   });
 
+  test('a thrown message that ends a sentence gets no second period', async function (assert) {
+    let command = new RunRealmCodeTool(getService('tool-service').toolContext);
+
+    await assert.rejects(
+      command.execute({
+        realm: testRealmURL,
+        roomId: '!room:example.com',
+        code: `throw new Error('Could not find the styles.');`,
+      }),
+      /Could not find the styles\. No file was saved\./,
+    );
+  });
+
   test('a caught failed write does not fail the run', async function (assert) {
     let toolService = getService('tool-service');
     let cardService = getService('card-service');
@@ -2546,7 +2559,7 @@ return queued;`,
     );
     assert.strictEqual(operatorModeStateService.state.submode, 'code');
     assert.strictEqual(
-      operatorModeStateService.state.codePath?.href,
+      operatorModeStateService.state.codePath,
       `${testRealmURL}pet.gts`,
     );
     assert.strictEqual(
@@ -2608,7 +2621,7 @@ await realm.ui.openFile('notes/second.md');`,
 
     assert.strictEqual(result.uiActions[0]?.status, 'done');
     assert.strictEqual(
-      operatorModeStateService.state.codePath?.href,
+      operatorModeStateService.state.codePath,
       `${testRealmURL}notes/second.md`,
     );
   });

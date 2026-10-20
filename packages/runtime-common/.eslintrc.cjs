@@ -26,5 +26,24 @@ module.exports = {
         '@cardstack/boxel/no-url-from-realm-identifier': 'error',
       },
     },
+    {
+      // A base-realm module is imported by its `@cardstack/base/` prefix, and a
+      // prefix realm is named by its prefix rather than the URL one
+      // environment serves it at.
+      files: ['**/*.ts', 'etc/**/*.js'],
+      plugins: ['@cardstack/boxel'],
+      rules: {
+        '@cardstack/boxel/no-url-form-base-imports': 'error',
+        '@cardstack/boxel/no-literal-realm-urls': 'error',
+      },
+    },
+    {
+      // Tests build environment-specific realm URLs on purpose, to check how
+      // those URLs are resolved and mapped.
+      files: ['tests/**'],
+      rules: {
+        '@cardstack/boxel/no-literal-realm-urls': 'off',
+      },
+    },
   ],
 };
