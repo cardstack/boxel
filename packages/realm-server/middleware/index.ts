@@ -19,7 +19,7 @@ import {
 import { nodeStreamToText, nodeStreamToBuffer } from '../stream.ts';
 import { guardDeclaredLength } from '../lib/declared-length-guard.ts';
 import { retrieveUserSessionClaim } from '../utils/jwt.ts';
-import { getInstanceId, INSTANCE_ID_HEADER } from '../lib/instance-id.ts';
+import { getPublicInstanceId, INSTANCE_ID_HEADER } from '../lib/instance-id.ts';
 import {
   verifyOperatorToken,
   type OperatorScope,
@@ -499,10 +499,10 @@ async function shedSearch(ctxt: Koa.Context, waitedMs: number) {
   );
 }
 
-// Names the replica that answered, so a client behind a load balancer can tell
-// replicas apart and see when one is replaced.
+// Names the replica that answered, by a digest of its instance id, so a client
+// behind a load balancer can tell replicas apart and see when one is replaced.
 export function instanceIdHeader(ctxt: Koa.Context, next: Koa.Next) {
-  ctxt.set(INSTANCE_ID_HEADER, getInstanceId());
+  ctxt.set(INSTANCE_ID_HEADER, getPublicInstanceId());
   return next();
 }
 

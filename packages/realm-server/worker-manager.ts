@@ -91,7 +91,7 @@ import {
 } from './lib/worker-request-forwarder.ts';
 import { isDeployedServerURL } from './lib/outbound/client.ts';
 import { withCredentialHeadersMasked } from './lib/request-telemetry.ts';
-import { getInstanceId, INSTANCE_ID_ENV } from './lib/instance-id.ts';
+import { getInstanceId, INHERITED_INSTANCE_ID_ENV } from './lib/instance-id.ts';
 import {
   encodeSecretsKeyringIpc,
   SECRETS_KEYRING_REQUEST,
@@ -856,7 +856,7 @@ async function startWorker(
     ],
     {
       stdio: ['pipe', 'pipe', 'pipe', 'ipc'],
-      env: { ...process.env, [INSTANCE_ID_ENV]: getInstanceId() },
+      env: { ...process.env, [INHERITED_INSTANCE_ID_ENV]: getInstanceId() },
     },
   );
   let name = `${getInstanceId()}-pid-${worker.pid}`;
