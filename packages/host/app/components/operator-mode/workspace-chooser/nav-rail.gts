@@ -1,15 +1,18 @@
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
+import { cancel, scheduleOnce } from '@ember/runloop';
 import { service } from '@ember/service';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 
+import Bot from '@cardstack/boxel-icons/bot';
+import ChevronRight from '@cardstack/boxel-icons/chevron-right';
 import LayoutGrid from '@cardstack/boxel-icons/layout-grid';
 import MessageCircle from '@cardstack/boxel-icons/message-circle';
 import Plus from '@cardstack/boxel-icons/plus';
-import Sparkles from '@cardstack/boxel-icons/sparkles';
 import Store from '@cardstack/boxel-icons/store';
+import { modifier } from 'ember-modifier';
 
 import { RealmIcon } from '@cardstack/boxel-ui/components';
 import { cn, cssVar, eq } from '@cardstack/boxel-ui/helpers';
@@ -29,7 +32,66 @@ import { leadWith } from './index';
 const RECENT_SESSION_COUNT = 5;
 const FAVORITES_SHOWN = 6;
 
-type Flyout = 'workspaces' | 'ai' | 'catalog';
+// The rail's entries are the dashboard's sections, in page order.
+type Section = 'workspaces' | 'catalogs' | 'agents';
+
+// A section counts as the one being read once its top passes this far down
+// the scroller.
+const READING_LINE = 0.35;
+
+function dashboardScroller() {
+  return document.querySelector<HTMLElement>(
+    '[data-workspace-chooser-scroller]',
+  );
+}
+
+// Reports which section the dashboard is scrolled to, so the rail can mark
+// it. Reads run after render, outside the render that installs this.
+const trackSection = modifier(
+  (_element: HTMLElement, [onChange]: [(section: Section) => void]) => {
+    let scroller = dashboardScroller();
+    if (!scroller) {
+      return;
+    }
+    let update = () => {
+      let sections = [
+        ...scroller.querySelectorAll<HTMLElement>('[data-dashboard-section]'),
+      ];
+      let readingLine =
+        scroller.getBoundingClientRect().top +
+        scroller.clientHeight * READING_LINE;
+      let current = sections[0];
+      for (let section of sections) {
+        if (section.getBoundingClientRect().top <= readingLine) {
+          current = section;
+        }
+      }
+      // The last section may be too short to reach the line; at the bottom
+      // of a page that scrolls, it is the one in view.
+      let scrolls = scroller.scrollHeight > scroller.clientHeight + 1;
+      let atBottom =
+        scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 1;
+      if (scrolls && atBottom) {
+        current = sections[sections.length - 1];
+      }
+      if (current) {
+        onChange(current.dataset.dashboardSection as Section);
+      }
+    };
+    let timer: ReturnType<typeof scheduleOnce> | undefined;
+    let schedule = () => {
+      timer = scheduleOnce('afterRender', update);
+    };
+    scroller.addEventListener('scroll', schedule, { passive: true });
+    schedule();
+    return () => {
+      scroller.removeEventListener('scroll', schedule);
+      if (timer) {
+        cancel(timer);
+      }
+    };
+  },
+);
 
 interface Signature {
   Element: HTMLElement;
@@ -54,7 +116,8 @@ interface RealmEntry {
 // The dashboard's left rail: a floating glass capsule summoned from the
 // BOXEL wordmark. It sits on the column the wordmark and the search button
 // already share, so it adds navigation without moving any existing control.
-// Each entry opens a flyout of the places it leads to.
+// Each entry jumps to its section of the dashboard and marks the one being
+// read; hovering one opens a flyout of the places it leads to.
 export default class NavRail extends Component<Signature> {
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
   @service declare private matrixService: MatrixService;
@@ -62,7 +125,8 @@ export default class NavRail extends Component<Signature> {
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
 
-  @tracked private openFlyout: Flyout | null = null;
+  @tracked private openFlyout: Section | null = null;
+  @tracked private currentSection: Section = 'workspaces';
 
   private entryFor = (url: string): RealmEntry => {
     let info = this.realm.info(url);
@@ -100,7 +164,7 @@ export default class NavRail extends Component<Signature> {
     );
   }
 
-  @action private showFlyout(flyout: Flyout | null) {
+  @action private showFlyout(flyout: Section | null) {
     this.openFlyout = flyout;
   }
 
@@ -126,9 +190,28 @@ export default class NavRail extends Component<Signature> {
     await this.operatorModeStateService.openWorkspace(url);
   }
 
-  @action private async openAssistant() {
-    this.closeRail();
-    await this.aiAssistantPanelService.openPanel();
+  @action private setCurrentSection(section: Section) {
+    if (section !== this.currentSection) {
+      this.currentSection = section;
+    }
+  }
+
+  @action private scrollToSection(section: Section) {
+    this.openFlyout = null;
+    this.currentSection = section;
+    let behavior: ScrollBehavior = window.matchMedia(
+      '(prefers-reduced-motion: reduce)',
+    ).matches
+      ? 'auto'
+      : 'smooth';
+    // Workspaces opens the page, greeting and all, so it goes to the top.
+    if (section === 'workspaces') {
+      dashboardScroller()?.scrollTo({ top: 0, behavior });
+      return;
+    }
+    document
+      .querySelector(`[data-dashboard-section='${section}']`)
+      ?.scrollIntoView({ behavior, block: 'start' });
   }
 
   @action private async openSession(roomId: string) {
@@ -142,14 +225,6 @@ export default class NavRail extends Component<Signature> {
     this.closeRail();
     await this.aiAssistantPanelService.openPanel();
     await this.aiAssistantPanelService.createNewSession();
-  }
-
-  // The Catalog entry opens the Boxel catalog; the flyout lists the rest.
-  @action private openCatalogHome() {
-    let url = catalogRealmURL ?? this.catalogs[0]?.url;
-    if (url) {
-      this.openRealm(url);
-    }
   }
 
   private formatWhen = (timestamp: number) => formatRelativeTime(timestamp);
@@ -170,6 +245,7 @@ export default class NavRail extends Component<Signature> {
       {{on 'mouseleave' @onPointerLeave}}
       {{on 'focusin' @onPointerEnter}}
       {{on 'keydown' this.onKeydown}}
+      {{trackSection this.setCurrentSection}}
       ...attributes
     >
       <div
@@ -180,15 +256,16 @@ export default class NavRail extends Component<Signature> {
         <button
           type='button'
           class={{cn
-            'rail-button is-current'
+            'rail-button'
+            is-current=(eq this.currentSection 'workspaces')
             is-open=(eq this.openFlyout 'workspaces')
           }}
-          aria-current='page'
+          aria-current={{if (eq this.currentSection 'workspaces') 'location'}}
           aria-label='Workspaces'
           aria-haspopup='true'
           aria-expanded={{if (eq this.openFlyout 'workspaces') 'true' 'false'}}
           {{on 'focus' (fn this.showFlyout 'workspaces')}}
-          {{on 'click' this.closeRail}}
+          {{on 'click' (fn this.scrollToSection 'workspaces')}}
           data-test-nav-rail-item='workspaces'
         >
           <LayoutGrid width='20' height='20' />
@@ -237,27 +314,85 @@ export default class NavRail extends Component<Signature> {
 
       <div
         class='rail-item'
-        {{on 'mouseenter' (fn this.showFlyout 'ai')}}
+        {{on 'mouseenter' (fn this.showFlyout 'catalogs')}}
         {{on 'mouseleave' (fn this.showFlyout null)}}
       >
         <button
           type='button'
-          class={{cn 'rail-button' is-open=(eq this.openFlyout 'ai')}}
-          aria-label='Boxel AI'
+          class={{cn
+            'rail-button'
+            is-current=(eq this.currentSection 'catalogs')
+            is-open=(eq this.openFlyout 'catalogs')
+          }}
+          aria-current={{if (eq this.currentSection 'catalogs') 'location'}}
+          aria-label='Catalogs'
           aria-haspopup='true'
-          aria-expanded={{if (eq this.openFlyout 'ai') 'true' 'false'}}
-          {{on 'focus' (fn this.showFlyout 'ai')}}
-          {{on 'click' this.openAssistant}}
-          data-test-nav-rail-item='ai'
+          aria-expanded={{if (eq this.openFlyout 'catalogs') 'true' 'false'}}
+          {{on 'focus' (fn this.showFlyout 'catalogs')}}
+          {{on 'click' (fn this.scrollToSection 'catalogs')}}
+          data-test-nav-rail-item='catalogs'
         >
-          <Sparkles width='20' height='20' />
+          <Store width='20' height='20' />
         </button>
-        {{#if (eq this.openFlyout 'ai')}}
+        {{#if (eq this.openFlyout 'catalogs')}}
           <div
             class='flyout'
             role='group'
-            aria-label='Boxel AI sessions'
-            data-test-nav-rail-flyout='ai'
+            aria-label='Catalogs'
+            data-test-nav-rail-flyout='catalogs'
+          >
+            <header class='flyout-header'>
+              <span class='flyout-title'>Catalogs</span>
+              <span class='flyout-hint'>Apps, fields and themes to use</span>
+            </header>
+            <div class='catalog-grid'>
+              {{#each this.catalogs key='url' as |entry|}}
+                <button
+                  type='button'
+                  class='catalog-tile'
+                  style={{cssVar rail-wallpaper=(this.wallpaper entry)}}
+                  {{on 'click' (fn this.openRealm entry.url)}}
+                  data-test-nav-rail-catalog={{entry.url}}
+                >
+                  <span class='catalog-name'>
+                    <RealmIcon class='catalog-icon' @realmInfo={{entry.info}} />
+                    <span class='row-title'>{{entry.name}}</span>
+                  </span>
+                </button>
+              {{/each}}
+            </div>
+          </div>
+        {{/if}}
+      </div>
+
+      <div
+        class='rail-item'
+        {{on 'mouseenter' (fn this.showFlyout 'agents')}}
+        {{on 'mouseleave' (fn this.showFlyout null)}}
+      >
+        <button
+          type='button'
+          class={{cn
+            'rail-button'
+            is-current=(eq this.currentSection 'agents')
+            is-open=(eq this.openFlyout 'agents')
+          }}
+          aria-current={{if (eq this.currentSection 'agents') 'location'}}
+          aria-label='Agents'
+          aria-haspopup='true'
+          aria-expanded={{if (eq this.openFlyout 'agents') 'true' 'false'}}
+          {{on 'focus' (fn this.showFlyout 'agents')}}
+          {{on 'click' (fn this.scrollToSection 'agents')}}
+          data-test-nav-rail-item='agents'
+        >
+          <Bot width='20' height='20' />
+        </button>
+        {{#if (eq this.openFlyout 'agents')}}
+          <div
+            class='flyout'
+            role='group'
+            aria-label='Agents'
+            data-test-nav-rail-flyout='agents'
           >
             <header class='flyout-header'>
               <span class='flyout-title'>Boxel AI</span>
@@ -291,54 +426,15 @@ export default class NavRail extends Component<Signature> {
                 No sessions yet. Ask Boxel AI to build or change something.
               </p>
             {{/each}}
-          </div>
-        {{/if}}
-      </div>
-
-      <div
-        class='rail-item'
-        {{on 'mouseenter' (fn this.showFlyout 'catalog')}}
-        {{on 'mouseleave' (fn this.showFlyout null)}}
-      >
-        <button
-          type='button'
-          class={{cn 'rail-button' is-open=(eq this.openFlyout 'catalog')}}
-          aria-label='Catalog'
-          aria-haspopup='true'
-          aria-expanded={{if (eq this.openFlyout 'catalog') 'true' 'false'}}
-          {{on 'focus' (fn this.showFlyout 'catalog')}}
-          {{on 'click' this.openCatalogHome}}
-          data-test-nav-rail-item='catalog'
-        >
-          <Store width='20' height='20' />
-        </button>
-        {{#if (eq this.openFlyout 'catalog')}}
-          <div
-            class='flyout'
-            role='group'
-            aria-label='Catalogs'
-            data-test-nav-rail-flyout='catalog'
-          >
-            <header class='flyout-header'>
-              <span class='flyout-title'>Catalog</span>
-              <span class='flyout-hint'>Apps, fields and themes to use</span>
-            </header>
-            <div class='catalog-grid'>
-              {{#each this.catalogs key='url' as |entry|}}
-                <button
-                  type='button'
-                  class='catalog-tile'
-                  style={{cssVar rail-wallpaper=(this.wallpaper entry)}}
-                  {{on 'click' (fn this.openRealm entry.url)}}
-                  data-test-nav-rail-catalog={{entry.url}}
-                >
-                  <span class='catalog-name'>
-                    <RealmIcon class='catalog-icon' @realmInfo={{entry.info}} />
-                    <span class='row-title'>{{entry.name}}</span>
-                  </span>
-                </button>
-              {{/each}}
-            </div>
+            <button
+              type='button'
+              class='session-row is-link'
+              {{on 'click' (fn this.scrollToSection 'agents')}}
+              data-test-nav-rail-connect-agent
+            >
+              <span class='row-title'>Connect Claude Code or Codex</span>
+              <ChevronRight width='14' height='14' />
+            </button>
           </div>
         {{/if}}
       </div>
@@ -410,6 +506,7 @@ export default class NavRail extends Component<Signature> {
         color: var(--foreground);
       }
       .rail-button.is-current {
+        /* The section being read. */
         background-color: var(--boxel-highlight);
         color: var(--boxel-highlight-foreground);
         box-shadow: 0 0 1.25rem
@@ -563,6 +660,15 @@ export default class NavRail extends Component<Signature> {
         font-weight: 600;
         letter-spacing: 0.1em;
         text-transform: uppercase;
+      }
+      .session-row.is-link {
+        margin-top: var(--boxel-sp-4xs);
+        border-top: 1px solid var(--rail-line);
+        border-radius: 0 0 0.625rem 0.625rem;
+        color: var(--muted-foreground);
+      }
+      .session-row.is-link:hover {
+        color: var(--foreground);
       }
       .session-icon {
         flex: none;

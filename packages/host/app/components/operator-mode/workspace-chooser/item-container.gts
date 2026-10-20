@@ -16,7 +16,7 @@ const WorkspaceChooserItemContainer: TemplateOnlyComponent<Signature> =
       .workspace {
         min-width: var(--workspace-chooser-tile-width);
         width: var(--workspace-chooser-tile-width);
-        height: 10.375rem;
+        height: var(--workspace-chooser-tile-height);
         display: flex;
         flex-direction: column;
         border-radius: var(--boxel-border-radius-xl);

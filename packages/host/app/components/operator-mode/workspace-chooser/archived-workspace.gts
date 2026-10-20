@@ -130,7 +130,7 @@ export default class ArchivedWorkspace extends Component<Signature> {
       .tile {
         min-width: var(--workspace-chooser-tile-width);
         width: var(--workspace-chooser-tile-width);
-        height: 10.375rem;
+        height: var(--workspace-chooser-tile-height);
         border-radius: var(--boxel-border-radius-xl);
         background-color: var(--boxel-500);
         background-image: var(--workspace-background-image-url);

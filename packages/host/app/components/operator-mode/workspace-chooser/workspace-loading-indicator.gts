@@ -20,7 +20,7 @@ const WorkspaceLoadingIndicator: TemplateOnlyComponent<Signature> = <template>
     .workspace {
       min-width: var(--workspace-chooser-tile-width);
       width: var(--workspace-chooser-tile-width);
-      height: 10.375rem;
+      height: var(--workspace-chooser-tile-height);
       display: flex;
       flex-direction: column;
       justify-content: center;

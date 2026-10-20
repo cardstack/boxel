@@ -14,7 +14,6 @@ import { BoxelSelect, LoadingIndicator } from '@cardstack/boxel-ui/components';
 import { add, eq } from '@cardstack/boxel-ui/helpers';
 import {
   FailureBordered as FailureIcon,
-  IconGlobe,
   Lock,
   StarFilled,
   TriangleRight,
@@ -31,6 +30,7 @@ import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import AddWorkspace from './add-workspace';
+import Agents from './agents';
 import ArchivedWorkspace from './archived-workspace';
 import GetStarted from './get-started';
 import ManageCatalogs from './manage-catalogs';
@@ -64,6 +64,10 @@ interface Signature {
 }
 
 const log = logger('component:workspace-chooser');
+
+// Favorites keep the roomy tile and gap; the lists below them are compact.
+const FAVORITE_MIN_WIDTH_PX = 440;
+const FAVORITE_ROW_GAP_PX = 48;
 
 export default class WorkspaceChooser extends Component<Signature> {
   @service declare matrixService: MatrixService;
@@ -321,11 +325,20 @@ export default class WorkspaceChooser extends Component<Signature> {
     return Math.max(1, perRow);
   }
 
-  // Two tiles' worth of Favorites-section width for every 3-across, rounded
-  // up — a row of 3 or 4 gives favorited tiles pairs, a row of 5 gives
-  // groups of 3, etc.
+  // As many favorites per row as fit at their minimum width across the
+  // measured Your Workspaces row, which the compact tiles below fill much
+  // more finely than favorites need.
   private get favoritesSlotCount(): number {
-    return Math.ceil(this.tilesPerRow / 2);
+    let rowWidth =
+      this.tilesPerRow * this.workspaceTileWidth +
+      (this.tilesPerRow - 1) * this.workspaceTileGap;
+    return Math.max(
+      1,
+      Math.floor(
+        (rowWidth + FAVORITE_ROW_GAP_PX) /
+          (FAVORITE_MIN_WIDTH_PX + FAVORITE_ROW_GAP_PX),
+      ),
+    );
   }
 
   // The width a single favorited tile should be so that `favoritesSlotCount`
@@ -336,10 +349,11 @@ export default class WorkspaceChooser extends Component<Signature> {
       return null;
     }
     let n = this.favoritesSlotCount;
+    let gap = FAVORITE_ROW_GAP_PX;
     let rowWidth =
       this.tilesPerRow * this.workspaceTileWidth +
       (this.tilesPerRow - 1) * this.workspaceTileGap;
-    return (rowWidth - (n - 1) * this.workspaceTileGap) / n;
+    return (rowWidth - (n - 1) * gap) / n;
   }
 
   // Applied to real favorited tiles (via cssVar, see workspace.gts) so they
@@ -620,7 +634,10 @@ export default class WorkspaceChooser extends Component<Signature> {
           </div>
         {{/in-element}}
       {{/if}}
-      <div class='workspace-chooser__content boxel-dark-scrollbar'>
+      <div
+        class='workspace-chooser__content boxel-dark-scrollbar'
+        data-workspace-chooser-scroller
+      >
         {{#if this.unreachableRealmServers.length}}
           <div
             class='unreachable-notice'
@@ -650,98 +667,174 @@ export default class WorkspaceChooser extends Component<Signature> {
             data-test-dashboard-greeting
           >{{this.greeting}}</h1>
           <GetStarted />
-          <div class='workspace-section' data-test-favorites-section>
-            <div class='section-header'>
-              <StarFilled width='14' height='14' class='section-header-icon' />
-              <span class='workspace-chooser__title'>Favorites</span>
-              {{#if this.favoriteRealmIdentifiers.length}}
-                <span
-                  class='section-count'
-                >{{this.favoriteRealmIdentifiers.length}}</span>
-              {{/if}}
+          <section
+            class='dashboard-section'
+            aria-labelledby='dashboard-section-workspaces'
+            data-dashboard-section='workspaces'
+            data-test-dashboard-section='workspaces'
+          >
+            <div class='dashboard-section-header'>
+              <h2
+                id='dashboard-section-workspaces'
+                class='dashboard-section-title'
+              >Workspaces</h2>
+              <p class='dashboard-section-hint'>Where your cards live. Star one
+                to keep it at the top.</p>
             </div>
-            {{#if this.favoritesEmptyMessage}}
-              <span
-                class='section-empty'
-                data-test-favorites-empty
-              >{{this.favoritesEmptyMessage}}</span>
-            {{else}}
-              <div
-                class='workspace-list'
-                data-test-favorites-list
-                {{this.trackFavoriteCounts
-                  this.favoriteCountsKey
-                  this.realm.indexCountsRevision
-                }}
-              >
-                {{#each this.favoriteRealmIdentifiers as |realmIdentifier i|}}
-                  <Workspace
-                    @realmIdentifier={{realmIdentifier}}
-                    @navIndex={{i}}
-                    @isSelected={{eq this.currentIndex i}}
-                    @selectionActive={{this.isSelectionActive}}
-                    @isFavoritesSection={{true}}
-                    @enlargedWidth={{this.favoritesTileWidthPx}}
-                  />
-                {{/each}}
-              </div>
-            {{/if}}
-          </div>
-          <div class='workspace-section'>
-            <div class='section-header'>
-              <Lock width='14' height='14' class='section-header-icon' />
-              <span class='workspace-chooser__title'>Your Workspaces</span>
-              {{#if this.filteredUserRealmIdentifiers.length}}
-                <span
-                  class='section-count'
-                >{{this.filteredUserRealmIdentifiers.length}}</span>
-              {{/if}}
-            </div>
-            {{#if this.userWorkspacesEmptyMessage}}
-              <span
-                class='section-empty'
-                data-test-workspaces-empty
-              >{{this.userWorkspacesEmptyMessage}}</span>
-            {{else}}
-              <div
-                class='workspace-list'
-                data-test-workspace-list
-                {{this.measureWorkspaceGrid}}
-              >
-                <AddWorkspace
-                  @navIndex={{this.addWorkspaceNavIndex}}
-                  @isSelected={{eq this.currentIndex this.addWorkspaceNavIndex}}
+            <div class='workspace-section' data-test-favorites-section>
+              <div class='section-header'>
+                <StarFilled
+                  width='14'
+                  height='14'
+                  class='section-header-icon'
                 />
-                {{#if this.matrixService.isInitializingNewUser}}
-                  <WorkspaceLoadingIndicator />
+                <span class='workspace-chooser__title'>Favorites</span>
+                {{#if this.favoriteRealmIdentifiers.length}}
+                  <span
+                    class='section-count'
+                  >{{this.favoriteRealmIdentifiers.length}}</span>
                 {{/if}}
-                {{#each
-                  this.filteredUserRealmIdentifiers
-                  as |realmIdentifier i|
-                }}
-                  {{#let (add this.userWorkspacesNavBase i) as |navIndex|}}
+              </div>
+              {{#if this.favoritesEmptyMessage}}
+                <span
+                  class='section-empty'
+                  data-test-favorites-empty
+                >{{this.favoritesEmptyMessage}}</span>
+              {{else}}
+                <div
+                  class='workspace-list'
+                  data-test-favorites-list
+                  {{this.trackFavoriteCounts
+                    this.favoriteCountsKey
+                    this.realm.indexCountsRevision
+                  }}
+                >
+                  {{#each this.favoriteRealmIdentifiers as |realmIdentifier i|}}
                     <Workspace
                       @realmIdentifier={{realmIdentifier}}
-                      @showMenu={{true}}
-                      @navIndex={{navIndex}}
-                      @isSelected={{eq this.currentIndex navIndex}}
+                      @navIndex={{i}}
+                      @isSelected={{eq this.currentIndex i}}
                       @selectionActive={{this.isSelectionActive}}
+                      @isFavoritesSection={{true}}
+                      @enlargedWidth={{this.favoritesTileWidthPx}}
                     />
-                  {{/let}}
-                {{/each}}
+                  {{/each}}
+                </div>
+              {{/if}}
+            </div>
+            <div class='workspace-section'>
+              <div class='section-header'>
+                <Lock width='14' height='14' class='section-header-icon' />
+                <span class='workspace-chooser__title'>Your Workspaces</span>
+                {{#if this.filteredUserRealmIdentifiers.length}}
+                  <span
+                    class='section-count'
+                  >{{this.filteredUserRealmIdentifiers.length}}</span>
+                {{/if}}
               </div>
-            {{/if}}
-          </div>
-          <div class='workspace-section'>
-            <div class='section-header'>
-              <IconGlobe width='14' height='14' class='section-header-icon' />
-              <span class='workspace-chooser__title'>Catalogs</span>
+              {{#if this.userWorkspacesEmptyMessage}}
+                <span
+                  class='section-empty'
+                  data-test-workspaces-empty
+                >{{this.userWorkspacesEmptyMessage}}</span>
+              {{else}}
+                <div
+                  class='workspace-list is-compact'
+                  data-test-workspace-list
+                  {{this.measureWorkspaceGrid}}
+                >
+                  <AddWorkspace
+                    @navIndex={{this.addWorkspaceNavIndex}}
+                    @isSelected={{eq
+                      this.currentIndex
+                      this.addWorkspaceNavIndex
+                    }}
+                  />
+                  {{#if this.matrixService.isInitializingNewUser}}
+                    <WorkspaceLoadingIndicator />
+                  {{/if}}
+                  {{#each
+                    this.filteredUserRealmIdentifiers
+                    as |realmIdentifier i|
+                  }}
+                    {{#let (add this.userWorkspacesNavBase i) as |navIndex|}}
+                      <Workspace
+                        @realmIdentifier={{realmIdentifier}}
+                        @showMenu={{true}}
+                        @navIndex={{navIndex}}
+                        @isSelected={{eq this.currentIndex navIndex}}
+                        @selectionActive={{this.isSelectionActive}}
+                      />
+                    {{/let}}
+                  {{/each}}
+                </div>
+              {{/if}}
+            </div>
+            <div class='workspace-section' data-test-archived-section>
+              <button
+                type='button'
+                class='section-header section-header--toggle
+                  {{if this.isArchivedExpanded "is-expanded"}}'
+                aria-expanded='{{if this.isArchivedExpanded "true" "false"}}'
+                data-test-archived-toggle
+                {{on 'click' this.toggleArchived}}
+              >
+                <TriangleRight
+                  width='12'
+                  height='12'
+                  class='section-disclosure-icon'
+                />
+                <ArchiveIcon
+                  width='14'
+                  height='14'
+                  class='section-header-icon'
+                />
+                <span class='workspace-chooser__title'>Archived</span>
+                {{#if this.showArchivedCount}}
+                  <span
+                    class='section-count'
+                  >{{this.archivedRealms.length}}</span>
+                {{/if}}
+              </button>
+              {{#if this.isArchivedExpanded}}
+                {{#if this.loadArchivedRealmsTask.isRunning}}
+                  <WorkspaceLoadingIndicator />
+                {{else if this.archivedRealms.length}}
+                  <div
+                    class='workspace-list is-compact'
+                    data-test-archived-list
+                  >
+                    {{#each this.archivedRealms as |archivedRealm|}}
+                      <ArchivedWorkspace @archivedRealm={{archivedRealm}} />
+                    {{/each}}
+                  </div>
+                {{else}}
+                  <span class='section-empty' data-test-archived-empty>
+                    No archived workspaces
+                  </span>
+                {{/if}}
+              {{/if}}
+            </div>
+          </section>
+          <section
+            class='dashboard-section'
+            aria-labelledby='dashboard-section-catalogs'
+            data-dashboard-section='catalogs'
+            data-test-dashboard-section='catalogs'
+          >
+            <div class='dashboard-section-header'>
+              <h2
+                id='dashboard-section-catalogs'
+                class='dashboard-section-title'
+              >Catalogs</h2>
               {{#if this.filteredCatalogRealmIdentifiers.length}}
                 <span
                   class='section-count'
                 >{{this.filteredCatalogRealmIdentifiers.length}}</span>
               {{/if}}
               <ManageCatalogs />
+              <p class='dashboard-section-hint'>Apps, fields and themes to use
+                in your workspaces.</p>
             </div>
             {{#if this.catalogEmptyMessage}}
               <span
@@ -749,7 +842,7 @@ export default class WorkspaceChooser extends Component<Signature> {
                 data-test-catalog-empty
               >{{this.catalogEmptyMessage}}</span>
             {{else}}
-              <div class='workspace-list' data-test-catalog-list>
+              <div class='workspace-list is-compact' data-test-catalog-list>
                 {{#each
                   this.filteredCatalogRealmIdentifiers
                   as |realmIdentifier i|
@@ -765,45 +858,23 @@ export default class WorkspaceChooser extends Component<Signature> {
                 {{/each}}
               </div>
             {{/if}}
-          </div>
-          <div class='workspace-section' data-test-archived-section>
-            <button
-              type='button'
-              class='section-header section-header--toggle
-                {{if this.isArchivedExpanded "is-expanded"}}'
-              aria-expanded='{{if this.isArchivedExpanded "true" "false"}}'
-              data-test-archived-toggle
-              {{on 'click' this.toggleArchived}}
-            >
-              <TriangleRight
-                width='12'
-                height='12'
-                class='section-disclosure-icon'
-              />
-              <ArchiveIcon width='14' height='14' class='section-header-icon' />
-              <span class='workspace-chooser__title'>Archived</span>
-              {{#if this.showArchivedCount}}
-                <span
-                  class='section-count'
-                >{{this.archivedRealms.length}}</span>
-              {{/if}}
-            </button>
-            {{#if this.isArchivedExpanded}}
-              {{#if this.loadArchivedRealmsTask.isRunning}}
-                <WorkspaceLoadingIndicator />
-              {{else if this.archivedRealms.length}}
-                <div class='workspace-list' data-test-archived-list>
-                  {{#each this.archivedRealms as |archivedRealm|}}
-                    <ArchivedWorkspace @archivedRealm={{archivedRealm}} />
-                  {{/each}}
-                </div>
-              {{else}}
-                <span class='section-empty' data-test-archived-empty>
-                  No archived workspaces
-                </span>
-              {{/if}}
-            {{/if}}
-          </div>
+          </section>
+          <section
+            class='dashboard-section'
+            aria-labelledby='dashboard-section-agents'
+            data-dashboard-section='agents'
+            data-test-dashboard-section='agents'
+          >
+            <div class='dashboard-section-header'>
+              <h2
+                id='dashboard-section-agents'
+                class='dashboard-section-title'
+              >Agents</h2>
+              <p class='dashboard-section-hint'>Boxel AI works here; your own
+                agent works through the Boxel CLI.</p>
+            </div>
+            <Agents />
+          </section>
         </div>
       </div>
     </div>
@@ -840,7 +911,10 @@ export default class WorkspaceChooser extends Component<Signature> {
           transparent
         );
         --workspace-chooser-card-width: fit-content;
-        --workspace-chooser-tile-width: var(--boxel-xxs-container);
+        /* Compact tiles for the long lists of workspace and catalog names;
+           favorites get the big desk tiles. */
+        --workspace-chooser-tile-width: 11.5rem;
+        --workspace-chooser-tile-height: 7rem;
         /* Favorites until the grid is measured; capped so the tile never
            outgrows a content area narrower than 1.5 tiles. */
         --workspace-chooser-enlarged-tile-width: min(
@@ -925,7 +999,7 @@ export default class WorkspaceChooser extends Component<Signature> {
       .sections-wrapper {
         display: flex;
         flex-direction: column;
-        gap: calc(var(--boxel-sp-lg) * 2);
+        gap: calc(var(--boxel-sp-xl) * 2);
       }
       .workspace-section {
         display: flex;
@@ -986,8 +1060,46 @@ export default class WorkspaceChooser extends Component<Signature> {
       .workspace-list {
         display: flex;
         flex-wrap: wrap;
-        gap: calc(var(--boxel-sp-lg) + var(--boxel-sp-lg));
+        /* Matches FAVORITE_ROW_GAP_PX, which sizes the favorite tiles. */
+        gap: 3rem;
         padding: var(--boxel-sp-xs) 0;
+      }
+      .workspace-list.is-compact {
+        gap: var(--boxel-sp-lg) var(--boxel-sp);
+      }
+      /* The three places the rail jumps to. Each opens with a real heading so
+         the single scroll reads as chapters rather than one long grid. */
+      .dashboard-section {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xl);
+        scroll-margin-top: calc(
+          var(--operator-mode-top-bar-item-height) + 2 *
+            var(--operator-mode-spacing) + var(--boxel-sp)
+        );
+      }
+      .dashboard-section-header {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        column-gap: var(--boxel-sp-xs);
+        row-gap: var(--boxel-sp-5xs);
+        padding-bottom: var(--boxel-sp-sm);
+        border-bottom: 1px solid
+          color-mix(in oklch, var(--boxel-light) 10%, transparent);
+      }
+      .dashboard-section-title {
+        margin: 0;
+        font-size: 1.25rem;
+        font-weight: 700;
+        letter-spacing: -0.015em;
+        color: var(--boxel-light);
+      }
+      .dashboard-section-hint {
+        flex-basis: 100%;
+        margin: 0;
+        font-size: var(--boxel-font-size-sm);
+        color: var(--workspace-chooser-count-color);
       }
       .section-empty {
         color: var(--boxel-400);

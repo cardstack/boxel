@@ -661,7 +661,7 @@ export default class Workspace extends Component<Signature> {
         top: 0;
         left: 0;
         width: var(--workspace-chooser-tile-width);
-        height: 10.375rem;
+        height: var(--workspace-chooser-tile-height);
         box-sizing: border-box;
         border-radius: var(--boxel-border-radius-xl);
         border: 1px solid rgba(255 255 255 / 25%);
@@ -1184,7 +1184,7 @@ export default class Workspace extends Component<Signature> {
       }
       .host-trigger {
         position: absolute;
-        top: calc(10.375rem - 2.25rem);
+        top: calc(var(--workspace-chooser-tile-height) - 2.25rem);
         left: 0;
         width: var(--workspace-chooser-tile-width);
         height: 2.25rem;
@@ -1237,7 +1237,7 @@ export default class Workspace extends Component<Signature> {
       }
       .host-dropdown {
         position: absolute;
-        top: 10.375rem;
+        top: var(--workspace-chooser-tile-height);
         right: 0;
         width: var(--boxel-xxs-container);
         background: var(--boxel-light);
