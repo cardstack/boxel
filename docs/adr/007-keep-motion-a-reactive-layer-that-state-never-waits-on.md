@@ -98,9 +98,6 @@ animation inspector or slow-motion control.
 Host MAY use glimmer-motion and Choreo inside the engine and in low-level
 declarations.
 
-The first host integration SHOULD replace one existing animation one-to-one.
-That tests the engine design in host before it spreads.
-
 ### 1.5. Motion quality
 
 Each animation SHOULD have a purpose. It SHOULD show where something came from
