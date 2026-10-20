@@ -626,12 +626,6 @@ export class RunRealmCodeResult extends CardDef {
             {{/each}}
           </ul>
         {{/if}}
-        {{#if @model.shownCard}}
-          <p class='shown-card' data-test-realm-code-shown-card>
-            Opened
-            <a href={{@model.shownCard}}>{{@model.shownCard}}</a>
-          </p>
-        {{/if}}
         {{#if @model.showError}}
           <p class='show-error' data-test-realm-code-show-error>
             {{@model.showError}}
@@ -682,12 +676,9 @@ export class RunRealmCodeResult extends CardDef {
           color: var(--boxel-450);
           text-transform: capitalize;
         }
-        .shown-card,
         .show-error {
           margin: 0;
           word-break: break-all;
-        }
-        .show-error {
           color: var(--boxel-error-200);
         }
         .captures {
