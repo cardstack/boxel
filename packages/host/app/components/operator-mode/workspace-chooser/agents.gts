@@ -221,20 +221,19 @@ export default class Agents extends Component {
 
   <template>
     <div class='make' data-theme='dark' data-test-agents>
-      <div class='intro'>
-        <div class='pitch'>
-          <span class='eyebrow'>Bring your own agent</span>
-          <h3 class='pitch-title'>Build with the agent you already pay for</h3>
-          <p class='pitch-body'>
-            Add the Boxel plugin to Claude or Codex and your agent builds right
-            in your workspaces. Ask in its chat; Boxel shows the result beside
-            it, live.
-          </p>
-        </div>
-        <AgentScreencast />
+      <div class='pitch'>
+        <span class='eyebrow'>Bring your own agent</span>
+        <h3 class='pitch-title'>Build with the agent you already pay for</h3>
+        <p class='pitch-body'>
+          Add the Boxel plugin to Claude or Codex and your agent builds right in
+          your workspaces. Ask in its chat; Boxel shows the result beside it,
+          live.
+        </p>
       </div>
 
-      <div class='bench'>
+      {{! Watch it on the left, do it on the right. }}
+      <div class='hero'>
+        <AgentScreencast />
         <section class='steps' aria-label='Connect your agent'>
           <div class='steps-top'>
             <span class='steps-title'>
@@ -355,48 +354,46 @@ export default class Agents extends Component {
             {{/each}}
           </ol>
         </section>
+      </div>
 
-        <section class='browser' aria-label='Boxel AI'>
+      <section class='browser' aria-label='Boxel AI'>
+        <div class='browser-words'>
           <span class='eyebrow'>No agent?</span>
           <b class='browser-title'>Build in the browser</b>
           <span class='muted'>Describe what you want and Boxel AI makes it in
             your workspace. Uses credits.</span>
-          <Button
-            class='browser-action'
-            @kind='primary'
-            @size='small'
-            {{on 'click' this.startSession}}
-            data-test-agent-new-session
-          >
-            <Sparkles width='14' height='14' />
-            Describe it
-          </Button>
-          {{#if this.recentSessions.length}}
-            <ul class='session-list' aria-label='Recent Boxel AI sessions'>
-              {{#each this.recentSessions as |session|}}
-                <li>
-                  <button
-                    type='button'
-                    class='session-row'
-                    {{on 'click' (fn this.openSession session.roomId)}}
-                    data-test-agent-session={{session.roomId}}
-                  >
-                    <MessageCircle
-                      class='session-icon'
-                      width='14'
-                      height='14'
-                    />
-                    <span class='session-name'>{{session.name}}</span>
-                    <span class='muted'>{{this.formatWhen
-                        session.lastActiveTimestamp
-                      }}</span>
-                  </button>
-                </li>
-              {{/each}}
-            </ul>
-          {{/if}}
-        </section>
-      </div>
+        </div>
+        <Button
+          class='browser-action'
+          @kind='primary'
+          @size='small'
+          {{on 'click' this.startSession}}
+          data-test-agent-new-session
+        >
+          <Sparkles width='14' height='14' />
+          Describe it
+        </Button>
+        {{#if this.recentSessions.length}}
+          <ul class='session-list' aria-label='Recent Boxel AI sessions'>
+            {{#each this.recentSessions as |session|}}
+              <li>
+                <button
+                  type='button'
+                  class='session-row'
+                  {{on 'click' (fn this.openSession session.roomId)}}
+                  data-test-agent-session={{session.roomId}}
+                >
+                  <MessageCircle class='session-icon' width='14' height='14' />
+                  <span class='session-name'>{{session.name}}</span>
+                  <span class='muted'>{{this.formatWhen
+                      session.lastActiveTimestamp
+                    }}</span>
+                </button>
+              </li>
+            {{/each}}
+          </ul>
+        {{/if}}
+      </section>
     </div>
 
     <style scoped>
@@ -420,23 +417,12 @@ export default class Agents extends Component {
         color: var(--boxel-highlight);
       }
 
-      /* The pitch beside the screencast that shows it: why, before how. */
-      .intro {
-        display: grid;
-        grid-template-columns: minmax(16rem, 1fr) minmax(0, 2fr);
-        align-items: center;
-        gap: var(--boxel-sp-xl);
-      }
+      /* The pitch: why, before how. */
       .pitch {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xs);
-        max-width: 38rem;
-      }
-      @media (max-width: 60rem) {
-        .intro {
-          grid-template-columns: minmax(0, 1fr);
-        }
+        max-width: 40rem;
       }
       /* Below the section heading in rank: the pitch never outshouts it. */
       .pitch-title {
@@ -453,11 +439,18 @@ export default class Agents extends Component {
         color: var(--make-muted);
       }
 
-      .bench {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: flex-start;
+      /* The screencast shows the flow the steps beside it walk through,
+         so the two share a row; one column when there's no room. */
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.3fr) minmax(22rem, 1fr);
+        align-items: stretch;
         gap: var(--boxel-sp-lg);
+      }
+      @media (max-width: 64rem) {
+        .hero {
+          grid-template-columns: minmax(0, 1fr);
+        }
       }
       /* The dashboard's one surface: a dark panel with a hairline edge. */
       .steps,
@@ -468,8 +461,7 @@ export default class Agents extends Component {
         background-color: var(--boxel-700);
       }
       .steps {
-        flex: 1.6 1 30rem;
-        max-width: 40rem;
+        min-width: 0;
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-sm);
@@ -701,15 +693,15 @@ export default class Agents extends Component {
         outline-offset: 2px;
       }
 
-      /* Boxel AI, for anyone without an agent: the same panel, its teal
-         edge saying it's the other way in, not a sixth step. */
+      /* Boxel AI, for anyone without an agent: a strip under the row, the
+         same panel with a teal edge saying it's the other way in, not a sixth
+         step. Its words, its action and its recent sessions read across. */
       .browser {
-        flex: 1 1 16rem;
-        max-width: 22rem;
         display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-xs);
-        padding: var(--boxel-sp-lg);
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-sm) var(--boxel-sp-xl);
+        padding: var(--boxel-sp) var(--boxel-sp-lg);
         border-color: color-mix(
           in oklch,
           var(--boxel-highlight) 35%,
@@ -718,21 +710,28 @@ export default class Agents extends Component {
         font-size: var(--boxel-font-size-sm);
         line-height: 1.45;
       }
+      .browser-words {
+        flex: 1 1 16rem;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-5xs);
+      }
       .browser-title {
         font-size: var(--boxel-font-size);
       }
       .browser-action {
-        align-self: flex-start;
+        flex: none;
         gap: var(--boxel-sp-4xs);
-        margin-top: var(--boxel-sp-4xs);
       }
       .session-list {
+        flex: 1 1 18rem;
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-6xs);
-        margin: var(--boxel-sp-xs) 0 0;
-        padding: var(--boxel-sp-xs) 0 0;
-        border-top: 1px solid var(--make-line);
+        min-width: 0;
+        margin: 0;
+        padding: 0 0 0 var(--boxel-sp-lg);
+        border-left: 1px solid var(--make-line);
         list-style: none;
       }
       .session-row {
@@ -771,10 +770,9 @@ export default class Agents extends Component {
         font-weight: 600;
       }
       @media (max-width: 30rem) {
-        .steps,
-        .browser {
-          flex-basis: 100%;
-          max-width: none;
+        .session-list {
+          padding-left: 0;
+          border-left: 0;
         }
         .pitch-title {
           font-size: 1.375rem;

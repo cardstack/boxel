@@ -323,7 +323,10 @@ export default class AgentScreencast extends Component {
       .window {
         display: grid;
         grid-template-columns: 6.5rem minmax(0, 1.25fr) minmax(0, 1fr);
-        height: 17rem;
+        /* Fills the height its row gives it (the steps beside it), and
+           never less than room for the whole conversation. */
+        flex: 1;
+        min-height: 19rem;
         overflow: hidden;
         border: 1px solid var(--app-line);
         border-radius: 1rem;
