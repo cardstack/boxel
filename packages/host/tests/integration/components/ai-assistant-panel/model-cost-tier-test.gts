@@ -42,8 +42,8 @@ import { setupRenderingTest } from '../../../helpers/setup';
 // host behavior it owns — given a catalog card with `costTierLabel = X`, the
 // picker renders badge X — rather than re-deriving the tier.
 const OPENROUTER_MODEL_SOURCE = `
-  import { CardDef, field, contains } from 'https://cardstack.com/base/card-api';
-  import StringField from 'https://cardstack.com/base/string';
+  import { CardDef, field, contains } from '@cardstack/base/card-api';
+  import StringField from '@cardstack/base/string';
 
   export class OpenRouterModel extends CardDef {
     static displayName = 'OpenRouter Model';

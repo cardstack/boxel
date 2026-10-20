@@ -4,6 +4,7 @@ import {
   getField,
   isCardDocumentString,
   isFileDef,
+  isPrefixForm,
   primitive,
   relationshipEntries,
   resolveRRIReference,
@@ -375,7 +376,7 @@ function resolveLinkTarget(
   } catch {
     return undefined;
   }
-  if (target.startsWith('@') || /^https?:\/\//.test(target)) {
+  if (isPrefixForm(target) || /^https?:\/\//.test(target)) {
     return target;
   }
   return undefined;

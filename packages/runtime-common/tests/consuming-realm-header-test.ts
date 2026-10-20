@@ -11,8 +11,8 @@ const tests = Object.freeze({
 
   'accepts a plain https realm URL': async (assert) => {
     assert.strictEqual(
-      sanitizeConsumingRealmHeader('https://cardstack.com/base/'),
-      'https://cardstack.com/base/',
+      sanitizeConsumingRealmHeader('https://realms.example.test/base/'),
+      'https://realms.example.test/base/',
     );
   },
 

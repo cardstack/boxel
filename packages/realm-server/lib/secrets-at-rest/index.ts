@@ -193,54 +193,72 @@ export function receiveSecretsKeyring({
   });
 }
 
-// A column that holds a secret in plain text until its table seals it with
-// this helper. `query` returns one row with a numeric `count` of rows whose
-// secret is still in plain text.
+// A column that holds a secret in plain text. `query` returns one row with a
+// numeric `count` of rows that still hold one.
 export interface PlaintextCensusEntry {
   table: string;
   column: string;
   query: string;
 }
 
-// Each table that adopts the helper adds its column here, and removes it once
-// no plain-text value can remain.
+// Each column that holds a secret in plain text alongside its sealed copy is
+// listed here. The census counts a column only while it exists, so an entry
+// reports the rows still holding plain text up to the removal migration that
+// drops its column, and nothing after it.
 export const PLAINTEXT_CENSUS: PlaintextCensusEntry[] = [
-  // A key is in plain text until the backfill seals it. The plain-text column
-  // is kept in step alongside the sealed one, so it isn't counted.
   {
     table: 'proxy_endpoints',
     column: 'api_key',
     query: `SELECT COUNT(*) AS count FROM proxy_endpoints
-            WHERE api_key IS NOT NULL AND api_key_ciphertext IS NULL`,
+            WHERE api_key IS NOT NULL`,
   },
   {
     table: 'incoming_webhooks',
     column: 'signing_secret',
     query: `SELECT COUNT(*) AS count FROM incoming_webhooks
-            WHERE signing_secret_ciphertext IS NULL`,
+            WHERE signing_secret IS NOT NULL`,
   },
 ];
 
-// Logs how many rows of each adopting table still hold their secret in plain
-// text. A count that fails to run is logged and doesn't stop startup.
+async function columnExists(
+  dbAdapter: DBAdapter,
+  table: string,
+  column: string,
+): Promise<boolean> {
+  let rows = await dbAdapter.execute(
+    `SELECT 1 FROM pg_attribute
+     WHERE attrelid = to_regclass($1) AND attname = $2 AND NOT attisdropped`,
+    { bind: [table, column] },
+  );
+  return rows.length > 0;
+}
+
+// Logs how many rows still hold a secret in plain text, for each listed
+// column that exists, or that no column holds one. A count that fails to run
+// is logged and doesn't stop startup.
 export async function reportPlaintextCensus(
   dbAdapter: DBAdapter,
   entries: PlaintextCensusEntry[] = PLAINTEXT_CENSUS,
 ): Promise<void> {
-  if (entries.length === 0) {
-    log.info('plaintext census: no table seals its secrets with this helper');
-    return;
-  }
+  let counted = 0;
   for (let { table, column, query } of entries) {
     try {
+      if (!(await columnExists(dbAdapter, table, column))) {
+        continue;
+      }
+      counted++;
       let [row] = await dbAdapter.execute(query);
       log.info(
         `plaintext census: ${table}.${column} plaintextRows=${Number(row?.count ?? 0)}`,
       );
     } catch (e: any) {
+      counted++;
       log.warn(
         `plaintext census: counting ${table}.${column} failed: ${e?.message ?? e}`,
       );
     }
+  }
+  if (counted === 0) {
+    log.info('plaintext census: no plain-text secret columns');
   }
 }

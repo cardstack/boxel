@@ -3,7 +3,6 @@ import { getOwner, setOwner } from '@ember/owner';
 import {
   click,
   waitFor,
-  find,
   findAll,
   waitUntil,
   settled,
@@ -116,6 +115,27 @@ module('Acceptance | Tools tests', function (hooks) {
     getRoomState,
     createAndJoinRoom,
   } = mockMatrixUtils;
+
+  // The last result event the room holds for a tool call: a call that is
+  // retried gets more than one, and the newest is its current status.
+  function toolResultFor(roomId: string, toolCallId: string) {
+    return getRoomEvents(roomId)
+      .filter(
+        (event) =>
+          event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+          event.content.commandRequestId === toolCallId,
+      )
+      .pop();
+  }
+
+  // Names a tool call's result for an assertion message, so a failed
+  // assertion says whether the call ended invalid or failed, and why.
+  function describeToolResult(roomId: string, toolCallId: string) {
+    let content = toolResultFor(roomId, toolCallId)?.content;
+    return content
+      ? `result is ${content['m.relates_to']?.key} (${content.failureReason ?? 'no failure reason'})`
+      : 'no result event';
+  }
 
   hooks.beforeEach(async function () {
     savedMeetingCardId = undefined;
@@ -1007,7 +1027,6 @@ module('Acceptance | Tools tests', function (hooks) {
     // before clicking apply. The drain acquires a test waiter that blocks settled(),
     // and running it concurrently with the heavy switch-to-code-mode command
     // can exceed CI's browser_disconnect_timeout.
-    await waitFor('[data-test-message-idx="0"]');
     await settled();
     assert
       .dom('[data-test-message-idx="0"] .tool-description')
@@ -1197,7 +1216,6 @@ module('Acceptance | Tools tests', function (hooks) {
         },
       ],
     });
-    await waitFor('[data-test-message-idx="0"]');
     await settled();
 
     // The skill's frontmatter has no requiresApproval on the tool, so
@@ -1268,11 +1286,10 @@ module('Acceptance | Tools tests', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-message-idx="0"]');
-
-    await waitFor(
-      '[data-test-message-idx="0"] [data-test-apply-state="invalid"]',
-    );
+    await settled();
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="invalid"]')
+      .exists('the tool call is invalid');
     assert
       .dom('[data-test-boxel-alert="warning"]')
       .containsText('No command for the name "switch-submode_dd88" was found');
@@ -1280,14 +1297,12 @@ module('Acceptance | Tools tests', function (hooks) {
       .dom('[data-test-submode-switcher=code]')
       .doesNotExist('the forged tool call never executed');
 
-    let message = getRoomEvents(roomId)
-      .filter(
-        (m) =>
-          m.content.msgtype === APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
-      )
-      .pop()!;
+    let message = toolResultFor(roomId, 'call-forged')!;
+    assert.strictEqual(
+      message.content.msgtype,
+      APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+    );
     assert.strictEqual(message.content['m.relates_to']?.key, 'invalid');
-    assert.strictEqual(message.content.commandRequestId, 'call-forged');
   });
 
   test('rendering a command request without a description fallsback to attributes.description', async function (assert) {
@@ -1418,7 +1433,6 @@ module('Acceptance | Tools tests', function (hooks) {
     await addSkillToAiAssistant(`${testRealmURL}Skill/card-editing`);
     await waitForNewRoomSkillsLoaded(roomId);
     let toolCallId = '1554f297-e9f2-43fe-8b95-55b29251444d';
-    let dispatchedAt = performance.now();
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Show the card',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -1444,123 +1458,16 @@ module('Acceptance | Tools tests', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-message-idx="0"]');
-
     // Note: you don't have to click on apply button, because command on Skill
     // has requireApproval set to false.
-    //
-    // "applied" is the end of a chain that settled() does not track: the
-    // tool queue drains on a debounce, waits out any in-flight room
-    // processing, validates, runs the tool in an ember-concurrency task,
-    // refreshes the room's skills and the AI context, sends the result event
-    // through the mock homeserver's setTimeout delivery, and only then does
-    // room processing fold the result in. That takes 0.5-1.2s locally, at or
-    // past waitFor's 1s default, so the wait gets a budget sized for the
-    // whole chain. Each phase's first sighting is recorded so the log shows
-    // where the time went (or which phase never happened): "executed" is
-    // the tool body returning, "resultSent" is its result event reaching the
-    // room, "applied" is that result folded in and rendered.
-    let toolService = getService('tool-service');
-    let phaseReachedAt: Record<string, number> = {};
-    let notePhase = (phase: string, reached: boolean) => {
-      if (reached && phaseReachedAt[phase] === undefined) {
-        phaseReachedAt[phase] = Math.round(performance.now() - dispatchedAt);
-      }
-    };
-    try {
-      await waitUntil(
-        () => {
-          notePhase(
-            'claimed',
-            toolService.claimedToolRequestIds.has(toolCallId),
-          );
-          notePhase(
-            'executing',
-            toolService.currentlyExecutingToolRequestIds.has(toolCallId),
-          );
-          notePhase(
-            'executed',
-            toolService.executedToolRequestIds.has(toolCallId),
-          );
-          notePhase(
-            'resultSent',
-            getRoomEvents(roomId).some(
-              (event: any) => event.content?.commandRequestId === toolCallId,
-            ),
-          );
-          let applied = Boolean(
-            find(
-              '[data-test-message-idx="0"] [data-test-apply-state="applied"]',
-            ),
-          );
-          notePhase('applied', applied);
-          return applied;
-        },
-        { timeout: 10_000 },
-      );
-      console.log(
-        `[commands-test/show-card-auto-apply] phases reached (ms after the bot message): ${JSON.stringify(phaseReachedAt)}`,
-      );
-    } catch (err) {
-      let applyButtons = findAll('[data-test-tool-call-apply]').map((el) => ({
-        idx: el
-          .closest('[data-test-message-idx]')
-          ?.getAttribute('data-test-message-idx'),
-        state: el.getAttribute('data-test-tool-call-apply'),
-      }));
-      let applyStates = findAll('[data-test-apply-state]').map((el) =>
-        el.getAttribute('data-test-apply-state'),
-      );
-      let warnings = findAll('[data-test-boxel-alert="warning"]').map(
-        (el) => el.textContent?.trim() ?? '',
-      );
-      let roomData = getService('matrix-service').getRoomData(roomId);
-      let roomResource = getService('matrix-service').roomResources.get(roomId);
-      let message = roomResource?.messages[0];
-      console.error(
-        '[commands-test/show-card-auto-apply] timed out waiting for applied state. Diagnostic:',
-        JSON.stringify(
-          {
-            roomId,
-            renderedApplyButtonStates: applyButtons,
-            renderedApplyStates: applyStates,
-            warnings,
-            enabledSkillCards:
-              roomData?.skillsConfig?.enabledSkillCards?.map(
-                (f) => f.sourceUrl,
-              ) ?? null,
-            roomResourceCommandCount: roomResource?.tools?.length ?? null,
-            elapsedMs: Math.round(performance.now() - dispatchedAt),
-            phaseReachedAt,
-            roomIsProcessing: roomResource?.isProcessing ?? null,
-            messageIsStreamingFinished: message?.isStreamingFinished ?? null,
-            messageAgentId: message?.agentId ?? null,
-            sessionAgentId: getService('matrix-service').agentId,
-            messageTools:
-              message?.tools.map((tool) => ({
-                id: tool.id,
-                name: tool.name,
-                status: tool.status,
-                hasCodeRef: Boolean(tool.codeRef),
-                requiresApproval: tool.requiresApproval,
-                claimed: toolService.claimedToolRequestIds.has(tool.id!),
-                executing: toolService.currentlyExecutingToolRequestIds.has(
-                  tool.id!,
-                ),
-                executed: toolService.executedToolRequestIds.has(tool.id!),
-              })) ?? null,
-          },
-          null,
-          2,
-        ),
-      );
-      throw err;
-    }
+    await settled();
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .exists(describeToolResult(roomId, toolCallId));
 
     assert.dom('[data-test-tool-call-id]').doesNotHaveClass('is-failed');
 
     // check we're in interact mode
-    await waitFor('[data-test-submode-switcher=interact]');
     assert.dom('[data-test-submode-switcher=interact]').exists();
 
     // verify that the card is opened
@@ -1572,7 +1479,7 @@ module('Acceptance | Tools tests', function (hooks) {
 
     // verify that command result event was created correctly
     await waitUntil(() => getRoomIds().length > 0);
-    let message = getRoomEvents(roomId).pop()!;
+    let message = toolResultFor(roomId, toolCallId)!;
     assert.strictEqual(
       message.content.msgtype,
       APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
@@ -1646,9 +1553,10 @@ module('Acceptance | Tools tests', function (hooks) {
           context: { agentId: getService('matrix-service').agentId },
         },
       });
-      await waitFor(
-        '[data-test-message-idx="0"] [data-test-apply-state="applied"]',
-      );
+      await settled();
+      assert
+        .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+        .exists(describeToolResult(roomId, 'view-visually-handoff'));
 
       let result = getRoomEvents(roomId)
         .filter(
@@ -1709,9 +1617,10 @@ module('Acceptance | Tools tests', function (hooks) {
         context: { agentId: getService('matrix-service').agentId },
       },
     });
-    await waitFor(
-      '[data-test-message-idx="0"] [data-test-apply-state="applied"]',
-    );
+    await settled();
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .exists(describeToolResult(roomId, 'realm-viewer-request'));
 
     let result = getRoomEvents(roomId)
       .filter(
@@ -1785,11 +1694,12 @@ module('Acceptance | Tools tests', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-message-idx="0"]');
-
-    await waitFor(
-      '[data-test-message-idx="0"] [data-test-apply-state="ready"]',
-    );
+    // settled() holds through the tool drain, so a command the drain had run
+    // anyway would have switched the submode by now.
+    await settled();
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="ready"]')
+      .exists();
 
     assert.dom('[data-test-tool-call-id]').doesNotHaveClass('is-failed');
     assert.dom('[data-test-submode-switcher=interact]').exists();
@@ -1880,10 +1790,12 @@ module('Acceptance | Tools tests', function (hooks) {
       },
     });
 
-    await waitFor('[data-test-message-idx="0"]');
+    // settled() holds through the tool drain and any run it starts, so once
+    // it returns, a command the drain had auto-applied would show as applied.
+    await settled();
     // In 'ask' mode, the apply button should be visible and not auto-applied
     assert
-      .dom('[data-test-tool-call-apply]')
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="ready"]')
       .exists('Apply button is shown in ask mode');
     assert
       .dom('[data-test-apply-state="applied"]')
@@ -1919,13 +1831,12 @@ module('Acceptance | Tools tests', function (hooks) {
       },
     });
 
-    // Wait for the new message to appear and be auto-applied
-    await waitFor(
-      '[data-test-message-idx="1"] [data-test-apply-state="applied"]',
-    );
+    await settled();
     assert
       .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
-      .exists('Command is auto-applied in act mode');
+      .exists(
+        `Command is auto-applied in act mode: ${describeToolResult(matrixRoomId, commandId2)}`,
+      );
 
     // Now test that commands sent BEFORE switching to act mode are NOT auto-applied
     // Switch back to 'ask' mode
@@ -1956,25 +1867,24 @@ module('Acceptance | Tools tests', function (hooks) {
       },
     });
 
-    await waitFor('[data-test-message-idx="2"]');
+    await settled();
     // In 'ask' mode, the apply button should be visible and not auto-applied
     assert
-      .dom('[data-test-message-idx="2"] [data-test-tool-call-apply]')
+      .dom('[data-test-message-idx="2"] [data-test-apply-state="ready"]')
       .exists('Apply button is shown in ask mode');
     assert
       .dom('[data-test-message-idx="2"] [data-test-apply-state="applied"]')
       .doesNotExist('Command is not auto-applied in ask mode');
 
-    // Now switch to 'act' mode again - the previous command should still NOT be auto-applied
+    // Now switch to 'act' mode again - the previous command should still NOT
+    // be auto-applied. The click settles, which includes the mode event's
+    // round trip and any tool drain it causes.
     await click('[data-test-llm-mode-option="act"]');
     assert.dom('[data-test-llm-mode-option="act"]').hasClass('selected');
 
-    // Wait a moment to ensure the mode change is processed
-    await waitFor('[data-test-llm-mode-option="act"].selected');
-
     // The command from message idx 2 should still not be auto-applied because it was sent before act mode
     assert
-      .dom('[data-test-message-idx="2"] [data-test-tool-call-apply]')
+      .dom('[data-test-message-idx="2"] [data-test-apply-state="ready"]')
       .exists('Apply button is still shown for command sent before act mode');
     assert
       .dom('[data-test-message-idx="2"] [data-test-apply-state="applied"]')
@@ -2004,13 +1914,12 @@ module('Acceptance | Tools tests', function (hooks) {
       },
     });
 
-    // Wait for the new message to appear and be auto-applied
-    await waitFor(
-      '[data-test-message-idx="3"] [data-test-apply-state="applied"]',
-    );
+    await settled();
     assert
       .dom('[data-test-message-idx="3"] [data-test-apply-state="applied"]')
-      .exists('New command sent after act mode is auto-applied');
+      .exists(
+        `New command sent after act mode is auto-applied: ${describeToolResult(matrixRoomId, commandId4)}`,
+      );
   });
 
   test('command request with invalid name gets an "invalid" result', async function (assert) {
@@ -2061,11 +1970,10 @@ module('Acceptance | Tools tests', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-message-idx="0"]');
-
-    await waitFor(
-      '[data-test-message-idx="0"] [data-test-apply-state="invalid"]',
-    );
+    await settled();
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="invalid"]')
+      .exists('the tool call is invalid');
     assert
       .dom('[data-test-boxel-alert="warning"]')
       .containsText('No command for the name "no-such-command" was found');
@@ -2073,7 +1981,10 @@ module('Acceptance | Tools tests', function (hooks) {
     assert.dom('[data-test-tool-call-id]').doesNotHaveClass('is-failed');
 
     // verify that command result event was created correctly
-    let message = getRoomEvents(roomId).pop()!;
+    let message = toolResultFor(
+      roomId,
+      '1554f297-e9f2-43fe-8b95-55b29251444d',
+    )!;
     assert.strictEqual(
       message.content.msgtype,
       APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
@@ -2118,6 +2029,7 @@ module('Acceptance | Tools tests', function (hooks) {
     await waitForNewRoomSkillsLoaded(roomId);
     // `description` is only the label the pill shows; a model that leaves it
     // out has still sent everything the command needs.
+    let toolCallId = 'no-description-request';
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Show the card',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -2125,7 +2037,7 @@ module('Acceptance | Tools tests', function (hooks) {
       isStreamingFinished: true,
       [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
-          id: 'no-description-request',
+          id: toolCallId,
           name: showCardToolName,
           arguments: JSON.stringify({
             attributes: {
@@ -2140,21 +2052,18 @@ module('Acceptance | Tools tests', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-message-idx="0"]');
-    await waitFor(
-      '[data-test-message-idx="0"] [data-test-apply-state="applied"]',
-    );
+    await settled();
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .exists(describeToolResult(roomId, toolCallId));
     assert.dom('[data-test-boxel-alert="warning"]').doesNotExist();
     assert
       .dom('[data-test-message-idx="0"] [data-test-tool-code-block]')
       .containsText('Show card', 'the pill label falls back to the tool name');
 
-    let message = getRoomEvents(roomId).pop()!;
+    let message = toolResultFor(roomId, toolCallId)!;
     assert.strictEqual(message.content['m.relates_to']?.key, 'applied');
-    assert.strictEqual(
-      message.content.commandRequestId,
-      'no-description-request',
-    );
+    assert.strictEqual(message.content.commandRequestId, toolCallId);
   });
 
   test('command request with arguments that do not match the json schema gets an "invalid" result', async function (assert) {
@@ -2210,11 +2119,10 @@ module('Acceptance | Tools tests', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-message-idx="0"]');
-
-    await waitFor(
-      '[data-test-message-idx="0"] [data-test-apply-state="invalid"]',
-    );
+    await settled();
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="invalid"]')
+      .exists('the tool call is invalid');
     // The CI flake mode for this test is that the warning reads "No command
     // for the name X was found" (skill not yet loaded) instead of the
     // expected JSON-schema validation message. Log enough state to
@@ -2252,7 +2160,10 @@ module('Acceptance | Tools tests', function (hooks) {
     assert.dom('[data-test-tool-call-id]').doesNotHaveClass('is-failed');
 
     // verify that command result event was created correctly
-    let message = getRoomEvents(roomId).pop()!;
+    let message = toolResultFor(
+      roomId,
+      '1554f297-e9f2-43fe-8b95-55b29251444d',
+    )!;
     assert.strictEqual(
       message.content.msgtype,
       APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
