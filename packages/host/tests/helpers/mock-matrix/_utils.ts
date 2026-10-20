@@ -60,12 +60,11 @@ export class MockUtils {
     return messages();
   };
   // Wait until the mock homeserver holds the result event for a tool call,
-  // then return it. Applying a tool call can keep running after the click's
-  // settled(): executing the tool awaits work no test waiter tracks, and the
-  // run's later steps (such as re-uploading the room's skills) happen only
-  // once it finishes, before the result event is sent. The event's
-  // `m.relates_to.key` is the call's status, and `failureReason` says why a
-  // call that did not apply failed.
+  // then return it. A tool's run holds a test waiter until its result event
+  // is sent, so after a settle this returns at once; the wait remains for
+  // callers that do not settle first. The event's `m.relates_to.key` is the
+  // call's status, and `failureReason` says why a call that did not apply
+  // failed.
   waitForToolResult = async (roomId: string, toolCallId: string) => {
     let findResult = () =>
       this.getRoomEvents(roomId).find(
