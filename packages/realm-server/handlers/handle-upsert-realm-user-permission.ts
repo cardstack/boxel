@@ -1,6 +1,7 @@
 import type Koa from 'koa';
 import {
   ensureTrailingSlash,
+  fetchRealmPermissions,
   insertPermissions,
   logger,
   type RealmAction,
@@ -107,6 +108,20 @@ export default function handleUpsertRealmUserPermission({
       await sendResponseForBadRequest(
         ctxt,
         `write permission requires read permission`,
+      );
+      return;
+    }
+
+    // The upsert writes every permission column, so granting read/write to the
+    // realm owner would clear their `realm_owner` flag (ADR 006 §1.2).
+    let currentPermissions = await fetchRealmPermissions(
+      dbAdapter,
+      new URL(normalizedRealmHref),
+    );
+    if (currentPermissions[user]?.includes('realm-owner')) {
+      await sendResponseForBadRequest(
+        ctxt,
+        `cannot modify permissions of the realm owner ${user}`,
       );
       return;
     }

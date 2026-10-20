@@ -63,8 +63,9 @@ level from another. A grant of `write` MUST include `read`, and every endpoint
 that grants permissions MUST refuse `write` without `read`.
 
 `realm-owner` MUST be assigned only when a realm is created or published, and
-always with `read`. The permissions endpoints MUST refuse to grant
-`realm-owner` and MUST refuse to change an owner's permissions.
+always with `read`. A migration that seeds a system realm's owner counts as
+creating that realm. Every endpoint that grants permissions MUST refuse to
+grant `realm-owner` and MUST refuse to change an owner's permissions.
 
 `assume-user` is not a grantable level. Only the realm's own Matrix user
 holds it, and it MUST NOT be stored or granted.
@@ -153,3 +154,7 @@ may read a realm, nothing elsewhere takes that away.
    a caller the ACL declined, so a policy never narrows access and an allowed
    caller pays nothing for it.
 8. Luke Melia, 2026-10-19: the reasons in §2 and the rejected options in §3.
+
+## 5. Remediation
+
+No known gaps.
