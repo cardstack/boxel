@@ -73,7 +73,9 @@ registrations_require_3pid:
   - email
 # Production's Matrix server lets anyone register without an invite code.
 # This template is `test` with that one difference, for the specs under
-# tests/with-synapse/test-without-registration-token/.
+# tests/with-synapse/test-without-registration-token/. A change to `test` is
+# made here too: support/shard-spec-files.test.ts fails while they differ by
+# more.
 registration_requires_token: false
 report_stats: false
 macaroon_secret_key: "{{MACAROON_SECRET_KEY}}"

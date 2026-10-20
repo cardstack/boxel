@@ -1,7 +1,8 @@
 import { strict as assert } from 'assert';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { test } from 'node:test';
 import { join } from 'path';
+import { parse as parseYaml } from 'yaml';
 import {
   SYNAPSE_TEMPLATE_SPECS_DIR,
   assignSpecFiles,
@@ -138,6 +139,64 @@ test('each template with specs of its own is a Synapse template, and runs only i
         `${file} is not one of ${template}'s specs`,
       );
     }
+  }
+});
+
+test('CI runs every template that has specs of its own', () => {
+  let workflow = parseYaml(
+    readFileSync(
+      join(
+        import.meta.dirname,
+        '..',
+        '..',
+        '..',
+        '.github',
+        'workflows',
+        'ci.yaml',
+      ),
+      'utf8',
+    ),
+  );
+  let include: { synapseTemplate?: string }[] =
+    workflow.jobs['matrix-client-test'].strategy.matrix.include ?? [];
+  assert.deepEqual(
+    include
+      .map((entry) => entry.synapseTemplate)
+      .filter((template): template is string => Boolean(template))
+      .sort(),
+    specSynapseTemplates(testDir),
+    'each directory under tests/with-synapse/ needs a matrix-client-test include entry in ci.yaml, and each entry a directory',
+  );
+});
+
+// A template other than `test` exists to change one thing about the Synapse
+// the specs run against. Everything else is held to `test`'s configuration,
+// so a setting added there reaches it too.
+const TEMPLATE_DIFFERENCES: Record<string, Record<string, unknown>> = {
+  'test-without-registration-token': { registration_requires_token: false },
+};
+
+test('a template with specs of its own differs from test only as it declares', () => {
+  let synapseDir = join(import.meta.dirname, 'synapse');
+  let read = (template: string, file: string) =>
+    readFileSync(join(synapseDir, template, file), 'utf8');
+  let base = parseYaml(read('test', 'homeserver.yaml'));
+  for (let template of specSynapseTemplates(testDir)) {
+    let differences = TEMPLATE_DIFFERENCES[template];
+    assert.ok(
+      differences,
+      `${template} declares no differences from test in TEMPLATE_DIFFERENCES`,
+    );
+    assert.deepEqual(
+      parseYaml(read(template, 'homeserver.yaml')),
+      { ...base, ...differences },
+      `${template}/homeserver.yaml differs from test's by more than TEMPLATE_DIFFERENCES`,
+    );
+    assert.equal(
+      read(template, 'log.config'),
+      read('test', 'log.config'),
+      `${template}/log.config differs from test's`,
+    );
   }
 });
 

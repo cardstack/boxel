@@ -146,7 +146,7 @@ Prefer the headless `vite build --mode development && pnpm exec ember test --pat
     `pnpm test`
   - `pnpm test` starts Synapse from the `test` template, which asks for an invite code at registration. A spec that needs a Synapse configured otherwise goes under `tests/with-synapse/<template>/`, named for a template in `support/synapse/`, and runs in a pass of its own against a Synapse from that template:
     `MATRIX_SYNAPSE_TEMPLATE=test-without-registration-token pnpm test`
-    CI runs each such pass as a job beside the shards.
+    In CI each such template needs its own `include` entry in `ci.yaml`'s `matrix-client-test` job, which runs it beside the shards. A template other than `test` differs from it only by the settings `TEMPLATE_DIFFERENCES` in `support/shard-spec-files.test.ts` declares. `pnpm test:shard-assignment` checks both.
 - Focusing on single test or module:
 - make sure to kill previously running matrix tests if they are still running before starting a new test run.
   Add `--grep` flag to command (`--grep 'it can register a user with a registration token'`)
