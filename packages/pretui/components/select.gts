@@ -314,7 +314,7 @@ export class Select extends Component<SelectSignature> {
       @layer PretComponent {
         .pretui-selectwrap {
           /* per-instance knob: the trigger's height */
-          --pretui-select-h: 1.75rem;
+          --pretui-select-h: var(--boxel-form-control-height-sm);
 
           min-width: 0;
           /* BoxelSelect's knobs, set to theme tokens. The --boxel-dropdown-*
@@ -324,6 +324,9 @@ export class Select extends Component<SelectSignature> {
              so it pads 1px more than a bordered Input to line its text up */
           --boxel-select-trigger-padding: 0 0.625rem;
           --boxel-select-trigger-gap: var(--boxel-sp-2xs);
+          --boxel-select-trigger-font-size: var(--boxel-font-size-xs);
+          --boxel-select-trigger-line-height: var(--boxel-line-height-xs);
+          --boxel-select-trigger-letter-spacing: var(--boxel-lsp-xs);
           /* one block line, so a long label ends in an ellipsis */
           --boxel-select-trigger-content-display: block;
           --boxel-select-background-color: var(--field);
@@ -386,14 +389,8 @@ export class Select extends Component<SelectSignature> {
           background-color: var(--field);
           color: var(--foreground);
         }
-        /* the trigger's type; the dropdown rule below repeats it, since the
-           wormhole is outside this subtree */
         .pretui-selectwrap :deep(.boxel-trigger) {
           width: 100%;
-          font-family: inherit;
-          font-size: var(--boxel-font-size-xs);
-          line-height: var(--boxel-line-height-xs);
-          letter-spacing: var(--boxel-lsp-xs);
         }
         .pretui-selectwrap :deep(.boxel-trigger-content) {
           min-width: 0;
@@ -403,15 +400,23 @@ export class Select extends Component<SelectSignature> {
         }
         .pretui-selectwrap :deep(.boxel-trigger-placeholder) {
           color: var(--muted-foreground);
-          font-family: inherit;
-          font-size: var(--boxel-font-size-xs);
-          line-height: var(--boxel-line-height-xs);
-          letter-spacing: var(--boxel-lsp-xs);
         }
         .pretui-selectwrap :deep(.pretui-selecttrigger svg) {
           --icon-color: var(--muted-foreground);
 
           flex: none;
+        }
+        /* 16px on touch screens, as on Input and Autocomplete, with Input's
+           line-height; the trigger's height is fixed, so it doesn't grow */
+        @media (pointer: coarse) {
+          .pretui-selectwrap {
+            --boxel-select-trigger-font-size: var(
+              --boxel-form-control-touch-font-size
+            );
+            --boxel-select-trigger-line-height: var(
+              --boxel-form-control-line-height-sm
+            );
+          }
         }
       }
     </style>
@@ -426,7 +431,7 @@ export class Select extends Component<SelectSignature> {
           /* the trigger's padding and default height, restated: the wrapper's
              knobs do not reach the wormhole */
           --_select-px: 0.625rem;
-          --_select-h: 1.75rem;
+          --_select-h: var(--boxel-form-control-height-sm);
           /* the list matches the trigger's width as a floor, never a ceiling:
              a trigger sized to a short value must not clip the other labels */
           min-width: max-content;
@@ -457,10 +462,16 @@ export class Select extends Component<SelectSignature> {
           outline-offset: 1px;
           box-shadow: 0 0 0 1.5px var(--ring);
         }
-        /* iOS zooms into inputs under 16px on focus */
+        /* iOS zooms into inputs under 16px on focus; the options follow
+           the trigger, and their rows grow as Autocomplete's do */
         @media (pointer: coarse) {
+          .pretui-select-dropdown.ember-power-select-dropdown .boxel-select-option-item,
           .pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input {
-            font-size: var(--boxel-font-size);
+            font-size: var(--boxel-form-control-touch-font-size);
+            line-height: var(--boxel-form-control-line-height-sm);
+          }
+          .pretui-select-dropdown.ember-power-select-dropdown .boxel-select-option-item {
+            padding-block: 0.6em;
           }
         }
       }

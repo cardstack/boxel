@@ -694,12 +694,14 @@ function renderField(formElement, form, field) {
   let vertical = form.layout !== 'settings';
   let wrapper = document.createElement('label');
   wrapper.className = `boxel-field ${vertical ? 'vertical' : 'horizontal'}`;
+  wrapper.setAttribute('data-test-boxel-field', '');
 
   let labelContainer = document.createElement('div');
   labelContainer.className = 'label-container';
   if (field.label) {
     let label = document.createElement('div');
     label.className = 'boxel-label label';
+    label.setAttribute('data-test-boxel-field-label', '');
     label.textContent = field.label;
     labelContainer.append(label);
   }

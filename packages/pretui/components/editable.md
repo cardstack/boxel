@@ -60,7 +60,7 @@ No APG pattern names this exactly; it is a **button** that discloses an **input*
 
 ## Theming
 
-Read from the host theme: `--hover` and `--border` (the trigger's hover surface and hairline), `--ring` (the focus outline), `--radius`, `--muted-foreground` (the empty-state placeholder and the pencil). Hoisted once on the root as internal variables: `--control-h` (the trigger's minimum height, so the text does not jump when the field opens), `--text-ui-md`, `--space-2`, `--track-ui`, and `--pretui-dur-snap` / `--pretui-ease-snap` for the hover transition.
+Read from the host theme: `--hover` and `--border` (the trigger's hover surface and hairline), `--ring` (the focus outline), `--radius`, `--muted-foreground` (the empty-state placeholder and the pencil). Hoisted once on the root as internal variables: `--boxel-form-control-height-sm` (the trigger's minimum height, the same as the Input it opens into, so the row does not jump when the field opens), `--boxel-font-size-xs` (the Input's text size), `--space-2`, `--track-ui`, and `--pretui-dur-snap` / `--pretui-ease-snap` for the hover transition.
 
 The trigger paints nothing at rest, so it inherits the surface and ink it sits on; hover adds the `--hover` fill and a `--border` hairline so the text reads as editable. The open field is **Input**'s dress entirely, so a theme that retunes Input retunes this. Fixed here: the 0.75rem pencil and its hover-only opacity.
 

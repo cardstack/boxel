@@ -600,7 +600,7 @@ export class ColorPicker extends Component<ColorPickerSignature> {
         .pretui-picker-input {
           width: 100%;
           min-width: 0;
-          height: var(--control-h, 28px);
+          height: var(--boxel-form-control-height-sm);
           padding: 0 var(--space-3, 8px);
           border: 0;
           border-radius: var(--radius);

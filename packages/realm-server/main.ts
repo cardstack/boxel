@@ -53,6 +53,7 @@ import { ModuleCacheCoordinator } from './lib/module-cache-coordination.ts';
 import { JobsFinishedListener } from './lib/jobs-finished-listener.ts';
 import { JobScopedSearchCache } from './job-scoped-search-cache.ts';
 import { startHealthSampler } from './health-sampler.ts';
+import { healthCheckUserAgents } from './middleware/index.ts';
 import {
   isDeployedServerURL,
   startOutboundGuard,
@@ -602,6 +603,16 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
   } catch (e: any) {
     console.error(`Secrets-at-rest self-check failed: ${e.message}`);
     process.exit(-1);
+  }
+  // Without it, the load balancer's probe on `/` falls through to the host app,
+  // which is slower and can fail the probe under load or during boot.
+  if (
+    isDeployedServerURL(String(serverURL)) &&
+    healthCheckUserAgents().length === 0
+  ) {
+    console.warn(
+      `HEALTH_CHECK_USER_AGENTS is not set, so no health check is answered from memory. Set it to your load balancer's health-check user-agent prefix (see docs/realm-server-health-signals.md).`,
+    );
   }
   try {
     await smokeTestHostApp();

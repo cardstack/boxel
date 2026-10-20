@@ -8,7 +8,7 @@ import type { Select } from 'ember-power-select/types';
 
 import type { Icon } from '../../icons/types.ts';
 import LoadingIndicator from '../loading-indicator/index.gts';
-import { BoxelMultiSelectBasic } from '../multi-select/index.gts';
+import { BoxelMultiSelect } from '../multi-select/index.gts';
 import PickerBeforeOptionsWithSearch from './before-options-with-search.gts';
 import PickerOptionRow from './option-row.gts';
 import PickerLabeledTrigger from './trigger-labeled.gts';
@@ -355,7 +355,7 @@ export default class Picker extends Component<PickerSignature> {
   };
 
   <template>
-    <BoxelMultiSelectBasic
+    <BoxelMultiSelect
       @options={{this.displayOptions}}
       @selected={{@selected}}
       @onChange={{this.onChange}}
@@ -397,7 +397,7 @@ export default class Picker extends Component<PickerSignature> {
           </div>
         {{/if}}
       {{/if}}
-    </BoxelMultiSelectBasic>
+    </BoxelMultiSelect>
 
     {{! template-lint-disable require-scoped-style }}
     <style>

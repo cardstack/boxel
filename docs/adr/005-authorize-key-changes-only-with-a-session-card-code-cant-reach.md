@@ -7,6 +7,9 @@ scope:
   - packages/realm-server/lib/google-sign-in.ts
   - packages/realm-server/lib/google-account.ts
   - packages/realm-server/lib/sign-in-limiter.ts
+  - packages/realm-server/lib/key-shares.ts
+  - packages/postgres/migrations/1792187770930_add-key-shares.js
+  - packages/realm-server/handlers/realm-destruction-utils.ts
   - packages/realm-server/handlers/handle-secure-session.ts
   - packages/realm-server/handlers/handle-user-keys.ts
   - packages/realm-server/utils/jwt.ts
@@ -67,8 +70,9 @@ The secure window MUST keep its session only in the secure origin's own
 storage, and MUST NOT send it to the app page. Secure-origin pages MUST be
 served with `Cross-Origin-Opener-Policy: same-origin`, so the page that opens
 one keeps no handle to it. Their CSP MUST let them connect only to their own
-origin and the realm server, and submit forms only to their own origin and the
-CLI's loopback listener.
+origin, the realm server and the Matrix server the realm server is configured
+with, and submit forms only to their own origin and the CLI's loopback
+listener.
 
 ### 1.5. The CLI
 
@@ -113,6 +117,13 @@ returns to the secure origin. Synapse's own SSO hands the session to whoever
 started the sign-in, so a sign-in link that card code opens would sign in for
 card code [2]. Reusing Synapse's Google client means existing users see no new
 consent screen [2].
+
+Secure-origin pages reach the Matrix server themselves to create an account
+and to reset a password, so the password and the invite code are typed into,
+and sent from, the secure origin alone [3]. The realm server writes the Matrix
+server's URL into the page from its own configuration, so card code can't
+change where those requests go. The credential fields the app frames, on the
+same origin and with the same storage, already connect to it [3].
 
 Signing out of the app has to reach the secure window, or a session the user
 believes ended keeps minting key write tickets for up to a week. Only the
@@ -163,3 +174,20 @@ limit wouldn't stop it, since one call after each sign-in is enough.
    not stop".
 2. #6776, its description and review thread, and
    `.claude/skills/secure-session/SKILL.md`.
+3. #6861, its description and review thread, and
+   `.claude/skills/secure-origin/SKILL.md`.
+
+## 5. Remediation
+
+- `packages/realm-server/lib/key-shares.ts` (`unshareKey`, `suspendShare`)
+  breaks §1.1. Each changes what a key may be used for without a key write
+  ticket.
+- `packages/postgres/migrations/1792187770930_add-key-shares.js`
+  (`key_shares_follow_permissions`) breaks §1.1. Restoring a user's write
+  access to a realm resumes their suspended shares there, through a
+  permissions change the app's session can make.
+- `packages/realm-server/handlers/realm-destruction-utils.ts` breaks §1.1.
+  Deleting a realm deletes its key shares without a secure session.
+- `packages/realm-server/handlers/handle-secure-session.ts`
+  (`handleGoogleSignInStart`) breaks §1.3. The Google sign-in start route
+  answers a request from any `Origin`.

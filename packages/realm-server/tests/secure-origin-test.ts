@@ -1,6 +1,8 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
-import { basename } from 'path';
+import { basename, dirname, join } from 'path';
+import { readFileSync } from 'fs';
+import { createRequire } from 'module';
 import supertest from 'supertest';
 import type { Test, SuperTest } from 'supertest';
 import { rri, SupportedMimeType } from '@cardstack/runtime-common';
@@ -64,10 +66,11 @@ const NON_SHELL_PATHS: { path: string; accept: string }[] = [
   { path: '/secure/credentials.html', accept: 'text/html' },
 ];
 
-// The shell's own page talks to the realm server it was configured with, and
-// its sign-in may hand a session to the CLI's loopback listener.
+// The shell's own page talks to the realm server and the Matrix server it was
+// configured with, and its sign-in may hand a session to the CLI's loopback
+// listener.
 const SHELL_PAGE_HEADERS = {
-  connectSrc: [realmURL.origin],
+  connectSrc: [realmURL.origin, new URL(matrixURL).origin],
   formAction: ['http://127.0.0.1:*'],
 };
 
@@ -375,6 +378,12 @@ module(basename(import.meta.filename), function () {
           ),
           `${path}: names the realm server its modes talk to`,
         );
+        assert.ok(
+          response.text.includes(
+            `<meta name="boxel-matrix-url" content="${new URL(matrixURL).href}" />`,
+          ),
+          `${path}: names the Matrix server its modes talk to`,
+        );
       }
     });
 
@@ -396,8 +405,17 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test("serves the sign-in mode's scripts with the locked-down headers", async function (assert) {
-      for (let name of ['session.js', 'sign-in.js', 'sign-in-copy.js']) {
+    test("serves the modes' scripts with the locked-down headers", async function (assert) {
+      for (let name of [
+        'session.js',
+        'sign-in.js',
+        'sign-in-copy.js',
+        'register.js',
+        'password-reset.js',
+        'password-fields.js',
+        'matrix.js',
+        'dom.js',
+      ]) {
         let response = await request
           .get(`/secure/${name}`)
           .set('Host', secureHost);
@@ -429,6 +447,73 @@ module(basename(import.meta.filename), function () {
         style.headers['content-type'].startsWith('text/css'),
         'stylesheet content type',
       );
+    });
+
+    test("serves boxel-ui's design tokens and typeface as boxel-ui has them", async function (assert) {
+      let stylesDir = dirname(
+        createRequire(import.meta.url).resolve(
+          '@cardstack/boxel-ui/styles/fonts.css',
+        ),
+      );
+      for (let [name, type] of [
+        ['variables.css', 'text/css'],
+        ['theme.css', 'text/css'],
+        ['IBMPlexSansVar-Roman.woff2', 'font/woff2'],
+      ]) {
+        let response = await request
+          .get(`/secure/${name}`)
+          .set('Host', secureHost)
+          .buffer(true)
+          .parse((res, done) => {
+            let chunks: Buffer[] = [];
+            res.on('data', (chunk: Buffer) => chunks.push(chunk));
+            res.on('end', () => done(null, Buffer.concat(chunks)));
+          });
+        assert.strictEqual(response.status, 200, `${name}: status`);
+        assert.ok(
+          response.headers['content-type'].startsWith(type),
+          `${name}: content type`,
+        );
+        assertSecureOriginHeaders(assert, response, name);
+        assert.true(
+          (response.body as Buffer).equals(readFileSync(join(stylesDir, name))),
+          `${name}: boxel-ui's own file`,
+        );
+      }
+    });
+
+    test("draws boxel-ui's own icons", async function (assert) {
+      // The pages build the app's logo, Google's "G", the check mark and the
+      // loading indicator from boxel-ui's icon components' paths, copied in,
+      // since the page's policy loads no markup from elsewhere. Every path
+      // boxel-ui draws them with is in the copy.
+      let icons = join(
+        dirname(
+          createRequire(import.meta.url).resolve(
+            '@cardstack/boxel-ui/styles/fonts.css',
+          ),
+        ),
+        '..',
+        'icons',
+      );
+      let dom = readFileSync(
+        join(import.meta.dirname, '..', 'secure-origin', 'dom.js'),
+        'utf8',
+      );
+      for (let icon of [
+        'boxel-icon.gts',
+        'google-color.gts',
+        'check-mark.gts',
+        'loading-indicator.gts',
+      ]) {
+        let paths = [
+          ...readFileSync(join(icons, icon), 'utf8').matchAll(/\sd='([^']+)'/g),
+        ].map(([, d]) => d);
+        assert.ok(paths.length > 0, `${icon} has paths`);
+        for (let d of paths) {
+          assert.ok(dom.includes(`'${d}'`), `${icon}: ${d.slice(0, 24)}…`);
+        }
+      }
     });
 
     test('answers HEAD for the shell without a body', async function (assert) {
@@ -579,7 +664,6 @@ module(basename(import.meta.filename), function () {
         ['/secure/app-origins.js', 'text/javascript'],
         ['/secure/redact.js', 'text/javascript'],
         ['/secure/credentials.css', 'text/css'],
-        ['/secure/IBMPlexSansVar-Roman.woff2', 'font/woff2'],
       ]) {
         let response = await request.get(path).set('Host', secureHost);
         assert.strictEqual(response.status, 200, `${path}: status`);

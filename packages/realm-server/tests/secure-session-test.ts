@@ -375,12 +375,20 @@ module(basename(import.meta.filename), function () {
     function passwordSignIn(
       username: string,
       password: string,
-      origin: string | null = secureOrigin,
+      {
+        origin = secureOrigin,
+        registrationToken,
+      }: { origin?: string | null; registrationToken?: string } = {},
     ) {
       return post(
         '/_secure-session',
         'secure-session',
-        { username, password, client: 'window' },
+        {
+          username,
+          password,
+          client: 'window',
+          ...(registrationToken ? { registrationToken } : {}),
+        },
         origin,
       );
     }
@@ -479,9 +487,6 @@ module(basename(import.meta.filename), function () {
 
     test('a failed password sign-in says nothing about the account', async function (assert) {
       let { username, password } = await registerPasswordUser(dbAdapter);
-      let outsider = await registerPasswordUser(dbAdapter, {
-        boxelAccount: false,
-      });
       let wrongPassword = await passwordSignIn(username, `${password}-wrong`);
       let noSuchUser = await passwordSignIn(
         `nobody-${randomBytes(6).toString('hex')}`,
@@ -491,11 +496,11 @@ module(basename(import.meta.filename), function () {
         `${randomBytes(6).toString('hex')}@nowhere.test`,
         password,
       );
-      let notInBoxel = await passwordSignIn(
-        outsider.username,
-        outsider.password,
+      let otherServer = await passwordSignIn(
+        `@${username}:elsewhere.test`,
+        password,
       );
-      for (let refusal of [noSuchUser, noSuchEmail, notInBoxel]) {
+      for (let refusal of [noSuchUser, noSuchEmail, otherServer]) {
         assert.strictEqual(refusal.status, 401);
         assert.deepEqual(
           refusal.body,
@@ -507,6 +512,107 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         wrongPassword.body.errors[0].code,
         'invalid-credentials',
+      );
+    });
+
+    test("a sign-in the Matrix server can't look up is unavailable, not a wrong password", async function (assert) {
+      let { username, password, userId } =
+        await registerPasswordUser(dbAdapter);
+      // The Matrix server fails the admin lookup of this one account.
+      let lookup = `/_synapse/admin/v2/users/${encodeURIComponent(userId)}`;
+      let originalFetch = globalThis.fetch;
+      globalThis.fetch = (async (
+        input: RequestInfo | URL,
+        init?: RequestInit,
+      ) => {
+        let url = new URL(input instanceof Request ? input.url : String(input));
+        if (url.pathname === lookup && (init?.method ?? 'GET') === 'GET') {
+          return new Response(JSON.stringify({ errcode: 'M_UNKNOWN' }), {
+            status: 502,
+          });
+        }
+        return await originalFetch(input, init);
+      }) as typeof fetch;
+      let attempts;
+      try {
+        attempts = [];
+        for (let attempt = 0; attempt < 4; attempt++) {
+          attempts.push(await passwordSignIn(username, password));
+        }
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+      for (let response of attempts) {
+        assert.strictEqual(response.status, 503, response.text);
+        assert.strictEqual(response.body.errors[0].code, 'unavailable');
+      }
+      let recovered = await passwordSignIn(username, password);
+      assert.strictEqual(
+        recovered.status,
+        201,
+        'the failures were not counted against the account',
+      );
+    });
+
+    test('a first password sign-in to Boxel sets the account up, recording its invite code', async function (assert) {
+      // An account just registered on the secure origin: a Matrix account
+      // that has never signed in to Boxel.
+      let { username, password, userId } = await registerPasswordUser(
+        dbAdapter,
+        { boxelAccount: false },
+      );
+      await updateAccount(userId, { displayname: 'New Registrant' });
+
+      let wrong = await passwordSignIn(username, `${password}-wrong`, {
+        registrationToken: 'invite-code',
+      });
+      assert.strictEqual(wrong.status, 401);
+      assert.strictEqual(wrong.body.errors[0].code, 'invalid-credentials');
+      assert.notOk(
+        await fetchSessionRoom(dbAdapter, userId),
+        'a wrong password sets nothing up',
+      );
+      assert.deepEqual(
+        await dbAdapter.execute(
+          `SELECT 1 FROM users WHERE matrix_user_id = $1`,
+          { bind: [userId] },
+        ),
+        [],
+        'nor makes a realm-server user',
+      );
+
+      let response = await passwordSignIn(username, password, {
+        registrationToken: 'invite-code',
+      });
+      assert.strictEqual(response.status, 201, response.text);
+      assert.strictEqual(response.body.data.attributes.user, userId);
+      assert.ok(
+        await fetchSessionRoom(dbAdapter, userId),
+        'the user has a session room',
+      );
+      let [user] = await dbAdapter.execute(
+        `SELECT matrix_registration_token FROM users WHERE matrix_user_id = $1`,
+        { bind: [userId] },
+      );
+      assert.strictEqual(
+        user?.matrix_registration_token,
+        'invite-code',
+        'the realm-server user records the invite code',
+      );
+      let localpart = userId.slice(1).split(':')[0];
+      let realms = await accountRealms(userId);
+      assert.deepEqual(
+        realms.map((url) => new URL(url).pathname.split('/').slice(-3)),
+        [[localpart, 'personal', '']],
+        'the user has a personal realm',
+      );
+
+      let again = await passwordSignIn(username, password);
+      assert.strictEqual(again.status, 201, again.text);
+      assert.deepEqual(
+        await accountRealms(userId),
+        realms,
+        'signing in again makes no second realm',
       );
     });
 
@@ -614,7 +720,7 @@ module(basename(import.meta.filename), function () {
       let sub = `google-${randomUUID()}`;
       await linkGoogle(userId, sub);
       for (let origin of [APP_ORIGIN, 'null', null]) {
-        let viaPassword = await passwordSignIn(username, password, origin);
+        let viaPassword = await passwordSignIn(username, password, { origin });
         assert.strictEqual(
           viaPassword.status,
           403,
@@ -1497,6 +1603,11 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         response.body.data.attributes.url,
         secureOriginURL.href,
+      );
+      assert.strictEqual(
+        response.body.data.attributes.matrixServerName,
+        'localhost',
+        'with the Matrix server its accounts are on',
       );
     });
   });
