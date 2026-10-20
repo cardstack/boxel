@@ -1,4 +1,5 @@
 import { RealmPaths } from '../paths.ts';
+import { isPrefixForm } from '../realm-identifiers.ts';
 import { getImmediateFieldDef, type Definition } from '../definitions.ts';
 import {
   parseSearchEntryQueryFromPayload,
@@ -734,7 +735,7 @@ function hopTarget(
   }: { paths: RealmPaths; opts: ParseEnvelopeOptions; from: URL },
 ): string {
   let resolved = opts.resolveIdentifier?.(link) ?? link;
-  if (resolved.startsWith('@')) {
+  if (isPrefixForm(resolved)) {
     // A scoped reference the identifier map did not resolve, which means this
     // process has not registered its prefix. It is cross-realm by
     // construction — that is exactly why the writer stores it verbatim

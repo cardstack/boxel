@@ -9,6 +9,7 @@ import {
   ensureTrailingSlash,
   isBinaryContentType,
   isCardInstance,
+  isPrefixForm,
   isRelativePath,
   isResolvedCodeRef,
   logger,
@@ -1375,7 +1376,7 @@ class RealmFsSession {
   private captureTarget(path: unknown): { url: string; path: string } {
     if (
       typeof path === 'string' &&
-      (/^[a-z][a-z0-9+.-]*:/i.test(path) || path.startsWith('@'))
+      (/^[a-z][a-z0-9+.-]*:/i.test(path) || isPrefixForm(path))
     ) {
       let reference = path.trim();
       return {
@@ -2605,7 +2606,7 @@ export default class RunRealmCodeTool extends HostBaseTool<
     // `@cardstack/boxel-ui/`, or a path beneath a realm prefix, does not.
     let unknown = (realms ?? []).find(
       (realm) =>
-        realm.startsWith('@') &&
+        isPrefixForm(realm) &&
         virtualNetwork.prefixKind(ensureTrailingSlash(realm)) !== 'realm',
     );
     if (unknown !== undefined) {

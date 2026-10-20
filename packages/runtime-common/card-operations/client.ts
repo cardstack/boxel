@@ -1,6 +1,7 @@
 import { v4 as uuidV4 } from 'uuid';
 
 import { moduleFrom } from '../code-ref.ts';
+import { isPrefixForm } from '../realm-identifiers.ts';
 import type { CodeRef, ResolvedCodeRef } from '../code-ref.ts';
 import type { EntryCollectionDocument } from '../document-types.ts';
 import type { ErrorEntry } from '../error.ts';
@@ -1625,7 +1626,7 @@ function fileAtPath(
   try {
     absolute = new URL(path);
   } catch {
-    if (path.startsWith('@')) {
+    if (isPrefixForm(path)) {
       refuse(
         `names a realm by a registered prefix, which is resolved where the ` +
           `virtual network is and not here; name the file by its path in ` +

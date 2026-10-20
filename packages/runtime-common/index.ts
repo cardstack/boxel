@@ -20,7 +20,11 @@ import type {
   CaptureManifest,
 } from './capture-spec.ts';
 import type { ErrorEntry } from './error.ts';
-import { rri, type RealmResourceIdentifier } from './realm-identifiers.ts';
+import {
+  isPrefixForm,
+  rri,
+  type RealmResourceIdentifier,
+} from './realm-identifiers.ts';
 
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 import type { FileDef } from '@cardstack/base/file-api';
@@ -2606,7 +2610,7 @@ export function unixTime(epochTimeMs: number) {
 // RRIs start with `@`), so this needs no VirtualNetwork: identifiers are
 // canonical RRI by the time they reach here.
 export function isLocalId(id: string) {
-  return !id.startsWith('http') && !id.startsWith('@');
+  return !id.startsWith('http') && !isPrefixForm(id);
 }
 
 export function isBrowserTestEnv() {

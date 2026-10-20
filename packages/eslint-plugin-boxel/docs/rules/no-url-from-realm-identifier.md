@@ -28,8 +28,8 @@ All three mishandle the prefix form, so all three are checked:
 
 The probe forms are the quietest and so the most dangerous: a caller reads
 "not a URL" and carries on, usually classifying the identifier as a relative
-path. Ask `virtualNetwork.isRegisteredPrefix(x)` before asking whether a value
-parses.
+path. Test an identifier's form with `isPrefixForm(x)` from
+`@cardstack/runtime-common` instead of asking whether it parses.
 
 A base argument does not make it safe. `new URL(identifier, base)` does not
 throw, because the prefix form is a valid relative reference — it resolves to
