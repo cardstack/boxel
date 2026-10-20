@@ -119,9 +119,10 @@ nothing.
 When one appears:
 
 1. **Stop the generation, but only when it has clearly gone sideways.** The
-   runner does this itself when four separate turns carry a failed or invalid
-   pill or an error alert (a normal repair takes two or three rounds, each of
-   which can fail once more before it lands), the
+   runner does this itself when three turns in a row carry a failed or
+   invalid pill or an error alert, or eight in all (a normal repair takes two
+   or three rounds, each of which can fail once more before it lands, and a
+   failure the next turn repaired is graded, not stopped), the
    same tool call repeated three times, a pill stuck past the host's two-minute
    tool timeout, a turn that streams nothing for three minutes, and the
    15-minute safety clock (verdict notes start with "stopped early"). It never stops a run for being
@@ -208,8 +209,10 @@ Verdicts:
   fine; the tab froze. Keep the room id, this is a repro for a host bug.
 - `bot-failure` — the bot showed "Generating results" with no new text for
   three minutes: the request between the ai-bot and the provider never came
-  back. The ai-bot has no timeout of its own for this. Not the model's doing;
-  check the ai-bot's terminal for the request error.
+  back. The ai-bot has no timeout of its own for this. Also a reply the bot
+  posted empty (no text, no tool call, no usage): the provider returned
+  nothing and the ai-bot finalized it. Not the model's doing; check the
+  ai-bot's terminal for the request error.
 - `runner-failure` — the script itself broke (a selector, a timeout on the UI).
   The step name is in the notes. Fix the runner, not the model.
 

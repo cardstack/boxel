@@ -453,21 +453,41 @@ async function readActivityOnce(page: Page): Promise<Activity> {
     let errorAlerts = q('[data-test-boxel-alert="error"]');
     // A failed or rejected call is something a model can notice and correct:
     // the host tells it what was wrong, and a normal repair takes two or three
-    // rounds, each of which can fail once more before it lands. Only a fourth
-    // failing turn reads as a run going sideways; stopping at two cut off a
-    // Haiku run two seconds before its card appeared. Count turns, not pills:
-    // one fix reply can carry several calls that all fail together.
-    let messagesWithFailures = Array.from(
+    // rounds, each of which can fail once more before it lands. A failure the
+    // next turn repairs is graded afterwards (too many failed calls reads
+    // ROUGH), not stopped: across a run with follow-ups, scattered slips that
+    // were each fixed added up to a stop after the last prompt's work was on
+    // screen. So the run stops on three failing turns in a row, the model not
+    // getting out of it, and on eight in all as a backstop for one that
+    // alternates. Count turns, not pills: one fix reply can carry several
+    // calls that all fail together. A finished turn shows its token usage; a
+    // turn with neither a failure nor usage (a correctness note) leaves the
+    // streak as it is.
+    let failingTurns = 0;
+    let failingStreak = 0;
+    let longestFailingStreak = 0;
+    for (let m of Array.from(
       document.querySelectorAll('[data-test-message-idx]'),
-    ).filter(
-      (m) =>
+    )) {
+      let failing =
         m.querySelector(
           '[data-test-apply-state="failed"], [data-test-apply-state="invalid"]',
-        ) || m.querySelector('[data-test-boxel-alert="error"]'),
-    ).length;
-    if (messagesWithFailures >= 4) {
+        ) || m.querySelector('[data-test-boxel-alert="error"]');
+      if (failing) {
+        failingTurns++;
+        failingStreak++;
+        longestFailingStreak = Math.max(longestFailingStreak, failingStreak);
+      } else if (m.querySelector('[data-test-token-usage]')) {
+        failingStreak = 0;
+      }
+    }
+    if (longestFailingStreak >= 3) {
       irregularities.push(
-        `${messagesWithFailures} turns had a failed or rejected tool call (${failed} failed, ${invalid} invalid, ${errorAlerts} error alerts)`,
+        `${longestFailingStreak} turns in a row had a failed or rejected tool call (${failingTurns} failing turns in all; ${failed} failed, ${invalid} invalid, ${errorAlerts} error alerts)`,
+      );
+    } else if (failingTurns >= 8) {
+      irregularities.push(
+        `${failingTurns} turns had a failed or rejected tool call (${failed} failed, ${invalid} invalid, ${errorAlerts} error alerts)`,
       );
     }
     // A loop: the same tool call, with the same arguments, three times. The
@@ -778,6 +798,12 @@ function classify(
   if (stoppedBy === 'stuck') {
     reasons.push('a tool pill stayed in "applying" past the host tool timeout');
     return { verdict: 'host-failure', reasons };
+  }
+  if (stoppedBy === 'no-reply' && analysis.emptyBotReplies > 0) {
+    reasons.push(
+      `the bot posted an empty reply (no text, no tool call, no usage): the provider returned no content, and the ai-bot finalized it; its log for that turn shows the generation id`,
+    );
+    return { verdict: 'bot-failure', reasons };
   }
   if (stoppedBy === 'no-reply') {
     reasons.push(

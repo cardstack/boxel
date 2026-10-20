@@ -143,9 +143,9 @@ A run also prints the table at the end.
    first, and sends each follow-up prompt once the bot is idle) and waits
    until the bot is idle: no message streaming, no
    tool pill applying or waiting for approval, no pending Accept. The run is cut
-   short only when it has clearly gone wrong (a failed or invalid tool call, an
-   error alert, the same call repeated three
-   times, a pill stuck past the host's tool timeout) or after the safety wall
+   short only when it has clearly gone wrong (three turns in a row with a
+   failed or invalid tool call or an error alert, or eight in all, the same
+   call repeated three times, a pill stuck past the host's tool timeout) or after the safety wall
    clock.
 4. Looks for a rendered card in the stack that is not the workspace index and
    has no error state; screenshots the page.

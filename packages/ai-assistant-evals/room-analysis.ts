@@ -30,6 +30,9 @@ export interface RoomAnalysis {
   failedToolCalls: { name: string; reason: string }[];
   // Requests the host never answered: the signature of a stuck host.
   unansweredToolCalls: number;
+  // Finished bot replies with no text, no tool call and no usage: the
+  // provider returned nothing and the ai-bot posted it as a reply.
+  emptyBotReplies: number;
   // realm.fs writes in run-realm-code calls the host applied.
   realmCodeWrites: number;
   // Applied calls to the other tools that write into a realm (copy, patch,
@@ -110,6 +113,7 @@ export function analyzeRoom(
     realmSearches: {},
     failedToolCalls: [],
     unansweredToolCalls: 0,
+    emptyBotReplies: 0,
     realmCodeWrites: 0,
     toolWrites: 0,
     filesRead: [],
@@ -139,6 +143,40 @@ export function analyzeRoom(
         });
       }
     }
+  }
+
+  // A turn the bot ended with nothing: its last finished message before the
+  // next user message (or the end of the room) has no text, no tool call and
+  // no usage. An empty finished message followed by one with content is the
+  // bot closing a streaming placeholder before it posts the turn, not an
+  // empty turn.
+  let endedEmpty = false;
+  for (let event of sorted) {
+    if (event.type !== 'm.room.message') {
+      continue;
+    }
+    let content = event.content;
+    if (event.sender !== botUserId) {
+      if (endedEmpty) {
+        result.emptyBotReplies++;
+      }
+      endedEmpty = false;
+      continue;
+    }
+    if (
+      content.msgtype !== BOT_MESSAGE_MSGTYPE ||
+      content.isStreamingFinished !== true
+    ) {
+      continue;
+    }
+    endedEmpty = !(
+      Boolean((content.body ?? '').trim()) ||
+      (content[TOOL_REQUESTS_KEY] ?? []).length > 0 ||
+      Boolean(parseData(content).usage)
+    );
+  }
+  if (endedEmpty) {
+    result.emptyBotReplies++;
   }
 
   for (let event of sorted) {
