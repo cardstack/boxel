@@ -32,6 +32,7 @@ import {
   resolveModuleHref,
   trimExecutableExtension,
   type CodeRef,
+  type RealmIdentifier,
   type RealmResourceIdentifier,
   type ResolvedCodeRef,
 } from './index.ts';
@@ -193,8 +194,8 @@ export class ModuleSyntax {
     fieldType: FieldType;
     fieldDefinitionType: 'card' | 'field';
     incomingRelativeTo: RealmResourceIdentifier | undefined; // can be undefined when you know the path is not going to be relative
-    outgoingRelativeTo: URL | undefined; // can be undefined when you know url is not going to be relative
-    outgoingRealmURL: URL | undefined; // should be provided when the other 2 params are provided
+    outgoingRelativeTo: RealmResourceIdentifier | URL | undefined; // can be undefined when you know url is not going to be relative
+    outgoingRealmURL: RealmIdentifier | URL | undefined; // should be provided when the other 2 params are provided
     addFieldAtIndex?: number; // if provided, the field will be added at the specified index in the card's possibleFields map
     computedFieldFunctionSourceCode?: string; // if provided, the field will be added as a computed field
   }) {
@@ -471,8 +472,8 @@ function makeNewField({
   fieldName: string;
   cardBeingModified: CodeRef;
   incomingRelativeTo: RealmResourceIdentifier | undefined;
-  outgoingRelativeTo: URL | undefined;
-  outgoingRealmURL: URL | undefined;
+  outgoingRelativeTo: RealmResourceIdentifier | URL | undefined;
+  outgoingRealmURL: RealmIdentifier | URL | undefined;
   moduleURL: URL;
   computedFieldFunctionSourceCode?: string;
   virtualNetwork: VirtualNetwork;

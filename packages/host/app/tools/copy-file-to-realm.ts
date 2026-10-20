@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import { rri } from '@cardstack/runtime-common';
+import { RealmPaths, ri, rri } from '@cardstack/runtime-common';
 
 import HostBaseTool from '../lib/host-base-tool';
 import { findNonConflictingFilename } from '../utils/file-name';
@@ -40,37 +40,43 @@ export default class CopyFileToRealmTool extends HostBaseTool<
       throw new Error(`Do not have write permissions to ${targetRealm}`);
     }
 
-    let sourceUrl = new URL(input.sourceFileIdentifier);
-    let filename = decodeURIComponent(
-      sourceUrl.pathname.split('/').pop() ?? sourceUrl.pathname,
-    );
-
-    let destinationUrl = new URL(filename, targetRealm);
-
-    let existing = await this.cardService.getSource(destinationUrl);
-    if (existing.status === 200 || existing.status === 406) {
-      let nonConflictingUrl = await findNonConflictingFilename(
-        destinationUrl.href,
-        (candidateUrl) => this.fileExists(candidateUrl),
-      );
-      destinationUrl = new URL(nonConflictingUrl);
-    } else if (existing.status !== 404) {
+    // Both identifiers stay in the form they were given, so a realm
+    // registered under a prefix gets a prefix-form file identifier back.
+    let sourceId = rri(input.sourceFileIdentifier);
+    let sourcePath = sourceId.split(/[?#]/)[0];
+    let filename = decodeURIComponent(sourcePath.split('/').pop() ?? '');
+    if (!filename) {
       throw new Error(
-        `Error checking if file exists at ${destinationUrl}: ${existing.status}`,
+        `sourceFileIdentifier does not name a file: ${input.sourceFileIdentifier}`,
       );
     }
 
-    let result = await this.cardService.copySource(sourceUrl, destinationUrl);
+    let destinationId = new RealmPaths(ri(targetRealm)).fileRRI(filename);
+
+    let existing = await this.cardService.getSource(destinationId);
+    if (existing.status === 200 || existing.status === 406) {
+      destinationId = rri(
+        await findNonConflictingFilename(destinationId, (candidateId) =>
+          this.fileExists(candidateId),
+        ),
+      );
+    } else if (existing.status !== 404) {
+      throw new Error(
+        `Error checking if file exists at ${destinationId}: ${existing.status}`,
+      );
+    }
+
+    let result = await this.cardService.copySource(sourceId, destinationId);
     if (!result.ok) {
       throw new Error(
-        `Failed to copy file from ${input.sourceFileIdentifier} to ${destinationUrl.href}`,
+        `Failed to copy file from ${input.sourceFileIdentifier} to ${destinationId}`,
       );
     }
 
     let commandModule = await this.loadToolModule();
     const { CopyFileToRealmResult } = commandModule;
     return new CopyFileToRealmResult({
-      newFileIdentifier: destinationUrl.href,
+      newFileIdentifier: destinationId,
     });
   }
 

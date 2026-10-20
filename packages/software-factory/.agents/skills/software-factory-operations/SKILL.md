@@ -297,9 +297,11 @@ Evaluates an ESM module in the realm's prerenderer sandbox. Use
 right after writing a `.gts` to catch import errors, decorator
 mishaps, or anything else that fails at module load time.
 
-**Input shape** — `moduleIdentifier` is the _absolute_ module URL
-(no `.gts` extension); `realmIdentifier` is the absolute target
-realm URL (used for SSRF validation):
+**Input shape** — `moduleIdentifier` is the complete module
+identifier (no `.gts` extension): an absolute URL or a realm-prefix
+form such as `@scope/realm/sticky-note`, not a relative path;
+`realmIdentifier` is the target realm's identifier in either form
+(used for SSRF validation — the module must resolve inside it):
 
 ```bash
 MODULE="http://localhost:4201/user/my-realm/sticky-note"
@@ -335,10 +337,12 @@ errors in field initializers.
 
 **Input shape** — `moduleIdentifier`, `cardName`, and
 `realmIdentifier` are required; `instanceData` is optional but
-needed to exercise actual field values. **All three identifiers
-must be absolute URLs.** If `instanceData` is passed, its
-`data.meta.adoptsFrom.module` must already be the same absolute URL
-(the relative form `../sticky-note` will be rejected with
+needed to exercise actual field values. **Both identifiers must be
+complete — absolute URLs or realm-prefix forms, not relative
+paths.** If `instanceData` is passed, its
+`data.meta.adoptsFrom.module` must already be the same identifier,
+spelled the same way (the relative form `../sticky-note` will be
+rejected with
 "instanceData adoptsFrom (...) does not match moduleUrl/cardName").
 
 ```bash
@@ -349,7 +353,7 @@ CARD_NAME="StickyNote"
 # matching the convention used across the catalog/experiments realms.
 INSTANCE_PATH="StickyNote/note-1.json"
 
-# Read the workspace JSON, rewrite adoptsFrom.module to the absolute URL,
+# Read the workspace JSON, rewrite adoptsFrom.module to that identifier,
 # then feed it to instantiate-card as the instanceData string.
 INSTANCE_DATA=$(jq -c --arg m "$MODULE" --arg name "$CARD_NAME" \
   '.data.meta.adoptsFrom = {module:$m, name:$name}' "$INSTANCE_PATH")

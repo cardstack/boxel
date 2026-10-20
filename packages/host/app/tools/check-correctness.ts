@@ -262,18 +262,22 @@ export default class CheckCorrectnessTool extends HostBaseTool<
     return [errorMessage];
   }
 
+  // The prerender request and the indexing wait both speak URLs: the
+  // realm-server endpoint parses the realm as a URL, and writes register their
+  // invalidation waits by file URL. So the file is resolved to its URL before
+  // anything else, and the realm is looked up from that URL.
   private moduleInfoFromFile(
     targetRef: string,
   ): { moduleURL: URL; realmURL: string; fileURL: URL } | undefined {
     try {
-      let fileURL = new URL(targetRef);
+      let { virtualNetwork } = this.network;
+      let fileURL = virtualNetwork.toURL(targetRef);
       let realmURL = this.realm.realmOf(fileURL);
       if (!realmURL) {
         return undefined;
       }
 
-      let moduleHref = fileURL.href.replace(/\.gts$/, '');
-      let moduleURL = new URL(moduleHref);
+      let moduleURL = virtualNetwork.toURL(fileURL.href.replace(/\.gts$/, ''));
       return { moduleURL, realmURL, fileURL };
     } catch {
       return undefined;

@@ -1,6 +1,6 @@
 import { service } from '@ember/service';
 
-import { rri } from '@cardstack/runtime-common';
+import { ri, rri } from '@cardstack/runtime-common';
 import { ModuleSyntax } from '@cardstack/runtime-common/module-syntax';
 
 import HostBaseTool from '../lib/host-base-tool';
@@ -56,10 +56,10 @@ export default class AddFieldToCardDefinitionTool extends HostBaseTool<
         ? rri(input.incomingRelativeTo)
         : undefined,
       outgoingRelativeTo: input.outgoingRelativeTo
-        ? new URL(input.outgoingRelativeTo)
+        ? rri(input.outgoingRelativeTo)
         : undefined,
       outgoingRealmURL: input.outgoingRealmURL
-        ? new URL(input.outgoingRealmURL)
+        ? ri(input.outgoingRealmURL)
         : undefined,
       addFieldAtIndex: input.addFieldAtIndex,
       computedFieldFunctionSourceCode: input.computedFieldFunctionSourceCode,

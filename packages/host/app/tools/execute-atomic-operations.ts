@@ -1,5 +1,6 @@
 import { service } from '@ember/service';
 
+import { ri } from '@cardstack/runtime-common';
 import type { AtomicOperation } from '@cardstack/runtime-common/atomic-document';
 
 import HostBaseTool from '../lib/host-base-tool';
@@ -30,7 +31,7 @@ export default class ExecuteAtomicOperationsTool extends HostBaseTool<
     const { ExecuteAtomicOperationsResult } = commandModule;
     const results = await this.cardService.executeAtomicOperations(
       input.operations as AtomicOperation[],
-      new URL(input.realmIdentifier),
+      ri(input.realmIdentifier),
     );
     const atomicResults = results['atomic:results'];
     if (!Array.isArray(atomicResults)) {
