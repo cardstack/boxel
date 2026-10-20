@@ -1030,48 +1030,93 @@ export async function getTools(
       continue;
     }
 
-    // Tools discovered by the bot reading a skill file (readRealmFile):
-    // each applied read's result event embeds the definitions in
-    // `data.discoveredTools`. Only the bot publishes these; a
-    // discoveredTools block on anyone else's result event is not a
-    // legitimate discovery, and a failed or invalid read is not evidence
-    // of anything.
-    if (isToolResultEvent(event) && event.sender === aiBotUserId) {
-      let content = event.content;
-      if (
-        !isToolResultWithOutputContent(content) ||
-        content['m.relates_to']?.key !== 'applied'
-      ) {
+    for (let { tool, sourceSkillUrl } of toolSourceTools(event, aiBotUserId)) {
+      if (sourceSkillUrl && disabledSkillIds.has(sourceSkillUrl)) {
         continue;
       }
-      for (let def of content.data?.discoveredTools ?? []) {
-        if (
-          !def?.sourceSkillUrl ||
-          disabledSkillIds.has(def.sourceSkillUrl) ||
-          def.definition?.type !== 'function' ||
-          !def.definition.function?.name
-        ) {
-          continue;
-        }
-        add(def.definition as Tool);
-      }
-      continue;
-    }
-
-    // Tools carried in a user message's context.
-    if (
-      event.type === 'm.room.message' &&
-      event.sender !== aiBotUserId &&
-      event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
-    ) {
-      for (let tool of event.content.data?.context?.tools ?? []) {
-        add(tool);
-      }
+      add(tool);
     }
   }
 
   return Array.from(toolMap.values());
 }
+
+// The tools an event other than a room-skills state event contributes to
+// `getTools`, with the skill each discovered one came from.
+//
+// Tools discovered by the bot reading a skill file (readRealmFile): each
+// applied read's result event embeds the definitions in
+// `data.discoveredTools`. Only the bot publishes these; a discoveredTools
+// block on anyone else's result event is not a legitimate discovery, and a
+// failed or invalid read is not evidence of anything. A user message can
+// also carry tools in its context.
+export function toolSourceTools(
+  event: DiscreteMatrixEvent,
+  aiBotUserId: string,
+): { tool: Tool; sourceSkillUrl?: string }[] {
+  if (isToolResultEvent(event) && event.sender === aiBotUserId) {
+    let content = event.content;
+    if (
+      !isToolResultWithOutputContent(content) ||
+      content['m.relates_to']?.key !== 'applied'
+    ) {
+      return [];
+    }
+    return (content.data?.discoveredTools ?? [])
+      .filter(
+        (def) =>
+          def?.sourceSkillUrl &&
+          def.definition?.type === 'function' &&
+          def.definition.function?.name,
+      )
+      .map((def) => ({
+        tool: def.definition as Tool,
+        sourceSkillUrl: def.sourceSkillUrl,
+      }));
+  }
+  if (
+    event.type === 'm.room.message' &&
+    event.sender !== aiBotUserId &&
+    event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
+  ) {
+    return (event.content.data?.context?.tools ?? []).map((tool: Tool) => ({
+      tool,
+    }));
+  }
+  return [];
+}
+
+// The events a compaction carries forward for `getTools`: in order, each
+// event that contributes a tool, from a given skill, that no earlier one
+// does. The history before the compaction's cut is not loaded, and
+// `getRoomEvents` fetches these back by id. A tool is told apart by its skill
+// as well as its name: when two skills declare the same tool and the user
+// disables the first, `getTools` takes it from the second.
+export function toolSourceEventIdsToCarry(
+  eventList: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): string[] {
+  let seen = new Set<string>();
+  let eventIds: string[] = [];
+  for (let event of eventList) {
+    let newKeys = toolSourceTools(event, aiBotUserId)
+      .filter(({ tool }) => !!tool?.function?.name)
+      .map(({ tool, sourceSkillUrl }) =>
+        JSON.stringify([sourceSkillUrl ?? null, tool.function.name]),
+      )
+      .filter((key) => !seen.has(key));
+    if (newKeys.length) {
+      newKeys.forEach((key) => seen.add(key));
+      eventIds.push(event.event_id);
+    }
+  }
+  return eventIds.slice(0, MAX_CARRIED_TOOL_SOURCE_EVENTS);
+}
+
+// The most tool-source events a compaction event carries. The tools of the
+// events past it leave the prompt once the history before the cut is no
+// longer loaded.
+export const MAX_CARRIED_TOOL_SOURCE_EVENTS = 200;
 
 export function getLastUserMessage(
   history: DiscreteMatrixEvent[],

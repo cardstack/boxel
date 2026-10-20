@@ -21,7 +21,9 @@ import {
 import {
   buildCompactionRequest,
   compactRoomHistory,
+  fitCompactionContent,
   isContextLengthExceededError,
+  MAX_COMPACTION_CONTENT_BYTES,
   summaryFromCompletion,
 } from '../lib/compaction.ts';
 import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
@@ -650,6 +652,8 @@ module('compaction', (hooks) => {
         upToEventId: 'u2',
         summary: 'Objective: build a wedding planner.',
         summaryVersion: 1,
+        usedToolCallIds: [],
+        toolSourceEventIds: [],
       });
 
       assert.true(result.compacted);
@@ -667,6 +671,67 @@ module('compaction', (hooks) => {
       assert.deepEqual(messages!.slice(2, -1).map(text), [
         'Added a guest list field',
         'Add a budget',
+      ]);
+    });
+
+    test('carries forward the tool-call ids the room has used', async () => {
+      eventList = [
+        {
+          type: APP_BOXEL_COMPACTION_EVENT_TYPE,
+          sender: aiBotUserId,
+          event_id: 'earlier-compaction',
+          origin_server_ts: 0,
+          room_id: 'room-1',
+          content: {
+            status: 'done',
+            upToEventId: 'before-this-history',
+            summary: 'Objective: plan a wedding.',
+            summaryVersion: 1,
+            usedToolCallIds: ['x:0', 'x:0_1', 'x:0_2'],
+          },
+        } as unknown as DiscreteMatrixEvent,
+        ...eventList,
+        {
+          type: 'app.boxel.toolResult',
+          sender: userId,
+          event_id: 'result-1',
+          origin_server_ts: 6,
+          room_id: 'room-1',
+          content: { commandRequestId: 'y:0' },
+        } as unknown as DiscreteMatrixEvent,
+      ];
+      let { result } = await compact(completion());
+
+      assert.true(result.compacted);
+      assert.deepEqual(client.getSentEvents()[1].content.usedToolCallIds, [
+        'x:0',
+        'x:0_2',
+        'y:0',
+      ]);
+    });
+
+    test('carries forward the events that contributed tools', async () => {
+      eventList[0] = {
+        ...eventList[0],
+        content: {
+          ...eventList[0].content,
+          data: {
+            context: {
+              tools: [
+                {
+                  type: 'function',
+                  function: { name: 'planWedding', parameters: {} },
+                },
+              ],
+            },
+          },
+        },
+      } as unknown as DiscreteMatrixEvent;
+      let { result } = await compact(completion());
+
+      assert.true(result.compacted);
+      assert.deepEqual(client.getSentEvents()[1].content.toolSourceEventIds, [
+        'u1',
       ]);
     });
 
@@ -733,5 +798,53 @@ module('compaction', (hooks) => {
       assert.strictEqual(requests.length, 0);
       assert.strictEqual(client.getSentEvents().length, 0);
     });
+  });
+});
+
+module('fitCompactionContent', () => {
+  test('trims what a compaction carries to fit the event size limit', () => {
+    let content = {
+      status: 'done' as const,
+      upToEventId: '$cut',
+      summary: 'x'.repeat(40_000),
+      summaryVersion: 1,
+      usedToolCallIds: Array.from(
+        { length: 600 },
+        (_, i) => `toolu_${String(i).padStart(30, '0')}`,
+      ),
+      toolSourceEventIds: Array.from(
+        { length: 200 },
+        (_, i) => `$${String(i).padStart(43, '0')}`,
+      ),
+    };
+    let fitted = fitCompactionContent(content);
+
+    assert.true(
+      Buffer.byteLength(JSON.stringify(fitted)) <= MAX_COMPACTION_CONTENT_BYTES,
+    );
+    assert.strictEqual(fitted.summary, content.summary);
+    assert.true(fitted.usedToolCallIds!.length < 600);
+    assert.deepEqual(
+      fitted.usedToolCallIds,
+      content.usedToolCallIds.slice(-fitted.usedToolCallIds!.length),
+      'the most recent used ids are kept',
+    );
+    assert.deepEqual(
+      fitted.toolSourceEventIds,
+      content.toolSourceEventIds.slice(0, fitted.toolSourceEventIds!.length),
+      'the earliest tool sources are kept',
+    );
+  });
+
+  test('leaves content that fits as it is', () => {
+    let content = {
+      status: 'done' as const,
+      upToEventId: '$cut',
+      summary: 'summary',
+      summaryVersion: 1,
+      usedToolCallIds: ['x:0'],
+      toolSourceEventIds: ['$source'],
+    };
+    assert.strictEqual(fitCompactionContent(content), content);
   });
 });
