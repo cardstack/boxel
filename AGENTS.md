@@ -113,6 +113,10 @@ Diagnosing a stuck test page fast (do this FIRST, before assuming it's a slow bu
 
 Prefer the headless `vite build --mode development && pnpm exec ember test --path dist --filter "…"` path over a second live dev server: the shared `pnpm start` server is env-mode/Traefik-locked (one slug at a time) and switching the shared tree under it triggers a long Vite dep re-optimize + full reloads. The realm-server stack the tests talk to (`../realm-server && pnpm start:all`) is backend-only and can be shared across checkouts on the usual localhost ports.
 
+#### Signing a browser into a host
+
+- A host on any origin other than the environment's own (for example `http://localhost:<port>/` against staging) can't use the email/password sign-in form: the form is a secure-origin frame those origins may not embed, so it shows up blank. Sign in with boxel-cli instead: `boxel browse --profile <id> --host-url <host origin> --print-url | pbcopy`. The printed URL is a single-use credential that expires in about 2 minutes: never put it in chat, and never open or paste it yourself; ask the human to paste it into their browser. The `boxel-cli:browser-sign-in` skill (`packages/boxel-cli/plugin/skills/browser-sign-in/SKILL.md`) has the details.
+
 #### CSS Guidance
 
 - Use scalable units such as rem
