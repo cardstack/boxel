@@ -168,3 +168,7 @@ it.
   application and the infrastructure must change in a set order. A
   configured user agent keeps the probe where it is, and a different load
   balancer needs only a new setting.
+
+## 4. Remediation
+
+No known gaps.
