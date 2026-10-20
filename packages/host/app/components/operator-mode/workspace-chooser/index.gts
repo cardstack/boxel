@@ -56,6 +56,13 @@ interface Signature {
 
 const log = logger('component:workspace-chooser');
 
+// Your Workspaces leads with its most recently updated workspaces as full
+// tiles, enough to fill this many rows beside the New Workspace tile (about a
+// dozen); the rest are compact rows, this many rows of them until the user
+// asks for the rest.
+const RECENT_WORKSPACE_ROWS = 3;
+const COLLAPSED_WORKSPACE_ROWS = 10;
+
 // Fewer workspaces of one's own than this, and the catalog leads the page.
 export const CATALOG_LEADS_BELOW = 3;
 
@@ -304,83 +311,74 @@ export default class WorkspaceChooser extends Component<Signature> {
   // Measured live from the Your Workspaces tile grid so favorited tiles can
   // mirror however many tiles actually fit per row at the current viewport
   // width (see measureWorkspaceGrid below).
-  @tracked private workspaceGridWidth = 0;
-  @tracked private workspaceTileWidth = 0;
-  @tracked private workspaceTileGap = 0;
+  @tracked private workspaceSectionWidth = 0;
+  @tracked private workspaceRowColumns = 0;
+  @tracked private recentTileColumns = 0;
 
+  // Fills the recent rows exactly; a dozen until the grid is measured.
+  private get recentWorkspaceCount() {
+    return this.recentTileColumns
+      ? this.recentTileColumns * RECENT_WORKSPACE_ROWS - 1
+      : 12;
+  }
+
+  // Columns in the compact row grid, as CSS laid them out. Three until it
+  // has been measured, or when there are no rows to lay out.
   private get tilesPerRow(): number {
-    if (!this.workspaceTileWidth) {
-      return 3;
-    }
-    let perRow = Math.floor(
-      (this.workspaceGridWidth + this.workspaceTileGap) /
-        (this.workspaceTileWidth + this.workspaceTileGap),
-    );
-    return Math.max(1, perRow);
+    return this.workspaceRowColumns || 3;
   }
 
   // As many favorites per row as fit at their minimum width across the
-  // measured Your Workspaces row, which the compact tiles below fill much
-  // more finely than favorites need.
+  // section, so they span the same width as the lists below them.
   private get favoritesSlotCount(): number {
-    let rowWidth =
-      this.tilesPerRow * this.workspaceTileWidth +
-      (this.tilesPerRow - 1) * this.workspaceTileGap;
     return Math.max(
       1,
       Math.floor(
-        (rowWidth + FAVORITE_ROW_GAP_PX) /
+        (this.workspaceSectionWidth + FAVORITE_ROW_GAP_PX) /
           (FAVORITE_MIN_WIDTH_PX + FAVORITE_ROW_GAP_PX),
       ),
     );
   }
 
   // The width a single favorited tile should be so that `favoritesSlotCount`
-  // of them, plus the gaps between them, exactly span the measured Your
-  // Workspaces row width. Null before the grid has been measured.
+  // of them, plus the gaps between them, exactly span the section. Null
+  // before the section has been measured.
   private get favoritesSlotWidth(): number | null {
-    if (!this.workspaceTileWidth) {
+    if (!this.workspaceSectionWidth) {
       return null;
     }
     let n = this.favoritesSlotCount;
-    let gap = FAVORITE_ROW_GAP_PX;
-    let rowWidth =
-      this.tilesPerRow * this.workspaceTileWidth +
-      (this.tilesPerRow - 1) * this.workspaceTileGap;
-    return (rowWidth - (n - 1) * gap) / n;
+    return (this.workspaceSectionWidth - (n - 1) * FAVORITE_ROW_GAP_PX) / n;
   }
 
   // Applied to real favorited tiles (via cssVar, see workspace.gts) so they
-  // take up this responsive width. Undefined before the grid has been
+  // take up this responsive width. Undefined before the section has been
   // measured, so the tile falls back to its static CSS width.
   private get favoritesTileWidthPx(): string | undefined {
     let width = this.favoritesSlotWidth;
     return width === null ? undefined : `${width}px`;
   }
 
-  // Watches the Your Workspaces tile grid so we always know how many tiles
-  // currently fit per row (and their exact width/gap), regardless of how
-  // many workspaces the user actually has.
+  // Watches Your Workspaces so the favorites above can match its width and
+  // the row list knows how many rows its first ten hold.
   private measureWorkspaceGrid = modifier((el: HTMLElement) => {
     let measure = () => {
-      this.workspaceGridWidth = el.clientWidth;
-      // Every tile in the list is the same width, the New Workspace tile
-      // first among them.
-      let tile = el.firstElementChild;
-      if (tile) {
-        this.workspaceTileWidth = tile.getBoundingClientRect().width;
-      }
-      let gap = parseFloat(getComputedStyle(el).columnGap);
-      if (!Number.isNaN(gap)) {
-        this.workspaceTileGap = gap;
-      }
+      this.workspaceSectionWidth = el.clientWidth;
+      let recent = el.querySelector<HTMLElement>('[data-workspace-recent]');
+      this.recentTileColumns = recent
+        ? getComputedStyle(recent).gridTemplateColumns.split(' ').length
+        : 0;
+      let rows = el.querySelector<HTMLElement>('[data-workspace-rows]');
+      this.workspaceRowColumns = rows
+        ? getComputedStyle(rows).gridTemplateColumns.split(' ').length
+        : 0;
     };
     // `observe()` delivers an initial callback with the element's current
     // size, so this covers the first measurement too — and it lands after the
     // render transaction commits, keeping these tracked writes out of a
     // transaction the Favorites block's `@enlargedWidth={{favoritesTileWidthPx}}`
     // already read this frame. A synchronous `measure()` here would write
-    // `workspaceTileWidth` after that read and trip Ember's backtracking-
+    // `workspaceSectionWidth` after that read and trip Ember's backtracking-
     // rerender assertion for any user who opens the chooser with a favorite.
     // The observer also supersedes a window 'resize' listener: anything that
     // changes the viewport width also changes `el.clientWidth`, and it
@@ -407,8 +405,63 @@ export default class WorkspaceChooser extends Component<Signature> {
     return this.favoriteRealmIdentifiers.length;
   }
 
+  // The most recently updated workspaces, as full tiles.
+  private get recentUserRealmIdentifiers() {
+    let updated = (url: string) => {
+      let updatedAt = this.realm.info(url).updatedAt;
+      return updatedAt ? new Date(updatedAt).getTime() : 0;
+    };
+    return [...this.filteredUserRealmIdentifiers]
+      .sort((a, b) => updated(b) - updated(a))
+      .slice(0, this.recentWorkspaceCount);
+  }
+
+  // Everything else, in list order, as compact rows.
+  private get otherUserRealmIdentifiers() {
+    let recent = new Set<string>(this.recentUserRealmIdentifiers);
+    return this.filteredUserRealmIdentifiers.filter((url) => !recent.has(url));
+  }
+
+  // A long row list shows its first rows, faded under a scrim with a way to
+  // show the rest; only the rows shown are rendered.
+  @tracked private showAllWorkspaces = false;
+
+  @action private toggleAllWorkspaces() {
+    this.showAllWorkspaces = !this.showAllWorkspaces;
+  }
+
+  private get collapsedWorkspaceCount() {
+    return this.tilesPerRow * COLLAPSED_WORKSPACE_ROWS;
+  }
+
+  private get visibleOtherRealmIdentifiers() {
+    let others = this.otherUserRealmIdentifiers;
+    return this.showAllWorkspaces
+      ? others
+      : others.slice(0, this.collapsedWorkspaceCount);
+  }
+
+  private get hiddenWorkspaceCount() {
+    return (
+      this.otherUserRealmIdentifiers.length -
+      this.visibleOtherRealmIdentifiers.length
+    );
+  }
+
+  private get isWorkspaceListCollapsible() {
+    return this.otherUserRealmIdentifiers.length > this.collapsedWorkspaceCount;
+  }
+
+  private get otherWorkspacesNavBase() {
+    return this.userWorkspacesNavBase + this.recentUserRealmIdentifiers.length;
+  }
+
+  // Counts the tiles rendered, which is what keyboard navigation walks.
   private get userWorkspacesCount() {
-    return this.filteredUserRealmIdentifiers.length;
+    return (
+      this.recentUserRealmIdentifiers.length +
+      this.visibleOtherRealmIdentifiers.length
+    );
   }
 
   // The "New Workspace" tile is hidden only when the hosted-only filter empties
@@ -751,35 +804,92 @@ export default class WorkspaceChooser extends Component<Signature> {
                 >{{this.userWorkspacesEmptyMessage}}</span>
               {{else}}
                 <div
-                  class='workspace-list is-compact'
+                  class='your-workspaces'
                   data-test-workspace-list
                   {{this.measureWorkspaceGrid}}
                 >
-                  <AddWorkspace
-                    @navIndex={{this.addWorkspaceNavIndex}}
-                    @isSelected={{eq
-                      this.currentIndex
-                      this.addWorkspaceNavIndex
+                  <div class='workspace-list is-recent' data-workspace-recent>
+                    <AddWorkspace
+                      @navIndex={{this.addWorkspaceNavIndex}}
+                      @isSelected={{eq
+                        this.currentIndex
+                        this.addWorkspaceNavIndex
+                      }}
+                    />
+                    {{#if this.matrixService.isInitializingNewUser}}
+                      <WorkspaceLoadingIndicator />
+                    {{/if}}
+                    {{#each
+                      this.recentUserRealmIdentifiers
+                      as |realmIdentifier i|
                     }}
-                  />
-                  {{#if this.matrixService.isInitializingNewUser}}
-                    <WorkspaceLoadingIndicator />
+                      {{#let (add this.userWorkspacesNavBase i) as |navIndex|}}
+                        <Workspace
+                          @realmIdentifier={{realmIdentifier}}
+                          @showMenu={{true}}
+                          @navIndex={{navIndex}}
+                          @isSelected={{eq this.currentIndex navIndex}}
+                          @selectionActive={{this.isSelectionActive}}
+                        />
+                      {{/let}}
+                    {{/each}}
+                  </div>
+                  {{#if this.otherUserRealmIdentifiers.length}}
+                    <div class='section-header'>
+                      <span class='workspace-chooser__title'>More</span>
+                      <span
+                        class='section-count'
+                      >{{this.otherUserRealmIdentifiers.length}}</span>
+                    </div>
+                    <div
+                      class='workspace-list is-compact
+                        {{if this.hiddenWorkspaceCount "is-clipped"}}'
+                      data-workspace-rows
+                      data-test-workspace-more-list
+                    >
+                      {{#each
+                        this.visibleOtherRealmIdentifiers
+                        as |realmIdentifier i|
+                      }}
+                        {{#let
+                          (add this.otherWorkspacesNavBase i)
+                          as |navIndex|
+                        }}
+                          <Workspace
+                            @realmIdentifier={{realmIdentifier}}
+                            @showMenu={{true}}
+                            @compact={{true}}
+                            @navIndex={{navIndex}}
+                            @isSelected={{eq this.currentIndex navIndex}}
+                            @selectionActive={{this.isSelectionActive}}
+                          />
+                        {{/let}}
+                      {{/each}}
+                      {{#if this.hiddenWorkspaceCount}}
+                        <div class='list-scrim'>
+                          <button
+                            type='button'
+                            class='list-more'
+                            aria-expanded='false'
+                            {{on 'click' this.toggleAllWorkspaces}}
+                            data-test-workspace-list-show-all
+                          >Show all
+                            {{this.otherUserRealmIdentifiers.length}}</button>
+                        </div>
+                      {{/if}}
+                    </div>
+                    {{#if this.showAllWorkspaces}}
+                      {{#if this.isWorkspaceListCollapsible}}
+                        <button
+                          type='button'
+                          class='list-more list-fewer'
+                          aria-expanded='true'
+                          {{on 'click' this.toggleAllWorkspaces}}
+                          data-test-workspace-list-show-fewer
+                        >Show fewer</button>
+                      {{/if}}
+                    {{/if}}
                   {{/if}}
-                  {{#each
-                    this.filteredUserRealmIdentifiers
-                    as |realmIdentifier i|
-                  }}
-                    {{#let (add this.userWorkspacesNavBase i) as |navIndex|}}
-                      <Workspace
-                        @realmIdentifier={{realmIdentifier}}
-                        @showMenu={{true}}
-                        @compact={{true}}
-                        @navIndex={{navIndex}}
-                        @isSelected={{eq this.currentIndex navIndex}}
-                        @selectionActive={{this.isSelectionActive}}
-                      />
-                    {{/let}}
-                  {{/each}}
                 </div>
               {{/if}}
             </div>
@@ -1083,6 +1193,65 @@ export default class WorkspaceChooser extends Component<Signature> {
         display: grid;
         grid-template-columns: repeat(auto-fill, minmax(15.5rem, 1fr));
         gap: var(--boxel-sp-sm);
+      }
+      .your-workspaces {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-lg);
+      }
+      /* The recent workspaces keep the full wallpaper tile, a size up. */
+      .workspace-list.is-recent {
+        --workspace-chooser-card-width: 100%;
+        --workspace-chooser-tile-width: 100%;
+        --workspace-chooser-tile-height: 8rem;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+        gap: var(--boxel-sp-lg) var(--boxel-sp);
+      }
+      /* A clipped list fades out over its last row, where the button to
+         show the rest sits. */
+      .workspace-list.is-clipped {
+        position: relative;
+      }
+      .list-scrim {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        z-index: 2;
+        height: 7rem;
+        display: flex;
+        align-items: flex-end;
+        justify-content: center;
+        padding-bottom: var(--boxel-sp-xs);
+        background-image: linear-gradient(
+          to bottom,
+          transparent,
+          var(--boxel-800) 72%
+        );
+        pointer-events: none;
+      }
+      .list-more {
+        height: 2.75rem;
+        padding: 0 var(--boxel-sp-lg);
+        border: 1px solid
+          color-mix(in oklch, var(--boxel-light) 18%, transparent);
+        border-radius: 1.375rem;
+        background-color: var(--boxel-700);
+        color: var(--boxel-light);
+        font: 600 var(--boxel-font-sm);
+        cursor: pointer;
+        pointer-events: auto;
+      }
+      .list-more:hover {
+        background-color: var(--boxel-650);
+      }
+      .list-more:focus-visible {
+        outline: 2px solid var(--boxel-highlight);
+        outline-offset: 2px;
+      }
+      .list-fewer {
+        align-self: center;
       }
       /* The three places the rail jumps to. Each opens with a real heading so
          the single scroll reads as chapters rather than one long grid. */
