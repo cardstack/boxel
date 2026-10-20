@@ -162,10 +162,12 @@ module('Acceptance | AI assistant creates a workspace', function (hooks) {
       'nothing is created before the user approves',
     );
 
+    // The click settles, and settling holds through the tool's run and the
+    // round trip of its result event.
     await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
-    await waitFor(
-      '[data-test-message-idx="0"] [data-test-apply-state="applied"]',
-    );
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .exists();
 
     assert.strictEqual(createRealmCalls.length, 1, 'one realm is created');
     assert.strictEqual(createRealmCalls[0].endpoint, 'team-space');
