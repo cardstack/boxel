@@ -37,11 +37,18 @@ Why, in prose: the forces at the time of the decision.
 
 Optional. Delete unless it adds value beyond the Decision.
 
-## 5. Open questions
+## 5. Remediation
+
+Proposed ADRs only. Each known gap: the path or glob where the code does not
+yet meet the Decision, and the requirement it breaks. Delete on acceptance.
+
+- `packages/example/old-path.ts` breaks §1.1.
+
+## 6. Open questions
 
 Retroactive ADRs only. Each reason no source states, and whom to ask.
 
-## 6. Sources
+## 7. Sources
 
 Commit SHAs, PRs in this repository, and file paths that the ADR rests on.
 Required for retroactive ADRs.

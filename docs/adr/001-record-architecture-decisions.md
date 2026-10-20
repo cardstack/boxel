@@ -60,6 +60,7 @@ MUST follow the title directly. Sections MUST be numbered, in this order:
 | Rationale          | REQUIRED.                                                |
 | Considered options | REQUIRED when viable alternatives existed.               |
 | Consequences       | OPTIONAL. Omit unless it adds value beyond the Decision. |
+| Remediation        | `proposed` ADRs only, while any known gap remains.       |
 | Open questions     | Retroactive ADRs only, while any question remains.       |
 | Sources            | REQUIRED for retroactive ADRs. OPTIONAL otherwise.       |
 
@@ -95,7 +96,19 @@ restating it.
 Anyone, including an agent, MAY propose an ADR. Only a person MAY set
 `accepted`. An agent MUST NOT.
 
-The Decision of an accepted ADR MUST NOT be edited. A changed decision MUST be
+An ADR MAY merge with status `proposed` before the code conforms to it.
+Merging a proposed ADR records that the team agrees with its Decision.
+Accepting it records that the code conforms.
+
+A proposed ADR MUST list, under Remediation, each known gap: a place where the
+code does not meet a MUST or MUST NOT of its Decision. Each entry names the
+path or glob and the requirement it breaks. A change that closes a gap MUST
+remove its entry. A person SHOULD set `accepted` when no entries remain, and
+MUST delete the Remediation section when they do.
+
+The Decision of a proposed ADR MAY change in a reviewed PR, for example when
+remediation shows that a requirement is wrong. The Decision of an accepted ADR
+MUST NOT be edited. A changed decision MUST be
 a new ADR that supersedes the old one. Fixes to typos, links, and `scope` globs
 after a file moves MAY be made in place. An ADR that no longer applies, with
 nothing to replace it, is `deprecated`.
@@ -126,6 +139,11 @@ superseding ADR, is a blocking review finding. A change that departs from a
 SHOULD or SHOULD NOT needs a stated reason, and a missing reason is a
 non-blocking review finding.
 
+These rules also apply to a proposed ADR that has merged, with one exception.
+A gap listed under its Remediation section is not a review finding, and a
+change MAY touch that code without closing the gap. A listed gap is not a
+precedent: new code MUST NOT copy it.
+
 ## 2. Rationale
 
 Much of the work in this repository is done by AI agents. An agent starts each
@@ -142,6 +160,13 @@ quickly whether the rest is relevant. Agents make drafting cheap, so the
 concision rules keep the log small enough for people to read. The retroactive
 rules exist because an invented reason misleads more than a missing ADR.
 
+The codebase is older than its ADRs, so a new ADR often describes a rule the
+code does not yet follow everywhere. If the ADR waits in its PR until the code
+conforms, the agreed rule stays invisible to the agents and reviewers who do
+the remediation, and new code keeps adding gaps. A merged proposed ADR stops
+new gaps at once. Its Remediation section turns the old ones into a finite
+list of work, and acceptance marks the end of that list.
+
 ## 3. Considered options
 
 - **Short normative ADRs with rationale and rejected options (chosen).** This
@@ -149,6 +174,11 @@ rules exist because an invented reason misleads more than a missing ADR.
 - **Short-RFC ADRs only, with Context and Consequences optional.** These are
   checkable and concise. They have no place for rejected alternatives and no
   rules for sourcing retroactive reasons, which are what agents most need.
+- **Merge an ADR only when the code conforms.** The ADR waits in its PR
+  through the remediation, while the code it governs keeps changing under it.
+- **Accept an ADR with known gaps.** Each gap is then a broken MUST of an
+  accepted ADR, which §1.9 makes blocking, so every change that touches the
+  gap is blocked or needs an exception.
 - **MADR or Nygard templates.** These are rationale-heavy prose with no
   requirement key words, so compliance is harder to check. Nygard's template
   also has no place for rejected alternatives.
