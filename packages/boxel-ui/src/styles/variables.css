@@ -26,6 +26,8 @@
   --boxel-font-size-sm: calc(var(--boxel-font-size) * 0.875); /* 14px */
   --boxel-font-size-xs: calc(var(--boxel-font-size) * 0.75); /* 12px */
   --boxel-font-size-2xs: calc(var(--boxel-font-size) * 0.6875); /* 11px */
+  /* text typed into a field on touch screens: iOS zooms in on focus under 16px */
+  --boxel-form-control-touch-font-size: max(1rem, var(--boxel-font-size));
 
   /* font shorthand */
   --boxel-font-xl: var(--boxel-font-size-xl) / calc(43 / 32)

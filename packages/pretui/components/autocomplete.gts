@@ -1124,7 +1124,7 @@ export class Autocomplete extends Component<AutocompleteSignature> {
           }
           /* iOS zooms into inputs under 16px on focus */
           .pretui-ac-input {
-            font-size: var(--boxel-font-size);
+            font-size: var(--boxel-form-control-touch-font-size);
           }
         }
         @media (prefers-reduced-motion: reduce) {

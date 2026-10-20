@@ -418,7 +418,7 @@ export class Select extends Component<SelectSignature> {
         @media (pointer: coarse) {
           .pretui-selectwrap :deep(.boxel-trigger),
           .pretui-selectwrap :deep(.boxel-trigger-placeholder) {
-            font-size: var(--boxel-font-size);
+            font-size: var(--boxel-form-control-touch-font-size);
             line-height: var(--boxel-line-height);
           }
         }
@@ -471,7 +471,7 @@ export class Select extends Component<SelectSignature> {
         @media (pointer: coarse) {
           .pretui-select-dropdown.ember-power-select-dropdown .boxel-select-option-item,
           .pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input {
-            font-size: var(--boxel-font-size);
+            font-size: var(--boxel-form-control-touch-font-size);
             line-height: var(--boxel-line-height);
           }
         }

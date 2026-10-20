@@ -128,7 +128,7 @@ export class Input extends Component<InputSignature> {
         /* iOS zooms into inputs under 16px on focus */
         @media (pointer: coarse) {
           .pretui-inputwrap {
-            font-size: var(--boxel-font-size);
+            font-size: var(--boxel-form-control-touch-font-size);
           }
         }
         /* Input owns @invalid, so the invalid channel must also be applied
