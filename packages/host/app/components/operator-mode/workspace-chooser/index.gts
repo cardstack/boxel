@@ -1305,13 +1305,17 @@ export default class WorkspaceChooser extends Component<Signature> {
       .unreachable-notice-spinner {
         flex-shrink: 0;
       }
-      /* At the wide breakpoint the dashboard rail becomes a labeled sidebar
-         (see nav-rail.gts); the page starts past it. */
+      /* At the wide breakpoint the dashboard rail stays as an icon column
+         (see nav-rail.gts); the page starts past it. Its labels slide out
+         over the page on hover, so they need no room of their own. */
       @media (min-width: 80rem) {
         .workspace-chooser__content {
-          padding-left: calc(
-            var(--host-dashboard-sidebar-width) + var(--operator-mode-spacing) +
-              var(--boxel-sp-xl)
+          padding-left: max(
+            var(--workspace-chooser-gutter),
+            calc(
+              var(--container-button-size) + 2 * var(--operator-mode-spacing) +
+                var(--boxel-sp-xl)
+            )
           );
         }
       }

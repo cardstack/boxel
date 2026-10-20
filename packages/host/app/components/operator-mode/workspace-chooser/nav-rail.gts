@@ -622,40 +622,59 @@ export default class NavRail extends Component<Signature> {
         outline-offset: 2px;
       }
 
-      /* Summoned below the wide breakpoint (80rem, matched in the chooser's
-         own padding); a labeled sidebar at and above it. */
+      /* An icon column. Below the wide breakpoint (80rem, matched in the
+         chooser's own padding) it shows only while summoned; at and above it,
+         it stays. Either way, hovering it or focusing into it slides its
+         labels out over the page, the icons holding still. */
+      .nav-rail {
+        width: calc(var(--container-button-size) + 2 * var(--rail-pad) + 2px);
+        box-sizing: border-box;
+        transition: width 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
       .nav-rail:not(.is-summoned) {
         display: none;
+      }
+      @media (min-width: 80rem) {
+        .nav-rail:not(.is-summoned) {
+          display: flex;
+        }
+        .nav-rail {
+          animation: none;
+        }
+      }
+      .nav-rail:is(:hover, :focus-within) {
+        width: var(--host-dashboard-sidebar-width);
+      }
+      .rail-button {
+        overflow: hidden;
+        white-space: nowrap;
+      }
+      .nav-rail:is(:hover, :focus-within) .rail-button {
+        width: 100%;
+        justify-content: flex-start;
+        gap: var(--boxel-sp-sm);
+        /* The icon's own inset, so it stays put as the rail widens. */
+        padding: 0 calc((var(--container-button-size) - 20px) / 2);
       }
       .rail-label,
       .rail-count {
         display: none;
       }
-      @media (min-width: 80rem) {
-        .nav-rail,
-        .nav-rail:not(.is-summoned) {
-          display: flex;
-          width: var(--host-dashboard-sidebar-width);
-          box-sizing: border-box;
-          animation: none;
-        }
-        .rail-button {
-          width: 100%;
-          justify-content: flex-start;
-          gap: var(--boxel-sp-sm);
-          padding: 0 var(--boxel-sp-sm);
-        }
-        .rail-label {
-          display: inline;
-          font-size: var(--boxel-font-size-sm);
-          font-weight: 600;
-        }
-        .rail-count {
-          display: inline;
-          margin-left: auto;
-          font-family: var(--boxel-monospace-font-family);
-          font-size: var(--boxel-font-size-xs);
-          color: var(--muted-foreground);
+      .nav-rail:is(:hover, :focus-within) .rail-label {
+        display: inline;
+        font-size: var(--boxel-font-size-sm);
+        font-weight: 600;
+      }
+      .nav-rail:is(:hover, :focus-within) .rail-count {
+        display: inline;
+        margin-left: auto;
+        font-family: var(--boxel-monospace-font-family);
+        font-size: var(--boxel-font-size-xs);
+        color: var(--muted-foreground);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .nav-rail {
+          transition: none;
         }
       }
       .flyout {
