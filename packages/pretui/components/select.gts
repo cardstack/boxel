@@ -324,6 +324,9 @@ export class Select extends Component<SelectSignature> {
              so it pads 1px more than a bordered Input to line its text up */
           --boxel-select-trigger-padding: 0 0.625rem;
           --boxel-select-trigger-gap: var(--boxel-sp-2xs);
+          --boxel-select-trigger-font-size: var(--boxel-font-size-xs);
+          --boxel-select-trigger-line-height: var(--boxel-line-height-xs);
+          --boxel-select-trigger-letter-spacing: var(--boxel-lsp-xs);
           /* one block line, so a long label ends in an ellipsis */
           --boxel-select-trigger-content-display: block;
           --boxel-select-background-color: var(--field);
@@ -386,14 +389,8 @@ export class Select extends Component<SelectSignature> {
           background-color: var(--field);
           color: var(--foreground);
         }
-        /* the trigger's type; the dropdown rule below repeats it, since the
-           wormhole is outside this subtree */
         .pretui-selectwrap :deep(.boxel-trigger) {
           width: 100%;
-          font-family: inherit;
-          font-size: var(--boxel-font-size-xs);
-          line-height: var(--boxel-line-height-xs);
-          letter-spacing: var(--boxel-lsp-xs);
         }
         .pretui-selectwrap :deep(.boxel-trigger-content) {
           min-width: 0;
@@ -403,23 +400,22 @@ export class Select extends Component<SelectSignature> {
         }
         .pretui-selectwrap :deep(.boxel-trigger-placeholder) {
           color: var(--muted-foreground);
-          font-family: inherit;
-          font-size: var(--boxel-font-size-xs);
-          line-height: var(--boxel-line-height-xs);
-          letter-spacing: var(--boxel-lsp-xs);
         }
         .pretui-selectwrap :deep(.pretui-selecttrigger svg) {
           --icon-color: var(--muted-foreground);
 
           flex: none;
         }
-        /* 16px on touch screens, as on Input and Autocomplete; the
-           trigger's height is fixed, so it doesn't grow */
+        /* 16px on touch screens, as on Input and Autocomplete, with Input's
+           line-height; the trigger's height is fixed, so it doesn't grow */
         @media (pointer: coarse) {
-          .pretui-selectwrap :deep(.boxel-trigger),
-          .pretui-selectwrap :deep(.boxel-trigger-placeholder) {
-            font-size: var(--boxel-form-control-touch-font-size);
-            line-height: var(--boxel-line-height);
+          .pretui-selectwrap {
+            --boxel-select-trigger-font-size: var(
+              --boxel-form-control-touch-font-size
+            );
+            --boxel-select-trigger-line-height: var(
+              --boxel-form-control-line-height-sm
+            );
           }
         }
       }
@@ -467,12 +463,15 @@ export class Select extends Component<SelectSignature> {
           box-shadow: 0 0 0 1.5px var(--ring);
         }
         /* iOS zooms into inputs under 16px on focus; the options follow
-           the trigger */
+           the trigger, and their rows grow as Autocomplete's do */
         @media (pointer: coarse) {
           .pretui-select-dropdown.ember-power-select-dropdown .boxel-select-option-item,
           .pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input {
             font-size: var(--boxel-form-control-touch-font-size);
-            line-height: var(--boxel-line-height);
+            line-height: var(--boxel-form-control-line-height-sm);
+          }
+          .pretui-select-dropdown.ember-power-select-dropdown .boxel-select-option-item {
+            padding-block: 0.6em;
           }
         }
       }

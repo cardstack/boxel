@@ -46,12 +46,20 @@ export interface InputSignature {
 // line-height overshoots it, so an Input would sit taller than every other
 // control in the kit. The wrapper token channel cannot reach the UA
 // line-height; the inline constant can. Borders, padding-block and
-// line-height add up to --boxel-form-control-height-sm (1.875rem), so
-// change them together. BoxelInput has no end padding, so the end gets
-// Select's inset too.
+// --boxel-form-control-line-height-sm add up to
+// --boxel-form-control-height-sm (1.75rem); the line-height token assumes
+// this padding-block, so change them together. BoxelInput pads only the physical left, so the
+// inline style sets Select's inset on both inline sides, which also holds
+// in right-to-left text. A search input keeps BoxelInput's start padding,
+// which clears its icon. A color input keeps BoxelInput's `padding: 0`, or
+// its swatch shrinks inside the fixed box.
 const INPUT_FONT = htmlSafe(
-  'font: inherit; letter-spacing: inherit; line-height: calc(1.375rem - 2px); padding-block: 0.25rem; padding-inline-end: calc(0.625rem - 1px);',
+  'font: inherit; letter-spacing: inherit; line-height: var(--boxel-form-control-line-height-sm); padding-block: 0.25rem; padding-inline: calc(0.625rem - 1px);',
 );
+const SEARCH_INPUT_FONT = htmlSafe(
+  'font: inherit; letter-spacing: inherit; line-height: var(--boxel-form-control-line-height-sm); padding-block: 0.25rem; padding-inline-end: calc(0.625rem - 1px);',
+);
+const COLOR_INPUT_FONT = htmlSafe('font: inherit; letter-spacing: inherit;');
 
 export class Input extends Component<InputSignature> {
   get invalid() {
@@ -75,6 +83,16 @@ export class Input extends Component<InputSignature> {
   }
   get state() {
     return this.invalid ? 'invalid' : 'none';
+  }
+  get inputStyle() {
+    switch (this.args.type) {
+      case 'color':
+        return COLOR_INPUT_FONT;
+      case 'search':
+        return SEARCH_INPUT_FONT;
+      default:
+        return INPUT_FONT;
+    }
   }
   handleInput = (value: string) => {
     emit(
@@ -101,7 +119,7 @@ export class Input extends Component<InputSignature> {
         @required={{this.required}}
         @optional={{@optional}}
         @onInput={{this.handleInput}}
-        style={{INPUT_FONT}}
+        style={{this.inputStyle}}
         ...attributes
       />
     </div>
@@ -121,8 +139,10 @@ export class Input extends Component<InputSignature> {
           --boxel-form-control-height: var(--boxel-form-control-height-sm);
           --boxel-input-height: var(--boxel-form-control-height-sm);
           --boxel-form-control-border-radius: calc(var(--radius) - 2px);
-          /* the helper and error rows, a step below the field's text */
+          /* the helper and error rows and the Optional label, a step below
+             the field's text */
           --boxel-font-size-sm: var(--boxel-font-size-2xs);
+          --boxel-input-optional-font-size: var(--boxel-font-size-2xs);
           --boxel-sp-xs: var(--boxel-sp-3xs);
           /* Select's 0.625rem text inset, less this edge's 1px border */
           --boxel-sp-sm: calc(0.625rem - 1px);

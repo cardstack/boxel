@@ -450,7 +450,7 @@ export class EditInPlace extends Component<EditInPlaceSignature> {
           min-width: 0;
           position: relative;
           border-radius: var(--radius);
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           color: var(--foreground);
         }
         .pretui-eip[data-editing='true'] {

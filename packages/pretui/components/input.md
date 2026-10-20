@@ -41,7 +41,7 @@ Honest gaps:
 
 ## Theming
 
-Input, **Select** and **Autocomplete** share one field look at rest: a `--field` face with `--foreground` text, an `--input` edge, a `--muted-foreground` placeholder, Button's corner (`calc(var(--radius) - 2px)`), a `--boxel-form-control-height-sm` (1.875rem) height and `--boxel-font-size-xs` text. On touch screens (`pointer: coarse`) the field's text and placeholder are at least 16px (`--boxel-form-control-touch-font-size`), so iOS doesn't zoom into the field on focus.
+Input, **Select** and **Autocomplete** share one field look at rest: a `--field` face with `--foreground` text, an `--input` edge, a `--muted-foreground` placeholder, Button's corner (`calc(var(--radius) - 2px)`), a `--boxel-form-control-height-sm` (1.75rem) height and `--boxel-font-size-xs` text, with the helper and error rows and the Optional label a step below at `--boxel-font-size-2xs`. On touch screens (`pointer: coarse`) the field's text and placeholder are at least 16px (`--boxel-form-control-touch-font-size`), so iOS doesn't zoom into the field on focus.
 
 Forwarded into boxel-ui: `--boxel-form-control-height`, `--boxel-input-height`, `--boxel-form-control-border-radius`, `--boxel-font-size-sm` (the helper and error rows), `--boxel-sp-xs`, `--boxel-sp-sm`.
 

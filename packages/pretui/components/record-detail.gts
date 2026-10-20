@@ -563,14 +563,14 @@ class RecordField extends Component<RecordFieldSignature> {
           align-items: center;
           gap: 6px;
           margin: 0;
-          min-height: var(--control-h, 28px);
+          min-height: var(--boxel-form-control-height-sm);
           padding: var(--pretui-record-staticpad, 4px 10px);
           border: 0;
           border-radius: var(--radius-chip, 6px);
           background: transparent;
           text-align: start;
           font-family: inherit;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--boxel-font-size-xs);
           line-height: 18px;
           color: var(--card-foreground);
         }
