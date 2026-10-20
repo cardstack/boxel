@@ -33,6 +33,11 @@ judging against the card's success criteria, and recording the score with
 benchmarks applies to both. For an evaluation with follow-up prompts the turn
 and time targets are multiplied by the number of prompts.
 
+A change to the boxel-skills content that targets one of the assistant's core
+use cases needs an evaluation that shows the problem and the with/without
+numbers: the `skill-change-eval` skill covers writing it and what counts as
+evidence.
+
 ## Prerequisites
 
 - The dev stack is up: `mise run dev-all` with `OPENROUTER_API_KEY` set for the
