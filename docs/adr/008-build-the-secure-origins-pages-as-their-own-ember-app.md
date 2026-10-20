@@ -172,11 +172,8 @@ keep it readable without knowing the framework, and testable on its own.
 
 ## 4. Consequences
 
-Until the package exists, the pages remain the plain modules in
-`packages/realm-server/secure-origin/`, which this ADR's scope covers but
-which don't yet meet §1.1–§1.8. Until the host renders its screens from the
-package (§1.9), a change to the host's sign-in screens still needs the same
-change in the package.
+Until the host renders its screens from the package (§1.9), a change to the
+host's sign-in screens still needs the same change in the package.
 
 ## 5. Sources
 
@@ -185,3 +182,18 @@ change in the package.
    §1.4, the secure origin's pages and their policy.
 3. #6861, which adds the registration and password-reset pages, the copied
    styles and icons, and the pixel comparison.
+
+## 6. Remediation
+
+- `packages/realm-server/secure-origin/index.html`, `shell.js`, `shell.css`,
+  `sign-in.js`, `sign-in-copy.js`, `register.js`, `password-reset.js`,
+  `password-fields.js` and `dom.js` break §1.1. They are served as written,
+  not built from `packages/secure-origin`.
+- `packages/realm-server/secure-origin/credentials.html` and
+  `credentials.css` break §1.1, for the same reason.
+- `packages/realm-server/secure-origin/credentials.js`, `matrix.js`,
+  `session.js`, `redact.js` and `app-origins.js` break §1.1 and §1.6. They
+  are served as written, and they are not in `packages/secure-origin/src/security/`.
+- `packages/realm-server/lib/secure-origin.ts` (`SHELL_ASSETS`,
+  `CREDENTIALS_ASSETS`) breaks §1.1 and §1.7. It serves fixed source files,
+  not the package's build output read through a manifest.
