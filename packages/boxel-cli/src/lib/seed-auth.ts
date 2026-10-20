@@ -84,6 +84,8 @@ export function mintRealmServerToken(
   });
 }
 
+export type OperatorScope = 'data-keys' | 'system-keys' | 'diagnostic-render';
+
 /**
  * Mint an operator token for one family of the realm server's operator
  * endpoints (the `boxel realm-server` commands). It carries no user, names its
@@ -93,7 +95,7 @@ export function mintRealmServerToken(
  */
 export function mintOperatorToken(
   seed: string,
-  scope: 'data-keys' | 'system-keys',
+  scope: OperatorScope,
   audience: string,
   opts: { expiresIn?: jwt.SignOptions['expiresIn'] } = {},
 ): string {
@@ -140,7 +142,7 @@ export async function operatorRequest(
     realmSecretSeed: string;
     fetch?: typeof globalThis.fetch;
   },
-  scope: 'data-keys' | 'system-keys',
+  scope: OperatorScope,
   path: string,
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
   body?: unknown,

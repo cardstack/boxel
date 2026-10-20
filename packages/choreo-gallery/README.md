@@ -6,7 +6,8 @@ their data, and the modules they import. Cards import `glimmer-motion` and
 `@cardstack/choreo` like any other card; the host serves both to realms.
 
 The rest of the package is tooling that is not served: `tools/` (the realm
-check and the film and widget tools) and `scripts/`. The agent skills for working on the libraries and the
+check, the published site's check, and the film and widget tools) and
+`scripts/` (among them the site's republish). The agent skills for working on the libraries and the
 gallery are in the monorepo's `.claude/skills/` (`motion-pattern` routes to
 the rest).
 
@@ -129,6 +130,128 @@ the realm's source of truth: staging follows `main`, production follows each
 production deploy, and an edit made in the app lasts only until the next
 deploy. The service account `choreo_gallery_realm` owns the realm,
 `choreo_gallery_writer` can read and write it, and everyone can read it.
+
+### The published site
+
+`https://choreo.boxel.site/` serves a published copy of the production realm.
+The realm's root is the site's root, so a file's path in `realm/` is its path
+on the site: the gallery (`index.json`) is `https://choreo.boxel.site/`, a demo
+(`demos/towers.json`) is `https://choreo.boxel.site/demos/towers`, and a guide
+is `https://choreo.boxel.site/docs/guides/<name>.md`. The libraries' READMEs,
+the docs and the guides link to the gallery by these URLs, and `pnpm
+lint:realm` checks that each names a file in the realm.
+
+Publishing copies the realm's files into a realm of their own, which indexes
+them and renders each card and file to HTML. Everyone can read the copy and
+nobody can write it. It changes only when the realm is published again, so an
+edit to the realm, or a deploy that updates it, reaches the site at the next
+publish.
+
+The account that publishes is `choreo_gallery_writer`, which can write the
+gallery realm but doesn't own it. The realm server lets only a realm's owner
+publish it, except for the realms listed in its
+`PUBLISHED_REALM_DOMAIN_OVERRIDES` environment variable. The variable is a JSON
+object from source realm URL to domain, set in production's realm-server
+environment outside this repository, and the gallery's entry is:
+
+```json
+{ "https://app.boxel.ai/choreo-gallery/": "choreo.boxel.site" }
+```
+
+For a realm listed there, any account that can write the realm can publish it
+to that domain and no other, and the Publish dialog offers the domain. The
+variable stands in for registering a custom domain to a realm, which Boxel
+doesn't offer yet. When it does, the gallery moves to that and its entry
+goes.
+
+### Republishing
+
+Every production release republishes the site. Once the release is live,
+Manual Deploy [boxel] starts a run of
+[`republish-choreo-gallery.yml`](../../.github/workflows/republish-choreo-gallery.yml),
+which signs in as `choreo_gallery_writer` and runs
+[`scripts/republish.sh`](scripts/republish.sh). It reads the writer's password
+from the SSM parameter `/<environment>/boxel/choreo_gallery_writer_pw`, through
+the AWS role the deploy uses. The script:
+
+1. waits until the realm has indexed the files the deploy changed;
+2. publishes with `boxel realm publish`, which refuses to publish if a gallery
+   card depends on a realm not everyone can read, or fails to index;
+3. waits until the site's HTML is rendered.
+
+A release republishes even when the gallery didn't change. The copy's cards
+import glimmer-motion and Choreo from the host the release deploys, so a copy
+left as it was runs its cards against libraries newer than the realm it was
+taken from. The republish runs apart from the deploy, so the deploy neither
+waits for it nor fails with it, and the next deploy doesn't queue behind it. A
+republish that fails leaves the previous copy serving and turns only its own
+run red. The script never unpublishes the site.
+
+To republish without a deploy, run "Republish the Choreo gallery" from the
+repository's Actions tab. Or sign in as the writer and run the script yourself
+(it needs the Boxel CLI on your `PATH`):
+
+```sh
+boxel profile add --user @choreo_gallery_writer:boxel.ai
+packages/choreo-gallery/scripts/republish.sh
+```
+
+The Publish dialog does the same publish: sign in to `https://app.boxel.ai/`
+as `choreo_gallery_writer`, open the gallery realm in Host mode, choose
+Publish, and select `choreo.boxel.site`.
+
+Staging's realm is published the same way to
+`https://choreo.staging.boxel.build/`, under its own override entry
+(`"https://realms-staging.stack.cards/choreo-gallery/": "choreo.staging.boxel.build"`).
+No deploy republishes it: staging deploys on every merge, and a full render
+of the gallery on each would only add to staging's queue. Republish it by hand
+when a change needs trying on a published copy, with the workflow's
+`staging` environment or the script:
+
+```sh
+boxel profile add --user @choreo_gallery_writer:stack.cards
+SOURCE_REALM_URL=https://realms-staging.stack.cards/choreo-gallery/ \
+PUBLISHED_REALM_URL=https://choreo.staging.boxel.build/ \
+  packages/choreo-gallery/scripts/republish.sh
+```
+
+A publish renders every card again when the code that renders them has
+changed since the last one, which is the case after every release. Until a
+page's new HTML is rendered, the site keeps serving the HTML from the previous
+publish. A page that has no HTML yet (every page, on the first publish) is
+served as the app alone, which renders the page in the browser once it starts,
+under a generic title and with no link preview.
+
+### Checking the site
+
+[`tools/check-published-site.mjs`](tools/check-published-site.mjs) sweeps the
+published site in headless Chrome. It reads the published realm's file list, so
+it checks whatever the copy holds:
+
+- the grid shows a tile for every demo;
+- every demo's URL loads that demo's page, and the lab opens;
+- each film's frame plays its first frame;
+- each tile opens its demo, and Back returns to the grid;
+- the 3D Gallery link opens the widget room, and the room renders;
+- every guide renders, with a live demo for each card it embeds.
+
+It runs the grid and the demo pages in both the dark and the light theme. Any
+console error, uncaught exception, failed request, or error response from the
+site fails the check it happened in, except the platform problems the script
+names in `knownIssue` and `knownConsoleIssue`, which it reports as `known:`
+lines without failing. Run it after each publish (it needs Chrome installed,
+and `pnpm install` for Playwright):
+
+```sh
+node packages/choreo-gallery/tools/check-published-site.mjs
+node packages/choreo-gallery/tools/check-published-site.mjs --only towers,crossing --themes dark
+node packages/choreo-gallery/tools/check-published-site.mjs --json sweep.json
+```
+
+It exits 1 when any check fails. `--only` limits it to the named demos (and
+skips the grid, the room and the guides), `--themes` to the named themes, and
+`--json` also writes the results to a file. The first argument, when given, is
+the site to sweep instead of `https://choreo.boxel.site/`.
 
 ## Developing
 

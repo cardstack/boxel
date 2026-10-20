@@ -104,7 +104,7 @@ export async function deleteWorkspace(
       operatorModeStateService
         .getOpenCardIds()
         .some((cardId) => realmPath.inRealm(cardId)) ||
-      Boolean(operatorModeStateService.codePathString?.startsWith(url))
+      Boolean(operatorModeStateService.state.codePath?.startsWith(url))
     );
   });
 

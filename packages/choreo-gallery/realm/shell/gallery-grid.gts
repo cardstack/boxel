@@ -104,6 +104,8 @@ interface Signature {
 
 export class GalleryGrid extends Component<Signature> {
   @tracked filter: string = ALL;
+  /** whether a filter has been chosen yet, which starts the announcements */
+  @tracked private filtered = false;
 
   /**
    * Whether the grid still moves tiles to their new seats on a filter.
@@ -148,6 +150,21 @@ export class GalleryGrid extends Component<Signature> {
   isOn = (filter: string) => filter === this.filter;
 
   /**
+   * What the grid shows, for a status a screen reader announces when a
+   * filter changes it. It stays empty until the first filter, so demos
+   * arriving as the page loads are not counted aloud.
+   */
+  get shown(): string {
+    if (!this.filtered) {
+      return '';
+    }
+    let total = this.args.tiles.length;
+    return this.filter === ALL
+      ? `All ${total} demos`
+      : `${this.filter}: ${this.tiles.length} of ${total} demos`;
+  }
+
+  /**
    * Watch the frames a filter pass actually got: sampled rather than
    * predicted, at the cost of one rAF loop lasting about half a second.
    */
@@ -179,6 +196,7 @@ export class GalleryGrid extends Component<Signature> {
       return;
     }
     this.filter = filter;
+    this.filtered = true;
     if (!this.heavy) {
       this.measure();
     }
@@ -228,7 +246,7 @@ export class GalleryGrid extends Component<Signature> {
           href='https://motion.dev'
           target='_blank'
           rel='noopener noreferrer'
-        >Motion</a>
+        >Motion<span class='sr-only'> (opens in a new tab)</span></a>
         engine for Ember — and a timeline for the scene.
       </p>
       <div class='filter-row'>
@@ -252,6 +270,7 @@ export class GalleryGrid extends Component<Signature> {
           How this filters
         </button>
       </div>
+      <p class='sr-only' role='status'>{{this.shown}}</p>
       <Presence @items={{this.panel}} @key={{panelKey}} as |_panel h|>
         <section
           class='filter-code'
@@ -358,6 +377,13 @@ export class GalleryGrid extends Component<Signature> {
 
         to {
           transform: scaleX(1);
+        }
+      }
+
+      /* for a viewer who asked for less movement, the rule is simply there */
+      @media (prefers-reduced-motion: reduce) {
+        .kicker::before {
+          animation: none;
         }
       }
 
@@ -573,6 +599,8 @@ export class GalleryGrid extends Component<Signature> {
         height: 540px;
         border: 1px solid var(--line);
         border-radius: 18px;
+        /* the tile inside rounds its focus ring to this box's inner edge */
+        --tile-radius: 17px;
         overflow: hidden;
         background: var(--bg-elev);
         cursor: pointer;

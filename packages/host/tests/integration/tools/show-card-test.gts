@@ -9,6 +9,7 @@ import { setupWindowMock } from 'ember-window-mock/test-support';
 
 import { module, test, skip } from 'qunit';
 
+import { rri } from '@cardstack/runtime-common';
 import { basicMappings } from '@cardstack/runtime-common/helpers/ai';
 import type { Loader } from '@cardstack/runtime-common/loader';
 
@@ -48,8 +49,6 @@ class MockOperatorModeStateService extends Service {
     submode: 'interact' as 'interact' | 'code',
     codeSelection: undefined as string | undefined,
   };
-  @tracked codePathString: string | undefined;
-
   addedStackItems: StackItem[] = [];
   updatedCodePaths: (URL | string)[] = [];
 
@@ -81,14 +80,16 @@ class MockOperatorModeStateService extends Service {
 
   updateCodePath(url: URL | string) {
     this.updatedCodePaths.push(url);
-    this.codePathString = url instanceof URL ? url.href : url;
+    this.state = {
+      ...this.state,
+      codePath: rri(url instanceof URL ? url.href : url),
+    };
   }
 
   reset() {
     this.addedStackItems = [];
     this.updatedCodePaths = [];
     this.state = { submode: 'interact', codeSelection: undefined };
-    this.codePathString = undefined;
   }
 
   get workspaceChooserOpened() {
@@ -471,8 +472,8 @@ module('Integration | Command | show-card', function (hooks) {
       mockOperatorModeStateService.state = {
         submode: 'code',
         codeSelection: undefined,
+        codePath: rri(`${testRealmURL}person.gts`),
       };
-      mockOperatorModeStateService.codePathString = `${testRealmURL}person.gts`;
 
       await command.execute({ cardId });
 

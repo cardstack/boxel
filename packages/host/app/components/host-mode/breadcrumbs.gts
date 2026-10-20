@@ -163,12 +163,6 @@ export default class HostModeBreadcrumbs extends Component<Signature> {
         font-size: var(--boxel-font-size);
         line-height: 1;
       }
-
-      @media (max-width: 30rem) {
-        .host-mode-breadcrumbs {
-          padding-inline: var(--boxel-sp-3xs);
-        }
-      }
     </style>
   </template>
 }

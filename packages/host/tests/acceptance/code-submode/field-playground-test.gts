@@ -667,7 +667,6 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         cardId: rri(`${testRealmURL}Spec/comment-main`),
         format: 'embedded',
         fieldIndex: 0,
-        url: `${testRealmURL}blog-post.gts`,
       });
 
       await toggleSpecPanel();
@@ -706,7 +705,6 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         cardId: rri(`${testRealmURL}Spec/comment-alt`),
         format: 'embedded',
         fieldIndex: 0,
-        url: `${testRealmURL}blog-post.gts`,
       });
     });
 
@@ -726,7 +724,6 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         cardId: rri(`${testRealmURL}Spec/comment-main`),
         format: 'embedded',
         fieldIndex: 0,
-        url: `${testRealmURL}blog-post.gts`,
       });
 
       await chooseAnotherInstance();
@@ -750,7 +747,6 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         cardId: rri(`${testRealmURL}Spec/comment-main`),
         format: 'embedded',
         fieldIndex: 1,
-        url: `${testRealmURL}blog-post.gts`,
       });
     });
 
@@ -861,7 +857,6 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         cardId: rri(`${testRealmURL}Spec/comment-main`),
         format: 'embedded',
         fieldIndex: 0,
-        url: `${testRealmURL}blog-post.gts`,
       });
 
       await createNewInstance();
@@ -876,7 +871,6 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         cardId: rri(`${testRealmURL}Spec/comment-main`),
         format: 'edit',
         fieldIndex: 2,
-        url: `${testRealmURL}blog-post.gts`,
       });
 
       await toggleSpecPanel();
@@ -943,7 +937,6 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         cardId: rri(`${testRealmURL}Spec/full-name`),
         format: 'edit',
         fieldIndex: 0,
-        url: `${testRealmURL}author.gts`,
       });
     });
 
@@ -994,7 +987,6 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
           cardId: specId,
           fieldIndex: 0,
           format: 'embedded',
-          url: `${testRealmURL}pet.gts`,
         },
       };
       assert.deepEqual(
@@ -1289,7 +1281,6 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         cardId: rri(`${additionalRealmURL}Spec/toy`),
         format: 'atom',
         fieldIndex: 0,
-        url: `${additionalRealmURL}pet.gts`,
       });
 
       await createNewInstance();
@@ -1304,7 +1295,6 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         cardId: rri(`${additionalRealmURL}Spec/toy`),
         format: 'edit',
         fieldIndex: 1,
-        url: `${additionalRealmURL}pet.gts`,
       });
 
       await toggleSpecPanel();
@@ -1375,7 +1365,6 @@ module('Acceptance | code-submode | field playground', function (_hooks) {
         cardId: rri(`${additionalRealmURL}Spec/full-name`),
         format: 'edit',
         fieldIndex: 0,
-        url: `${additionalRealmURL}author.gts`,
       });
     });
   });

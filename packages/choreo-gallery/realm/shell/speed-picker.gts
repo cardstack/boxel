@@ -4,10 +4,24 @@ import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import { setMotionSpeed } from 'glimmer-motion';
 
+import { radioKeys } from '../lib/focus';
+
 const RATES = [1, 2, 5, 10] as const;
 
 function label(rate: number) {
   return rate === 1 ? 'Full' : `÷${rate}`;
+}
+
+/** each rate's name in words, which a screen reader says in place of ÷ */
+const SPOKEN: Record<(typeof RATES)[number], string> = {
+  1: 'Full speed',
+  2: 'Half speed',
+  5: 'One fifth speed',
+  10: 'One tenth speed',
+};
+
+function spoken(rate: (typeof RATES)[number]) {
+  return SPOKEN[rate];
 }
 
 /**
@@ -69,6 +83,13 @@ export class SpeedPicker extends Component {
     setMotionSpeed(rate);
   };
 
+  pickAt = (index: number) => {
+    let rate = RATES[index];
+    if (rate !== undefined) {
+      this.pick(rate);
+    }
+  };
+
   willDestroy() {
     super.willDestroy();
     if (clock.owner === this) {
@@ -78,13 +99,21 @@ export class SpeedPicker extends Component {
 
   <template>
     <div class='speeds'>
-      <span class='speeds-label'>Speed</span>
-      <div class='speeds-track' role='group' aria-label='Playback speed'>
+      <span class='speeds-label' aria-hidden='true'>Speed</span>
+      <div
+        class='speeds-track'
+        role='radiogroup'
+        aria-label='Playback speed'
+        {{radioKeys this.pickAt}}
+      >
         {{#each RATES as |rate|}}
           <button
             type='button'
             class={{if (this.isOn rate) 'speed is-on' 'speed'}}
-            aria-pressed={{if (this.isOn rate) 'true' 'false'}}
+            role='radio'
+            aria-checked={{if (this.isOn rate) 'true' 'false'}}
+            aria-label={{spoken rate}}
+            tabindex={{if (this.isOn rate) '0' '-1'}}
             {{on 'click' (fn this.pick rate)}}
           >{{label rate}}</button>
         {{/each}}

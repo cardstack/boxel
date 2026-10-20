@@ -21,6 +21,7 @@ import { tracked } from '@glimmer/tracking';
 import { consumeTag, VOLATILE_TAG } from '@glimmer/validator';
 import { modifier } from 'ember-modifier';
 import {
+  closestMotionConfig,
   flushPendingMounts,
   motionSpeed,
   postRender,
@@ -333,6 +334,23 @@ function groundOf(root: Element): string | undefined {
     el = el.parentElement;
   }
   return undefined;
+}
+
+/**
+ * Whether motion is reduced for a region, by the MotionConfig it sits in:
+ * `'user'` (glimmer-motion's default) follows `prefers-reduced-motion`,
+ * `'always'` and `'never'` decide outright. Read as each run begins, so a
+ * preference changed mid-session holds from the next pass.
+ */
+function reducesMotion(root: Element): boolean {
+  const policy = closestMotionConfig(root).reducedMotion ?? 'user';
+  if (policy !== 'user') {
+    return policy === 'always';
+  }
+  return (
+    typeof matchMedia === 'function' &&
+    matchMedia('(prefers-reduced-motion: reduce)').matches
+  );
 }
 
 /**
@@ -926,6 +944,7 @@ export class Choreo extends Component<Signature> implements ChoreoHost {
       camera: { ...inherited.camera },
       camera3d: { ...shot3d },
       cameraFrame: this.element,
+      reduced: this.element ? reducesMotion(this.element) : false,
       // the aim point in force carries run to run, so a re-aim lerps from
       // what is actually applied rather than assuming an unaimed frame —
       // except a same-score re-execution, which carries the fold origin

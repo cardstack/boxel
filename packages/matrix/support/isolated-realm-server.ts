@@ -7,6 +7,7 @@ const { ensureDirSync, copySync, readFileSync } = fsExtra;
 import { Pool } from 'pg';
 import { createServer as createNetServer, type AddressInfo } from 'net';
 import type { SynapseInstance } from './synapse/index.ts';
+import { MOCK_OAUTH2_HOST_PORT } from '../docker/mock-oauth2.ts';
 
 setGracefulCleanup();
 
@@ -35,6 +36,8 @@ const baseRealmDir = resolve(join(import.meta.dirname, '..', '..', 'base'));
 const matrixDir = resolve(join(import.meta.dirname, '..'));
 export const appURL = 'https://localhost:4205/test';
 const SECURE_ORIGIN_PORT = 4208;
+// Where the secure window's pages are served.
+export const secureOriginURL = `https://localhost:${SECURE_ORIGIN_PORT}/secure`;
 export const skillsRealmURL = 'https://localhost:4205/skills/';
 
 const DEFAULT_PRERENDER_PORT = 4231;
@@ -617,7 +620,7 @@ export async function startServer({
     // sign-in, registration and password forms are typed into. The host build
     // the harness serves expects it where the dev stack puts it.
     `--securePort=${SECURE_ORIGIN_PORT}`,
-    `--secureOriginURL='https://localhost:${SECURE_ORIGIN_PORT}/secure'`,
+    `--secureOriginURL='${secureOriginURL}'`,
 
     `--path='${testRealmDir}'`,
     `--username='test_realm'`,
@@ -662,6 +665,16 @@ export async function startServer({
       PUBLISHED_REALM_BOXEL_SPACE_DOMAIN: 'localhost:4205',
       PUBLISHED_REALM_BOXEL_SITE_DOMAIN: 'localhost:4205',
       TEST_HARNESS_REALM_SERVER_METADATA_FILE: realmServerMetadataFile,
+      // The admin global.setup.ts registers. Signing in on the secure origin
+      // drives Synapse's admin API with it.
+      MATRIX_ADMIN_USERNAME: 'admin',
+      MATRIX_ADMIN_PASSWORD: 'adminpass',
+      // The secure window signs in with Google through the same mock
+      // provider Synapse uses, reached on its host port, which the realm
+      // server and the browser can both reach.
+      GOOGLE_OAUTH_CLIENT_ID: 'boxel-secure-window-test',
+      GOOGLE_OAUTH_CLIENT_SECRET: 'boxel-secure-window-test-secret',
+      GOOGLE_OAUTH_ISSUER: `http://localhost:${MOCK_OAUTH2_HOST_PORT}/default`,
     },
   });
   realmServer.unref();

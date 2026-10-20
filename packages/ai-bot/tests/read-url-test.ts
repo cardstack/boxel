@@ -587,6 +587,30 @@ module('readUrl helpers', () => {
     );
   });
 
+  test('knownRealmOrigins counts the realms the context prefixes stand for', () => {
+    let history = [
+      {
+        type: 'm.room.message',
+        sender: '@user:localhost',
+        content: {
+          data: JSON.stringify({
+            context: {
+              realmPrefixes: {
+                '@cardstack/base/': 'https://base.example/base/',
+              },
+              codeMode: { currentFile: '@cardstack/base/card-api.gts' },
+            },
+          }),
+        },
+      },
+    ] as unknown as DiscreteMatrixEvent[];
+
+    assert.deepEqual(
+      [...knownRealmOrigins(history, '@aibot:localhost')],
+      ['https://base.example'],
+    );
+  });
+
   test('urlFromReadUrlArguments recovers the url from cut-off arguments', () => {
     assert.strictEqual(
       urlFromReadUrlArguments('{"url":"https://example.com/a"}'),

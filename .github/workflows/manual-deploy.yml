@@ -391,3 +391,27 @@ jobs:
         run: |
           packages/catalog/scripts/dispatch-catalog-deploy.sh after-release \
             "$(jq -r .revision packages/catalog/test-subset.json)"
+
+  # choreo.boxel.site serves a published copy of the gallery realm, which the
+  # release updates but doesn't republish. Once the release is live, start the
+  # republish as a run of its own rather than calling it: a production run
+  # holds the deploy-production group until every one of its jobs finishes,
+  # and the republish can wait hours on the realm's index. As its own run, it
+  # neither holds up the next deploy nor turns this one red when it fails.
+  republish-choreo-gallery:
+    name: Start the Choreo gallery's republish
+    needs: [release]
+    if: >-
+      inputs.environment == 'production'
+      && needs.release.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Start the republish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run republish-choreo-gallery.yml \
+            --repo "$GITHUB_REPOSITORY" --ref "$GITHUB_REF_NAME" \
+            -f environment=production

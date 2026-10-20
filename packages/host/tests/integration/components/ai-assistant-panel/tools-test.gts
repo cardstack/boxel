@@ -65,6 +65,16 @@ import { setupMockMatrix } from '../../../helpers/mock-matrix';
 import { renderComponent } from '../../../helpers/render-component';
 import { setupRenderingTest } from '../../../helpers/setup';
 
+// Each registered realm prefix, mapped to the URL its realm is served from.
+function registeredRealmPrefixes() {
+  let { virtualNetwork } = getService('network');
+  return Object.fromEntries(
+    virtualNetwork
+      .knownRealms()
+      .map((prefix) => [prefix, virtualNetwork.toURLHref(prefix)]),
+  );
+}
+
 module('Integration | ai-assistant-panel | tools', function (hooks) {
   const realmName = 'Operator Mode Workspace';
   const readOnlyRealmName = 'Read Only Workspace';
@@ -760,6 +770,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         submode: 'interact',
         debug: false,
         openCardIds: ['http://test-realm/test/Person/fadhlan'],
+        realmPrefixes: registeredRealmPrefixes(),
         realmUrl: 'http://test-realm/test/',
         realmPermissions: {
           canRead: true,
@@ -836,6 +847,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         submode: 'interact',
         debug: false,
         openCardIds: ['http://test-realm/test/Person/fadhlan'],
+        realmPrefixes: registeredRealmPrefixes(),
         realmUrl: 'http://test-realm/test/',
         realmPermissions: {
           canRead: true,
@@ -4297,20 +4309,9 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       );
   });
 
-  test('a run-realm-code result does not list the card it opened, but says why it could not open one', async function (assert) {
+  test('a run-realm-code result says why it could not show a card', async function (assert) {
     let roomId = await renderAiAssistantPanel();
-    let cardId = `${testRealmURL}Pet/mango`;
 
-    simulateToolResult(roomId, {
-      requestId: 'run-realm-code-shown',
-      toolName: 'run-realm-code',
-      resultDoc: baseCommandResultDoc('RunRealmCodeResult', {
-        files: [],
-        scriptResult: JSON.stringify({ show: 'Pet/mango' }),
-        captures: [],
-        shownCard: cardId,
-      }),
-    });
     simulateToolResult(roomId, {
       requestId: 'run-realm-code-not-shown',
       toolName: 'run-realm-code',
@@ -4324,14 +4325,11 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
 
     await waitFor('[data-test-realm-code-show-error]');
     assert
-      .dom('[data-test-room]')
-      .doesNotContainText(cardId, 'the opened card is not listed');
-    assert
       .dom('[data-test-realm-code-show-error]')
       .containsText('The card was not shown', 'the reason is shown');
   });
 
-  test('a run-realm-code result lists its UI actions', async function (assert) {
+  test('a run-realm-code result lists its failed UI actions only', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
     simulateToolResult(roomId, {
@@ -4360,13 +4358,39 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     await waitFor('[data-test-realm-code-ui-action="previewFormat"]');
     assert
       .dom('[data-test-realm-code-ui-action="openFile"]')
-      .containsText('done', 'a done action shows its status');
+      .doesNotExist('a done action is not listed');
     assert
       .dom('[data-test-realm-code-ui-action="previewFormat"]')
       .containsText('Card not found', 'a failed action says why');
   });
 
-  test('a run-realm-code result that saved no files and took no captures stays out of the chat', async function (assert) {
+  test('a run-realm-code result lists the workspaces it created and deleted', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let created = 'http://test-realm/new-workspace/';
+    let deleted = 'http://test-realm/old-workspace/';
+
+    simulateToolResult(roomId, {
+      requestId: 'run-realm-code-workspaces',
+      toolName: 'run-realm-code',
+      resultDoc: baseCommandResultDoc('RunRealmCodeResult', {
+        files: [],
+        scriptResult: '',
+        captures: [],
+        createdWorkspaces: [created],
+        deletedWorkspaces: [deleted],
+      }),
+    });
+
+    await waitFor('[data-test-realm-code-created-workspace]');
+    assert
+      .dom('[data-test-realm-code-created-workspace]')
+      .containsText(created, 'the created workspace is listed');
+    assert
+      .dom('[data-test-realm-code-deleted-workspace]')
+      .containsText(deleted, 'the deleted workspace is listed');
+  });
+
+  test('a run-realm-code result that wrote nothing and had no failure stays out of the chat', async function (assert) {
     let roomId = await renderAiAssistantPanel();
     // The chat makes the result card asynchronously; wait for that card, so
     // the assertion below runs after the chat has decided whether to show it.
@@ -4387,8 +4411,26 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       toolName: 'run-realm-code',
       resultDoc: baseCommandResultDoc('RunRealmCodeResult', {
         files: [],
-        scriptResult: 'the file contents',
-        captures: [],
+        scriptResult: JSON.stringify({ show: 'Pet/mango' }),
+        captures: [
+          {
+            name: 'pet.gts (isolated).png',
+            url: new URL(
+              '/_matrix/client/v1/media/download/localhost/read-only-capture',
+              ENV.matrixURL,
+            ).href,
+            contentType: 'image/png',
+          },
+        ],
+        shownCard: `${testRealmURL}Pet/mango`,
+        uiActions: [
+          { action: 'switchSubmode', target: 'code', status: 'done' },
+          {
+            action: 'openFile',
+            target: `${testRealmURL}pet.gts`,
+            status: 'done',
+          },
+        ],
       }),
     });
 
@@ -4400,6 +4442,8 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       .exists('the tool row shows the call as applied');
     assert
       .dom('[data-test-tool-result-container]')
-      .doesNotExist('the read-only run has no result card');
+      .doesNotExist(
+        'a run that only read, captured, and opened things has no result card',
+      );
   });
 });

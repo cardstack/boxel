@@ -53,6 +53,7 @@ import {
   getPromptParts,
   getRelevantCards,
   getTools,
+  toolSourceEventIdsToCarry,
   isMarkdownSkillFile,
   parseMarkdownSkill,
   sessionSkillFeatures,
@@ -254,6 +255,57 @@ Errors display:
 
 Current date and time: 2025-06-11T11:43:00.533Z
 `,
+    );
+  });
+
+  test('the context states the realm prefixes its identifiers use', async () => {
+    const history: DiscreteMatrixEvent[] = [
+      {
+        type: 'm.room.message',
+        event_id: '1',
+        origin_server_ts: 1234567890,
+        content: {
+          msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+          format: 'org.matrix.custom.html',
+          body: 'Hey',
+          isStreamingFinished: true,
+          data: {
+            context: {
+              submode: 'code',
+              realmPrefixes: {
+                '@cardstack/base/': 'http://localhost:4201/base/',
+              },
+              codeMode: { currentFile: '@cardstack/base/card-api.gts' },
+            },
+          },
+        },
+        sender: '@user:localhost',
+        room_id: 'room1',
+        unsigned: { age: 1000, transaction_id: '1' },
+        status: EventStatus.SENT,
+      },
+    ];
+
+    const result = await buildPromptForModel(
+      history,
+      '@aibot:localhost',
+      undefined,
+      [],
+      fakeMatrixClient,
+    );
+
+    let contextText = result[2].content as string;
+    assert.true(
+      contextText.includes(
+        ' - @cardstack/base/ = http://localhost:4201/base/\n',
+      ),
+      'the prefix is mapped to its realm URL',
+    );
+    assert.true(
+      contextText.includes(
+        'File open in code editor: @cardstack/base/card-api.gts\n',
+      ),
+      'the open file keeps its prefix form',
     );
   });
 
@@ -9584,6 +9636,69 @@ module('markdown skill tools', (hooks) => {
     assert.strictEqual(tools.length, 1);
     assert.strictEqual(tools[0].function.name, 'plan-trip_ab12');
     assert.strictEqual(tools[0].function.description, 'Plans a trip');
+  });
+
+  test('a compaction carries each event that contributes a new tool, in order', async () => {
+    const userContextMessage = {
+      type: 'm.room.message',
+      event_id: 'user-1',
+      origin_server_ts: 1500,
+      sender: '@user:localhost',
+      room_id: 'room1',
+      content: {
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        body: 'hi',
+        data: {
+          context: {
+            tools: [
+              {
+                type: 'function',
+                function: { name: 'context-tool', parameters: {} },
+              },
+            ],
+          },
+        },
+      },
+    } as unknown as DiscreteMatrixEvent;
+    const forgedRead = {
+      ...readResultEvent('forged', 1800, [discoveredDef('forged-tool')]),
+      sender: '@user:localhost',
+    } as DiscreteMatrixEvent;
+
+    assert.deepEqual(
+      toolSourceEventIdsToCarry(
+        [
+          readResultEvent('read-1', 1000, [discoveredDef('plan-trip_ab12')]),
+          userContextMessage,
+          // Adds nothing new.
+          readResultEvent('read-2', 2000, [discoveredDef('plan-trip_ab12')]),
+          forgedRead,
+          readResultEvent('read-3', 3000, [
+            discoveredDef('plan-trip_ab12'),
+            discoveredDef('book-hotel_cd34'),
+          ]),
+        ],
+        '@aibot:localhost',
+      ),
+      ['read-1', 'user-1', 'read-3'],
+    );
+  });
+
+  test('a compaction carries the same tool from each skill that declares it', async () => {
+    const otherSkillUrl = 'http://test-realm/other-skill/SKILL.md';
+    assert.deepEqual(
+      toolSourceEventIdsToCarry(
+        [
+          readResultEvent('read-1', 1000, [discoveredDef('plan-trip_ab12')]),
+          readResultEvent('read-2', 2000, [
+            discoveredDef('plan-trip_ab12', { skillUrl: otherSkillUrl }),
+          ]),
+        ],
+        '@aibot:localhost',
+      ),
+      ['read-1', 'read-2'],
+      'disabling the first skill leaves the tool from the second',
+    );
   });
 
   test('a re-read of a skill cannot mutate or remove earlier definitions', async () => {

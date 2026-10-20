@@ -117,6 +117,7 @@ export interface BrowseOptions {
   openBrowserFn?: (url: string) => Promise<boolean>;
   log?: (message: string) => void;
   sleep?: (ms: number) => Promise<void>;
+  isInteractive?: () => boolean;
 }
 
 // Resolve the target profile: the named one, or the active one. A missing
@@ -151,6 +152,8 @@ export async function browse(
   let openBrowserFn = options.openBrowserFn ?? openBrowser;
   let log = options.log ?? ((message: string) => console.log(message));
   let sleep = options.sleep ?? defaultSleep;
+  let isInteractive =
+    options.isInteractive ?? (() => process.stderr.isTTY === true);
 
   let resolved = resolveProfile(pm, options.profile);
 
@@ -274,6 +277,17 @@ export async function browse(
 
   let opened = await openBrowserFn(url);
   if (!opened) {
+    // The fallback prints the credential, so only to a person at a terminal.
+    // A non-interactive caller (an agent's shell, a script) captures stderr
+    // into a log or a transcript, so it gets an error instead.
+    if (!isInteractive()) {
+      throw new Error(
+        `Couldn't open a browser automatically. The sign-in URL is a ` +
+          `credential, so it is not printed to a non-interactive shell. Run ` +
+          `\`boxel browse\` in a terminal, or send \`--print-url\` output ` +
+          `straight to a browser launcher or clipboard tool.`,
+      );
+    }
     cliLog.warn(
       `Couldn't open a browser automatically. Open this URL to sign in ` +
         `(single-use, expires soon):\n  ${url}`,

@@ -7,11 +7,12 @@ import { tracked } from '@glimmer/tracking';
 import window from 'ember-window-mock';
 import { TrackedArray } from 'tracked-built-ins';
 
-import { RealmPaths, ri, rri } from '@cardstack/runtime-common';
+import { RealmPaths, ri } from '@cardstack/runtime-common';
 import type { LocalPath } from '@cardstack/runtime-common/paths';
 
 import { RecentFiles } from '../utils/local-storage-keys';
 
+import type NetworkService from './network';
 import type OperatorModeStateService from './operator-mode-state-service';
 import type SessionService from './session';
 
@@ -33,6 +34,7 @@ export default class RecentFilesService extends Service {
   // from, the caller should just tell us
   @service declare private operatorModeStateService: OperatorModeStateService;
   @service declare private session: SessionService;
+  @service declare private network: NetworkService;
 
   @tracked declare recentFiles: TrackedArray<RecentFile>;
 
@@ -87,8 +89,14 @@ export default class RecentFilesService extends Service {
     let realmURL = this.operatorModeStateService.realmURL;
 
     if (realmURL) {
-      let realmPaths = new RealmPaths(ri(realmURL));
-      let id = rri(urlString);
+      // A realm can advertise its URL in a different spelling than the file
+      // was served from (the base realm advertises its virtual alias), so
+      // membership is checked with both sides in RRI form.
+      let { virtualNetwork } = this.network;
+      let realmPaths = new RealmPaths(
+        ri(virtualNetwork.unresolveURL(realmURL)),
+      );
+      let id = virtualNetwork.unresolveURL(urlString);
 
       if (realmPaths.inRealm(id)) {
         this.addRecentFile(realmPaths.local(id));
@@ -179,8 +187,11 @@ export default class RecentFilesService extends Service {
   }
 
   private findRecentFileIndexByURL(urlString: string) {
+    let { virtualNetwork } = this.network;
+    let id = virtualNetwork.unresolveURL(urlString);
     return this.recentFiles.findIndex(
-      ({ realmURL, filePath }) => `${realmURL}${filePath}` === urlString,
+      ({ realmURL, filePath }) =>
+        virtualNetwork.unresolveURL(`${realmURL}${filePath}`) === id,
     );
   }
 

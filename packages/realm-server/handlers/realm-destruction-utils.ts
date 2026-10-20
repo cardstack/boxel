@@ -136,4 +136,8 @@ export async function removeRealmDatabaseArtifacts(args: {
   ]);
   await q([`DELETE FROM realm_file_meta WHERE realm_url =`, param(realmURL)]);
   await q([`DELETE FROM realm_metadata WHERE url =`, param(realmURL)]);
+  // A deleted realm's shares serve no one, and kept, they would resume for a
+  // realm later made at the same URL that grants their owner write. Their
+  // notices go with them.
+  await q([`DELETE FROM key_shares WHERE realm_url =`, param(realmURL)]);
 }

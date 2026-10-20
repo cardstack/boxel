@@ -9,7 +9,7 @@ import type {
   PromptParts,
   TextContent,
 } from './types.ts';
-import { uniqBy } from 'lodash-es';
+import { chunk, uniqBy } from 'lodash-es';
 import { constructHistory } from './history.ts';
 import {
   canonicalizeMatrixMediaKey,
@@ -75,14 +75,22 @@ import { logger } from '../log.ts';
 
 import { parseFrontmatter } from '../frontmatter-parse.ts';
 import { isMarkdownFile } from '../paths.ts';
-import { SKILL_INSTRUCTIONS_MESSAGE, SYSTEM_MESSAGE } from './constants.ts';
+import {
+  READ_REALM_FILE_TOOL_NAME,
+  SKILL_INSTRUCTIONS_MESSAGE,
+  SYSTEM_MESSAGE,
+} from './constants.ts';
 import { MAX_CORRECTNESS_FIX_ATTEMPTS } from './correctness-constants.ts';
 import { humanReadable } from '../code-ref.ts';
 import { readStopState } from './stop.ts';
 import {
+  carriedSkillFilesMessage,
   compactionSummaryMessage,
   getLatestCompaction,
   historyAfterCompaction,
+  isSkillFileUrl,
+  MAX_CARRIED_SKILL_FILE_BYTES,
+  MAX_CARRIED_SKILL_FILE_EVENTS,
   type CompactionContent,
 } from './compaction.ts';
 
@@ -1030,47 +1038,336 @@ export async function getTools(
       continue;
     }
 
-    // Tools discovered by the bot reading a skill file (readRealmFile):
-    // each applied read's result event embeds the definitions in
-    // `data.discoveredTools`. Only the bot publishes these; a
-    // discoveredTools block on anyone else's result event is not a
-    // legitimate discovery, and a failed or invalid read is not evidence
-    // of anything.
-    if (isToolResultEvent(event) && event.sender === aiBotUserId) {
-      let content = event.content;
-      if (
-        !isToolResultWithOutputContent(content) ||
-        content['m.relates_to']?.key !== 'applied'
-      ) {
+    for (let { tool, sourceSkillUrl } of toolSourceTools(event, aiBotUserId)) {
+      if (sourceSkillUrl && disabledSkillIds.has(sourceSkillUrl)) {
         continue;
       }
-      for (let def of content.data?.discoveredTools ?? []) {
-        if (
-          !def?.sourceSkillUrl ||
-          disabledSkillIds.has(def.sourceSkillUrl) ||
-          def.definition?.type !== 'function' ||
-          !def.definition.function?.name
-        ) {
-          continue;
-        }
-        add(def.definition as Tool);
-      }
-      continue;
-    }
-
-    // Tools carried in a user message's context.
-    if (
-      event.type === 'm.room.message' &&
-      event.sender !== aiBotUserId &&
-      event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
-    ) {
-      for (let tool of event.content.data?.context?.tools ?? []) {
-        add(tool);
-      }
+      add(tool);
     }
   }
 
   return Array.from(toolMap.values());
+}
+
+// The tools an event other than a room-skills state event contributes to
+// `getTools`, with the skill each discovered one came from.
+//
+// Tools discovered by the bot reading a skill file (readRealmFile): each
+// applied read's result event embeds the definitions in
+// `data.discoveredTools`. Only the bot publishes these; a discoveredTools
+// block on anyone else's result event is not a legitimate discovery, and a
+// failed or invalid read is not evidence of anything. A user message can
+// also carry tools in its context.
+export function toolSourceTools(
+  event: DiscreteMatrixEvent,
+  aiBotUserId: string,
+): { tool: Tool; sourceSkillUrl?: string }[] {
+  if (isToolResultEvent(event) && event.sender === aiBotUserId) {
+    let content = event.content;
+    if (
+      !isToolResultWithOutputContent(content) ||
+      content['m.relates_to']?.key !== 'applied'
+    ) {
+      return [];
+    }
+    return (content.data?.discoveredTools ?? [])
+      .filter(
+        (def) =>
+          def?.sourceSkillUrl &&
+          def.definition?.type === 'function' &&
+          def.definition.function?.name,
+      )
+      .map((def) => ({
+        tool: def.definition as Tool,
+        sourceSkillUrl: def.sourceSkillUrl,
+      }));
+  }
+  if (
+    event.type === 'm.room.message' &&
+    event.sender !== aiBotUserId &&
+    event.content.msgtype === APP_BOXEL_MESSAGE_MSGTYPE
+  ) {
+    return (event.content.data?.context?.tools ?? []).map((tool: Tool) => ({
+      tool,
+    }));
+  }
+  return [];
+}
+
+// The events a compaction carries forward for `getTools`: in order, each
+// event that contributes a tool, from a given skill, that no earlier one
+// does. The history before the compaction's cut is not loaded, and
+// `getRoomEvents` fetches these back by id. A tool is told apart by its skill
+// as well as its name: when two skills declare the same tool and the user
+// disables the first, `getTools` takes it from the second.
+export function toolSourceEventIdsToCarry(
+  eventList: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): string[] {
+  let seen = new Set<string>();
+  let eventIds: string[] = [];
+  for (let event of eventList) {
+    let newKeys = toolSourceTools(event, aiBotUserId)
+      .filter(({ tool }) => !!tool?.function?.name)
+      .map(({ tool, sourceSkillUrl }) =>
+        JSON.stringify([sourceSkillUrl ?? null, tool.function.name]),
+      )
+      .filter((key) => !seen.has(key));
+    if (newKeys.length) {
+      newKeys.forEach((key) => seen.add(key));
+      eventIds.push(event.event_id);
+    }
+  }
+  return eventIds.slice(0, MAX_CARRIED_TOOL_SOURCE_EVENTS);
+}
+
+// The most tool-source events a compaction event carries. The tools of the
+// events past it leave the prompt once the history before the cut is no
+// longer loaded, unless the compaction also lists the event in
+// `skillFileEventIds`: `getRoomEvents` fetches it back for its skill files,
+// and `getTools` takes the tools of every event it is given.
+export const MAX_CARRIED_TOOL_SOURCE_EVENTS = 200;
+
+// The skill files an applied result ai-bot published attached.
+function attachedSkillFiles(
+  event: DiscreteMatrixEvent,
+  aiBotUserId: string,
+): SerializedFileDef[] {
+  if (!isToolResultEvent(event) || event.sender !== aiBotUserId) {
+    return [];
+  }
+  let content = event.content;
+  if (
+    !isToolResultWithOutputContent(content) ||
+    content['m.relates_to']?.key !== 'applied'
+  ) {
+    return [];
+  }
+  return (content.data?.attachedFiles ?? []).filter(
+    (file: SerializedFileDef) =>
+      isSkillFileUrl(file.sourceUrl) &&
+      isTextBasedContentType(file.contentType),
+  );
+}
+
+// The readRealmFile results in the history that attached skill files, in
+// order. A result counts only when the request it answers is in the history
+// too, so a file named like a skill file that came from anywhere else (a
+// readUrl call, a host command) is never taken for one.
+function skillFileReadEvents(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+): DiscreteMatrixEvent[] {
+  let readRequestIds = new Set<string>();
+  for (let event of history) {
+    if (event.type !== 'm.room.message' || event.sender !== aiBotUserId) {
+      continue;
+    }
+    for (let request of getToolRequests<Partial<EncodedToolRequest>>(
+      event.content as CardMessageContent,
+    ) ?? []) {
+      if (request.id && request.name === READ_REALM_FILE_TOOL_NAME) {
+        readRequestIds.add(request.id);
+      }
+    }
+  }
+  return history.filter(
+    (event) =>
+      attachedSkillFiles(event, aiBotUserId).length > 0 &&
+      readRequestIds.has((event as ToolResultEvent).content.commandRequestId),
+  );
+}
+
+// The readRealmFile results with skill files that a prompt carries after a
+// compaction's summary: the ones the compaction lists, or, for a compaction
+// that lists none, every one in the history up to its cut point.
+function carriedSkillFileEvents(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+  compaction: CompactionContent,
+): DiscreteMatrixEvent[] {
+  let cutIndex = history.findIndex(
+    (event) => event.event_id === compaction.upToEventId,
+  );
+  if (cutIndex === -1) {
+    return [];
+  }
+  let covered = history.slice(0, cutIndex + 1);
+  if (!compaction.skillFileEventIds) {
+    return skillFileReadEvents(covered, aiBotUserId);
+  }
+  let listed = new Set(compaction.skillFileEventIds);
+  return covered.filter(
+    (event) =>
+      listed.has(event.event_id) &&
+      attachedSkillFiles(event, aiBotUserId).length > 0,
+  );
+}
+
+// The readRealmFile results with skill files that a new compaction, cutting
+// at `upToEventId`, lists: those the prompt carries after the current
+// compaction, and those read since, up to the new cut point. Their history
+// is not loaded once the new compaction is in place, so `getRoomEvents`
+// fetches them back by id. The newest are kept past
+// `MAX_CARRIED_SKILL_FILE_EVENTS`.
+export function skillFileEventIdsToCarry(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+  upToEventId: string,
+  currentCompaction?: CompactionContent,
+): string[] {
+  let cutIndex = history.findIndex((event) => event.event_id === upToEventId);
+  if (cutIndex === -1) {
+    return [];
+  }
+  let covered = history.slice(0, cutIndex + 1);
+  let carried = new Set(
+    (currentCompaction
+      ? carriedSkillFileEvents(history, aiBotUserId, currentCompaction)
+      : []
+    ).map((event) => event.event_id),
+  );
+  for (let event of skillFileReadEvents(covered, aiBotUserId)) {
+    carried.add(event.event_id);
+  }
+  return covered
+    .map((event) => event.event_id)
+    .filter((eventId) => carried.has(eventId))
+    .slice(-MAX_CARRIED_SKILL_FILE_EVENTS);
+}
+
+// Whether a skill file belongs to a skill the user disabled: the disabled
+// skill's own file, or a file under the directory of a disabled `SKILL.md`.
+function isDisabledSkillFile(url: string, disabledSkillIds: string[]) {
+  return disabledSkillIds.some(
+    (skillId) =>
+      url === skillId ||
+      (skillId.endsWith('/SKILL.md') &&
+        url.startsWith(skillId.slice(0, -'SKILL.md'.length))),
+  );
+}
+
+// How many carried skill files `carriedSkillFiles` downloads at once.
+const SKILL_FILE_DOWNLOAD_CONCURRENCY = 10;
+
+// The message that follows a compaction's summary with the skill files the
+// model read in the history the summary replaces, or undefined when it read
+// none. Each file appears once, as its newest read.
+//
+// Files are chosen newest first by the size their read recorded: each one
+// that still fits in `MAX_CARRIED_SKILL_FILE_BYTES` is chosen, so an older,
+// smaller file can be chosen after a newer one too large for what is left.
+// Only the chosen files are downloaded, a few at a time. The message then
+// carries them as rendered, line numbers and headings included, newest first
+// up to the same limit. The files that don't fit, files with no recorded
+// size, and files the media server no longer has or won't serve are named
+// for the model to read again. Any other download failure throws, as it does
+// for the room's tool definitions, so a transient failure never changes the
+// message. Files of a skill the user disabled are left out, as its tools
+// are.
+//
+// The message depends on the history up to the cut point, the files it
+// names, and which skills are disabled. Its bytes stay the same on every
+// prompt until the next compaction, the next time the user disables or
+// enables a skill (which also changes the tools), or a carried file's media
+// goes missing; a file read again after the cut point does not change it.
+async function carriedSkillFiles(
+  history: DiscreteMatrixEvent[],
+  aiBotUserId: string,
+  compaction: CompactionContent,
+  disabledSkillIds: string[],
+  client: MatrixClient,
+): Promise<string | undefined> {
+  let seenUrls = new Set<string>();
+  let newestFirst: SerializedFileDef[] = [];
+  for (let event of [
+    ...carriedSkillFileEvents(history, aiBotUserId, compaction),
+  ].reverse()) {
+    for (let file of [...attachedSkillFiles(event, aiBotUserId)].reverse()) {
+      let url = file.sourceUrl!;
+      if (seenUrls.has(url) || isDisabledSkillFile(url, disabledSkillIds)) {
+        continue;
+      }
+      seenUrls.add(url);
+      newestFirst.push(file);
+    }
+  }
+  if (!newestFirst.length) {
+    return undefined;
+  }
+
+  let chosen: SerializedFileDef[] = [];
+  let chosenBytes = 0;
+  for (let file of newestFirst) {
+    let size = file.contentSize;
+    if (
+      typeof size === 'number' &&
+      Number.isFinite(size) &&
+      size >= 0 &&
+      chosenBytes + size <= MAX_CARRIED_SKILL_FILE_BYTES
+    ) {
+      chosenBytes += size;
+      chosen.push(file);
+    }
+  }
+
+  let downloaded: (SerializedFileDef | undefined)[] = [];
+  for (let batch of chunk(chosen, SKILL_FILE_DOWNLOAD_CONCURRENCY)) {
+    downloaded.push(
+      ...(await Promise.all(
+        batch.map(async (file) => {
+          try {
+            return {
+              ...toFileDefMetadata(file),
+              content: await downloadFile(client, file),
+            };
+          } catch (error: any) {
+            if (error?.status === 404 || error?.status === 403) {
+              getLog().warn(
+                `Skill file ${file.sourceUrl} is no longer available to carry`,
+                error,
+              );
+              return undefined;
+            }
+            throw new Error(
+              `Could not download the skill file ${file.sourceUrl} that the compaction carries: ${error?.message ?? error}`,
+              { cause: error },
+            );
+          }
+        }),
+      )),
+    );
+  }
+
+  let carried: SerializedFileDef[] = [];
+  let carriedBytes = 0;
+  let encoder = new TextEncoder();
+  for (let file of downloaded) {
+    if (!file) {
+      continue;
+    }
+    let bytes =
+      encoder.encode(attachedFilesToMessage([file])).length +
+      (carried.length ? 1 : 0);
+    if (carriedBytes + bytes <= MAX_CARRIED_SKILL_FILE_BYTES) {
+      carriedBytes += bytes;
+      carried.push(file);
+    }
+  }
+  let carriedUrls = new Set(carried.map((file) => file.sourceUrl));
+  let reReadUrls = newestFirst
+    .map((file) => file.sourceUrl!)
+    .filter((url) => !carriedUrls.has(url))
+    .reverse();
+  carried.reverse();
+  getLog().info(
+    `Carrying ${carried.length} skill files (${carriedBytes} bytes rendered) after the compaction summary; ${reReadUrls.length} to read again: %j`,
+    reReadUrls,
+  );
+  return carriedSkillFilesMessage(
+    carried.length ? attachedFilesToMessage(carried) : undefined,
+    reReadUrls,
+  );
 }
 
 export function getLastUserMessage(
@@ -1943,6 +2240,16 @@ export async function buildPromptForModel(
       role: 'user',
       content: compactionSummaryMessage(compaction.summary),
     });
+    let skillFilesMessage = await carriedSkillFiles(
+      history,
+      aiBotUserId,
+      compaction,
+      disabledSkillIds,
+      client,
+    );
+    if (skillFilesMessage) {
+      messages.push({ role: 'user', content: skillFilesMessage });
+    }
   }
   messages = messages.concat(historicalMessages);
   let contextContent = await buildContextMessage(
@@ -2749,6 +3056,13 @@ export const buildContextMessage = async (
         result += ` - ${workspace.name} (${workspace.url})${workspace.type === 'catalog-workspace' ? ' - Catalog' : ''}\n`;
       });
       result += `\n`;
+    }
+    let realmPrefixes = Object.entries(context?.realmPrefixes ?? {});
+    if (realmPrefixes.length > 0) {
+      result += `Realm prefixes (an identifier that starts with one names a file in that realm; replace the prefix with the realm's URL to get the file's URL):\n`;
+      for (let [prefix, url] of realmPrefixes) {
+        result += ` - ${prefix} = ${url}\n`;
+      }
     }
     if (context?.openCardIds && context.openCardIds.length > 0) {
       result += `Open cards:\n${context.openCardIds.map((id) => ` - ${id}\n`)}`;

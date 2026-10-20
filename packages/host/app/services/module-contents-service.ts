@@ -5,6 +5,7 @@ import {
   Command,
   getAncestor,
   getField,
+  baseRRI,
   isBaseDef,
   rri,
 } from '@cardstack/runtime-common';
@@ -90,7 +91,7 @@ export function isComponentDeclaration(
   let { name, module } = declaration.super;
   return (
     module === '@glimmer/component' ||
-    (name === 'Component' && module === 'https://cardstack.com/base/card-api')
+    (name === 'Component' && module === baseRRI('card-api'))
   );
 }
 

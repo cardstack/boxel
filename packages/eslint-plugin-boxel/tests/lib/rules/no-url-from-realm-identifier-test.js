@@ -154,6 +154,12 @@ ruleTester.run('no-url-from-realm-identifier', rule, {
       filename,
       errors: [{ messageId: 'urlProbeOnIdentifier' }],
     },
+    // `URL.parse` with an identifier as its base answers `null` the same way.
+    {
+      code: `${IMPORT}let rriBase = ri('@cardstack/base/');\nlet parsed = URL.parse('card-api', rriBase);`,
+      filename,
+      errors: [{ messageId: 'urlProbeOnIdentifier' }],
+    },
     // Computing the value into a `const` first is the shape this appears in:
     // the local's own type is `string`, and the identifier is only visible in
     // the expression it was initialized with.

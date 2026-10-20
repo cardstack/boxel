@@ -4,37 +4,35 @@
 // Rule Definition
 //------------------------------------------------------------------------------
 
-// Maps each registered prefix to the set of environment-specific base URLs
-// that should be replaced by it, plus optional regex patterns for dynamic
-// URLs (e.g. environment-mode *.localhost subdomains).
-const DEFAULT_REALM_MAPPINGS = [
-  {
-    prefix: '@cardstack/catalog/',
-    urls: [
-      'http://localhost:4201/catalog/',
-      'https://realms-staging.stack.cards/catalog/',
-      'https://app.boxel.ai/catalog/',
-    ],
-    // Catches environment-mode URLs like http://realm-server.linty.localhost/catalog/
-    patterns: ['https?://realm-server\\.[^.]+\\.localhost(:\\d+)?/catalog/'],
-  },
-  // Future entries:
-  // {
-  //   prefix: '@cardstack/skills/',
-  //   urls: [
-  //     'http://localhost:4201/skills/',
-  //     'https://realms-staging.stack.cards/skills/',
-  //     'https://app.boxel.ai/skills/',
-  //   ],
-  //   patterns: ['https?://[^/]+\\.localhost[^/]*/skills/'],
-  // },
-  // {
-  //   prefix: '@cardstack/base/',
-  //   urls: [
-  //     'https://cardstack.com/base/',
-  //   ],
-  // },
+const { PREFIX_REALM_PREFIXES } = require('../utils/prefix-realms');
+
+// The origins a realm server is reached at in development, staging and
+// production. Each serves every prefix realm at the path named after it:
+// `@cardstack/skills/` is `<origin>/skills/`.
+const REALM_SERVER_ORIGINS = [
+  'http://localhost:4201',
+  'https://localhost:4201',
+  'https://realms-staging.stack.cards',
+  'https://app.boxel.ai',
 ];
+
+// Environment-mode realm servers, such as
+// `http://realm-server.linty.localhost/` or one with a port.
+const ENVIRONMENT_MODE_ORIGIN_PATTERN =
+  'https?://realm-server\\.[^.]+\\.localhost(:\\d+)?';
+
+// Maps each registered prefix to the environment-specific base URLs that
+// should be replaced by it, plus regex patterns for dynamic URLs. The base
+// realm's `https://cardstack.com/base/` alias is not among them: it is a
+// fetch target in its own right.
+const DEFAULT_REALM_MAPPINGS = PREFIX_REALM_PREFIXES.map((prefix) => {
+  let realmPath = `/${prefix.slice('@cardstack/'.length)}`;
+  return {
+    prefix,
+    urls: REALM_SERVER_ORIGINS.map((origin) => `${origin}${realmPath}`),
+    patterns: [`${ENVIRONMENT_MODE_ORIGIN_PATTERN}${realmPath}`],
+  };
+});
 
 /**
  * Build a flat list of { url, prefix } pairs from the realm mappings,
@@ -79,7 +77,7 @@ module.exports = {
     type: 'problem',
     docs: {
       description:
-        'Disallow environment-specific realm URLs in code; use portable prefixes like @cardstack/catalog/ instead',
+        'Disallow environment-specific realm URLs in code; use the registered prefixes like @cardstack/catalog/ instead',
       category: 'Best Practices',
       recommended: false,
     },

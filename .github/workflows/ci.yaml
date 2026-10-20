@@ -1667,7 +1667,11 @@ jobs:
       - boxel-ui-test
       - realm-server-test
     uses: ./.github/workflows/manual-deploy.yml
+    # A called workflow's jobs may ask for no more than these, so they cover
+    # every job in Manual Deploy, including the ones only production runs:
+    # actions: write is the one that starts the Choreo gallery's republish.
     permissions:
+      actions: write
       contents: read
       deployments: write
       id-token: write

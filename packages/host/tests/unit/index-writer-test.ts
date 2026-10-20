@@ -2248,6 +2248,7 @@ module('Unit | index-writer', function (hooks) {
         markdown: null,
         captures: null,
         sourceContentHash: null,
+        renderError: null,
       });
     } else {
       assert.ok(false, `expected index entry to not be an error document`);
@@ -2353,6 +2354,7 @@ module('Unit | index-writer', function (hooks) {
         markdown: null,
         captures: null,
         sourceContentHash: 'abc123',
+        renderError: null,
       });
     } else {
       assert.ok(false, `expected index entry to not be an error document`);

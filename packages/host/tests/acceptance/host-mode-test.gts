@@ -1,7 +1,11 @@
+import { on } from '@ember/modifier';
 import { getOwner } from '@ember/owner';
 import {
   click,
   currentURL,
+  scrollTo,
+  settled,
+  triggerKeyEvent,
   visit,
   waitFor,
   waitUntil,
@@ -167,6 +171,35 @@ module('Acceptance | host mode tests', function (hooks) {
         </template>
       };
     }
+    // Far taller than the test container, so the stack has room to scroll.
+    class TallStackCard extends CardDef {
+      static displayName = 'Tall Stack Card';
+      @field targetCardURL = contains(StringField);
+
+      static isolated = class Isolated extends Component<typeof this> {
+        openTarget = () => {
+          let target = this.args.model.targetCardURL;
+          if (target) {
+            this.args.viewCard?.(new URL(target));
+          }
+        };
+
+        <template>
+          <article class='tall-stack-card'>
+            <button
+              type='button'
+              {{on 'click' this.openTarget}}
+              data-test-tall-stack-card-open
+            >Open next</button>
+          </article>
+          <style scoped>
+            .tall-stack-card {
+              height: 200rem;
+            }
+          </style>
+        </template>
+      };
+    }
     class Whitepaper extends CardDef {
       static displayName = 'Boxel Whitepaper';
       static prefersWideFormat = true;
@@ -283,6 +316,55 @@ module('Acceptance | host mode tests', function (hooks) {
         'pet.gts': { Pet },
         'whitepaper.gts': { Whitepaper },
         'view-card-demo.gts': viewCardDemoCardSource,
+        'tall-stack-card.gts': { TallStackCard },
+        'TallStackCard/1.json': {
+          data: {
+            attributes: {
+              targetCardURL: `${testHostModeRealmURL}TallStackCard/2.json`,
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testHostModeRealmURL}tall-stack-card`,
+                name: 'TallStackCard',
+              },
+            },
+          },
+        },
+        'TallStackCard/2.json': {
+          data: {
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: `${testHostModeRealmURL}tall-stack-card`,
+                name: 'TallStackCard',
+              },
+            },
+          },
+        },
+        'TallStackCard/3.json': {
+          data: {
+            attributes: {
+              targetCardURL: `${testHostModeRealmURL}TallStackCard/4.json`,
+            },
+            meta: {
+              adoptsFrom: {
+                module: `${testHostModeRealmURL}tall-stack-card`,
+                name: 'TallStackCard',
+              },
+            },
+          },
+        },
+        'TallStackCard/4.json': {
+          data: {
+            attributes: {},
+            meta: {
+              adoptsFrom: {
+                module: `${testHostModeRealmURL}tall-stack-card`,
+                name: 'TallStackCard',
+              },
+            },
+          },
+        },
         'Whitepaper/index.json': {
           data: {
             type: 'card',
@@ -415,6 +497,8 @@ module('Acceptance | host mode tests', function (hooks) {
             },
           },
         },
+        'spring-guide.md':
+          '# Spring Guide\n\nSprings settle toward their target.\n',
         'realm.json': realmConfigCardJSON({
           name: 'Test Workspace B',
           backgroundURL:
@@ -564,6 +648,35 @@ module('Acceptance | host mode tests', function (hooks) {
       headStart.remove();
       headEnd.remove();
     }
+  });
+
+  test('visiting a Markdown file in host mode renders it', async function (assert) {
+    let fileURL = `${testHostModeRealmURL}spring-guide.md`;
+
+    await visit('/test/spring-guide.md');
+
+    assert.dom(`[data-test-host-mode-card="${fileURL}"]`).exists();
+    assert
+      .dom(`[data-test-host-mode-card="${fileURL}"]`)
+      .containsText('Springs settle toward their target.');
+    assert.dom('.host-mode-card').doesNotContainText('Loading card…');
+  });
+
+  test('a Markdown file in the stack renders and is named in the breadcrumbs', async function (assert) {
+    let fileURL = `${testHostModeRealmURL}spring-guide.md`;
+    let hostModeStackValue = encodeURIComponent(JSON.stringify([fileURL]));
+
+    await visit(`/test/Pet/mango.json?hostModeStack=${hostModeStackValue}`);
+
+    assert
+      .dom(`[data-test-host-mode-stack-item="${fileURL}"]`)
+      .containsText('Springs settle toward their target.');
+    assert
+      .dom(`[data-test-host-mode-stack-item="${fileURL}"]`)
+      .doesNotContainText('Loading card…');
+    assert
+      .dom(`[data-test-host-mode-breadcrumb="${fileURL}"]`)
+      .containsText('spring-guide.md');
   });
 
   test('visiting a non-existent card shows an error', async function (assert) {
@@ -901,6 +1014,141 @@ module('Acceptance | host mode tests', function (hooks) {
     );
   });
 
+  test('a card opened on the stack starts at its top, and closing it returns the card below to where it was left', async function (assert) {
+    let firstCardId = `${testHostModeRealmURL}TallStackCard/1`;
+    let secondCardId = `${testHostModeRealmURL}TallStackCard/2`;
+    let scroller = '[data-test-host-mode-stack-scroller]';
+
+    await visit(
+      `/test/Pet/mango.json?hostModeStack=${encodeURIComponent(
+        JSON.stringify([firstCardId]),
+      )}`,
+    );
+    await waitFor(`[data-test-host-mode-stack-item="${firstCardId}"]`);
+    await scrollTo(scroller, 0, 500);
+
+    await click(
+      `[data-test-host-mode-stack-item="${firstCardId}"] [data-test-tall-stack-card-open]`,
+    );
+    await waitFor(`[data-test-host-mode-stack-item="${secondCardId}"]`);
+    await settled();
+    assert.strictEqual(
+      document.querySelector(scroller)!.scrollTop,
+      0,
+      'the opened card starts at its top',
+    );
+
+    await click(
+      `[data-test-host-mode-stack-item="${secondCardId}"] [data-test-host-stack-item-close-button]`,
+    );
+    await waitUntil(
+      () =>
+        !document.querySelector(
+          `[data-test-host-mode-stack-item="${secondCardId}"]`,
+        ),
+    );
+    await settled();
+    assert.strictEqual(
+      document.querySelector(scroller)!.scrollTop,
+      500,
+      'the card below is back where it was left',
+    );
+  });
+
+  // A saved offset belongs to a place in the trail, not to a card: the same
+  // card can sit in the trail twice, and each copy keeps its own position.
+  test('two copies of a card in the trail keep separate scroll positions', async function (assert) {
+    let repeatedCardId = `${testHostModeRealmURL}TallStackCard/3`;
+    let middleCardId = `${testHostModeRealmURL}TallStackCard/2`;
+    let pushedCardId = `${testHostModeRealmURL}TallStackCard/4`;
+    let scroller = '[data-test-host-mode-stack-scroller]';
+    let scrollTop = () => document.querySelector(scroller)!.scrollTop;
+    let closeTopCard = async (index: number) => {
+      await click(
+        `[data-test-host-mode-stack-item-index="${index}"] [data-test-host-stack-item-close-button]`,
+      );
+      await waitUntil(
+        () =>
+          !document.querySelector(
+            `[data-test-host-mode-stack-item-index="${index}"]`,
+          ),
+      );
+      await settled();
+    };
+
+    await visit(
+      `/test/Pet/mango.json?hostModeStack=${encodeURIComponent(
+        JSON.stringify([repeatedCardId, middleCardId, repeatedCardId]),
+      )}`,
+    );
+    await waitFor('[data-test-host-mode-stack-item-index="2"]');
+    await scrollTo(scroller, 0, 500);
+
+    await click(
+      `[data-test-host-mode-stack-item-index="2"] [data-test-tall-stack-card-open]`,
+    );
+    await waitFor(`[data-test-host-mode-stack-item="${pushedCardId}"]`);
+    await settled();
+
+    await closeTopCard(3);
+    assert.strictEqual(scrollTop(), 500, 'the top copy is back where it was');
+
+    await closeTopCard(2);
+    assert.strictEqual(scrollTop(), 0, 'the middle card is at its top');
+
+    await closeTopCard(1);
+    assert.strictEqual(
+      scrollTop(),
+      0,
+      'the lower copy keeps its own position, not the top copy’s',
+    );
+  });
+
+  test('when host mode is narrow, only the top stack card shows, at full width', async function (assert) {
+    let firstCardId = `${testHostModeRealmURL}TallStackCard/1`;
+    let secondCardId = `${testHostModeRealmURL}TallStackCard/2`;
+    let testRoot = document.querySelector<HTMLElement>('#ember-testing')!;
+    let originalWidth = testRoot.style.width;
+    testRoot.style.width = '400px';
+
+    try {
+      await visit(
+        `/test/Pet/mango.json?hostModeStack=${encodeURIComponent(
+          JSON.stringify([firstCardId, secondCardId]),
+        )}`,
+      );
+      let top = `[data-test-host-mode-stack-item="${secondCardId}"]`;
+      let buried = `[data-test-host-mode-stack-item="${firstCardId}"]`;
+      await waitFor(top);
+      await waitUntil(
+        () => document.querySelector<HTMLElement>(buried)?.offsetWidth === 0,
+      );
+
+      assert.dom(buried).isNotVisible('the buried card is hidden');
+      assert.dom(top).isVisible('the top card shows');
+      assert
+        .dom('[data-test-host-mode-breadcrumbs]')
+        .isNotVisible('the breadcrumbs are hidden');
+
+      let content = document.querySelector<HTMLElement>(
+        '[data-test-host-mode-content]',
+      )!;
+      let item = document.querySelector<HTMLElement>(top)!;
+      let card = item.querySelector<HTMLElement>('[data-test-host-mode-card]')!;
+      assert.ok(
+        item.offsetWidth > content.offsetWidth * 0.9,
+        `the top card spans nearly the full width (${item.offsetWidth} of ${content.offsetWidth})`,
+      );
+      assert.strictEqual(
+        card.offsetWidth,
+        item.offsetWidth,
+        'the card fills its stack item instead of being clipped',
+      );
+    } finally {
+      testRoot.style.width = originalWidth;
+    }
+  });
+
   test('stack state persists in query parameter', async function (assert) {
     let hostModeStackValue = encodeURIComponent(
       JSON.stringify([`${testHostModeRealmURL}index`]),
@@ -975,6 +1223,72 @@ module('Acceptance | host mode tests', function (hooks) {
         .dom('[data-test-host-mode-stack-item]')
         .doesNotExist(`${value}: with no stack`);
     }
+  });
+
+  test('a card that opens takes focus, and closing it returns focus to what opened it', async function (assert) {
+    let targetStackId = `${testHostModeRealmURL}ViewCardDemo/secondary`;
+    let stackSelector = `[data-test-host-mode-stack-item="${targetStackId}"]`;
+    let openerSelector = '[data-test-view-card-demo-button]';
+
+    await visit('/test/ViewCardDemo/index.json');
+    await waitFor(openerSelector);
+    await click(openerSelector);
+    await waitFor(stackSelector);
+
+    assert.dom(stackSelector).isFocused('the opened card has focus');
+
+    await click(`${stackSelector} [data-test-host-stack-item-close-button]`);
+    await waitUntil(() => !document.querySelector(stackSelector));
+
+    assert.dom(openerSelector).isFocused('focus is back on the opener');
+  });
+
+  test('closing a card opened from a stacked card returns focus inside that card', async function (assert) {
+    let firstStackSelector = `[data-test-host-mode-stack-item="${testHostModeRealmURL}ViewCardDemo/secondary"]`;
+    let secondStackSelector = `[data-test-host-mode-stack-item="${testHostModeRealmURL}ViewCardDemo/tertiary"]`;
+    let innerOpener = `${firstStackSelector} [data-test-view-card-demo-button]`;
+
+    await visit('/test/ViewCardDemo/index.json');
+    await waitFor('[data-test-view-card-demo-button]');
+    await click('[data-test-view-card-demo-button]');
+    await waitFor(innerOpener);
+    await click(innerOpener);
+    await waitFor(secondStackSelector);
+
+    assert.dom(secondStackSelector).isFocused('the card on top has focus');
+
+    await click(
+      `${secondStackSelector} [data-test-host-stack-item-close-button]`,
+    );
+    await waitUntil(() => !document.querySelector(secondStackSelector));
+
+    assert
+      .dom(innerOpener)
+      .isFocused('focus is back on the control that opened it');
+  });
+
+  test('Escape closes the top card of the trail', async function (assert) {
+    let firstStackCardId = `${testHostModeRealmURL}ViewCardDemo/secondary`;
+    let secondStackCardId = `${testHostModeRealmURL}ViewCardDemo/tertiary`;
+    let hostModeStackValue = encodeURIComponent(
+      JSON.stringify([firstStackCardId, secondStackCardId]),
+    );
+
+    await visit(
+      `/test/ViewCardDemo/index.json?hostModeStack=${hostModeStackValue}`,
+    );
+
+    let secondStackSelector = `[data-test-host-mode-stack-item="${secondStackCardId}"]`;
+    let firstStackSelector = `[data-test-host-mode-stack-item="${firstStackCardId}"]`;
+    await waitFor(secondStackSelector);
+
+    await triggerKeyEvent(secondStackSelector, 'keydown', 'Escape');
+    await waitUntil(() => !document.querySelector(secondStackSelector));
+
+    assert.dom(firstStackSelector).exists('only the top card closes');
+    assert
+      .dom(firstStackSelector)
+      .isFocused('focus moves to the card now on top');
   });
 
   test('clicking on a stack card does not close it', async function (assert) {

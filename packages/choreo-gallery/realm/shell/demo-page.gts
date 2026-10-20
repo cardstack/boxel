@@ -1,10 +1,15 @@
 import { array } from '@ember/helper';
 import { on } from '@ember/modifier';
 import Component from '@glimmer/component';
+import { modifier } from 'ember-modifier';
+import { MotionConfig } from 'glimmer-motion';
 
 import type { GalleryDemo, Near } from '../demo';
 import { FilmLink } from '../lib/film-link';
+import { passFocus, takesFocus } from '../lib/focus';
 import { labSlug, LabState } from '../lib/lab';
+import { MotionHold, wakeOnTouch } from '../lib/motion-hold';
+import { restWhenOff } from '../lib/onstage';
 import { type Theater, theaterView } from '../lib/theater';
 import { ChoreoMark } from './choreo-mark';
 import { CodeBox } from './code-box';
@@ -13,6 +18,7 @@ import { DemoStage } from './demo-stage';
 import { GuideLink } from './guide-link';
 import { LabPanel } from './lab-panel';
 import { LabToggle } from './lab-toggle';
+import { MotionToggle } from './motion-toggle';
 import { SpeedPicker, startPage } from './speed-picker';
 
 interface Signature {
@@ -34,6 +40,8 @@ export class DemoPage extends Component<Signature> {
   /** the stage's film, when it has one, for the notes' join triggers */
   readonly filmLink = new FilmLink();
   readonly lab = new LabState();
+  /** for a viewer who asked for reduced motion, the stage waits to be asked */
+  readonly hold = new MotionHold();
 
   constructor(owner: unknown, args: Signature['Args']) {
     super(owner as never, args);
@@ -50,6 +58,14 @@ export class DemoPage extends Component<Signature> {
 
   toggleLab = () => this.lab.toggle(this.labSlug);
 
+  /**
+   * A replay, or a change of motion policy, mounts the stage afresh: a
+   * `{{motion}}` node settles its reduced-motion policy as it mounts.
+   */
+  get take(): string {
+    return `${this.lab.replays}:${this.hold.reducedMotion}`;
+  }
+
   get Notes() {
     return (this.args.demo.constructor as typeof GalleryDemo).notes;
   }
@@ -63,7 +79,27 @@ export class DemoPage extends Component<Signature> {
     return this.args.demo.theater === true && this.args.theater.on;
   }
 
-  leaveTheater = () => this.args.theater.enter(false);
+  /** the way out goes with theater; the door back in takes focus */
+  leaveTheater = () => {
+    passFocus('theater-enter');
+    this.args.theater.enter(false);
+  };
+
+  /**
+   * Escape in theater leaves theater, as it leaves a full-screen video, and
+   * goes no further: the host would otherwise take it as Escape for the card.
+   */
+  escapeTheater = modifier((element: HTMLElement) => {
+    let keydown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !event.defaultPrevented && this.inTheater) {
+        event.preventDefault();
+        event.stopPropagation();
+        this.leaveTheater();
+      }
+    };
+    element.addEventListener('keydown', keydown);
+    return () => element.removeEventListener('keydown', keydown);
+  });
 
   /** whether there is a neighbour for the pager to open */
   get paged(): boolean {
@@ -90,6 +126,7 @@ export class DemoPage extends Component<Signature> {
         class='demo-body {{if this.inTheater "is-theater"}}'
         data-test-demo-body
         data-test-theater={{this.inTheater}}
+        {{this.escapeTheater}}
       >
         <article class='demo-head' data-demo={{slug}}>
           {{#if @onOpen}}
@@ -105,7 +142,7 @@ export class DemoPage extends Component<Signature> {
                 >
                   Next
                   <b>{{@near.next.title}}</b>
-                  →
+                  <span aria-hidden='true'>→</span>
                 </DemoLink>
               </div>
             {{/if}}
@@ -130,6 +167,7 @@ export class DemoPage extends Component<Signature> {
           <SpeedPicker />
         {{/if}}
         <p class='demo-links'>
+          <MotionToggle @hold={{this.hold}} />
           {{#if this.labSlug}}
             <LabToggle @open={{this.labOpen}} @onToggle={{this.toggleLab}} />
           {{/if}}
@@ -145,15 +183,20 @@ export class DemoPage extends Component<Signature> {
             data-demo-stage
             data-test-stage
             data-well={{this.well}}
+            data-motion-hold={{this.hold.state}}
             {{@theater.stage}}
+            {{restWhenOff}}
+            {{wakeOnTouch this.hold}}
           >
-            {{#each (array this.lab.replays) key='@identity'}}
-              <DemoStage
-                @demo={{@demo}}
-                @face='stage'
-                @filmLink={{this.filmLink}}
-                @theater={{@theater}}
-              />
+            {{#each (array this.take) key='@identity'}}
+              <MotionConfig @reducedMotion={{this.hold.reducedMotion}}>
+                <DemoStage
+                  @demo={{@demo}}
+                  @face='stage'
+                  @filmLink={{this.filmLink}}
+                  @theater={{@theater}}
+                />
+              </MotionConfig>
             {{/each}}
             {{! THE MARK, in theater only, where the site's bar has stepped out.
             It is also the way out, because the thing a viewer wants after
@@ -166,6 +209,7 @@ export class DemoPage extends Component<Signature> {
                 class='theater-mark'
                 data-test-theater-exit
                 {{on 'click' this.leaveTheater}}
+                {{takesFocus 'theater-exit'}}
               >
                 <ChoreoMark />
                 <span class='theater-built'>How this is built</span>
@@ -202,7 +246,8 @@ export class DemoPage extends Component<Signature> {
             <nav class='pager' aria-label='More demos'>
               {{#if @near.prev}}
                 <DemoLink @demo={{@near.prev}} @onOpen={{@onOpen}}>
-                  ←
+                  <span aria-hidden='true'>←</span>
+                  <span class='sr-only'>Previous:</span>
                   {{@near.prev.title}}
                 </DemoLink>
               {{else}}
@@ -210,8 +255,9 @@ export class DemoPage extends Component<Signature> {
               {{/if}}
               {{#if @near.next}}
                 <DemoLink @demo={{@near.next}} @onOpen={{@onOpen}}>
+                  <span class='sr-only'>Next:</span>
                   {{@near.next.title}}
-                  →
+                  <span aria-hidden='true'>→</span>
                 </DemoLink>
               {{/if}}
             </nav>
@@ -464,6 +510,13 @@ export class DemoPage extends Component<Signature> {
         order: -1;
         container-type: inline-size;
         margin-inline: calc((100% - var(--site-w, 100%)) / 2);
+      }
+
+      /* a stage scrolled away, or one waiting to be asked to move, holds its
+         animations where they stand */
+      .stage-wrap.is-resting,
+      .stage-wrap.is-resting :deep(*) {
+        animation-play-state: paused !important;
       }
 
       /* THE WELL'S ASPECT IS FOR A WELL. In theater the frame is as tall as

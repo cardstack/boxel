@@ -1052,14 +1052,30 @@ Different procedure, because this one is not per-render and not affinity-gated.
 3. **Wait.** Each task captures itself once, on an idle tick after its heap crosses the threshold, and logs `heap snapshot starting …`, `heap snapshot written bytes=… writeMs=…`, `heap snapshot uploaded …`. Nothing else is needed — if it never fires, check `heapUsedMB` on the dashboard against the threshold.
 4. **Pull it** from the artifacts bucket like any other artifact, and read it per _Reading each artifact_.
 
-To choose the moment instead — a particular heap size, or a task that has already spent its one automatic capture — `POST /heap-snapshot` on the task. The service has no load balancer, so reach it by SSM port-forward; the log line carries everything the target needs (`ecs:<cluster>_<taskId>_<container_id>`, where `container_id` is both the runtime id and prefixed by the task id):
+To choose the moment instead — a particular heap size, or a task that has already spent its one automatic capture — `POST /heap-snapshot` on the task. The service has no load balancer, so reach it by SSM port-forward; the log line carries everything the target needs (`ecs:<cluster>_<taskId>_<container_id>`, where `container_id` is both the runtime id and prefixed by the task id). The forward's `host` must be the task's private IP, not `localhost`: the SSM agent refuses to forward to loopback addresses, and the prerender server listens on all interfaces. Check the port is free first and tear the tunnel down with both kills, as the `aws-access` skill's "A squatted port is a wrong-environment bug" and "Tearing the tunnel down actually requires two kills" explain:
 
 ```
-aws --profile <profile> ssm start-session \
-  --target "ecs:<cluster>_<taskId>_<container_id>" \
-  --document-name AWS-StartPortForwardingSessionToRemoteHost \
-  --parameters '{"portNumber":["4221"],"localPortNumber":["54221"],"host":["localhost"]}' &
-curl -X POST localhost:54221/heap-snapshot
+TASK_IP=$(aws --profile <profile> ecs describe-tasks --cluster <cluster> --tasks <taskId> \
+  --query 'tasks[0].containers[?name==`boxel-prerender-server`] | [0].networkInterfaces[0].privateIpv4Address' \
+  --output text)
+if lsof -nP -iTCP:54221 -sTCP:LISTEN >/dev/null 2>&1; then
+  echo "port 54221 is already bound — pick another, and find out what is holding it"
+else
+  aws --profile <profile> ssm start-session \
+    --target "ecs:<cluster>_<taskId>_<container_id>" \
+    --document-name AWS-StartPortForwardingSessionToRemoteHost \
+    --parameters "{\"portNumber\":[\"4221\"],\"localPortNumber\":[\"54221\"],\"host\":[\"$TASK_IP\"]}" &
+  TUNNEL_PID=$!
+  for _ in $(seq 30); do
+    lsof -nP -iTCP:54221 -sTCP:LISTEN >/dev/null 2>&1 && break
+    sleep 1
+  done
+  curl -sS -X POST localhost:54221/heap-snapshot
+  kill $TUNNEL_PID
+  pkill -f "session-manager-plugin.*localPortNumber.*54221" 2>/dev/null
+  unset TUNNEL_PID
+  lsof -nP -iTCP:54221 -sTCP:LISTEN && echo "TUNNEL LEAKED — kill the pid above"
+fi
 ```
 
 **What it costs.** The write stops the event loop: measured at 6.9–15.9 s for heaps of 1559–1588 MB on a staging task, producing 198–512 MB files. Cost follows object count rather than bytes, so a heap of the same size with many more, smaller objects is far slower. Two consequences worth knowing before raising the threshold: a pause beyond the manager's **30 s heartbeat** gets the instance swept as stale until it re-registers, and one file can spend a large share of the 5 GiB `PRERENDER_PROFILE_MAX_SESSION_BYTES` budget shared with the profiler artifacts. Capture at 1–2 GB; the retention reads the same and every cost is smaller.
@@ -2534,165 +2550,136 @@ Sometimes the written diagnostics aren't enough — you want to replay the exact
 
 There are two paths, depending on what you have access to:
 
-- **Path A — direct token mint via `mise run claude-prerender-token`** (preferred for staging/prod when you have the realm secret seed). Skip the Matrix login and reindex steps; the script mints the same shape of token the indexer mints, then you drive Chrome MCP straight at the `/render` route. Works for any card on a server you have the seed for, without changing server config or triggering a reindex.
+- **Path A — a diagnostic session from `boxel realm-server render-token`** (the common case, on staging, production or local). The operator asks the realm server for a short-lived, read-only session that reads the card as the indexer does, then you drive Chrome MCP straight at the `/render` route. Works for any card, without changing server config or triggering a reindex.
 - **Path B — the `prerenderer-reproduce` log channel** (local dev, or when you need the indexer's exact historical session). Turn on a debug log level on the realm server, trigger a reindex, and copy the URL + session value verbatim from the log line.
 
 Path A is faster, doesn't require server config changes, and works against staging/prod without touching the running fleet. Path B captures the indexer's exact multi-realm session at a point in time — the right choice when you suspect cross-realm fetch auth or want to replay a render that already happened. The "Visiting a render page" / Chrome MCP / `__boxelRenderDiagnostics()` recipe below is shared between the two paths.
 
-### Path A — direct token mint (the common case)
+### Path A — a diagnostic session (the common case)
 
-The user runs `mise run claude-prerender-token <realm-url> [<seed>]`. The script (`packages/realm-server/scripts/claude-prerender-token.ts`, executed via `node` from inside `packages/realm-server`) mints a `boxel-session` JWT the same way the indexer does — same claims, same HS256/1d, same `JSON.stringify({ <realmUrl>: <jwt> })` map shape that lands in `localStorage['boxel-session']`. Faithful CLI port of `buildCreatePrerenderAuth` (`packages/realm-server/prerender/auth.ts`).
+The operator runs, in their own shell:
 
-**The CLI is intentionally minimal: just `<realm-url>` and an optional `<seed>` positional.** If `<seed>` is omitted the script reads from `process.stdin` — interactively that's a masked TTY paste prompt (each char echoes as `*`, paste-friendly, no shell history); piped/redirected stdin is read in full and trimmed. Optional flags: `--user <matrix-id>` (required only for system realms), `--permissions <list>`, `--output <path>`, `--no-output`. That's it. The token is realm-scoped, not card-scoped — Claude builds the `/render` URL itself for whichever card it's investigating.
+```sh
+export BOXEL_REALM_SECRET_SEED=…   # this environment's seed; or let the command prompt for it
+boxel realm-server render-token <card-url> --note '<who is asking, and why>'
+```
+
+The command signs an **operator token** for `diagnostic-render` with the seed on the operator's machine — the seed itself is never sent — and posts the card to the realm server's `/_diagnostic-render-token` endpoint. The server issues one **diagnostic session** per realm the card's render reads and answers with the `boxel-session` map the render tab reads, plus the host app the render route is served from. The command builds the render URL and writes both to `/tmp/boxel-diagnostic-render.json` (mode 0600). It prints the render URL, who the session reads as, the realms it covers and its expiry. It never prints the session unless `--json` is given.
+
+Options:
+
+- `--note <text>` (required, at most 300 characters): who is asking and why. The server logs it with the mint and with every request the session is used on. A name in it is recorded as given; nothing verifies it.
+- `--realm-server <url>`: the realm server that holds the card. It defaults to the card URL's origin, which is right for a card on the environment's own realm server (`https://realms-staging.stack.cards`, `https://localhost:4201`). Pass it for a card on a published realm's domain. Its origin must be the one the server knows itself by (its `--serverURL`), because the operator token is signed for that origin alone.
+- `--realm-only`: cover only the card's own realm. Without it, the mint covers every realm the realm owner may read — the same set the indexer's render carries — so private cross-realm `linksTo` and query fields resolve as they do in indexing.
+- `--format isolated|embedded|fitted|atom` (default `isolated`) and `--clear-cache` (drop the loader cache before the render) shape the render URL.
+- `--output <path>` / `--no-output`, and `--json` to print everything the file holds, the session included.
+
+`boxel realm-server` is hidden from the CLI's general help; `boxel realm-server render-token --help` shows the options. When asked for "the steps to make a render token", give the operator the two commands above, filled in with the card URL, and ask them to tell you once the file is written.
 
 #### Hard rule: Claude never sees the seed
 
 - Do NOT ask the user for the seed.
-- Do NOT propose pasting the seed into the conversation, into a file Claude can read, or via any other channel.
+- Do NOT propose pasting the seed into the conversation, into a file Claude can read, or via any other channel. Do NOT run `render-token` yourself with a seed in the environment, and do NOT suggest the `!` prefix for it — that runs in this session.
 - Do NOT call `aws ssm get-parameter` against `REALM_SECRET_SEED` — Claude's `boxel-claude-readonly` role rejects it anyway, but don't try.
 
-The user fetches the seed however they like (SSM, dev-env, prompt) and runs the script in their own shell. Claude consumes only the artifact below.
+The operator fetches the seed however they like (SSM, dev-env, prompt) and runs the command in their own shell. Claude consumes only the file below.
 
-Why: the seed mints arbitrary user-impersonating tokens with arbitrary permissions. A 1-day JWT for one user is a bounded leak; the seed is unbounded.
+Why: the seed signs anything — any user, any permissions, any realm, and the operator endpoints. A diagnostic session is read-only, bound to the card's realm or to the realms its owner may read, and gone in fifteen minutes; the seed is unbounded.
 
-#### The artifact Claude reads
+#### The file Claude reads
 
-`/tmp/claude-prerender.json` (chmod 600), written by the script:
+`/tmp/boxel-diagnostic-render.json` (chmod 600):
 
 ```json
 {
+  "id": "<uuid shared by every session of this mint>",
+  "card": "https://realms-staging.stack.cards/example-user/example-realm/ExampleCard/1",
+  "realm": "https://realms-staging.stack.cards/example-user/example-realm/",
+  "user": "@example-user:stack.cards",
+  "scope": "owner-read-set", // or "realm" with --realm-only
+  "realms": [
+    "https://realms-staging.stack.cards/example-user/example-realm/",
+    "…"
+  ],
+  "hostURL": "https://boxel-host-staging.stack.cards/",
   "mintedAt": "<iso>",
-  "expiresAt": "<iso>", // 1d from mintedAt
-  "user": "@ctse:stack.cards",
-  "realmUrl": "https://realms-staging.stack.cards/ctse/concrete-mockingbird/",
-  "jwt": "eyJ...",
-  "session": "{\"<realmUrl>\":\"eyJ...\"}"
+  "expiresAt": "<iso>", // 15 minutes after mintedAt
+  "session": "{\"<realm>\":\"eyJ…\", …}",
+  "renderURL": "https://boxel-host-staging.stack.cards/render/…/html/isolated/0"
 }
 ```
 
-The host URL isn't in the artifact — Claude derives it from the realm URL when building the `/render` URL (recipe below). Matrix isn't involved in this flow at all; the realm-server's `checkPermission` just verifies the HS256 signature against the seed and looks up the user's row in `realm_user_permissions`.
+Before using it, check:
 
-Before using it, Claude must check:
+- `expiresAt` is in the future. Fifteen minutes is short; a long profiling session needs a fresh mint, which is one more run of the command.
+- `card` is the card you're rendering — a different card means a different `renderURL`. Another card in one of the covered `realms` can reuse the session with a render URL you build yourself (below).
+- `mintedAt` is from this investigation, not a leftover file.
 
-- `expiresAt` is in the future
-- `mintedAt` is recent enough that this is for the _current_ investigation (not a leftover artifact)
-- `realmUrl` matches the realm of the card you're rendering — different realm = ask for re-mint
+If a check fails, ask the operator to re-run the command. Don't reuse stale files.
 
-If any check fails, ask the user to re-run. Do not reuse stale artifacts.
+#### The `/render` URL
 
-#### Building the `/render` URL (Claude's responsibility)
-
-Once Claude has the artifact, it constructs the URL the prerender uses, mirroring `packages/realm-server/prerender/render-runner.ts:832`:
+`renderURL` in the file is ready to use. To render another card under the same session, or with other options, build it the way the prerender does (`packages/realm-server/prerender/render-runner.ts`, and `buildRenderURL` in `packages/boxel-cli/src/commands/realm-server/render-token.ts`):
 
 ```
-<hostUrl>/render/<encodeURIComponent(cardUrl)>/<nonce>/<encodeURIComponent(JSON.stringify(options))>/html/<format>/0
+<hostURL>render/<encodeURIComponent(cardUrl + '.json')>/<nonce>/<encodeURIComponent(JSON.stringify(options))>/html/<format>/0
 ```
 
-Slot-by-slot:
+- **`<hostURL>`** — from the file. It is the realm server's `--distURL`, the host app the prerenderer renders against (`https://boxel-host-staging.stack.cards/` on staging, `https://localhost:4200/` locally).
+- **card URL** — the card's file URL **including `.json`** (the indexer renders the `.json` file, not the bare card id). Omitting `.json` lands you on the host's login page because the route doesn't match.
+- **`<nonce>`** — any string; `1` is fine.
+- **options** — the render-route options (`packages/runtime-common/render-route-options.ts`): `{"cardRender":true}` for the indexer's card-render pass, `{"cardRender":true,"clearCache":true}` to drop the loader cache first, `{}` for no special pass.
+- **`<format>`** — `isolated` (matches the indexer), `embedded`, `fitted` or `atom`.
+- **`/0`** — recursion depth; always `0` for a card render.
 
-- **`<hostUrl>`** — derive from the artifact's `realmUrl` host. The boxel-host-app URL (NOT matrix — matrix isn't involved in this flow). Recognised patterns, mirroring the deployed-env Caddy config + local dev / env-mode Traefik labels in `mise-tasks/lib/env-vars.sh`:
-
-  | Realm host                              | Host-app URL                                            |
-  | --------------------------------------- | ------------------------------------------------------- |
-  | `realms-staging.stack.cards`            | `https://boxel-host-staging.stack.cards`                |
-  | `realms.stack.cards`                    | `https://boxel-host.stack.cards`                        |
-  | `realm-server.<slug>.localhost`         | `http://host.<slug>.localhost` (BOXEL_ENVIRONMENT mode) |
-  | `localhost` or `*.localhost` (standard) | `https://localhost:4200`                                |
-
-  If the realm host doesn't match any of these patterns, ask the user — don't guess. Constrain `realms-` matching to `*.stack.cards` so any future deployment using a `realms-` prefix on a different domain isn't silently mapped to a wrong (and possibly non-existent) host.
-
-- **`<encodeURIComponent(cardUrl)>`** — the card's full file URL **including `.json`** (the indexer renders against the .json file, not the bare card-id). `https://realms-staging.stack.cards/ctse/concrete-mockingbird/Environment/demo.json` → `https%3A%2F%2Frealms-staging.stack.cards%2Fctse%2Fconcrete-mockingbird%2FEnvironment%2Fdemo.json`. Omitting `.json` lands you on the host's login page because the route doesn't match.
-- **`<nonce>`** — any string. The indexer uses a monotonic counter; for manual replays `1` is fine.
-- **`<encodeURIComponent(JSON.stringify(options))>`** — the render-route options object, JSON-encoded then URL-encoded. The shape lives in `packages/runtime-common/render-route-options.ts`. Common values:
-  - `{"cardRender":true}` → `%7B%22cardRender%22%3Atrue%7D` (the indexer's card-render pass — what you want for a card desync repro)
-  - `{}` → `%7B%7D` (no special pass)
-  - `{"cardRender":true,"clearCache":true}` (drops the loader cache before the render — helpful when stale modules might be the cause)
-- **`<format>`** — `isolated` (matches the indexer for card-render), `embedded`, `fitted`, or `atom`. Default to `isolated`.
-- **`/0`** — recursion-depth segment. Always `0` for card render.
-
-All six dynamic segments must be present and correctly encoded. If any is missing or malformed, the route doesn't match and the host falls through to its login page — easy to diagnose because you'll see a login form instead of a prerender container.
-
-Worked example for the demo card:
-
-```
-https://boxel-host-staging.stack.cards/render/https%3A%2F%2Frealms-staging.stack.cards%2Fctse%2Fconcrete-mockingbird%2FEnvironment%2Fdemo.json/1/%7B%22cardRender%22%3Atrue%7D/html/isolated/0
-```
+All six dynamic segments must be present and correctly encoded, or the route doesn't match and the host falls through to its login page.
 
 #### Chrome MCP recipe (Path A specific — order matters)
 
 `localStorage['boxel-session']` must be set BEFORE navigating to `/render`. The render route reads it on initial load; if the session isn't there yet, the auth resolves as anonymous and the route 401s before any of the diagnostic surface is reachable.
 
 ```
-1. mcp__chrome-devtools__new_page → <hostUrl>/   (lands on the login page or homepage —
-                                                  doesn't matter, we just need a same-origin
-                                                  document to set localStorage on)
-2. mcp__chrome-devtools__evaluate_script → localStorage.setItem('boxel-session', <session-from-artifact>)
-                                           where <session-from-artifact> is the artifact's
-                                           `session` field verbatim — a JSON-stringified map,
-                                           NOT a bare JWT.
-3. mcp__chrome-devtools__navigate_page → <render-url built above>
+1. mcp__chrome-devtools__new_page → <hostURL>   (any same-origin document to set localStorage on)
+2. mcp__chrome-devtools__evaluate_script → localStorage.setItem('boxel-session', <session from the file>)
+                                           — the file's `session` field verbatim: a JSON-stringified
+                                           map, NOT a bare JWT.
+3. mcp__chrome-devtools__navigate_page → <renderURL>
 4. mcp__chrome-devtools__evaluate_script → document.querySelector('[data-prerender]')?.dataset.prerenderStatus
                                            polls 'loading' → 'ready' / 'error' / 'unusable'.
 5. Once stable, evaluate __boxelRenderDiagnostics?.() to grab the live diagnostic blob,
    and inspect the console / DOM for the unminified throw.
 ```
 
-If step 4 returns `null` (no `[data-prerender]` element at all) and the body shows a JSON `instance-error`, the request reached the host but failed auth — usually one of:
+If step 4 returns `null` (no `[data-prerender]` element) and the body shows a JSON `instance-error`, the request reached the host but failed auth — usually one of:
 
-- The `permissions` array in the JWT doesn't match the user's DB row exactly (see "How auth actually clears" below — re-mint with `--permissions` matching the DB).
+- The session expired (`expiresAt`); re-mint.
+- The card is in a realm the mint didn't cover — `--realm-only` was given, or the realm isn't one the owner reads. The file's `realms` lists what the mint covered.
 - The card URL in the render URL is missing `.json`.
-- localStorage wasn't set before navigation (set it, then reload — don't expect the host to pick it up mid-request).
+- localStorage wasn't set before navigation (set it, then reload).
 
-#### How auth actually clears the realm-server
+#### What the session can and can't do
 
-The realm-server's `checkPermission` (`packages/runtime-common/realm.ts:2249`) does two things in order:
+Each session reads as the realm owner with realm authority, exactly as the indexer's render does, so searches find what the realm ACL grants the owner and policy doesn't scope them. Beyond that it is narrow (`packages/runtime-common/diagnostic-session.ts`; the `realm-auth` skill has the verification detail):
 
-1. **Verify the JWT signature** against `REALM_SECRET_SEED`. Anyone with the seed can mint a valid signature — that's the diagnostic gate.
-2. **Look up the token's `user` claim in the realm's permission table** via `RealmPermissionChecker.for(username)` (`packages/runtime-common/realm-permission-checker.ts`).
-3. **Compare the JWT's `permissions` array against the DB's permissions array, sorted, byte-for-byte equal** (`packages/runtime-common/realm.ts:2306-2316`). This is the gotcha. The check is `JSON.stringify(token.permissions.sort()) === JSON.stringify(userPermissions.sort())`. So a JWT claiming `['read','realm-owner']` for a user whose DB row is `read=t,write=t,realm_owner=t` (which translates to `['read','write','realm-owner']`) is rejected with `PermissionMismatch` (401). Sub-set isn't enough; the arrays must be equal.
+- **Read-only.** A realm refuses any request needing write or realm-owner (403), including on a world-writable realm, where a write presented with an expired diagnostic session is refused too.
+- **Captures are drawn as no one.** A `_capture/` request with the session is served what an anonymous reader would be, and `_sign-capture-urls` hands its URLs back unsigned, so nothing outlives the session carrying the owner's identity.
+- **Only its realms.** A session minted with `--realm-only` is accepted by the card's realm alone, and by the federated read endpoints (`_federated-search`, `_federated-info`, `_federated-types`, `_federated-index-counts`) only for a request naming that realm alone. A default session is accepted wherever the owner may read at the time it is used. The file's `scope` says which.
+- **Nowhere else.** It is signed under its own key, so every other realm-server route (`_user`, `_user-keys`, `_request-forward`, `_realm-auth`, the operator endpoints, …) refuses it on its signature.
+- **Fifteen minutes**, with the lifetime checked by every verifier against its own clock.
 
-Practical implications:
+#### Who rendered what: the `diagnostic-render` log channel
 
-- The `user` claim has to be a real Matrix ID — a made-up user passes signature verification but fails the lookup → 401. The script's default derivation (`realms-staging.stack.cards/ctse/realm/` → `@ctse:stack.cards`) hits the realm owner's row.
-- The `permissions` claim has to mirror the DB exactly. The script defaults to `['read','write','realm-owner']` because that's the standard realm-owner shape, but if the user has a non-default permission set on this realm (read-only collaborator, write-without-owner, etc.) you'll hit `PermissionMismatch`. The fix is `--permissions <list>` matching the DB row.
-- For system realms (`/catalog/`, `/experiments/`), the script errors and asks for `--user @realm_server:<matrix-domain>` (the realm-server bot — `REALM_SERVER_MATRIX_USERNAME=realm_server` in `packages/realm-server/scripts/start-staging.sh`/`start-production.sh`).
+The realm server logs every mint and every request a session is used on, on the `diagnostic-render` channel at `info`:
 
-When the `instance-error` body says `User permissions in the JWT payload do not match the server's permissions`, it's specifically this check failing. Query the DB to see what the row actually is:
-
-```sql
-SELECT username, read, write, realm_owner
-FROM realm_user_permissions
-WHERE realm_url = '<realm-url>' AND username = '<user-from-artifact>';
+```
+diagnostic session <id> minted for card <card> as <owner>, reading <realms> until <iso>; operator note: "<note>"; from <client address>, operator token signed <iso>
+diagnostic session <id> read GET <url> as <owner>; minted for card <card>, operator note: "<note>"
+diagnostic session <id> read POST /_federated-search for realms <realms> as <owner>; …
 ```
 
-Then re-mint with `--permissions read,write,realm-owner` (or whatever the columns are). Booleans translate one-to-one to array entries; column `realm_owner` becomes `realm-owner` (note the dash).
+To answer "was this card rendered for diagnosis, and by whom?", search CloudWatch for `diagnostic session` on the realm server's log group and join on the id. The operator token carries no identity, so the note is the account of who asked, recorded as given; the client address and the token's signing time are what the server observed itself.
 
-For local dev: matrix `server_name` is `localhost` (`packages/matrix/support/synapse/dev/homeserver.yaml:1`), so user IDs are `@<username>:localhost`. Two local-dev modes are supported:
-
-- **Standard mode** (no `BOXEL_ENVIRONMENT` set) — realm at `https://localhost:4201/...`, host-app at `https://localhost:4200`.
-- **Environment mode** (`BOXEL_ENVIRONMENT=<name>` set) — realm at `http://realm-server.<slug>.localhost/...`, host-app at `http://host.<slug>.localhost` (Traefik routing per `mise-tasks/lib/env-vars.sh`).
-
-Both modes share `@<user>:localhost` for the matrix-domain part of user IDs. The host-app URL Claude needs to build the `/render` URL is derived from the realm URL per the table in the URL recipe section above. If you've configured a non-default matrix `server_name`, pass `--user` to the script explicitly.
-
-**Public realms (`'*': ['read']` in the permissions table) don't need a JWT.** Published realms always get this set (`packages/realm-server/handlers/handle-publish-realm.ts:326`). If you're rendering a published card, no token is needed — though minting still works, the request just doesn't depend on it.
-
-#### Cross-realm linksTo (when the simple flow isn't enough)
-
-The default session map has only the target realm. If the card pulls private cross-realm `linksTo`, the host's loader will 401 those fetches.
-
-For now this isn't auto-handled; if you hit a cross-realm 401, the user can extend the session map themselves by minting tokens for the additional realms (same secret signs them all) and merging the maps. The DB has the answer for which realms a user owns — query `realm_user_permissions` excluding published realms:
-
-```sql
-SELECT rup.realm_url
-FROM realm_user_permissions rup
-LEFT JOIN published_realms pr ON pr.published_realm_url = rup.realm_url
-WHERE rup.username = '@ctse:stack.cards'
-  AND rup.read = TRUE
-  AND pr.published_realm_url IS NULL
-ORDER BY rup.realm_url;
-```
-
-This matches the indexer's `fetchUserPermissions` (`packages/runtime-common/db-queries/realm-permission-queries.ts:127`) → `buildCreatePrerenderAuth` chain. Auto-discovery is a follow-up — for now, ask the user if cross-realm support is needed for a specific repro.
+**Public realms (`'*': ['read']`) don't need a session.** Published realms always have this. Rendering a published card works without one. A covering session is still accepted there and logged, and the read is made as the owner it names, as on any other realm.
 
 #### When this is the right path
 
