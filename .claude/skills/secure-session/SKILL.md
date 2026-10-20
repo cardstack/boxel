@@ -150,7 +150,10 @@ Matrix server's Google client (`lib/google-sign-in.ts`):
      `alice1`, `alice2`… past taken ones), Google's `name` as its display
      name, the email as a third-party id, and the Google link. An empty `PUT`
      makes the account, and only its `201` means this sign-in owns it, so a
-     taken localpart is never changed. A sign-in that fails after making the
+     taken localpart is never changed. A localpart is taken when an account
+     has it ignoring case, as Synapse's registration compares it; the admin
+     lookup matches only exactly, so a `M_USER_IN_USE` refusal of the `PUT`
+     counts the localpart as taken and the next one is tried. A sign-in that fails after making the
      account unlinks and deactivates it, so the next one resolves again.
 
    The rules live in `lib/google-account.ts`; the two implementations share

@@ -586,7 +586,8 @@ async function userLinkedToGoogle(
 }
 
 // How many times a sign-in resolves a Google identity again when another
-// sign-in takes the account or localpart it chose first.
+// sign-in takes the account or localpart it chose first, or the Matrix server
+// refuses the localpart as in use.
 const MAX_RESOLVE_ATTEMPTS = 5;
 
 // Links an unlinked Google identity to the one account holding its verified
@@ -597,6 +598,13 @@ async function linkOrCreateForGoogle(
   identity: GoogleIdentity,
 ): Promise<string> {
   let serverName = await matrixServerName(deps);
+  // Localparts this sign-in failed to make an account with. Synapse's
+  // registration refuses a localpart that any account has ignoring case, as
+  // the mapping provider's `check_user_exists` does, while the admin lookup
+  // below matches only exactly. So an account that differs only in case
+  // (`@Alice` for `alice`) shows up only as that refusal, and counting it as
+  // taken moves on to the next candidate, as the mapping provider does.
+  let refused = new Set<string>();
   let lookups: GoogleAccountLookups = {
     // The Matrix server stores an email address lowercased and gives each
     // address to one account, so the admin lookup by the lowercased address
@@ -616,6 +624,9 @@ async function linkOrCreateForGoogle(
       return users;
     },
     localpartTaken: async (localpart) => {
+      if (refused.has(localpart)) {
+        return true;
+      }
       let { status } = await adminRequest(
         deps,
         userPath(`@${localpart}:${serverName}`),
@@ -639,6 +650,9 @@ async function linkOrCreateForGoogle(
           });
     if (user) {
       return user;
+    }
+    if (resolved.kind === 'new') {
+      refused.add(resolved.localpart);
     }
   }
   log.error(
@@ -686,7 +700,8 @@ async function linkGoogle(
 
 // Makes the account a new Google user gets: the Google identity's link, its
 // display name, and its email address as a third-party id. Undefined when the
-// localpart was taken after it was found free, so the caller resolves again.
+// localpart is taken after all: an account has it, exactly or ignoring case,
+// or took it after it was found free. The caller then resolves again past it.
 async function createGoogleAccount(
   deps: SecureSessionDeps,
   config: GoogleSignInConfig,

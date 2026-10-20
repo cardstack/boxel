@@ -878,6 +878,59 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(await accountRealms(user), realms, 'nor a second realm');
     });
 
+    test('a new Google account suffixes past an account whose localpart differs only in case', async function (assert) {
+      // Synapse's API can't make a localpart with capitals, which only older
+      // accounts have, so the Matrix server answers the new account's create
+      // as it does when one of those (`@Base`) exists: the admin lookup finds
+      // no `@base`, and registration refuses it as in use.
+      let base = `secure-${randomBytes(6).toString('hex')}`;
+      let sub = `google-${randomUUID()}`;
+      let refusedPath = `/_synapse/admin/v2/users/${encodeURIComponent(
+        `@${base}:localhost`,
+      )}`;
+      let creates = 0;
+      let realFetch = globalThis.fetch;
+      globalThis.fetch = async (input, init) => {
+        let url = new URL(input instanceof Request ? input.url : input);
+        if (url.pathname === refusedPath && init?.method === 'PUT') {
+          creates++;
+          return new Response(
+            JSON.stringify({
+              errcode: 'M_USER_IN_USE',
+              error: 'User ID already taken.',
+            }),
+            { status: 400, headers: { 'Content-Type': 'application/json' } },
+          );
+        }
+        return await realFetch(input, init);
+      };
+      let response;
+      try {
+        response = await googleSignIn(
+          google.issue(sub, {
+            claims: {
+              email: `${base}@example.com`,
+              email_verified: true,
+              name: 'Case Googler',
+            },
+          }),
+        );
+      } finally {
+        globalThis.fetch = realFetch;
+      }
+      assert.strictEqual(response.status, 201, response.text);
+      assert.strictEqual(
+        response.body.data.attributes.user,
+        `@${base}1:localhost`,
+        'the next localpart',
+      );
+      assert.strictEqual(creates, 1, 'the refused localpart is tried once');
+      assert.deepEqual(
+        sortedExternalIds(await account(`@${base}1:localhost`)),
+        [{ auth_provider: 'oidc-google', external_id: sub }],
+      );
+    });
+
     test('a first sign-in that stopped part way sets up again, without a second realm', async function (assert) {
       let base = `secure-${randomBytes(6).toString('hex')}`;
       let sub = `google-${randomUUID()}`;
