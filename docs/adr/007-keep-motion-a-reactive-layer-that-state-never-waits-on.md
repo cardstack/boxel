@@ -5,12 +5,17 @@ scope:
   - packages/host/app/**/*motion*
   - packages/host/app/components/operator-mode/**
   - packages/host/app/components/search-sheet/**
-  - packages/host/app/services/**
+  - packages/host/app/components/pill-menu/**
+  - packages/host/app/services/operator-mode-state-service.ts
+  - packages/host/app/services/search-sheet-state.ts
+  - packages/host/app/services/playground-panel-service.ts
   - packages/host/app/lib/stack-item.ts
   - packages/base/card-api.gts
   - packages/base/field-component.gts
+  - packages/base/contains-many-component.gts
   - packages/base/links-to-*.gts
   - packages/pretui/components/**
+  - packages/pretui/internal/structure-morph.gts
   - packages/glimmer-motion/src/**
   - packages/choreo/src/**
 ---
@@ -49,8 +54,9 @@ flag that holds back a card's content until a flight ends.
 A failed, cancelled or interrupted animation MUST NOT throw into a state
 change, roll it back, or drop it.
 
-With motion off (reduced motion, tests, an unsupported browser), the app MUST
-reach the same state and the same DOM that it reaches with motion on.
+Once motion settles, the app MUST be in the same state, with the same DOM, as
+it is with motion off (in tests or an unsupported browser). Reduced motion
+(§1.5) changes how a state change animates, not where it ends.
 
 ### 1.2. One engine reacts to state changes
 
@@ -58,8 +64,8 @@ A motion engine MUST produce host animations by observing rendered changes:
 what was inserted, removed and kept, and where each element was before and
 after.
 
-Application code, services and state code MUST NOT call imperative motion
-methods to start, sequence or coordinate an animation.
+Host application code, services and state code MUST NOT call imperative
+motion methods to start, sequence or coordinate an animation.
 
 A component MUST NOT change its behavior based on whether an animation is
 running. It MUST NOT learn this from a motion service or from inspecting the
@@ -81,11 +87,12 @@ render and field components) and the semantically meaningful Pret UI
 Screen-level components SHOULD declare how possible changes should move: which
 change gets which motion, in what order, and with what timing.
 
-A card MUST get the platform's motion without its author writing motion code.
-The boundary components that render the card carry that motion.
+A card's platform motion MUST come from the boundary components that render
+the card. It MUST NOT require motion code in the card.
 
-A card MAY animate inside its own template with glimmer-motion. That motion
-MUST stay inside the card's own DOM and MUST NOT read host motion state.
+A card MAY animate inside its own template with any glimmer-motion API,
+including its imperative ones. That motion MUST stay inside the card's own DOM
+and MUST NOT read host motion state.
 
 ### 1.4. Native animation and libraries
 
@@ -171,8 +178,9 @@ off the main thread where it can, which keeps motion smooth while cards
 render.
 
 The quality rules in §1.5 follow widely used guidance. WCAG 2.2 covers reduced
-motion (2.3.3) and pausing automatic motion (2.2.2). Material Design 3 and
-IBM Carbon give the duration and easing ranges. Interruptibility, live input
+motion (2.3.3) and pausing automatic motion (2.2.2). The duration ranges and
+easings are Boxel's own choice, informed by Material Design 3 and IBM Carbon.
+They are stated here so that every surface draws on one scale. Interruptibility, live input
 and immediate focus keep a productivity app fast, because people repeat its
 actions many times a day.
 
@@ -201,7 +209,19 @@ A View Transition needs the old frame captured before the DOM changes. So an
 engine that uses one has to hook the render pass, not the state change. Where
 it cannot, it uses live-DOM motion.
 
-## 5. Sources
+## 5. Remediation
+
+- `packages/host/app/components/operator-mode/stack.gts` breaks §1.1: it
+  awaits the closing animations before it closes the cards.
+- `packages/host/app/components/operator-mode/stack-item.gts` breaks §1.2: it
+  runs its own animations, tracks which one is playing, and changes its
+  behavior on that.
+- `packages/host/app/components/pill-menu/index.gts` breaks §1.1: the menu
+  collapses only on `animationend`.
+- `packages/pretui/components/toaster.gts` breaks §1.1: a toast is removed on
+  `animationend`, so with motion off it is never removed by its timer.
+
+## 6. Sources
 
 - Edward Faulkner, 2026-10-02: the reactive-layer architecture, the
   two-level declarations, and native animation APIs.
