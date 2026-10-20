@@ -1,3 +1,4 @@
+import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import { fn } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { action } from '@ember/object';
@@ -43,12 +44,14 @@ const TINT_COUNT = 5;
 
 // Only these fields of a listing are read, so the search returns them from
 // the index and no card code loads to draw the shelf.
-const LISTING_FIELDS = ['item.name', 'item.cardThumbnailURL'];
+const LISTING_FIELDS = ['item.name', 'item.summary', 'item.cardThumbnailURL'];
 
 interface ShelfItem {
   id: string;
   kind: string;
   name: string;
+  copy: string;
+  action: string;
   art: string | undefined;
   artCss: string | undefined;
 }
@@ -211,7 +214,7 @@ export default class CatalogShowcase extends Component {
                     data-test-catalog-story-lead={{if story.isLead story.id}}
                   >
                     {{! The whole story opens its listing for a pointer; the
-                        Open button below is the keyboard's way in. }}
+                        buttons below are the keyboard's way in. }}
                     <button
                       type='button'
                       class='story-hit'
@@ -219,28 +222,37 @@ export default class CatalogShowcase extends Component {
                       aria-hidden='true'
                       {{on 'click' (fn this.openListing story.id)}}
                     ></button>
-                    <span class='eyebrow'>{{story.eyebrow}}</span>
-                    <h3 class='headline'>{{story.name}}</h3>
-                    <StoryArt
-                      @listingId={{story.id}}
-                      @artCss={{story.artCss}}
-                    />
-                    <span class='foot'>
-                      <span
-                        class='app-icon'
-                        style={{cssVar story-art=story.artCss}}
-                      ></span>
-                      <span class='app-words'>
-                        <b>{{story.name}}</b>
-                        <span>{{story.kind}} · Boxel catalog</span>
+                    <ExampleOf @listingId={{story.id}} as |exampleId|>
+                      <span class='eyebrow'>{{story.eyebrow}}</span>
+                      <h3 class='headline'>{{story.name}}</h3>
+                      <StoryArt
+                        @exampleId={{exampleId}}
+                        @artCss={{story.artCss}}
+                      />
+                      <p class='copy'>{{story.copy}}</p>
+                      <span class='foot'>
+                        <span
+                          class='app-icon'
+                          style={{cssVar story-art=story.artCss}}
+                        ></span>
+                        {{#if exampleId}}
+                          <button
+                            type='button'
+                            class='act secondary raised'
+                            aria-label='Try {{story.name}}'
+                            {{on 'click' (fn this.openListing exampleId)}}
+                            data-test-catalog-story-try={{story.id}}
+                          >Try it</button>
+                        {{/if}}
+                        <button
+                          type='button'
+                          class='act raised'
+                          aria-label='{{story.action}} {{story.name}}'
+                          {{on 'click' (fn this.openListing story.id)}}
+                          data-test-catalog-story-action={{story.id}}
+                        >{{story.action}}</button>
                       </span>
-                      <button
-                        type='button'
-                        class='act raised'
-                        aria-label='Open {{story.name}}'
-                        {{on 'click' (fn this.openListing story.id)}}
-                      >Open</button>
-                    </span>
+                    </ExampleOf>
                   </article>
                 {{/each}}
               </div>
@@ -380,6 +392,16 @@ export default class CatalogShowcase extends Component {
         white-space: nowrap;
         letter-spacing: -0.015em;
       }
+      .copy {
+        margin: 0;
+        display: -webkit-box;
+        -webkit-box-orient: vertical;
+        -webkit-line-clamp: 3;
+        overflow: hidden;
+        font-size: var(--boxel-font-size-sm);
+        line-height: 1.45;
+        color: color-mix(in oklch, var(--story-ink) 70%, transparent);
+      }
       .foot {
         display: flex;
         align-items: center;
@@ -389,8 +411,10 @@ export default class CatalogShowcase extends Component {
         border-top: 1px solid
           color-mix(in oklch, var(--story-ink) 12%, transparent);
       }
+      /* The icon holds the left; the actions gather at the right. */
       .app-icon {
         flex: none;
+        margin-right: auto;
         width: 2rem;
         height: 2rem;
         border-radius: 0.5rem;
@@ -400,21 +424,6 @@ export default class CatalogShowcase extends Component {
         background-position: top left;
         box-shadow: 0 0 0 1px
           color-mix(in oklch, var(--story-ink) 12%, transparent);
-      }
-      .app-words {
-        flex: 1;
-        min-width: 0;
-        display: flex;
-        flex-direction: column;
-        font-size: var(--boxel-font-size-sm);
-      }
-      .app-words > * {
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .app-words span {
-        color: color-mix(in oklch, var(--story-ink) 66%, transparent);
       }
       .act {
         flex: none;
@@ -427,6 +436,13 @@ export default class CatalogShowcase extends Component {
         font-size: var(--boxel-font-size-sm);
         font-weight: 700;
         cursor: pointer;
+      }
+      /* Try it sits beside the main action as its quieter outline. */
+      .act.secondary {
+        background-color: transparent;
+        box-shadow: inset 0 0 0 1px
+          color-mix(in oklch, var(--story-ink) 30%, transparent);
+        color: var(--story-ink);
       }
       .act:hover {
         background-color: color-mix(
@@ -457,23 +473,24 @@ export default class CatalogShowcase extends Component {
   </template>
 }
 
-interface StoryArtSignature {
+interface ExampleOfSignature {
   Args: {
     listingId: string;
-    artCss: string | undefined;
+  };
+  Blocks: {
+    default: [exampleId: string | undefined];
   };
 }
 
-// A story's art: the listing's first example card, laid out as a page and
-// zoomed into the frame, so the story shows the thing in use rather than
-// its icon. Until the example arrives, and for a listing without one, the
-// listing's thumbnail stands in.
-class StoryArt extends Component<StoryArtSignature> {
+// Loads a listing's first example card, the one that shows it in use, and
+// yields its id: the story draws it as art and its Try it opens it. A
+// listing that won't load, or has no example, yields nothing.
+class ExampleOf extends Component<ExampleOfSignature> {
   @service declare private network: NetworkService;
 
   @tracked private exampleId: string | undefined;
 
-  constructor(owner: unknown, args: StoryArtSignature['Args']) {
+  constructor(owner: unknown, args: ExampleOfSignature['Args']) {
     super(owner as never, args);
     this.loadExampleTask.perform().catch((error: unknown) => {
       if (!didCancel(error)) {
@@ -482,8 +499,6 @@ class StoryArt extends Component<StoryArtSignature> {
     });
   }
 
-  // A listing links the cards that show it in use; a listing that won't
-  // load just goes without.
   private loadExampleTask = task(async () => {
     let response = await this.network.authedFetch(this.args.listingId, {
       headers: { Accept: SupportedMimeType.CardJson },
@@ -498,63 +513,76 @@ class StoryArt extends Component<StoryArtSignature> {
     }
   });
 
-  <template>
-    {{#if this.exampleId}}
-      <span
-        class='art'
-        style={{cssVar page-width=artPageWidth}}
-        {{fitPage ART_PAGE_WIDTH}}
-        data-test-catalog-story-example={{this.exampleId}}
-      >
-        <span class='art-page' inert>
-          <SearchResults
-            @query={{exampleQuery this.exampleId}}
-            @mode='none'
-            @overlays={{false}}
-            as |example|
-          >
-            {{#each example.entries key='id' as |entry|}}
-              <entry.component />
-            {{/each}}
-          </SearchResults>
-        </span>
-      </span>
-    {{else}}
-      <span class='art is-thumb' style={{cssVar story-art=@artCss}}></span>
-    {{/if}}
-    <style scoped>
-      .art {
-        position: relative;
-        display: block;
-        flex: none;
-        height: 7rem;
-        overflow: hidden;
-        border-radius: 0.875rem;
-        background-color: var(--boxel-light);
-        box-shadow: 0 0 0 1px
-          color-mix(in oklch, var(--boxel-dark) 10%, transparent);
-      }
-      /* The thumbnail is an app icon, so it shows whole and centred rather
-         than cropped to fill the frame. */
-      .is-thumb {
-        background-image: var(--story-art);
-        background-size: auto 70%;
-        background-position: center;
-        background-repeat: no-repeat;
-      }
-      /* The example card, laid out as a page and zoomed into the frame. */
-      .art-page {
-        position: absolute;
-        top: 0;
-        left: 0;
-        width: var(--page-width);
-        transform: scale(var(--page-zoom, 0.4));
-        transform-origin: 0 0;
-        pointer-events: none;
-      }
-    </style>
-  </template>
+  <template>{{yield this.exampleId}}</template>
 }
+
+interface StoryArtSignature {
+  Args: {
+    exampleId: string | undefined;
+    artCss: string | undefined;
+  };
+}
+
+// A story's art: the listing's example card, laid out as a page and zoomed
+// into the frame, so the story shows the thing in use rather than its
+// icon. Until the example arrives, and for a listing without one, the
+// listing's thumbnail stands in.
+const StoryArt: TemplateOnlyComponent<StoryArtSignature> = <template>
+  {{#if @exampleId}}
+    <span
+      class='art'
+      style={{cssVar page-width=artPageWidth}}
+      {{fitPage ART_PAGE_WIDTH}}
+      data-test-catalog-story-example={{@exampleId}}
+    >
+      <span class='art-page' inert>
+        <SearchResults
+          @query={{exampleQuery @exampleId}}
+          @mode='none'
+          @overlays={{false}}
+          as |example|
+        >
+          {{#each example.entries key='id' as |entry|}}
+            <entry.component />
+          {{/each}}
+        </SearchResults>
+      </span>
+    </span>
+  {{else}}
+    <span class='art is-thumb' style={{cssVar story-art=@artCss}}></span>
+  {{/if}}
+  <style scoped>
+    .art {
+      position: relative;
+      display: block;
+      flex: none;
+      height: 9.5rem;
+      overflow: hidden;
+      border-radius: 0.875rem;
+      background-color: var(--boxel-light);
+      box-shadow: 0 0 0 1px
+        color-mix(in oklch, var(--boxel-dark) 10%, transparent);
+    }
+    /* The thumbnail is an app icon, so it shows whole and centred rather
+         than cropped to fill the frame. */
+    .is-thumb {
+      background-image: var(--story-art);
+      background-size: auto 70%;
+      background-position: center;
+      background-repeat: no-repeat;
+    }
+    /* The example card, laid out as a page and zoomed into the frame. */
+    .art-page {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: var(--page-width);
+      transform: scale(var(--page-zoom, 0.4));
+      transform-origin: 0 0;
+      pointer-events: none;
+    }
+  </style>
+</template>;
 
 function exampleQuery(exampleId: string): SearchEntryWireQuery {
   let base = searchEntryWireQueryFromQuery({}, { scope: 'cards' });
@@ -599,14 +627,17 @@ function kindOf(entry: RenderableSearchEntryLike) {
 }
 
 function toShelfItem(entry: RenderableSearchEntryLike): ShelfItem {
+  let kind = kindOf(entry);
   let attributes = (entry.item?.attributes ?? {}) as Record<string, unknown>;
   let text = (value: unknown) =>
     typeof value === 'string' && value.trim() ? value.trim() : undefined;
   let art = text(attributes.cardThumbnailURL);
   return {
     id: entry.id,
-    kind: kindOf(entry),
+    kind,
     name: shelfName(text(attributes.name)),
+    copy: shelfCopy(kind, text(attributes.summary)),
+    action: actionOf(kind),
     art,
     artCss: art ? `url("${art}")` : undefined,
   };
@@ -618,6 +649,35 @@ const DEFINITION_SUFFIX = /\s+(?:(?:card|field|app)\s+)?definition$/i;
 
 function shelfName(name: string | undefined) {
   return name ? name.replace(DEFINITION_SUFFIX, '') : 'Untitled listing';
+}
+
+// A summary that opens by describing the code ("The WineCellar component
+// serves as…") is documentation, not a pitch; until the catalog carries
+// editorial copy, such a listing gets a line that says what it's for.
+const CODE_DESCRIPTION = /^the\s+\S+\s+(?:component|card|field)\b/i;
+
+const KIND_COPY: Record<string, string> = {
+  App: 'A whole app made of cards. Remix it into a workspace and change anything.',
+  Theme: 'A look for your cards. Use it on any workspace.',
+  Skill: 'Teach Boxel AI something new, then use it in any chat.',
+  Field: 'A field to build your own cards with.',
+};
+
+function shelfCopy(kind: string, summary: string | undefined) {
+  if (summary && !CODE_DESCRIPTION.test(summary)) {
+    return summary;
+  }
+  return (
+    KIND_COPY[kind] ??
+    'Ready-made and free to remix: make it yours in a workspace of your own.'
+  );
+}
+
+// The story's call to action names what the listing page offers: themes
+// and skills are used as they are; cards, fields and apps are remixed
+// into a workspace of your own.
+function actionOf(kind: string) {
+  return kind === 'Theme' || kind === 'Skill' ? 'Use' : 'Remix';
 }
 
 const artPageWidth = `${ART_PAGE_WIDTH}px`;
