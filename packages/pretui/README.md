@@ -38,7 +38,7 @@ Every component's `<style scoped>` content sits in one of two layers, so a calle
 
 A rule that restyles a boxel-ui component goes in `PretComponent` too: Pret UI's layers sort above all of boxel-ui's. That holds only while the boxel-ui component's own CSS is layered, since unlayered CSS beats any layer; layer that component first.
 
-The `Pret` prefix matters because layer names are document-global. Usage pages and their shell (`freestyle-usage`, the `usage-*` argument rows and `internal/freestyle`), example galleries, `pretui-component.gts` and `pretui-note.gts` stay unlayered: they are callers of the kit, and their styles win the way any caller's do.
+The `Pret` prefix matters because layer names are document-global. Usage pages and their shell (`freestyle-usage`, the `usage-*` argument rows and `internal/freestyle`), example galleries and `pretui-component.gts` stay unlayered: they are callers of the kit, and their styles win the way any caller's do.
 
 ## Development
 
