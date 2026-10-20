@@ -930,6 +930,22 @@ export async function endSecureSession(
   return rows.length > 0;
 }
 
+// Signs the user's secure windows out, in every browser, when they sign out of
+// the app: the app page can neither read the window's storage nor reach the
+// window, so only the server can end its session. Rows are expired, not
+// deleted, as `endSecureSession` does. The CLI's sessions are left alone; the
+// CLI usually runs on another machine, and `boxel keys sign-out` ends them.
+export async function endWindowSessions(
+  dbAdapter: DBAdapter,
+  user: string,
+): Promise<void> {
+  await dbAdapter.execute(
+    `UPDATE secure_sessions SET expires_at = NOW()
+      WHERE user_id = $1 AND client = 'window' AND expires_at > NOW()`,
+    { bind: [user] },
+  );
+}
+
 function isUUID(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
     value,

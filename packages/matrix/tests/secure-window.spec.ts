@@ -8,6 +8,7 @@ import {
   createSubscribedUser,
   createSubscribedUserAndLogin,
   getExternalIdsForIdp,
+  logout,
   oauthErrorResponseURL,
   setupPermissions,
   subjectFor,
@@ -33,6 +34,27 @@ async function expectAppSignedIn(page: Page) {
   // session room, which signing in to the secure window expects.
   await expect(page.locator('[data-test-operator-mode-stack="0"]')).toHaveCount(
     1,
+  );
+}
+
+// The status a key write ticket mint gets with the given session, asked from
+// the secure window as the window asks.
+async function mintStatus(secure: Page, token: string): Promise<number> {
+  return await secure.evaluate(
+    async ({ realmServer, token }) => {
+      let response = await fetch(`${realmServer}_key-write-tickets`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          data: { type: 'key-write-ticket', attributes: { action: 'add' } },
+        }),
+      });
+      return response.status;
+    },
+    { realmServer: new URL('/', appURL).href, token },
   );
 }
 
@@ -201,23 +223,74 @@ test.describe('the secure window signs in on its own', () => {
       await secure.evaluate((key) => localStorage.getItem(key), STORAGE_KEY),
     ).toBeNull();
     // A session that has signed out mints nothing.
-    let afterSignOut = await secure.evaluate(
-      async ({ realmServer, token }) => {
-        let response = await fetch(`${realmServer}_key-write-tickets`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            data: { type: 'key-write-ticket', attributes: { action: 'add' } },
-          }),
-        });
-        return response.status;
-      },
-      { realmServer: new URL('/', appURL).href, token },
+    expect(await mintStatus(secure, token)).toBe(403);
+  });
+
+  test('signing out of the app signs the secure window out', async ({
+    page,
+  }, testInfo) => {
+    let { username, password } = await createSubscribedUserAndLogin(
+      page,
+      'secure-app-sign-out',
     );
-    expect(afterSignOut).toBe(403);
+    await expectAppSignedIn(page);
+
+    let secure = await openSecureWindow(page, 'mode=sign-in');
+    await secure.locator('[data-test-secure-username]').fill(username);
+    await secure.locator('[data-test-secure-password]').fill(password);
+    await secure.locator('[data-test-secure-password-submit]').click();
+    await expect(secure.locator('[data-test-secure-signed-in]')).toBeVisible();
+    let stored = (await secure.evaluate(
+      (key) => localStorage.getItem(key),
+      STORAGE_KEY,
+    ))!;
+    let { token } = JSON.parse(stored);
+    expect(await mintStatus(secure, token)).toBe(201);
+
+    // The secure window stays open while the user signs out of the app.
+    await logout(page);
+    await expect(page.locator('[data-test-login-btn]')).toBeVisible();
+
+    // The app's sign-out tells the realm server without waiting on it. Asked
+    // from the secure origin, where only an ended session is refused.
+    await expect(async () => {
+      expect(await mintStatus(secure, token)).toBe(403);
+    }).toPass();
+
+    // The open window's next mint finds its session ended, forgets it, and
+    // says the user is signed out.
+    let refused = await secure.evaluate(async (base) => {
+      let session = await import(`${base}/session.js`);
+      try {
+        await session.mintKeyWriteTicket(session.readConfig(), {
+          action: 'add',
+        });
+        return 'minted';
+      } catch (e: any) {
+        return e.code;
+      }
+    }, secureOriginURL);
+    expect(refused).toBe('signed-out');
+    expect(
+      await secure.evaluate((key) => localStorage.getItem(key), STORAGE_KEY),
+    ).toBeNull();
+    await secure.close();
+
+    // A window opened with the ended session still stored checks it with the
+    // server, forgets it, and offers to sign in, with no error.
+    let check = await openSecureWindow(page, 'mode=none');
+    await check.evaluate(
+      ([key, value]) => localStorage.setItem(key, value),
+      [STORAGE_KEY, stored],
+    );
+    await check.close();
+    let reopened = await openSecureWindow(page, 'mode=sign-in');
+    await expect(reopened.locator('[data-test-secure-username]')).toBeVisible();
+    await expect(reopened.locator('[data-test-secure-error]')).toBeHidden();
+    expect(
+      await reopened.evaluate((key) => localStorage.getItem(key), STORAGE_KEY),
+    ).toBeNull();
+    await snapshot(testInfo, reopened, 'secure-window-6-after-app-sign-out');
   });
 
   test('signs in with Google, returning to the secure window', async ({

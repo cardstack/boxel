@@ -13,6 +13,8 @@ scope:
   - packages/realm-server/secure-origin/**
   - packages/boxel-cli/src/commands/keys/**
   - packages/boxel-cli/src/lib/secure-session.ts
+  - packages/host/app/services/realm-server.ts
+  - packages/host/app/services/matrix-service.ts
 ---
 
 # 005. Authorize changes to a user's keys only with a session that card code can't reach
@@ -74,6 +76,21 @@ A client outside the browser MUST get its secure session from the secure
 window, which posts it to the client's loopback listener. The CLI MUST NOT
 call the sign-in routes itself.
 
+### 1.6. Signing out
+
+Signing out of the app MUST ask the realm server to end the user's secure
+window sessions, so a user who signs out of Boxel is signed out of key
+management too. The app page can't reach the window or its storage (§1.4), so
+only the realm server can end them; the app asks under the outgoing account's
+session, which the route MUST accept for a while after it expires. That
+request MUST NOT delay or block the app's sign-out. The route that serves it
+MAY take the app's session, since all it can do is end sessions; it MUST NOT
+create, extend, read or list one, and MUST answer alike whether or not a
+session ended. It SHOULD leave the CLI's sessions alone.
+
+A secure window whose session has ended MUST forget it and offer to sign in
+again.
+
 ## 2. Rationale
 
 Key write tickets were first minted only for a request from the secure origin
@@ -97,6 +114,27 @@ started the sign-in, so a sign-in link that card code opens would sign in for
 card code [2]. Reusing Synapse's Google client means existing users see no new
 consent screen [2].
 
+Signing out of the app has to reach the secure window, or a session the user
+believes ended keeps minting key write tickets for up to a week. Only the
+server can reach it. Ending sessions grants nothing, so letting the app's
+session, and with it card code, ask for that is harmless: the worst card code
+can do is sign the user out of key management. Rows aren't tied to a browser,
+so this ends the user's windows in every browser; the CLI usually runs on
+another machine and is left signed in.
+
+The request is best effort, so sign-out can't wait on it: when the realm
+server can't be reached or fails, the user's secure window sessions stay
+signed in until they expire, at most a week. The app's own session token is
+refreshed on a timer that fires late on a slept laptop, so the route accepts
+a session that expired no longer ago than a secure session lasts.
+
+Card code can also call the route, as often as it likes, and so keep the
+user's secure windows signed out, including when the user needs one to replace
+a key they suspect is compromised. This is accepted: it is visible, since the
+window asks the user to sign in again; it grants card code nothing; and the
+CLI's session, which the route leaves alone, can still change keys. A rate
+limit wouldn't stop it, since one call after each sign-in is enough.
+
 ## 3. Considered options
 
 - **A separate session, signed in on the secure origin (chosen).**
@@ -112,6 +150,12 @@ consent screen [2].
   the sign-in collects the session [2].
 - **Confirming the operation in the app page.** Card code can draw the same
   prompt and answer it.
+- **Ending only the signing-out browser's window session.** Rows carry no
+  browser binding, so it needs one recorded at sign-in and presented at
+  sign-out; and a user who signs out expects to be signed out everywhere.
+- **Ending the CLI's sessions too on app sign-out.** The CLI is usually on
+  another machine, where signing out of a browser shouldn't reach;
+  `boxel keys sign-out` ends it.
 
 ## 4. Sources
 

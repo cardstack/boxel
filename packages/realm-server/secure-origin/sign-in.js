@@ -11,6 +11,7 @@ import {
   beginGoogleSignIn,
   finishGoogleSignIn,
   googleSignInConfig,
+  liveSession,
   readConfig,
   signInWithPassword,
   signOut,
@@ -95,15 +96,22 @@ function cliCallback(params) {
   };
 }
 
-export function signInMode(root) {
+export async function signInMode(root) {
   let config = readConfig();
   // The window has no sign-out control; this ends its session from the
   // browser's console. Signed out here, the window shows its sign-in again.
   window.boxelSignOut = async () => {
     await signOut(config);
-    signInMode(root);
+    await signInMode(root);
   };
-  let session = storedSession();
+  // A stored session the server has ended, as signing out of the app ends it,
+  // shows the sign-in, with no error: the user simply isn't signed in.
+  if (storedSession()) {
+    root.replaceChildren(
+      page('Checking your sign-in…', h('p', {}, 'One moment.')),
+    );
+  }
+  let session = await liveSession(config);
   if (session) {
     renderSignedIn(root);
   } else {

@@ -23,6 +23,7 @@ user's session does, and additionally:
 | Gate                       | Requires                                                                    |
 | -------------------------- | --------------------------------------------------------------------------- |
 | `POST /_key-write-tickets` | `isSecureSession`: the claim, naming a row of the token's user, not expired |
+| `GET /_secure-session`     | The same; answers 204, or 401 `signed-out`                                  |
 
 Minting also still requires the request's `Origin` to be the secure origin's
 or absent (the CLI). Only `createSecureSessionJWT` mints the claim (ADR 005
@@ -38,13 +39,49 @@ session minter in `jwt.ts` refuse it.
 | `client`        | `window` (the secure window's own session) or `cli` (`boxel keys`)                                   |
 | `sign_in_proof` | What signed in: `uia:<UIA session>` for a password, `google:<sha256 of the code>` for Google; unique |
 | `created_at`    | `timestamptz`                                                                                        |
-| `expires_at`    | Seven days after sign-in (`SECURE_SESSION_TTL_SECONDS`); signing out sets it to now                  |
+| `expires_at`    | Seven days after sign-in (`SECURE_SESSION_TTL_SECONDS`); signing out sets it to now (see below)      |
 
 Excluded from the SQLite schema dump and withheld from `readonly_role`.
 Signing out expires a row rather than deleting it, and rows are swept two
 days after they expire, so a proof can't sign in again after its session
 ends. To sign a user's secure sessions out, expire their rows; revoking all of
 a user's sessions (`isSessionRevoked`) ends these too.
+
+## What ends a secure session
+
+| What                   | Route                                    | Ends                                                                |
+| ---------------------- | ---------------------------------------- | ------------------------------------------------------------------- |
+| Its seven days pass    | —                                        | That session                                                        |
+| Signing out of it      | `DELETE /_secure-session` (the session)  | That session: `boxelSignOut()` in the window, `boxel keys sign-out` |
+| Signing out of the app | `DELETE /_secure-sessions?client=window` | Every unexpired `window` row of the token's user                    |
+| Revoking all sessions  | —                                        | Every session of the user (`isSessionRevoked`)                      |
+
+The app's sign-out (`MatrixService.logout()`) calls `DELETE
+/_secure-sessions?client=window` with the outgoing account's realm-server
+session, before it drops that session. It is best effort and never awaited, so
+a failing or slow server can't hold sign-out up; a failure is only a console
+warning, and the user's window sessions then last until they expire. The app's
+session is refreshed on a timer that fires late on a slept laptop, so this
+route alone accepts a session that expired up to `SECURE_SESSION_TTL_SECONDS`
+ago (`jwtMiddleware`'s `expiredWithinSeconds`); every other route refuses an
+expired one. The app page can't clear the window's session itself: it can't
+read the secure origin's storage and keeps no handle to the window (ADR 005
+§1.4).
+
+That route takes any session of the user, the app's included, so card code can
+call it. All it can do is sign the user out of key management, which signing
+in again undoes; it answers 204 whether or not a row ended, and reads, lists
+and extends nothing. It ends the user's windows in every browser, since rows
+aren't tied to one, and leaves `cli` rows alone: the CLI usually runs on
+another machine.
+
+The window checks its stored session with `GET /_secure-session` (204 while
+it's live, 401 `signed-out` once it has ended) when it opens, and again when a
+request it makes under the session is refused with a 403, which is how a key
+write ticket refuses an ended session. An ended session is forgotten, and the
+window shows "Sign in to Boxel" with no error. When the check gets no answer
+within ten seconds, or the server can't be reached, the window keeps its
+session.
 
 ## Signing in
 
@@ -138,7 +175,7 @@ port and state wait in session storage). A Google sign-in the user cancels
 `cli-sign-in` page for the same listener, or the window's own sign-in. A
 Google sign-in that fails any other way shows the error, with Start again
 pointing at that same page. The shell's CSP allows that form
-target and `connect-src` to the realm server (ADR 005 §1.4). `DELETE /_secure-session` signs a secure session out.
+target and `connect-src` to the realm server (ADR 005 §1.4).
 
 ## Refusals
 
@@ -146,6 +183,7 @@ target and `connect-src` to the realm server (ADR 005 §1.4). `DELETE /_secure-s
 | ------------------------- | ------------------------------------------------------------------------------ |
 | 403 `forbidden`           | A sign-in not from the secure origin                                           |
 | 401 `invalid-credentials` | Any failed password sign-in (no account, no Boxel account, no password, wrong) |
+| 401 `signed-out`          | `GET /_secure-session` with a session that isn't, or is no longer, secure      |
 | 429 `rate-limited`        | Too many failed password sign-ins for the account; see `meta.retryAfterMs`     |
 | 401 `not-confirmed`       | Google's code didn't redeem, or its ID token didn't fit the sign-in            |
 | 403 `unverified-email`    | An unlinked Google account whose email Google hasn't verified                  |

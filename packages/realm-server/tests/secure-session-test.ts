@@ -1115,6 +1115,156 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a secure session can check that it is still signed in', async function (assert) {
+      let { userId } = await registerPasswordUser(dbAdapter);
+      let auth = await secureSessionAuth(dbAdapter, userId);
+      let check = (authorization: string) =>
+        request.get('/_secure-session').set('Authorization', authorization);
+
+      assert.strictEqual((await check(auth)).status, 204, 'signed in');
+
+      let appSession = `Bearer ${createRealmServerJWT(
+        { user: userId, sessionRoom: 'test-session' },
+        realmSecretSeed,
+      )}`;
+      let app = await check(appSession);
+      assert.strictEqual(app.status, 401, "the app's session is not one");
+      assert.strictEqual(app.body.errors[0].code, 'signed-out');
+
+      await request.delete('/_secure-session').set('Authorization', auth);
+      let ended = await check(auth);
+      assert.strictEqual(ended.status, 401, 'a signed-out session is not one');
+      assert.strictEqual(ended.body.errors[0].code, 'signed-out');
+    });
+
+    test("signing out of the app signs the user's secure windows out", async function (assert) {
+      let { userId } = await registerPasswordUser(dbAdapter);
+      let other = await registerPasswordUser(dbAdapter);
+      let windows = [
+        await secureSessionAuth(dbAdapter, userId),
+        await secureSessionAuth(dbAdapter, userId),
+      ];
+      let cli = await secureSessionAuth(dbAdapter, userId, { client: 'cli' });
+      let othersWindow = await secureSessionAuth(dbAdapter, other.userId);
+      let appSession = `Bearer ${createRealmServerJWT(
+        { user: userId, sessionRoom: 'test-session' },
+        realmSecretSeed,
+      )}`;
+      let endWindows = (query = '?client=window') =>
+        request.delete(`/_secure-sessions${query}`);
+
+      assert.strictEqual(
+        (await endWindows()).status,
+        401,
+        'an unauthenticated request is refused',
+      );
+      for (let query of ['', '?client=cli']) {
+        assert.strictEqual(
+          (await endWindows(query).set('Authorization', appSession)).status,
+          400,
+          `only window sessions are ended (${query || 'no client'})`,
+        );
+      }
+      for (let auth of windows) {
+        assert.strictEqual((await mint(auth)).status, 201, 'signed in');
+      }
+
+      let ended = await endWindows().set('Authorization', appSession);
+      assert.strictEqual(ended.status, 204);
+      assert.deepEqual(ended.body, {}, 'the answer says nothing');
+      for (let auth of windows) {
+        assert.strictEqual(
+          (await mint(auth)).status,
+          403,
+          'a signed-out window mints nothing',
+        );
+      }
+      assert.strictEqual(
+        (await mint(cli)).status,
+        201,
+        "the user's CLI session is left alone",
+      );
+      assert.strictEqual(
+        (await mint(othersWindow)).status,
+        201,
+        "another user's window is left alone",
+      );
+
+      let rows = (await dbAdapter.execute(
+        `SELECT expires_at <= NOW() AS ended FROM secure_sessions
+          WHERE user_id = $1 AND client = 'window'`,
+        { bind: [userId] },
+      )) as { ended: boolean }[];
+      assert.deepEqual(
+        rows.map((row) => row.ended),
+        [true, true],
+        'the rows are expired, not deleted, so their proofs stay spent',
+      );
+
+      assert.strictEqual(
+        (await endWindows().set('Authorization', appSession)).status,
+        204,
+        'answered alike when there is nothing to end',
+      );
+    });
+
+    test("an app session whose refresh came late still signs the user's secure windows out", async function (assert) {
+      let { userId } = await registerPasswordUser(dbAdapter);
+      let secureWindow = await secureSessionAuth(dbAdapter, userId);
+      let appSessionExpired = (seconds: number) =>
+        `Bearer ${createRealmServerJWT(
+          { user: userId, sessionRoom: 'test-session' },
+          realmSecretSeed,
+          -seconds,
+        )}`;
+      let endWindows = (authorization: string) =>
+        request
+          .delete('/_secure-sessions?client=window')
+          .set('Authorization', authorization);
+
+      assert.strictEqual(
+        (await endWindows(appSessionExpired(8 * 24 * 60 * 60))).status,
+        401,
+        'a session that expired longer ago than a secure session lasts is refused',
+      );
+      assert.strictEqual(
+        (await mint(secureWindow)).status,
+        201,
+        'still signed in',
+      );
+
+      assert.strictEqual(
+        (await endWindows(appSessionExpired(60 * 60))).status,
+        204,
+        'a session that expired an hour ago is still the user’s',
+      );
+      assert.strictEqual(
+        (await mint(secureWindow)).status,
+        403,
+        'the window is signed out',
+      );
+
+      let expiredSecure = `Bearer ${createSecureSessionJWT(
+        {
+          user: userId,
+          sessionRoom: 'test-session',
+          secureSession: retrieveTokenClaim(secureWindow, realmSecretSeed)
+            .secureSession!,
+        },
+        realmSecretSeed,
+        -60,
+      )}`;
+      assert.strictEqual(
+        (
+          await request
+            .get('/_secure-session')
+            .set('Authorization', expiredSecure)
+        ).status,
+        401,
+        'other routes still refuse an expired session',
+      );
+    });
+
     test('no other path mints the secure-session claim', async function (assert) {
       assert.throws(
         () =>
@@ -1183,7 +1333,11 @@ module(basename(import.meta.filename), function () {
           'nor the verifier',
         );
       }
-      for (let path of ['/_secure-session', '/_secure-session/google']) {
+      for (let path of [
+        '/_secure-session',
+        '/_secure-session/google',
+        '/_secure-sessions?client=window',
+      ]) {
         assert.true(
           keepsMethodAndPathOnly({ url: `http://127.0.0.1:4444${path}` }),
           `${path} keeps only method and path`,
