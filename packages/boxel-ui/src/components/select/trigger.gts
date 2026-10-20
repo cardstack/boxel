@@ -60,36 +60,32 @@ export class BoxelTriggerWrapper<
       {{/if}}
     </div>
     <style scoped>
-      .boxel-trigger {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        width: 100%;
-        gap: var(--boxel-select-trigger-gap, var(--boxel-sp));
-        padding: var(--boxel-select-trigger-padding, var(--boxel-sp-xs));
-        font: var(--boxel-font-sm);
-        font-family: inherit;
-        letter-spacing: var(--boxel-lsp-sm);
-        outline: none;
-        cursor: pointer;
-      }
-      .boxel-trigger-content {
-        display: var(--boxel-select-trigger-content-display, flex);
-        flex-wrap: var(--boxel-select-trigger-content-wrap, wrap);
-        align-items: var(--boxel-select-trigger-content-align, center);
-        gap: var(--boxel-select-trigger-content-gap, var(--boxel-sp-2xs));
-      }
-      .boxel-trigger-placeholder {
-        color: var(--boxel-450);
-        font: var(--boxel-font-sm);
-        font-family: inherit;
-        letter-spacing: var(--boxel-lsp-sm);
-      }
-    </style>
-    <style scoped>
-      /*Ember power select has a right padding to the trigger element*/
-      .ember-power-select-trigger {
-        padding: 0px;
+      @layer boxelComponentL1 {
+        .boxel-trigger {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          width: 100%;
+          gap: var(--boxel-select-trigger-gap, var(--boxel-sp));
+          padding: var(--boxel-select-trigger-padding, var(--boxel-sp-xs));
+          font: var(--boxel-font-sm);
+          font-family: inherit;
+          letter-spacing: var(--boxel-lsp-sm);
+          outline: none;
+          cursor: pointer;
+        }
+        .boxel-trigger-content {
+          display: var(--boxel-select-trigger-content-display, flex);
+          flex-wrap: var(--boxel-select-trigger-content-wrap, wrap);
+          align-items: var(--boxel-select-trigger-content-align, center);
+          gap: var(--boxel-select-trigger-content-gap, var(--boxel-sp-2xs));
+        }
+        .boxel-trigger-placeholder {
+          color: var(--boxel-450);
+          font: var(--boxel-font-sm);
+          font-family: inherit;
+          letter-spacing: var(--boxel-lsp-sm);
+        }
       }
     </style>
   </template>
@@ -126,21 +122,23 @@ export class BoxelSelectDefaultTrigger extends Component<TriggerSignature> {
       </:icon>
     </BoxelTriggerWrapper>
     <style scoped>
-      .icon {
-        width: 10px;
-        height: 10px;
-        flex-shrink: 0;
-      }
-      .is-open {
-        transform: rotate(180deg);
-      }
+      @layer boxelComponentL1 {
+        .icon {
+          width: 10px;
+          height: 10px;
+          flex-shrink: 0;
+        }
+        .is-open {
+          transform: rotate(180deg);
+        }
 
-      .icon.is-inverted {
-        transform: rotate(180deg);
-      }
+        .icon.is-inverted {
+          transform: rotate(180deg);
+        }
 
-      .icon.is-inverted.is-open {
-        transform: rotate(0deg);
+        .icon.is-inverted.is-open {
+          transform: rotate(0deg);
+        }
       }
     </style>
   </template>

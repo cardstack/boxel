@@ -38,4 +38,33 @@ module('Integration | Component | select', function (hooks) {
       'focus stays on the trigger, so a focus-out handler around the select does not read the pick as leaving',
     );
   });
+
+  test("a caller's one-class rule overrides the disabled state", async function (assert) {
+    // BoxelSelect's disabled rule out-specifies a single class, so the
+    // caller wins only while that rule sits in a cascade layer
+    let style = document.createElement('style');
+    style.textContent = '.caller-select { background-color: rgb(1, 2, 3); }';
+    document.head.append(style);
+    try {
+      await render(
+        <template>
+          <BoxelSelect
+            @options={{OPTIONS}}
+            @onChange={{noop}}
+            @disabled={{true}}
+            class='caller-select'
+            data-test-select
+            as |option|
+          >
+            {{option}}
+          </BoxelSelect>
+        </template>,
+      );
+      assert
+        .dom('[data-test-select]')
+        .hasStyle({ backgroundColor: 'rgb(1, 2, 3)' });
+    } finally {
+      style.remove();
+    }
+  });
 });

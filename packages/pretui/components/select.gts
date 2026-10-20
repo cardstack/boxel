@@ -204,24 +204,26 @@ class SelectSearch extends Component<SelectSearchSignature> {
       </div>
     {{/if}}
     <style scoped>
-      .pretui-selectsearch {
-        position: relative;
-      }
-      .pretui-selectsearch-icon {
-        --icon-color: var(--muted-foreground);
+      @layer PretComponent {
+        .pretui-selectsearch {
+          position: relative;
+        }
+        .pretui-selectsearch-icon {
+          --icon-color: var(--muted-foreground);
 
-        position: absolute;
-        /* the box's padding, then the input's */
-        inset-inline-start: calc(var(--boxel-sp-xs) + var(--_select-px));
-        top: 50%;
-        translate: 0 -50%;
-        pointer-events: none;
-      }
-      /* unlayered on purpose: BoxelSelect's dropdown rules are layered and
-         set the input's padding; this makes room for the icon */
-      .pretui-selectsearch .ember-power-select-search-input {
-        padding-inline-start: calc(var(--_select-px) + 1rem + var(--boxel-sp-2xs));
-        padding-inline-end: var(--_select-px);
+          position: absolute;
+          /* the box's padding, then the input's */
+          inset-inline-start: calc(var(--boxel-sp-xs) + var(--_select-px));
+          top: 50%;
+          translate: 0 -50%;
+          pointer-events: none;
+        }
+        /* BoxelSelect's dropdown rules set the input's padding; this makes
+           room for the icon */
+        .pretui-selectsearch .ember-power-select-search-input {
+          padding-inline-start: calc(var(--_select-px) + 1rem + var(--boxel-sp-2xs));
+          padding-inline-end: var(--_select-px);
+        }
       }
     </style>
   </template>
@@ -351,110 +353,116 @@ export class Select extends Component<SelectSignature> {
           --boxel-dropdown-selected-hover-color: var(--_select-primary-hover);
           --boxel-dropdown-focus-border-color: var(--ring);
         }
-      }
-      /* BoxelSelect has no knobs for the trigger's height and hairline, so
-         these reach its trigger, dressed to match Input. Unlayered, the one
-         exception in the kit: BoxelSelect's own rules are unlayered, and
-         unlayered CSS beats any layer. */
-      .pretui-selectwrap :deep(.pretui-selecttrigger) {
-        align-items: center;
-        height: var(--pretui-select-h);
-        border: 0;
-        box-shadow: 0 0 0 1px var(--input);
-        width: 100%;
-        text-align: start;
-        transition: box-shadow var(--pretui-dur-snap, 180ms)
-          var(--pretui-ease-snap, ease);
-      }
-      /* before the expanded and focus rules, which win the tie */
-      @media (hover: hover) {
-        .pretui-selectwrap :deep(.pretui-selecttrigger:hover) {
-          box-shadow: 0 0 0 1px var(--_select-edge-hover);
+        /* BoxelSelect has no knobs for the trigger's height and hairline, so
+           these reach its trigger, dressed to match Input. */
+        .pretui-selectwrap :deep(.pretui-selecttrigger) {
+          align-items: center;
+          height: var(--pretui-select-h);
+          border: 0;
+          box-shadow: 0 0 0 1px var(--input);
+          width: 100%;
+          text-align: start;
+          transition: box-shadow var(--pretui-dur-snap, 180ms)
+            var(--pretui-ease-snap, ease);
         }
-      }
-      .pretui-selectwrap :deep(.pretui-selecttrigger[aria-expanded='true']),
-      .pretui-selectwrap :deep(.pretui-selecttrigger:focus-visible) {
-        /* forced-colors paints no box-shadow, so a transparent outline keeps
-           a focus indicator there */
-        outline: 1.5px solid transparent;
-        outline-offset: 1px;
-        box-shadow: 0 0 0 1.5px var(--ring);
-      }
-      .pretui-selectwrap :deep(.pretui-selecttrigger[aria-disabled='true']) {
-        opacity: 0.45;
-        /* BoxelSelect paints disabled on --muted; this rule outranks it, so
-           the field surface holds and only the opacity says disabled */
-        background-color: var(--field);
-        color: var(--foreground);
-      }
-      /* the trigger's type; the dropdown rule below repeats it, since the
-         wormhole is outside this subtree */
-      .pretui-selectwrap :deep(.boxel-trigger) {
-        width: 100%;
-        font-family: inherit;
-        font-size: var(--boxel-font-size-xs);
-        line-height: var(--boxel-line-height-xs);
-        letter-spacing: var(--boxel-lsp-xs);
-      }
-      .pretui-selectwrap :deep(.boxel-trigger-content) {
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-      }
-      .pretui-selectwrap :deep(.boxel-trigger-placeholder) {
-        color: var(--muted-foreground);
-        font-family: inherit;
-        font-size: var(--boxel-font-size-xs);
-        line-height: var(--boxel-line-height-xs);
-        letter-spacing: var(--boxel-lsp-xs);
-      }
-      .pretui-selectwrap :deep(.pretui-selecttrigger svg) {
-        --icon-color: var(--muted-foreground);
+        /* before the expanded and focus rules, which win the tie */
+        @media (hover: hover) {
+          .pretui-selectwrap :deep(.pretui-selecttrigger:hover) {
+            box-shadow: 0 0 0 1px var(--_select-edge-hover);
+          }
+        }
+        .pretui-selectwrap :deep(.pretui-selecttrigger[aria-expanded='true']),
+        .pretui-selectwrap :deep(.pretui-selecttrigger:focus-visible) {
+          /* forced-colors paints no box-shadow, so a transparent outline keeps
+             a focus indicator there */
+          outline: 1.5px solid transparent;
+          outline-offset: 1px;
+          box-shadow: 0 0 0 1.5px var(--ring);
+        }
+        .pretui-selectwrap :deep(.pretui-selecttrigger[aria-disabled='true']) {
+          opacity: 0.45;
+          /* BoxelSelect paints disabled on --muted; this rule outranks it, so
+             the field surface holds and only the opacity says disabled */
+          background-color: var(--field);
+          color: var(--foreground);
+        }
+        /* the trigger's type; the dropdown rule below repeats it, since the
+           wormhole is outside this subtree */
+        .pretui-selectwrap :deep(.boxel-trigger) {
+          width: 100%;
+          font-family: inherit;
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--boxel-line-height-xs);
+          letter-spacing: var(--boxel-lsp-xs);
+        }
+        .pretui-selectwrap :deep(.boxel-trigger-content) {
+          min-width: 0;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+        .pretui-selectwrap :deep(.boxel-trigger-placeholder) {
+          color: var(--muted-foreground);
+          font-family: inherit;
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--boxel-line-height-xs);
+          letter-spacing: var(--boxel-lsp-xs);
+        }
+        .pretui-selectwrap :deep(.pretui-selecttrigger svg) {
+          --icon-color: var(--muted-foreground);
 
-        flex: none;
+          flex: none;
+        }
       }
     </style>
     {{! template-lint-disable require-scoped-style }}
     <style>
-      /* Unscoped: the dropdown renders in the wormhole, outside this
-         component's subtree, and BoxelSelect has no knobs for its type or
-         row metrics. The options and the search box take the trigger's
-         type, inline padding and height. */
-      .pretui-select-dropdown.ember-power-select-dropdown {
-        /* the trigger's padding and default height, restated: the wrapper's
-           knobs do not reach the wormhole */
-        --_select-px: 0.625rem;
-        --_select-h: 1.75rem;
-        /* the list matches the trigger's width as a floor, never a ceiling:
-           a trigger sized to a short value must not clip the other labels */
-        min-width: max-content;
-      }
-      .pretui-select-dropdown.ember-power-select-dropdown .boxel-select-option-item,
-      .pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input {
-        font-size: var(--boxel-font-size-xs);
-        line-height: var(--boxel-line-height-xs);
-        letter-spacing: var(--boxel-lsp-xs);
-      }
-      .pretui-select-dropdown.ember-power-select-dropdown .boxel-select-option-item {
-        min-height: var(--_select-h);
-        padding-block: 0;
-        padding-inline: var(--_select-px);
-      }
-      /* the hairline and ring are shadows, as on the trigger, so focus
-         thickens the edge to the trigger's 1.5px instead of stacking a
-         shadow on a border */
-      .pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input {
-        min-height: var(--_select-h);
-        padding-block: 0;
-        border: 0;
-        box-shadow: 0 0 0 1px var(--border);
-      }
-      .pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input:focus {
-        border: 0;
-        outline: 1.5px solid transparent;
-        outline-offset: 1px;
-        box-shadow: 0 0 0 1.5px var(--ring);
+      @layer PretComponent {
+        /* Unscoped: the dropdown renders in the wormhole, outside this
+           component's subtree, and BoxelSelect has no knobs for its type or
+           row metrics. The options and the search box take the trigger's
+           type, inline padding and height. */
+        .pretui-select-dropdown.ember-power-select-dropdown {
+          /* the trigger's padding and default height, restated: the wrapper's
+             knobs do not reach the wormhole */
+          --_select-px: 0.625rem;
+          --_select-h: 1.75rem;
+          /* the list matches the trigger's width as a floor, never a ceiling:
+             a trigger sized to a short value must not clip the other labels */
+          min-width: max-content;
+        }
+        .pretui-select-dropdown.ember-power-select-dropdown .boxel-select-option-item,
+        .pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input {
+          font-size: var(--boxel-font-size-xs);
+          line-height: var(--boxel-line-height-xs);
+          letter-spacing: var(--boxel-lsp-xs);
+        }
+        .pretui-select-dropdown.ember-power-select-dropdown .boxel-select-option-item {
+          min-height: var(--_select-h);
+          padding-block: 0;
+          padding-inline: var(--_select-px);
+        }
+        /* the hairline and ring are shadows, as on the trigger, so focus
+           thickens the edge to the trigger's 1.5px instead of stacking a
+           shadow on a border */
+        .pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input {
+          min-height: var(--_select-h);
+          padding-block: 0;
+          border: 0;
+          box-shadow: 0 0 0 1px var(--border);
+        }
+        .pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input:focus {
+          border: 0;
+          outline: 1.5px solid transparent;
+          outline-offset: 1px;
+          box-shadow: 0 0 0 1.5px var(--ring);
+        }
+        /* iOS zooms into inputs under 16px on focus */
+        @media (pointer: coarse) {
+          .pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input {
+            font-size: var(--boxel-font-size);
+          }
+        }
       }
     </style>
     {{! template-lint-enable require-scoped-style }}
