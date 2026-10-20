@@ -879,7 +879,7 @@ module('Acceptance | interact submode | single stack tests', function (hooks) {
       let fadhlan = `[data-test-stack-card="${testRealmURL}Person/fadhlan"]`;
 
       await click('[data-test-boxel-filter-list-button="All Cards"]');
-      await click(`${gridItem} .field-component-card`);
+      await click(`${gridItem} [data-test-field-component-card]`);
       assert.dom(fadhlan).isFocused('the opened card has focus');
 
       await click(`${fadhlan} [data-test-close-button]`);
