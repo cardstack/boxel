@@ -2,7 +2,7 @@ import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
 import type Koa from 'koa';
-import { healthCheck } from '../middleware/index.ts';
+import { healthCheck, healthCheckUserAgents } from '../middleware/index.ts';
 
 function probe(userAgent: string | undefined) {
   let ctxt = {
@@ -48,6 +48,17 @@ module(basename(import.meta.filename), function (hooks) {
       passedOn: true,
     });
     assert.deepEqual(probe(undefined), {
+      answered: undefined,
+      passedOn: true,
+    });
+  });
+
+  test('follows a change to the setting without a restart', function (assert) {
+    process.env.HEALTH_CHECK_USER_AGENTS = ' ELB-HealthChecker , ,';
+    assert.deepEqual(healthCheckUserAgents(), ['ELB-HealthChecker']);
+    process.env.HEALTH_CHECK_USER_AGENTS = 'kube-probe/';
+    assert.deepEqual(healthCheckUserAgents(), ['kube-probe/']);
+    assert.deepEqual(probe('ELB-HealthChecker/2.0'), {
       answered: undefined,
       passedOn: true,
     });

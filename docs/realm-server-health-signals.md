@@ -17,7 +17,8 @@ signal answers which question, and what to do with each.
 `healthCheck` in `packages/realm-server/middleware/index.ts` answers `OK` from
 memory to any request whose user-agent starts with a prefix listed in
 `HEALTH_CHECK_USER_AGENTS`, ahead of the host-app and realm-serving middleware.
-The deployed start scripts set it to `ELB-HealthChecker`. It touches no
+The deployed start scripts set it to `ELB-HealthChecker`, and a deployed server
+with it unset logs a warning at boot. It touches no
 database, no filesystem, and no realm state.
 
 It is served **by the event loop**, so it answers only when the loop has capacity

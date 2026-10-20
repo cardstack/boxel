@@ -191,18 +191,36 @@ export function livenessCheck(ctxt: Koa.Context, _next: Koa.Next) {
   ctxt.set('server', '@cardstack/host');
 }
 
+let parsedHealthCheckUserAgents:
+  | { raw: string; prefixes: string[] }
+  | undefined;
+
+// The user-agent prefixes the deployment names in HEALTH_CHECK_USER_AGENTS
+// (comma-separated), so the code carries no provider's name (ADR 003 §1.6).
+// The parse is kept until the setting changes, so tests and operators can
+// change it without a restart.
+export function healthCheckUserAgents(): string[] {
+  let raw = process.env.HEALTH_CHECK_USER_AGENTS ?? '';
+  if (parsedHealthCheckUserAgents?.raw !== raw) {
+    parsedHealthCheckUserAgents = {
+      raw,
+      prefixes: raw
+        .split(',')
+        .map((prefix) => prefix.trim())
+        .filter(Boolean),
+    };
+  }
+  return parsedHealthCheckUserAgents.prefixes;
+}
+
 // Answers the load balancer's health check from memory, ahead of the host-app
-// and realm-serving middleware. The deployment names its health checker's
-// user-agent prefixes in HEALTH_CHECK_USER_AGENTS (comma-separated), so the
-// code carries no provider's name (ADR 003 §1.6). Read per request, so tests
-// and operators can change it without a stale snapshot.
+// and realm-serving middleware.
 export function healthCheck(ctxt: Koa.Context, next: Koa.Next) {
   let userAgent = ctxt.req.headers['user-agent'];
-  let prefixes = (process.env.HEALTH_CHECK_USER_AGENTS ?? '')
-    .split(',')
-    .map((prefix) => prefix.trim())
-    .filter(Boolean);
-  if (userAgent && prefixes.some((prefix) => userAgent.startsWith(prefix))) {
+  if (
+    userAgent &&
+    healthCheckUserAgents().some((prefix) => userAgent.startsWith(prefix))
+  ) {
     ctxt.body = 'OK';
     return;
   }
