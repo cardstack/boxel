@@ -10,6 +10,11 @@
 // log records every query string. The Matrix server adds the session id to the
 // end of the link, so it lands in the fragment too. The page reads both and
 // takes them out of the address bar and the history.
+//
+// The link also carries the email address the reset was asked for, so that
+// once the new password is set the page can name the account to the realm
+// server, which ends every secure session it has (see
+// `endSessionsForNewPassword`).
 
 import {
   authButton,
@@ -28,6 +33,7 @@ import {
   resetPassword,
 } from './matrix.js';
 import { newPasswordFields } from './password-fields.js';
+import { endSessionsForNewPassword, readConfig } from './session.js';
 import {
   cliCallback,
   cliParams,
@@ -51,10 +57,14 @@ function signInURL(cli, username) {
     : modeURL('sign-in');
 }
 
-// Where the reset link lands: `reset-password`, with the client secret and the
-// CLI's listener in the fragment.
-function resetLink(clientSecret, cli) {
-  let fragment = new URLSearchParams({ clientSecret, ...cliParams(cli) });
+// Where the reset link lands: `reset-password`, with the client secret, the
+// email address and the CLI's listener in the fragment.
+function resetLink(clientSecret, email, cli) {
+  let fragment = new URLSearchParams({
+    clientSecret,
+    email,
+    ...cliParams(cli),
+  });
   return new URL(
     `${modeURL('reset-password')}#${fragment}`,
     window.location.href,
@@ -105,7 +115,7 @@ export function forgotPasswordMode(root) {
       email,
       clientSecret,
       sendAttempt: sendAttempt + 1,
-      nextLink: resetLink(clientSecret, cli),
+      nextLink: resetLink(clientSecret, email, cli),
     });
     sendAttempt++;
   }
@@ -209,6 +219,7 @@ export function resetPasswordMode(root) {
   let fragment = fragmentParams();
   let clientSecret = fragment.get('clientSecret') ?? '';
   let sid = fragment.get('sid') ?? '';
+  let email = fragment.get('email') ?? '';
   let { cli } = cliFrom(fragment);
   // Out of the address bar and the history: the secret has done its job once
   // it is read.
@@ -285,6 +296,19 @@ export function resetPasswordMode(root) {
               );
             }
             return;
+          }
+          // A link that names no account still resets the password; only
+          // ending the account's secure sessions needs to know whose it is.
+          if (email) {
+            try {
+              await endSessionsForNewPassword(readConfig(), {
+                username: email,
+                password: passwords.value,
+              });
+            } catch {
+              // The password is reset either way. A session the realm server
+              // couldn't end runs out within its week.
+            }
           }
           renderResetDone(root, cli);
         },

@@ -46,13 +46,29 @@ export default class Auth extends Component {
   constructor(owner: Owner, args: any) {
     super(owner, args);
 
-    let sid = this.router.currentRoute?.queryParams['sid'];
+    // A reset link carries the email address it was sent to in its
+    // fragment, and the Matrix server adds the validation session's id after
+    // it, so the id is in the fragment unless the link had none. The
+    // fragment is taken out of the address bar once read.
+    let fragment = new URLSearchParams(window.location.hash.slice(1));
+    let sid =
+      this.router.currentRoute?.queryParams['sid'] ??
+      fragment.get('sid') ??
+      undefined;
     let clientSecret = this.router.currentRoute?.queryParams['clientSecret'];
     if (sid && clientSecret) {
       this.resetPasswordParams = {
         sid: sid as string,
         clientSecret: clientSecret as string,
+        email: fragment.get('email') ?? undefined,
       };
+    }
+    if (fragment.has('sid') || fragment.has('email')) {
+      window.history.replaceState(
+        window.history.state,
+        '',
+        window.location.pathname + window.location.search,
+      );
     }
   }
 

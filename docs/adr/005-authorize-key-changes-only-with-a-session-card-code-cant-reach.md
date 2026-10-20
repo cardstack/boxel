@@ -77,7 +77,7 @@ A client outside the browser MUST get its secure session from the secure
 window, which posts it to the client's loopback listener. The CLI MUST NOT
 call the sign-in routes itself.
 
-### 1.6. Signing out
+### 1.6. Signing out, and changing a password
 
 Signing out of the app MUST ask the realm server to end the user's secure
 window sessions, so a user who signs out of Boxel is signed out of key
@@ -88,6 +88,15 @@ request MUST NOT delay or block the app's sign-out. The route that serves it
 MAY take the app's session, since all it can do is end sessions; it MUST NOT
 create, extend, read or list one, and MUST answer alike whether or not a
 session ended. It SHOULD leave the CLI's sessions alone.
+
+A page that changes a user's password MUST then ask the realm server to end
+every secure session of the account, the CLI's included. The page MUST be on
+the secure origin, and it MUST prove the request with the new password. The
+realm server MUST end the sessions only once that password checks out. It
+MUST check the password as a password sign-in does, under the same limit on
+failed attempts. The route MUST answer only a request whose `Origin` is the
+secure origin's, and MUST answer alike whether or not a session ended. The
+password stays changed whatever the route answers.
 
 A secure window whose session has ended MUST forget it and offer to sign in
 again.
@@ -143,6 +152,26 @@ window asks the user to sign in again; it grants card code nothing; and the
 CLI's session, which the route leaves alone, can still change keys. A rate
 limit wouldn't stop it, since one call after each sign-in is enough.
 
+A changed password has to end the account's secure sessions, the CLI's too.
+A user who resets a leaked password needs that most: whoever signed in with
+it holds a session that can change their keys for up to a week. The realm
+server can't learn of the change from Synapse. No module callback runs when a
+password is set, and the admin API shows nothing that changes with one, so
+there is nothing to poll [4]. So the page that changed the password tells
+the realm server. Every page that sets a password is on the secure origin:
+the reset page, and the credential fields the app frames for its own reset
+and change-password. The new password is the proof, and card code never sees
+it. So, unlike the app's sign-out, this route may end the CLI's sessions
+without handing card code a way to do so. Whoever knows only the old
+password can't use it here. A reset link carries the email address it was
+sent to in its fragment, because the page it lands on otherwise knows only
+the validation session, which names no account.
+
+Like sign-out, the request is best effort. When it fails, a session signed in
+with the old password lasts until it expires, at most a week. A password set
+outside Boxel, such as by an operator through Synapse's admin API, ends no
+session.
+
 ## 3. Considered options
 
 - **A separate session, signed in on the secure origin (chosen).**
@@ -164,6 +193,17 @@ limit wouldn't stop it, since one call after each sign-in is enough.
 - **Ending the CLI's sessions too on app sign-out.** The CLI is usually on
   another machine, where signing out of a browser shouldn't reach;
   `boxel keys sign-out` ends it.
+- **Learning of a password change from Synapse, through a module or an admin
+  poll.** No module callback runs when a password is set, and the admin API
+  shows nothing that changes with one [4]. A module would have to patch
+  Synapse's password handler.
+- **Tying each secure session to a Matrix access token that a password
+  change logs out.** Card code holds the user's access token and can log all
+  of the account's tokens out, which would end the CLI's sessions too. And the
+  realm server would hold a live Matrix token for every session.
+- **Letting the app's session ask, as sign-out does.** Card code could then
+  end the CLI's sessions. While card code keeps the windows signed out, the
+  CLI is the only way left to replace a key.
 
 ## 4. Sources
 
@@ -173,3 +213,6 @@ limit wouldn't stop it, since one call after each sign-in is enough.
    `.claude/skills/secure-session/SKILL.md`.
 3. #6861, its description and review thread, and
    `.claude/skills/secure-origin/SKILL.md`.
+4. Synapse v1.126.0: `SetPasswordHandler.set_password` calls no module
+   callback, and the admin API's user details (`GET
+/_synapse/admin/v2/users/<user>`) carry no password hash or change time.

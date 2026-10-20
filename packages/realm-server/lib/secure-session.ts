@@ -349,11 +349,8 @@ async function asUser<T>(
 }
 
 // Signs in with a password, checked by the Matrix server's UIA check as
-// described above. Only failures count against the account's limit (see
-// `sign-in-limiter.ts`), and an account over it is refused before its
-// password is checked. Failures are counted as the Matrix server counts failed
-// logins: against the Matrix user id the account resolves to, however it was
-// named, or against the name itself when it names no account.
+// described above, within the account's limit on failed attempts
+// (`withPasswordLimit`).
 //
 // An account that has never signed in to Boxel, as one just registered on the
 // secure origin, gets the app's first-sign-in setup once its password checks
@@ -370,6 +367,59 @@ export async function signInWithPassword(
     registrationToken?: string;
   },
 ): Promise<SignedInSession> {
+  return await withPasswordLimit(deps, limiter, attempt, async (user) => {
+    let uiaSession = await confirmPassword(deps, user, attempt.password);
+    if (!(await fetchSessionRoom(deps.dbAdapter, user))) {
+      await setUpFirstSignIn(deps, user, attempt.registrationToken);
+    }
+    return await createSecureSession(deps, {
+      user,
+      client: attempt.client,
+      proof: `uia:${uiaSession}`,
+    });
+  });
+}
+
+// Ends every secure session of the account a password belongs to, the
+// window's and the CLI's alike, once the password checks out. The secure
+// origin's pages call it as soon as they have changed an account's password,
+// with the new one: a session signed in with the old password, perhaps by
+// whoever it leaked to, must not outlive the change. The Matrix server signs
+// the account's devices out itself (`logout_devices`), but it has no way to
+// tell the realm server, so the page that changed the password does.
+//
+// The new password is the proof, as it is for signing in, so card code, which
+// never sees it, can't end the CLI's sessions this way; and whoever still
+// knows the old password can no longer use it here. It is checked, and
+// limited, exactly as a password sign-in is.
+export async function endSessionsForNewPassword(
+  deps: SecureSessionDeps,
+  limiter: SignInLimiter,
+  attempt: { username: string; password: string },
+): Promise<void> {
+  await withPasswordLimit(deps, limiter, attempt, async (user) => {
+    await confirmPassword(deps, user, attempt.password);
+    await deps.dbAdapter.execute(
+      `UPDATE secure_sessions SET expires_at = NOW()
+        WHERE user_id = $1 AND expires_at > NOW()`,
+      { bind: [user] },
+    );
+  });
+}
+
+// Runs `fn` for the Matrix user a password attempt names, within the
+// account's limit on failed attempts (see `sign-in-limiter.ts`): an account
+// over it is refused before its password is checked, and only a wrong
+// password or a name that matches no account counts. Failures are counted as
+// the Matrix server counts failed logins: against the Matrix user id the
+// account resolves to, however it was named, or against the name itself when
+// it names no account.
+async function withPasswordLimit<T>(
+  deps: SecureSessionDeps,
+  limiter: SignInLimiter,
+  attempt: { username: string; password: string },
+  fn: (user: string) => Promise<T>,
+): Promise<T> {
   if (!attempt.username.trim() || !attempt.password) {
     throw invalidCredentials();
   }
@@ -381,7 +431,10 @@ export async function signInWithPassword(
   }
   let failed = false;
   try {
-    return await checkPassword(deps, user, attempt);
+    if (!user) {
+      throw invalidCredentials();
+    }
+    return await fn(user);
   } catch (e) {
     failed =
       e instanceof SecureSessionError && e.code === 'invalid-credentials';
@@ -391,22 +444,13 @@ export async function signInWithPassword(
   }
 }
 
-async function checkPassword(
+// Checks `password` against the account with the UIA check described above,
+// and resolves to the UIA session that confirmed it.
+async function confirmPassword(
   deps: SecureSessionDeps,
-  user: string | undefined,
-  {
-    password,
-    client,
-    registrationToken,
-  }: {
-    password: string;
-    client: SecureSessionClient;
-    registrationToken?: string;
-  },
-): Promise<SignedInSession> {
-  if (!user) {
-    throw invalidCredentials();
-  }
+  user: string,
+  password: string,
+): Promise<string> {
   // The admin API mints a token for any user id, so a name that names no
   // account is caught here, before anything acts as it. Only "no such
   // account" is the account's answer; any other failure is the Matrix
@@ -477,14 +521,7 @@ async function checkPassword(
     );
     throw unavailable();
   }
-  if (!(await fetchSessionRoom(deps.dbAdapter, user))) {
-    await setUpFirstSignIn(deps, user, registrationToken);
-  }
-  return await createSecureSession(deps, {
-    user,
-    client,
-    proof: `uia:${uiaSession}`,
-  });
+  return uiaSession;
 }
 
 function googleRedirectURI(deps: SecureSessionDeps): string {

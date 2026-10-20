@@ -35,6 +35,10 @@ export type CredentialOperation =
       args: {
         auth: Record<string, unknown>;
         accessToken?: string;
+        // The account whose password this is, by Matrix id or email address.
+        // Once the password is changed, the fields end the account's secure
+        // sessions at the realm server, proving it with the new password.
+        account?: string;
       };
     }
   | {

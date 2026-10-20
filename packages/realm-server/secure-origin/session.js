@@ -105,6 +105,26 @@ export async function signInWithPassword(
   return json.data.attributes;
 }
 
+// Ends every secure session of the account whose password was just changed
+// here, the CLI's included: a session signed in with the old password must not
+// outlive it. `username` is the username, email address or Matrix id the
+// account goes by, and `password` the new password, which the realm server
+// checks before it ends anything. The password is already changed, so a
+// failure here is reported to the caller, which carries on regardless.
+export async function endSessionsForNewPassword(
+  config,
+  { username, password },
+) {
+  await request(
+    new URL('_secure-sessions/password-change', config.realmServerURL),
+    {
+      body: {
+        data: { type: 'password-change', attributes: { username, password } },
+      },
+    },
+  );
+}
+
 // The name of the Matrix server Boxel's accounts are on, which a username is
 // shown with (`@name:server`).
 export async function matrixServerName(config) {

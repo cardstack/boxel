@@ -7,8 +7,10 @@
 // What a password is sent to, and what goes back:
 //
 // - A password is only ever sent to the Matrix server named in this page's
-//   own markup, which the realm server writes from its configuration. Nothing
-//   the app sends can change where it goes.
+//   own markup, which the realm server writes from its configuration, and,
+//   once a password is changed, the new one to the realm server named there
+//   too, which ends the account's secure sessions. Nothing the app sends can
+//   change where either goes.
 // - The app sends the parts of a request that aren't secret (a username, an
 //   interactive-auth dict, its own access token), asks for the request to be
 //   made, and gets back the Matrix server's response. It learns whether each
@@ -198,6 +200,7 @@ function readConfig() {
     '';
   return {
     matrixURL: new URL(meta('boxel-matrix-url')),
+    realmServerURL: new URL(meta('boxel-realm-server-url')),
     appOrigins: meta('boxel-app-origins').split(/\s+/).filter(Boolean),
   };
 }
@@ -523,8 +526,11 @@ function start(form) {
 
     // Always signs out the account's other sessions, which is not the app's
     // to turn off: a session stolen before the change must not outlive it.
-    async 'set-password'({ auth, accessToken }) {
-      return await matrixRequest('account/password', {
+    // The Matrix server signs out the account's devices; its secure sessions
+    // are ended at the realm server, for the account the app names in
+    // `account` (its Matrix id, or the email address a reset was sent to).
+    async 'set-password'({ auth, accessToken, account }) {
+      let result = await matrixRequest('account/password', {
         accessToken,
         body: {
           auth: withPassword(plainObject(auth)),
@@ -532,6 +538,10 @@ function start(form) {
           logout_devices: true,
         },
       });
+      if (result.ok && typeof account === 'string' && account) {
+        await endSessionsForNewPassword(account);
+      }
+      return result;
     },
 
     async 'add-threepid'({ auth, accessToken, clientSecret, sid }) {
@@ -574,6 +584,37 @@ function start(form) {
       },
     });
     return byEmail.ok ? byEmail : byUsername;
+  }
+
+  // Asks the realm server to end every secure session of the account whose
+  // password was just changed, proving it with the new password. The password
+  // is changed whatever the answer, so a failure is not the app's to see; a
+  // session the realm server couldn't end runs out within its week. The app
+  // can name any account, but only the new password, which it never sees,
+  // gets a session ended.
+  async function endSessionsForNewPassword(account) {
+    try {
+      await fetch(
+        new URL('_secure-sessions/password-change', config.realmServerURL),
+        {
+          method: 'POST',
+          headers: {
+            Accept: 'application/vnd.api+json',
+            'Content-Type': 'application/vnd.api+json',
+          },
+          body: JSON.stringify({
+            data: {
+              type: 'password-change',
+              attributes: { username: account, password: value('password') },
+            },
+          }),
+          credentials: 'omit',
+          referrerPolicy: 'no-referrer',
+        },
+      );
+    } catch {
+      // See above: the password is changed either way.
+    }
   }
 
   // An interactive-auth dict for the password stage carries the account's

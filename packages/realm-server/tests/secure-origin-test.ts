@@ -206,6 +206,7 @@ module(basename(import.meta.filename), function () {
         new URL('https://secure-wildcard.example.test/secure'),
         {
           matrixURL: new URL(matrixURL),
+          realmServerURL: new URL('https://realms.example.test/'),
           appOrigins: [
             'https://app.example.test',
             'https://*.preview.example.test',
@@ -617,8 +618,10 @@ module(basename(import.meta.filename), function () {
         `only the app's origin may frame it (${csp})`,
       );
       assert.ok(
-        csp.includes(`connect-src 'self' ${matrixURL.origin}`),
-        `it may talk to the Matrix server and nothing else (${csp})`,
+        csp.includes(
+          `connect-src 'self' ${matrixURL.origin} ${realmURL.origin}`,
+        ),
+        `it may talk to the Matrix server and the realm server, and nothing else (${csp})`,
       );
       assert.ok(csp.includes(`default-src 'self'`), 'default-src is self');
       assert.notOk(csp.includes('unsafe-inline'), 'no inline script');
@@ -639,6 +642,12 @@ module(basename(import.meta.filename), function () {
           `<meta name="boxel-matrix-url" content="${matrixURL.href}" />`,
         ),
         'names the Matrix server a password is sent to',
+      );
+      assert.ok(
+        response.text.includes(
+          `<meta name="boxel-realm-server-url" content="${realmURL.origin}/" />`,
+        ),
+        "names the realm server a new password's sessions are ended at",
       );
       assert.ok(
         response.text.includes(

@@ -94,6 +94,24 @@ async function registerPasswordUser(
   return { username, password, userId };
 }
 
+// Sets a new password and signs the account's devices out, as resetting or
+// changing a password from Boxel does.
+async function setPassword(userId: string, newPassword: string) {
+  let response = await adminRequest(
+    `_synapse/admin/v1/reset_password/${encodeURIComponent(userId)}`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        new_password: newPassword,
+        logout_devices: true,
+      }),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`could not set the password: ${response.status}`);
+  }
+}
+
 async function updateAccount(userId: string, body: Record<string, unknown>) {
   let response = await adminRequest(
     `_synapse/admin/v2/users/${encodeURIComponent(userId)}`,
@@ -1328,6 +1346,132 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    function passwordChange(
+      username: string,
+      password: string,
+      origin: string | null = secureOrigin,
+    ) {
+      return post(
+        '/_secure-sessions/password-change',
+        'password-change',
+        { username, password },
+        origin,
+      );
+    }
+
+    test("a password reset ends every secure session the account had, the CLI's included", async function (assert) {
+      let { username, password, userId } =
+        await registerPasswordUser(dbAdapter);
+      let email = `${randomBytes(6).toString('hex')}@secure-session.test`;
+      await updateAccount(userId, {
+        threepids: [{ medium: 'email', address: email }],
+      });
+      let other = await registerPasswordUser(dbAdapter);
+      let signedIn = await passwordSignIn(username, password);
+      assert.strictEqual(signedIn.status, 201, signedIn.text);
+      let secureWindow = `Bearer ${signedIn.body.data.attributes.token}`;
+      let cli = await secureSessionAuth(dbAdapter, userId, { client: 'cli' });
+      let othersWindow = await secureSessionAuth(dbAdapter, other.userId);
+      for (let auth of [secureWindow, cli]) {
+        assert.strictEqual((await mint(auth)).status, 201, 'signed in');
+      }
+
+      let newPassword = `pw-${randomBytes(12).toString('hex')}`;
+      await setPassword(userId, newPassword);
+
+      let withOldPassword = await passwordChange(email, password);
+      assert.strictEqual(withOldPassword.status, 401, withOldPassword.text);
+      assert.strictEqual(
+        withOldPassword.body.errors[0].code,
+        'invalid-credentials',
+        'the old password is refused',
+      );
+      assert.strictEqual(
+        (await mint(secureWindow)).status,
+        201,
+        'and ends nothing',
+      );
+
+      let ended = await passwordChange(email, newPassword);
+      assert.strictEqual(ended.status, 204, ended.text);
+      assert.deepEqual(ended.body, {}, 'the answer says nothing');
+      for (let [auth, name] of [
+        [secureWindow, 'window'],
+        [cli, 'CLI'],
+      ]) {
+        assert.strictEqual(
+          (await mint(auth)).status,
+          403,
+          `the ${name} session signed in before the reset mints nothing after it`,
+        );
+      }
+      assert.strictEqual(
+        (await mint(othersWindow)).status,
+        201,
+        "another user's session is left alone",
+      );
+
+      let rows = (await dbAdapter.execute(
+        `SELECT expires_at <= NOW() AS ended FROM secure_sessions
+          WHERE user_id = $1`,
+        { bind: [userId] },
+      )) as { ended: boolean }[];
+      assert.deepEqual(
+        rows.map((row) => row.ended),
+        [true, true],
+        'the rows are expired, not deleted, so their proofs stay spent',
+      );
+
+      let again = await passwordSignIn(username, newPassword);
+      assert.strictEqual(again.status, 201, again.text);
+      assert.strictEqual(
+        (await mint(`Bearer ${again.body.data.attributes.token}`)).status,
+        201,
+        'the new password signs in again',
+      );
+      assert.strictEqual(
+        (await passwordChange(userId, newPassword)).status,
+        204,
+        'the account can be named by its Matrix id',
+      );
+    });
+
+    test('ending the sessions of a changed password is answered only for the secure origin', async function (assert) {
+      let { username, password, userId } =
+        await registerPasswordUser(dbAdapter);
+      let secureWindow = await secureSessionAuth(dbAdapter, userId);
+      for (let origin of [null, APP_ORIGIN]) {
+        let response = await passwordChange(username, password, origin);
+        assert.strictEqual(response.status, 403, `Origin: ${origin ?? 'none'}`);
+        assert.strictEqual(response.body.errors[0].code, 'forbidden');
+      }
+      assert.strictEqual(
+        (await mint(secureWindow)).status,
+        201,
+        'nothing was ended',
+      );
+    });
+
+    test('ending the sessions of a changed password shares the limit on failed sign-ins', async function (assert) {
+      let { username, password } = await registerPasswordUser(dbAdapter);
+      let refused;
+      for (let attempt = 0; attempt < 10; attempt++) {
+        let response = await passwordChange(username, `${password}-${attempt}`);
+        if (response.status === 429) {
+          refused = response;
+          break;
+        }
+        assert.strictEqual(response.status, 401, response.text);
+      }
+      assert.strictEqual(refused?.status, 429, 'failures are limited');
+      let signIn = await passwordSignIn(username, password);
+      assert.strictEqual(
+        signIn.status,
+        429,
+        'and count against signing in with the account too',
+      );
+    });
+
     test('no other path mints the secure-session claim', async function (assert) {
       assert.throws(
         () =>
@@ -1385,6 +1529,7 @@ module(basename(import.meta.filename), function () {
           await passwordSignIn(username, `${password}-wrong`);
           await passwordSignIn(username, password);
           await googleSignIn(issued);
+          await passwordChange(username, password);
         }),
       );
       assert.true(lines.length > 0, 'the requests are logged');
@@ -1400,6 +1545,7 @@ module(basename(import.meta.filename), function () {
         '/_secure-session',
         '/_secure-session/google',
         '/_secure-sessions?client=window',
+        '/_secure-sessions/password-change',
       ]) {
         assert.true(
           keepsMethodAndPathOnly({ url: `http://127.0.0.1:4444${path}` }),
