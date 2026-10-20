@@ -233,6 +233,111 @@ module('factory-prompt-loader > interpolate > #if blocks', function () {
 });
 
 // ---------------------------------------------------------------------------
+// interpolate — substituted values are never parsed as template syntax
+// ---------------------------------------------------------------------------
+
+module('factory-prompt-loader > interpolate > opaque values', function () {
+  test('a value inside #each keeps its template syntax', function (assert) {
+    let content =
+      '{{#if done}}finished{{else}}open{{/if}} {{#each tags}}{{.}}{{/each}} {{name}}';
+    assert.strictEqual(
+      interpolate('{{#each skills}}{{content}}{{/each}}', {
+        skills: [{ content }],
+        done: true,
+        tags: ['a'],
+        name: 'n',
+      }),
+      content,
+    );
+  });
+
+  test('a glimmer argument in a value survives', function (assert) {
+    let content = '<Results @query={{this.query}} @mode="hover" />';
+    assert.strictEqual(
+      interpolate('{{#each skills}}[{{content}}]{{/each}}', {
+        skills: [{ content }],
+      }),
+      `[${content}]`,
+    );
+  });
+
+  test('a string item in #each renders verbatim', function (assert) {
+    assert.strictEqual(
+      interpolate('{{#each items}}- {{.}}\n{{/each}}', {
+        items: ['{{x}}', 'a{{#if y}}b{{/if}}'],
+        x: 'X',
+        y: true,
+      }),
+      '- {{x}}\n- a{{#if y}}b{{/if}}',
+    );
+  });
+
+  test('values in a nested #each over string items render verbatim', function (assert) {
+    let template =
+      '{{#each skills}}# {{name}}\n{{content}}\n{{#each references}}> {{.}}\n{{/each}}{{/each}}';
+    assert.strictEqual(
+      interpolate(template, {
+        skills: [
+          {
+            name: 'live',
+            content: '{{@model.title}}',
+            references: ['{{#each r as |e|}}{{e}}{{/each}}'],
+          },
+        ],
+      }),
+      '# live\n{{@model.title}}\n> {{#each r as |e|}}{{e}}{{/each}}',
+    );
+  });
+
+  test('a value in either branch of #if renders verbatim', function (assert) {
+    let template = '{{#if v}}{{v}}{{else}}{{w}}{{/if}}';
+    assert.strictEqual(
+      interpolate(template, { v: '{{#if v}}x{{/if}}' }),
+      '{{#if v}}x{{/if}}',
+    );
+    assert.strictEqual(
+      interpolate(template, { v: '', w: '{{else}} {{w}}' }),
+      '{{else}} {{w}}',
+    );
+  });
+
+  test('an unclosed block opener in a value does not swallow a later block', function (assert) {
+    assert.strictEqual(
+      interpolate('{{#each items}}{{text}} {{/each}}{{#if show}}TAIL{{/if}}', {
+        items: [{ text: '{{#if foo}} open only' }],
+        show: true,
+      }),
+      '{{#if foo}} open only TAIL',
+    );
+  });
+
+  test('replacement patterns in a value render verbatim', function (assert) {
+    let value = "$& $$ $` $' $1";
+    assert.strictEqual(
+      interpolate('{{#each items}}<{{.}}>{{/each}}', { items: [value] }),
+      `<${value}>`,
+    );
+    assert.strictEqual(
+      interpolate('{{#each items}}<{{text}}>{{/each}}', {
+        items: [{ text: value }],
+      }),
+      `<${value}>`,
+    );
+  });
+
+  test('a top-level value keeps its template syntax', function (assert) {
+    assert.strictEqual(
+      interpolate('A {{v}} B', { v: '{{#if v}}{{v}}{{/if}}' }),
+      'A {{#if v}}{{v}}{{/if}} B',
+    );
+  });
+
+  test('rejects a template containing a NUL character', function (assert) {
+    assert.throws(() => interpolate('a\u0000b', {}), /NUL/);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // FilePromptLoader
 // ---------------------------------------------------------------------------
 
@@ -254,6 +359,47 @@ module('factory-prompt-loader > FilePromptLoader', function () {
       result.includes('workspace mirror of'),
       'system prompt names the workspace mirror as the read/write surface',
     );
+  });
+
+  test('renders skill content and references verbatim', function (assert) {
+    let loader = new FilePromptLoader();
+    let content =
+      '<@context.searchResultsComponent @query={{this.q}} />\n{{#if a}}x{{/if}}';
+    let reference = '{{#each r as |e|}}{{e}}{{/each}}';
+    let result = loader.load('system', {
+      targetRealm: 'https://example.test/target/',
+      darkfactoryModuleUrl: 'https://example.test/software-factory/darkfactory',
+      enableCatalogReuse: false,
+      skills: [{ name: 'live', content, references: [reference] }],
+    });
+    assert.ok(result.includes(content), 'skill content is verbatim');
+    assert.ok(result.includes(reference), 'skill reference is verbatim');
+  });
+
+  test('renders a real skill with its glimmer syntax intact', async function (assert) {
+    let content = await readFile(
+      join(
+        import.meta.dirname,
+        '..',
+        '.agents',
+        'skills-orchestrator',
+        'boxel-live-surfaces',
+        'SKILL.md',
+      ),
+      'utf8',
+    );
+    let loader = new FilePromptLoader();
+    let result = loader.load('system', {
+      targetRealm: 'https://example.test/target/',
+      darkfactoryModuleUrl: 'https://example.test/software-factory/darkfactory',
+      enableCatalogReuse: false,
+      skills: [{ name: 'boxel-live-surfaces', content, references: [] }],
+    });
+    assert.ok(
+      result.includes('@query={{this.tasksWireQuery}}'),
+      'glimmer argument is intact',
+    );
+    assert.ok(result.includes(content.trim()), 'skill content is verbatim');
   });
 
   test('caches templates on subsequent loads', function (assert) {
@@ -686,6 +832,39 @@ module('factory-prompt-loader > assembleIteratePrompt', function () {
     assert.ok(
       result.includes('some plain text output'),
       'text output preserved as-is',
+    );
+  });
+
+  test('renders tool output, previous actions and validation context verbatim', function (assert) {
+    let loader = new FilePromptLoader();
+    let output =
+      '<h1>{{@model.title}}</h1>\n{{#each @model.items as |i|}}{{i}}{{/each}}';
+    let fileContent = '<template>{{#if @model.done}}✓{{/if}}</template>';
+    let validationContext = 'FAILED: expected {{@model.title}} to render $&';
+    let ctx = makeMinimalContext({
+      validationContext,
+      toolResults: [{ tool: 'read-file', exitCode: 0, output, durationMs: 10 }],
+    });
+
+    let result = assembleIteratePrompt({
+      context: ctx,
+      previousActions: [
+        {
+          type: 'create_file',
+          path: 'card.gts',
+          content: fileContent,
+          realm: 'target',
+        },
+      ],
+      iteration: 1,
+      loader,
+    });
+
+    assert.ok(result.includes(output), 'tool output is verbatim');
+    assert.ok(result.includes(fileContent), 'action content is verbatim');
+    assert.ok(
+      result.includes(validationContext),
+      'validation context is verbatim',
     );
   });
 

@@ -80,24 +80,32 @@ export class FilePromptLoader implements PromptLoader {
  * - {{#each items}} ... {{/each}} — iterate over arrays
  * - {{#if value}} ... {{/if}} — conditional blocks
  * - {{.}} — current item in an #each block over a string array
+ *
+ * Substituted values are opaque: a value is never parsed as template syntax,
+ * so `{{…}}` and `$` sequences in it come out verbatim. A template must not
+ * contain a NUL character, which marks value placeholders.
  */
 export function interpolate(
   template: string,
   variables: Record<string, unknown>,
 ): string {
+  let subs = new Substitutions(template);
   let result = template;
 
   // Process {{#each ...}} blocks first — they recursively handle nested
   // {{#if}} and {{#each}} blocks within their body using the item context.
   // This must happen before top-level {{#if}} processing so that {{#if}}
   // blocks inside {{#each}} are resolved with the correct item variables.
-  result = processEachBlocks(result, variables);
+  result = processEachBlocks(result, variables, subs);
 
   // Process remaining top-level {{#if ...}} blocks
-  result = processIfBlocks(result, variables);
+  result = processIfBlocks(result, variables, subs);
 
   // Process simple {{variable}} and {{a.b.c}} substitutions
-  result = processVariables(result, variables);
+  result = processVariables(result, variables, subs);
+
+  // Swap the value placeholders back for the values themselves
+  result = subs.restore(result);
 
   // Clean up excessive blank lines (3+ consecutive → 2)
   result = result.replace(/\n{3,}/g, '\n\n');
@@ -105,9 +113,44 @@ export function interpolate(
   return result.trim();
 }
 
+/**
+ * Holds substituted values out of the working string until every pass has run.
+ *
+ * The block passes rescan their own output, so a value written straight into
+ * the working string would be parsed as template syntax. Every write of a value
+ * goes through `stash`, which returns a placeholder containing no braces, and
+ * `restore` puts the values back once at the end. Nothing may write a value
+ * into the working string without going through `stash`.
+ */
+class Substitutions {
+  #values: string[] = [];
+
+  constructor(template: string) {
+    if (template.includes('\u0000')) {
+      throw new Error('Prompt template must not contain a NUL character');
+    }
+  }
+
+  stash(value: string): string {
+    this.#values.push(value);
+    return `\u0000${this.#values.length - 1}\u0000`;
+  }
+
+  restore(text: string): string {
+    // A function replacer's return value is neither rescanned nor read for
+    // `$` patterns.
+    return text.replace(
+      // eslint-disable-next-line no-control-regex
+      /\u0000(\d+)\u0000/g,
+      (_match, index: string) => this.#values[Number(index)],
+    );
+  }
+}
+
 function processIfBlocks(
   template: string,
   variables: Record<string, unknown>,
+  subs: Substitutions,
 ): string {
   let result = template;
   let prevResult: string;
@@ -120,9 +163,9 @@ function processIfBlocks(
       let { trueBranch, falseBranch } = splitOnOwnElse(body);
 
       if (isTruthy(value)) {
-        return processBlock(trueBranch, variables);
+        return processBlock(trueBranch, variables, subs);
       }
-      return processBlock(falseBranch, variables);
+      return processBlock(falseBranch, variables, subs);
     });
   } while (result !== prevResult);
 
@@ -132,6 +175,7 @@ function processIfBlocks(
 function processEachBlocks(
   template: string,
   variables: Record<string, unknown>,
+  subs: Substitutions,
 ): string {
   let result = template;
   let prevResult: string;
@@ -149,11 +193,13 @@ function processEachBlocks(
           if (typeof item === 'object' && item !== null) {
             // Object item — merge into variables for nested resolution
             let itemVars = { ...variables, ...item };
-            return processBlock(body, itemVars);
+            return processBlock(body, itemVars, subs);
           } else {
             // Primitive item — replace {{.}} with the value
-            let rendered = body.replace(/\{\{\.\}\}/g, String(item));
-            return processVariables(rendered, variables);
+            let rendered = body.replace(/\{\{\.\}\}/g, () =>
+              subs.stash(String(item)),
+            );
+            return processVariables(rendered, variables, subs);
           }
         })
         .join('');
@@ -169,10 +215,11 @@ function processEachBlocks(
 function processBlock(
   body: string,
   variables: Record<string, unknown>,
+  subs: Substitutions,
 ): string {
-  let result = processEachBlocks(body, variables);
-  result = processIfBlocks(result, variables);
-  result = processVariables(result, variables);
+  let result = processEachBlocks(body, variables, subs);
+  result = processIfBlocks(result, variables, subs);
+  result = processVariables(result, variables, subs);
   return result;
 }
 
@@ -274,6 +321,7 @@ function replaceOutermostBlock(
 function processVariables(
   template: string,
   variables: Record<string, unknown>,
+  subs: Substitutions,
 ): string {
   return template.replace(/\{\{([^#/][^}]*)\}\}/g, (_match, key: string) => {
     let trimmed = key.trim();
@@ -285,9 +333,9 @@ function processVariables(
       return '';
     }
     if (typeof value === 'object') {
-      return JSON.stringify(value);
+      return subs.stash(JSON.stringify(value));
     }
-    return String(value);
+    return subs.stash(String(value));
   });
 }
 
