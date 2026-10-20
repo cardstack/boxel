@@ -2484,8 +2484,12 @@ export default class AgentScreencast extends Component<Signature> {
         padding: var(--boxel-sp-xs) 0;
       }
       .sidebar.is-rail .traffic {
-        flex-direction: column;
-        gap: 0.2rem;
+        gap: 0.1875rem;
+        margin-bottom: 0.375rem;
+      }
+      .sidebar.is-rail .traffic i {
+        width: 0.375rem;
+        height: 0.375rem;
       }
       .rail-icon {
         display: inline-flex;
