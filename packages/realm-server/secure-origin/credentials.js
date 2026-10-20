@@ -17,8 +17,11 @@
 //   one of the origins the realm server lists in this page's markup, and only
 //   the window that is this frame's parent.
 //
-// The form shown, and the requests it may make, are named by the `form` query
-// parameter; the app page's origin by `origin`.
+// The form shown, and the requests it may make, are named by the `form`
+// parameter; the app page's origin by `origin`. Both are in the URL's
+// fragment, not its query. The fragment is never sent to the server, so no
+// filter in front of it sees an app origin such as `http://localhost:4200`,
+// which a WAF rule refuses in a query string.
 
 import { isListedOrigin } from './app-origins.js';
 import { redactResponse } from './redact.js';
@@ -203,7 +206,7 @@ function readConfig() {
 }
 
 let config = readConfig();
-let params = new URL(window.location.href).searchParams;
+let params = new URLSearchParams(window.location.hash.slice(1));
 let formName = params.get('form');
 let form = Object.hasOwn(FORMS, formName) ? FORMS[formName] : undefined;
 let appOrigin = params.get('origin');

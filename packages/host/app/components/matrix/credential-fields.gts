@@ -191,8 +191,13 @@ export default class CredentialFieldsFrame extends Component<Signature> {
       ? ENV.secureOriginURL
       : `${ENV.secureOriginURL}/`;
     let url = new URL('credentials', base);
-    url.searchParams.set('form', this.args.form);
-    url.searchParams.set('origin', window.location.origin);
+    // In the fragment, which is never sent to the server: a filter in front
+    // of the secure origin refuses a query string naming a loopback origin,
+    // so a host app on this machine would otherwise get no frame at all.
+    url.hash = new URLSearchParams({
+      form: this.args.form,
+      origin: window.location.origin,
+    }).toString();
     return url.href;
   }
 

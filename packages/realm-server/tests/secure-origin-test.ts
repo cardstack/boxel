@@ -11,6 +11,7 @@ import {
   setupPermissionedRealmCached,
 } from './helpers/index.ts';
 import {
+  appOrigin,
   createSecureOrigin,
   secureOriginHeaders,
 } from '../lib/secure-origin.ts';
@@ -196,6 +197,104 @@ module(basename(import.meta.filename), function () {
       ]) {
         assert.false(isListedOrigin(origin, listed), origin || '(empty)');
       }
+    });
+
+    test('a port wildcard stands for any port of its host, and nothing else', function (assert) {
+      let loopback = ['http://localhost:*', 'http://127.0.0.1:*'];
+      for (let origin of [
+        'http://localhost:4200',
+        'http://localhost:7357',
+        'http://localhost',
+        'http://127.0.0.1:4200',
+      ]) {
+        assert.true(isListedOrigin(origin, loopback), origin);
+      }
+      for (let origin of [
+        'https://localhost:4200',
+        'http://localhost.evil.test:4200',
+        'http://evil.localhost:4200',
+        'http://127.0.0.2:4200',
+        'http://127.0.0.1.evil.test:4200',
+        'http://localhost:4200/',
+        'http://localhost:*',
+      ]) {
+        assert.false(isListedOrigin(origin, loopback), origin);
+      }
+    });
+
+    test('an app origin is configured as a single origin, its port optionally any', function (assert) {
+      assert.strictEqual(
+        appOrigin('http://localhost:*'),
+        'http://localhost:*',
+        'a port wildcard is kept',
+      );
+      assert.strictEqual(
+        appOrigin('HTTP://LocalHost:*'),
+        'http://localhost:*',
+        'and normalized as an origin is',
+      );
+      assert.strictEqual(
+        appOrigin('https://app.example.test/some/path'),
+        'https://app.example.test',
+        'an origin with a path is reduced to the origin',
+      );
+      assert.strictEqual(
+        appOrigin('https://*.preview.example.test'),
+        'https://*.preview.example.test',
+      );
+      for (let origin of [
+        '*',
+        'http://*',
+        'http://*:*',
+        'http:',
+        'http://localhost:4200:*',
+        'http://localhost/path:*',
+        'file:///tmp',
+        'not a url',
+      ]) {
+        assert.throws(
+          () => appOrigin(origin),
+          /is not an app origin/,
+          `${origin} is refused`,
+        );
+      }
+    });
+
+    test('a port wildcard origin is named in frame-ancestors and in the page', async function (assert) {
+      let origin = createSecureOrigin(
+        new URL('https://secure-loopback.example.test/secure'),
+        {
+          matrixURL: new URL(matrixURL),
+          appOrigins: [
+            'https://app.example.test',
+            'http://localhost:*',
+            'http://127.0.0.1:*',
+          ],
+        },
+      );
+      let headers: Record<string, string> = {};
+      let ctx = {
+        path: '/secure/credentials',
+        method: 'GET',
+        host: 'secure-loopback.example.test',
+        set(values: Record<string, string>) {
+          Object.assign(headers, values);
+        },
+      } as any;
+      await origin.handle(ctx);
+      assert.strictEqual(ctx.status, 200, 'status');
+      assert.ok(
+        headers['Content-Security-Policy'].includes(
+          'frame-ancestors https://app.example.test http://localhost:* http://127.0.0.1:*',
+        ),
+        headers['Content-Security-Policy'],
+      );
+      assert.ok(
+        String(ctx.body).includes(
+          '<meta name="boxel-app-origins" content="https://app.example.test http://localhost:* http://127.0.0.1:*" />',
+        ),
+        'the page lists them',
+      );
     });
 
     test('a wildcard origin is named in frame-ancestors and in the page', async function (assert) {

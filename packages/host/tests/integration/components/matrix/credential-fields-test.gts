@@ -182,6 +182,28 @@ module('Integration | credential fields', function (hooks) {
     assertNothingToRead(assert, 'login', snooped());
   });
 
+  // A filter in front of the secure origin refuses a query string naming a
+  // loopback origin, so a host app on this machine gets the frame only when
+  // what the frame is told rides in the fragment, which is never sent.
+  test('the frame is told its form and the page origin in the fragment, not the query', async function (assert) {
+    await render(<template><Login @setMode={{noop}} /></template>);
+
+    assertFrameShown(assert, 'login');
+    let src = new URL(
+      document.querySelector<HTMLIFrameElement>(
+        '[data-test-credential-fields-frame="login"]',
+      )!.src,
+    );
+    assert.strictEqual(src.search, '', 'the frame URL has no query');
+    let params = new URLSearchParams(src.hash.slice(1));
+    assert.strictEqual(params.get('form'), 'login', 'the form');
+    assert.strictEqual(
+      params.get('origin'),
+      window.location.origin,
+      "the page's origin",
+    );
+  });
+
   test('a card on the page cannot read the change-password fields', async function (assert) {
     await getService('matrix-service').ready;
     let CardComponent = await snoopingCard();

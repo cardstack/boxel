@@ -49,6 +49,7 @@ import { createServeIndex } from './handlers/serve-index.ts';
 import { findOrMountRealm } from './lib/realm-routing.ts';
 import type { GoogleSignInConfig } from './lib/google-sign-in.ts';
 import {
+  appOrigin,
   createSecureOrigin,
   secureOriginGate,
   type SecureOrigin,
@@ -890,9 +891,7 @@ export class RealmServer {
             appOrigins: [
               ...new Set([
                 serverURL.origin,
-                ...secureOriginAppOrigins.map(
-                  (origin) => new URL(origin).origin,
-                ),
+                ...secureOriginAppOrigins.map(appOrigin),
               ]),
             ],
           },

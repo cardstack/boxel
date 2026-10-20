@@ -30,6 +30,13 @@ SOFTWARE_FACTORY_REALM_URL="${RESOLVED_SOFTWARE_FACTORY_REALM_URL:-$DEFAULT_SOFT
 DEFAULT_BOXEL_HOMEPAGE_REALM_URL='https://app.boxel.ai/boxel-homepage/'
 BOXEL_HOMEPAGE_REALM_URL="${RESOLVED_BOXEL_HOMEPAGE_REALM_URL:-$DEFAULT_BOXEL_HOMEPAGE_REALM_URL}"
 
+# The app origins that may frame the secure origin's credential fields,
+# besides --serverURL's: a host app served from the developer's own machine,
+# over https or http and on any port. No remote page can have a loopback
+# origin, so these admit only pages the user started themselves. Nothing else
+# is listed here: a password manager fills a saved production password into
+# the fields wherever they are framed, so a preview or any other remote origin
+# belongs on staging's list, never this one.
 echo "[start-production] pid=$$ ppid=$PPID about to exec node at $(date -Iseconds)" >&2
 
 NODE_NO_WARNINGS=1 \
@@ -48,6 +55,10 @@ NODE_NO_WARNINGS=1 \
   --serverURL='https://app.boxel.ai' \
   --prerendererUrl='http://boxel-prerender-manager.boxel-production-internal:4222' \
   --secureOriginURL='https://secure.boxel.ai/' \
+  --secureOriginAppOrigin='https://localhost:*' \
+  --secureOriginAppOrigin='https://127.0.0.1:*' \
+  --secureOriginAppOrigin='http://localhost:*' \
+  --secureOriginAppOrigin='http://127.0.0.1:*' \
   \
   --path='/persistent/base' \
   --username='base_realm' \
