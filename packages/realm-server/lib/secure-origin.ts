@@ -53,6 +53,10 @@ const SHELL_ASSETS: Record<string, { file: string; contentType: string }> = {
     file: 'session.js',
     contentType: 'text/javascript; charset=utf-8',
   },
+  'oauth.js': {
+    file: 'oauth.js',
+    contentType: 'text/javascript; charset=utf-8',
+  },
   'sign-in.js': {
     file: 'sign-in.js',
     contentType: 'text/javascript; charset=utf-8',
@@ -190,6 +194,7 @@ export function createSecureOrigin(
   url: URL,
   credentialFields?: CredentialFieldsOptions,
   shellOptions?: ShellOptions,
+  oauthHandler?: (ctx: Koa.Context) => Promise<boolean>,
 ): SecureOrigin {
   let shellBase = url.pathname.replace(/\/+$/, '');
   let indexHTML = readFileSync(join(SHELL_DIR, 'index.html'), 'utf8')
@@ -243,7 +248,12 @@ export function createSecureOrigin(
   }
 
   function route(ctx: Koa.Context) {
-    let match = routes.get(ctx.path);
+    let match =
+      routes.get(ctx.path) ??
+      (oauthHandler &&
+      /^\/oauth\/interaction\/[A-Za-z0-9_-]{1,128}$/.test(ctx.path)
+        ? shell
+        : undefined);
     if (!match) {
       respond(ctx, 404, 'Not Found', 'text/plain; charset=utf-8');
       return;
@@ -277,12 +287,27 @@ export function createSecureOrigin(
       // the origin itself, which is what a log search filters on.
       let startedAt = Date.now();
       try {
+        ctx.set(secureOriginHeaders());
+        if (oauthHandler && (await oauthHandler(ctx))) {
+          return;
+        }
         route(ctx);
       } catch (e: any) {
         // Handled here rather than rethrown so the app's error handler, which
         // reports the request to Sentry, never sees a secure-origin request.
-        log.error(`secure origin failed to answer: ${e?.message ?? e}`);
-        respond(ctx, 500, 'Internal Server Error', 'text/plain; charset=utf-8');
+        log.error('secure origin failed to answer');
+        let status =
+          typeof e?.status === 'number' && e.status >= 400 && e.status < 500
+            ? e.status
+            : 500;
+        respond(
+          ctx,
+          status,
+          status === 500
+            ? 'Internal Server Error'
+            : 'Boxel authorization refused; start again',
+          'text/plain; charset=utf-8',
+        );
       }
       log.info(
         `secure-origin ${ctx.method} ${ctx.path}: ${ctx.status} dur=${Date.now() - startedAt}ms`,

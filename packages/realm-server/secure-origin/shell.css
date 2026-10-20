@@ -194,3 +194,1011 @@ body {
 .secure-error {
   color: var(--secure-danger);
 }
+
+/*
+  OAuth consent and connected applications. They speak the app's newer
+  surfaces (the AI assistant's approval gate, the dashboard's panels): Pret
+  UI's semantic tokens mapped onto Boxel's dark palette, hairline edges
+  instead of borders, and lime for the one place the window needs a decision.
+  The values are copied here, since the secure origin loads nothing from the
+  app.
+*/
+.secure-card.oauth {
+  --foreground: #ffffff;
+  --muted-foreground: #afafb7;
+  --card: #272330;
+  --inset: color-mix(in oklch, #ffffff 5%, var(--card));
+  --hover: color-mix(in oklch, #ffffff 9%, var(--card));
+  --border: color-mix(in oklch, #ffffff 16%, transparent);
+  --ring: #00ffba;
+  --attention: #c3fc33;
+  --caution: #ffba00;
+  --destructive: #ff5050;
+  --destructive-ink: color-mix(in oklch, #ff5050 60%, #ffffff);
+  --radius: 10px;
+  --font-mono: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+
+  gap: 1.25rem;
+  width: 100%;
+  padding: 1.75rem;
+  border: 0;
+  border-radius: 1.25rem;
+  background: var(--card);
+  box-shadow:
+    0 0 0 1px var(--border),
+    0 24px 48px -24px rgb(0 0 0 / 0.6);
+  color: var(--foreground);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+/* The OAuth pages bring their own top bar and footer, so the shell gives
+   up its narrow centered column to them. */
+#secure-shell:has(> .oauth-page) {
+  display: block;
+  max-width: none;
+  padding: 0;
+}
+
+.oauth-page {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  min-height: 100dvh;
+  color: #ffffff;
+}
+
+.oauth-topbar {
+  /* The app's top bar: 58px, 9px padding, wordmark left, avatar right. */
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+  height: 58px;
+  padding: 9px;
+}
+
+.oauth-wordmark {
+  display: block;
+  width: 160px;
+  height: 40px;
+}
+
+.oauth-account {
+  position: relative;
+}
+
+.oauth-avatar {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--oauth-avatar-bg, #000000);
+  color: var(--oauth-avatar-text, #ffffff);
+  line-height: 1;
+}
+
+.oauth-avatar--small {
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgb(255 255 255 / 0.35);
+  font-size: 22px;
+}
+
+.oauth-avatar--medium {
+  width: 36px;
+  height: 36px;
+  font-size: 19px;
+}
+
+.oauth-avatar--large {
+  width: 70px;
+  height: 70px;
+  font-size: 38px;
+}
+
+.oauth-avatar-button {
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  box-shadow: 0 5px 15px 0 rgb(0 0 0 / 0.5);
+  cursor: pointer;
+}
+
+/* The app's profile popover, light on the dark page. */
+.oauth-account-menu {
+  position: absolute;
+  top: calc(100% + 9px);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 320px;
+  max-width: calc(100vw - 18px);
+  padding: 16px;
+  border-radius: 10px;
+  background: #f8f7fa;
+  box-shadow: 0 5px 15px 0 rgb(0 0 0 / 0.5);
+  color: #000000;
+  font-size: 0.875rem;
+}
+
+.oauth-account-menu-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.oauth-pill {
+  min-height: 30px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 100px;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px #d1d1d1;
+  color: #000000;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.oauth-pill--dark {
+  background: #272330;
+  box-shadow: none;
+  color: #ffffff;
+}
+
+.oauth-pill:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.oauth-account-menu-who {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 0 4px;
+}
+
+.oauth-account-menu-id {
+  max-width: 100%;
+  overflow: hidden;
+  color: #5a586a;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.oauth-account-menu-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 14px;
+  border-top: 1px solid #000000;
+  color: #000000;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.oauth-account-menu-link:hover {
+  text-decoration: underline;
+}
+
+.oauth-avatar-button:focus-visible,
+.oauth-pill:focus-visible,
+.oauth-account-menu-link:focus-visible {
+  outline: 2px solid #00ffba;
+  outline-offset: 2px;
+}
+
+.oauth-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #00ffba;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.oauth-link:focus-visible,
+.oauth-page-footer a:focus-visible {
+  outline: 2px solid #00ffba;
+  outline-offset: 2px;
+}
+
+/* A request taller than the window starts at the top and scrolls; plain
+   centering would push its top out of reach. */
+.oauth-main {
+  display: flex;
+  flex-direction: column;
+  justify-content: safe center;
+  align-items: center;
+  padding: 2rem 1rem;
+}
+
+.oauth-main > .oauth {
+  max-width: 32rem;
+}
+
+.oauth-main > .oauth:has(.oauth-grants) {
+  max-width: 35rem;
+}
+
+.oauth-page-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem 1.5rem;
+  padding: 1rem 1.5rem 1.5rem;
+  color: #afafb7;
+  font-size: 0.75rem;
+}
+
+.oauth-page-footer nav {
+  display: flex;
+  gap: 1.25rem;
+}
+
+.oauth-page-footer a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.oauth-page-footer a:hover {
+  color: #ffffff;
+  text-decoration: underline;
+}
+
+.oauth-page-footer p {
+  margin: 0;
+}
+
+.oauth-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.oauth :focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.oauth .oauth-title:focus {
+  outline: none;
+}
+
+.oauth-icon {
+  width: 1rem;
+  height: 1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.oauth-mono {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+}
+
+.oauth-muted {
+  color: var(--muted-foreground);
+}
+
+.oauth-small {
+  font-size: 0.75rem;
+}
+
+/* ── header ─────────────────────────────────────────────────────────── */
+.oauth-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.625rem;
+  text-align: center;
+}
+
+.oauth-handshake {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.oauth-handshake-link {
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 50%;
+  color: var(--muted-foreground);
+  box-shadow: 0 0 0 1px var(--border);
+}
+
+.oauth-mark {
+  --oauth-mark-hue: 280;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.75rem;
+  background: oklch(0.42 0.11 var(--oauth-mark-hue));
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14);
+  color: #ffffff;
+  font-size: 1.125rem;
+  font-weight: 600;
+}
+
+.oauth-boxel-mark {
+  flex: none;
+  width: 2.75rem;
+  height: 2.75rem;
+  fill: #00ffba;
+}
+
+.secure-card.oauth h1.oauth-title {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 500;
+  line-height: 1.3;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+
+.oauth-client-name {
+  font-weight: 650;
+  /* A self-chosen name can be any length: keep the request readable. */
+  display: inline;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.oauth-account-id {
+  color: #ffffff;
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+
+.oauth-identity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.oauth-host {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  min-width: 0;
+  color: var(--foreground);
+  font-size: 0.875rem;
+}
+
+.oauth-host .oauth-icon {
+  flex: none;
+  color: var(--muted-foreground);
+}
+
+.oauth-whoami {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: var(--inset);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.oauth-whoami-id {
+  flex: 1;
+  min-width: 0;
+}
+
+.secure-card.oauth .oauth-note--center {
+  text-align: center;
+}
+
+.oauth-header--page {
+  align-items: flex-start;
+  text-align: left;
+}
+
+/* ── about the application ─────────────────────────────────────────── */
+.oauth-details {
+  margin-top: -0.5rem;
+  border-radius: var(--radius);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.oauth-details summary {
+  padding: 0.625rem 1rem;
+  border-radius: var(--radius);
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.oauth-details summary:hover {
+  color: var(--foreground);
+}
+
+.oauth-details[open] summary {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+
+.oauth-details .oauth-facts {
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+
+.oauth-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.375rem 1rem;
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius);
+  background: var(--inset);
+  box-shadow: inset 0 0 0 1px var(--border);
+  font-size: 0.8125rem;
+}
+
+.oauth-facts dt {
+  color: var(--muted-foreground);
+}
+
+.oauth-facts dd {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.secure-card.oauth .oauth-note {
+  margin-top: -0.5rem;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+
+/* ── sections ───────────────────────────────────────────────────────── */
+.oauth-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.oauth-section h2,
+.oauth-section legend {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.oauth-section legend {
+  margin-bottom: 0.5rem;
+}
+
+.oauth-count {
+  font-family: var(--font-mono);
+  font-weight: 400;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.oauth-lines,
+.oauth-grants,
+.oauth-chips {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.oauth-lines {
+  gap: 0.125rem;
+}
+
+.oauth-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+}
+
+.oauth-line-icon {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 0.5rem;
+  background: var(--inset);
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--foreground);
+}
+
+.oauth-line[data-caution] .oauth-line-icon {
+  background: color-mix(in oklch, var(--caution) 12%, var(--card));
+  box-shadow: inset 0 0 0 1px var(--caution);
+  color: var(--caution);
+}
+
+.oauth-line[data-quiet] .oauth-line-icon {
+  background: none;
+  color: var(--muted-foreground);
+}
+
+.oauth-line[data-quiet] .oauth-line-title {
+  color: var(--muted-foreground);
+  font-weight: 400;
+}
+
+.oauth-line-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  min-width: 0;
+  padding-top: 0.3125rem;
+}
+
+.oauth-line-title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.oauth-line-detail {
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.oauth-line-detail.oauth-mono {
+  font-size: 0.75rem;
+}
+
+/* ── choices: workspaces and renewal ───────────────────────────────── */
+.oauth-realms {
+  display: flex;
+  flex-direction: column;
+  border-radius: var(--radius);
+  box-shadow: inset 0 0 0 1px var(--border);
+  overflow: hidden;
+}
+
+.oauth-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  transition: background 180ms ease;
+}
+
+.oauth-realms .oauth-option + .oauth-option {
+  box-shadow: 0 -1px 0 var(--border);
+}
+
+.oauth-section > .oauth-option {
+  border-radius: var(--radius);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.oauth-option:hover {
+  background: var(--hover);
+}
+
+.oauth-option:has(:disabled) {
+  cursor: default;
+  opacity: 0.6;
+}
+
+.oauth-option .oauth-line-text {
+  padding-top: 0;
+}
+
+/* A checkbox drawn in the kit's style: a hairline square that fills with
+   the highlight when chosen. */
+.oauth-check {
+  appearance: none;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin: 0.0625rem 0 0;
+  border-radius: 0.3125rem;
+  background: var(--inset);
+  box-shadow: inset 0 0 0 1.5px var(--muted-foreground);
+  cursor: inherit;
+  transition:
+    background 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.oauth-check::after {
+  content: '';
+  width: 0.6875rem;
+  height: 0.375rem;
+  margin-top: -0.125rem;
+  border-bottom: 2px solid #000000;
+  border-left: 2px solid #000000;
+  transform: rotate(-45deg) scale(0);
+  transition: transform 140ms ease;
+}
+
+.oauth-check:checked {
+  background: var(--ring);
+  box-shadow: none;
+}
+
+.oauth-check:checked::after {
+  transform: rotate(-45deg) scale(1);
+}
+
+/* ── the decision ───────────────────────────────────────────────────── */
+.oauth-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+  margin: 0 -1.75rem -1.75rem;
+  padding: 1rem 1.75rem 1.25rem;
+  border-radius: 0 0 1.25rem 1.25rem;
+  background: color-mix(in oklch, var(--attention) 6%, var(--card));
+  box-shadow: 0 -1px 0 var(--border);
+}
+
+.oauth-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.oauth-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 2.5rem;
+  padding: 0 1rem;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--border);
+  color: var(--foreground);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.oauth-button:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.oauth-button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.oauth-button--approve {
+  flex: 1;
+  background: var(--attention);
+  box-shadow: none;
+  color: #000000;
+}
+
+.oauth-button--approve:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--attention) 88%, #ffffff);
+}
+
+.oauth-actions .oauth-button--quiet {
+  flex: 0 0 auto;
+  min-width: 6.5rem;
+}
+
+.oauth-button--danger {
+  color: var(--destructive-ink);
+  box-shadow: inset 0 0 0 1px
+    color-mix(in oklch, var(--destructive) 55%, transparent);
+}
+
+.oauth-button--danger:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--destructive) 16%, var(--card));
+}
+
+.secure-card.oauth .oauth-footnote,
+.secure-card.oauth .oauth-hint {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.secure-card.oauth .oauth-error:empty {
+  display: none;
+}
+
+.secure-card.oauth .oauth-error {
+  padding: 0.625rem 0.75rem;
+  border-radius: var(--radius);
+  background: color-mix(in oklch, var(--destructive) 14%, var(--card));
+  box-shadow: inset 0 0 0 1px
+    color-mix(in oklch, var(--destructive) 50%, transparent);
+  color: var(--destructive-ink);
+  font-size: 0.8125rem;
+}
+
+/* ── loading, problems ──────────────────────────────────────────────── */
+.secure-card.oauth .oauth-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem;
+  color: var(--muted-foreground);
+}
+
+.oauth-spinner {
+  flex: none;
+  width: 0.875rem;
+  height: 0.875rem;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: oauth-spin 700ms linear infinite;
+}
+
+@keyframes oauth-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.oauth-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.oauth-skeleton span {
+  height: 2.5rem;
+  border-radius: var(--radius);
+  background: var(--inset);
+  animation: oauth-pulse 1.4s ease-in-out infinite;
+}
+
+.oauth-skeleton span:first-child {
+  width: 60%;
+  height: 1.25rem;
+  margin: 0 auto 0.5rem;
+}
+
+@keyframes oauth-pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.oauth-problem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0;
+  text-align: center;
+}
+
+.oauth-problem-icon {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 0.75rem;
+  background: color-mix(in oklch, var(--destructive) 14%, var(--card));
+  color: var(--destructive-ink);
+}
+
+.oauth-problem-icon .oauth-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
+/* ── connected applications ─────────────────────────────────────────── */
+.oauth-grants {
+  overflow: hidden;
+  border-radius: var(--radius);
+  box-shadow: inset 0 0 0 1px var(--border);
+}
+
+.oauth-grants > li {
+  padding: 1rem;
+}
+
+.oauth-grants > li + li {
+  box-shadow: 0 -1px 0 var(--border);
+}
+
+.oauth-grant {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.oauth-grant[data-confirming] {
+  background: color-mix(in oklch, var(--destructive) 6%, var(--card));
+}
+
+.oauth-grant-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.875rem;
+}
+
+.oauth-grant-main > .oauth-button {
+  min-height: 2rem;
+  padding: 0 0.75rem;
+  font-size: 0.8125rem;
+}
+
+.oauth-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-left: 3.125rem;
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  background: color-mix(in oklch, #ffffff 3%, var(--card));
+  box-shadow: inset 0 0 0 1px
+    color-mix(in oklch, var(--destructive) 45%, transparent);
+}
+
+.oauth-confirm-text {
+  flex: 1 1 12rem;
+  font-size: 0.8125rem;
+}
+
+.oauth-confirm .oauth-button {
+  min-height: 2rem;
+  padding: 0 0.75rem;
+  font-size: 0.8125rem;
+}
+
+.oauth-button--destructive {
+  background: var(--destructive);
+  box-shadow: none;
+  color: #000000;
+}
+
+.oauth-button--destructive:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--destructive) 85%, #ffffff);
+}
+
+.oauth-grant .oauth-mark {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.625rem;
+  font-size: 1rem;
+}
+
+.oauth-grant-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.secure-card.oauth .oauth-grant-name {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.oauth-chips {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-top: 0.25rem;
+}
+
+.oauth-chip {
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  background: var(--inset);
+  box-shadow: inset 0 0 0 1px var(--border);
+  font-size: 0.75rem;
+  overflow-wrap: anywhere;
+}
+
+.oauth-chip[data-caution] {
+  background: color-mix(in oklch, var(--caution) 10%, var(--card));
+  color: var(--caution);
+  box-shadow: inset 0 0 0 1px
+    color-mix(in oklch, var(--caution) 55%, transparent);
+}
+
+.oauth-chip--realm {
+  background: none;
+  color: var(--muted-foreground);
+}
+
+/* ── phones ─────────────────────────────────────────────────────────── */
+@media (max-width: 30rem) {
+  .oauth-main {
+    justify-content: flex-start;
+    padding: 0.75rem;
+  }
+
+  .secure-card.oauth {
+    padding: 1.25rem;
+    border-radius: 1rem;
+  }
+
+  .oauth-footer {
+    margin: 0 -1.25rem -1.25rem;
+    padding: 0.875rem 1.25rem calc(1rem + env(safe-area-inset-bottom));
+    border-radius: 0;
+  }
+
+  .oauth-actions {
+    flex-direction: column-reverse;
+  }
+
+  .oauth-facts {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0 0;
+  }
+
+  .oauth-facts dd + dt {
+    margin-top: 0.5rem;
+  }
+
+  .oauth-grant {
+    flex-wrap: wrap;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .oauth-spinner,
+  .oauth-skeleton span {
+    animation-duration: 0s;
+  }
+
+  .oauth-check,
+  .oauth-check::after,
+  .oauth-option,
+  .oauth-button {
+    transition: none;
+  }
+}

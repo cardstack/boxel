@@ -39,8 +39,21 @@ type Handler = (ctxt: Koa.Context, next: Koa.Next) => Promise<void>;
 
 const CLIENTS = new Set<SecureSessionClient>(['window', 'cli']);
 
+type SecureSignInArgs = Pick<
+  CreateRoutesArgs,
+  | 'dbAdapter'
+  | 'matrixClient'
+  | 'realmSecretSeed'
+  | 'matrixAdminUsername'
+  | 'matrixAdminPassword'
+  | 'secureOriginURL'
+  | 'googleSignIn'
+>;
+
+// Realm creation is optional: the standalone OAuth service has none, and
+// refuses a first Google sign-in, which would need to make the user's realm.
 function deps(
-  args: CreateRoutesArgs,
+  args: SecureSignInArgs,
   createRealm?: CreateRealmDeps,
 ): SecureSessionDeps {
   return {
@@ -174,7 +187,7 @@ async function sendSession(ctxt: Koa.Context, session: unknown) {
 
 // POST /_secure-session: signs in with a username, email address or Matrix id
 // and the account's password.
-export function handlePasswordSignIn(args: CreateRoutesArgs): Handler {
+export function handlePasswordSignIn(args: SecureSignInArgs): Handler {
   let limiter = new SignInLimiter();
   return secureSessionHandler(async (ctxt) => {
     requireSecureOrigin(ctxt, args.secureOriginURL);
@@ -202,7 +215,7 @@ export function handlePasswordSignIn(args: CreateRoutesArgs): Handler {
 // GET /_secure-session/google: where the secure window sends the user to sign
 // in with Google, and as which client. 503 when this server has no Google
 // client.
-export function handleGoogleSignInStart(args: CreateRoutesArgs): Handler {
+export function handleGoogleSignInStart(args: SecureSignInArgs): Handler {
   return secureSessionHandler(async (ctxt) => {
     await sendJSON(ctxt, 200, {
       data: {
@@ -216,10 +229,10 @@ export function handleGoogleSignInStart(args: CreateRoutesArgs): Handler {
 // POST /_secure-session/google: signs in with the authorization code Google
 // sent to the secure origin's callback, with the PKCE verifier and nonce the
 // window started the sign-in with. A user's first sign-in to Boxel makes their
-// personal realm, hence the realm deps.
+// personal realm, hence the realm deps where this server has them.
 export function handleGoogleSignIn(
-  args: CreateRoutesArgs,
-  createRealm: CreateRealmDeps,
+  args: SecureSignInArgs,
+  createRealm?: CreateRealmDeps,
 ): Handler {
   return secureSessionHandler(async (ctxt) => {
     requireSecureOrigin(ctxt, args.secureOriginURL);
@@ -240,7 +253,7 @@ export function handleGoogleSignIn(
 // secure window or the CLI.
 export function handleEndSecureSession({
   dbAdapter,
-}: CreateRoutesArgs): Handler {
+}: Pick<CreateRoutesArgs, 'dbAdapter'>): Handler {
   return secureSessionHandler(async (ctxt) => {
     let token = ctxt.state.token as RealmServerTokenClaim | undefined;
     if (!token?.secureSession) {
@@ -260,7 +273,7 @@ export function handleEndSecureSession({
 // to sign in.
 export function handleSecureOriginInfo({
   secureOriginURL,
-}: CreateRoutesArgs): Handler {
+}: Pick<CreateRoutesArgs, 'secureOriginURL'>): Handler {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     if (!secureOriginURL) {
       await sendResponseForError(
