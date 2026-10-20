@@ -467,21 +467,47 @@ const CODEX_SHIELD = 'M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z';
 
 // Labeled once per agent app, so the thread keeps the same beat objects
 // from tick to tick and its rows aren't rebuilt (and re-animated) each time.
+// Only Claude Code and Codex can put a card form in their chat for the
+// user to fill in. Grok Bot and Boxel AI Assistant ask in words instead,
+// and the user answers with a message.
+const INLINE_CARDS: Record<AgentFlavor, boolean> = {
+  claude: true,
+  codex: true,
+  grok: false,
+  boxel: false,
+};
+
+const ASK_IN_WORDS =
+  'I need three details: headcount, dates and any dietary needs.';
+const ANSWER_IN_WORDS = '24 people, May 12–14. 3 vegetarian, 1 vegan';
+
+// The form beat and the ask before it, as an agent without card forms
+// plays them: same timing, so the panel keeps its pace.
+function withoutCardForm(beat: TimedBeat): TimedBeat {
+  if (beat.kind === 'form') {
+    return { ...beat, kind: 'user', text: ANSWER_IN_WORDS };
+  }
+  if (beat.chapter === 'form' && beat.kind === 'agent' && !beat.closes) {
+    return { ...beat, text: ASK_IN_WORDS };
+  }
+  return beat;
+}
+
 const LABELED_TIMELINES = Object.fromEntries(
   (Object.keys(AGENT_CHROME) as AgentFlavor[]).map((agent) => {
     let steps: Record<string, string> = AGENT_CHROME[agent].steps;
     return [
       agent,
       // The assistant works on cards directly, so it has no CLI calls.
-      TIMELINE.filter((beat) => agent !== 'boxel' || beat.kind !== 'cli').map(
-        (beat) => ({
+      TIMELINE.filter((beat) => agent !== 'boxel' || beat.kind !== 'cli')
+        .map((beat) => (INLINE_CARDS[agent] ? beat : withoutCardForm(beat)))
+        .map((beat) => ({
           ...beat,
           label:
             beat.kind === 'cli'
               ? steps.cli
               : (steps[beat.tool ?? ''] ?? beat.tool),
-        }),
-      ),
+        })),
     ];
   }),
 ) as Record<AgentFlavor, (TimedBeat & { label?: string })[]>;
@@ -531,8 +557,9 @@ const fitToTablet = modifier((element: HTMLElement) => {
 // are, works through the boxel CLI while Boxel, open in the app's side
 // panel, picks each change up. Its scenes walk what that pairing gives
 // you: cards composed from catalog fields, files kept as cards, a card
-// form the agent puts in its chat for your input, links across realms,
-// and live query lists. With reduced motion it holds the finished frame.
+// form the agent puts in its chat for your input (Claude Code and Codex
+// only; the others ask in words), links across realms, and live query
+// lists. With reduced motion it holds the finished frame.
 export default class AgentScreencast extends Component<Signature> {
   @tracked private elapsed = 0;
   @tracked private playing = !prefersReducedMotion();
@@ -555,7 +582,7 @@ export default class AgentScreencast extends Component<Signature> {
   // step after it show in the thread.
   private get typing() {
     let t = this.elapsed;
-    let ask = TIMELINE.find(
+    let ask = LABELED_TIMELINES[this.args.agent ?? 'claude'].find(
       (beat) =>
         beat.kind === 'user' && t >= beat.start && t < beat.end - SEND_PAUSE_MS,
     );
@@ -572,6 +599,15 @@ export default class AgentScreencast extends Component<Signature> {
 
   private get isClaude() {
     return (this.args.agent ?? 'claude') === 'claude';
+  }
+
+  // The form chapter is a card form only where the agent can show one.
+  private get chapters() {
+    return INLINE_CARDS[this.args.agent ?? 'claude']
+      ? CHAPTERS
+      : CHAPTERS.map((chapter) =>
+          chapter.id === 'form' ? { ...chapter, label: 'Questions' } : chapter,
+        );
   }
 
   private get isBoxel() {
@@ -1197,7 +1233,7 @@ export default class AgentScreencast extends Component<Signature> {
           data-test-agent-screencast-play
         >{{if this.playing '❚❚' '▶'}}</button>
         <span class='chapters' role='group' aria-label='Chapters'>
-          {{#each CHAPTERS as |chapter|}}
+          {{#each this.chapters as |chapter|}}
             <button
               type='button'
               class={{cn 'chapter'}}
