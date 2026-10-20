@@ -792,10 +792,16 @@ export default class Workspace extends Component<Signature> {
         background: var(--boxel-dark-40);
         backdrop-filter: blur(6px);
       }
+      /* Hovered, a tile's glass controls brighten rather than fill: the
+         star turns the highlight, the menu just lifts. */
       .workspace-card:hover .tile-favorite-btn:hover {
-        background: var(--boxel-highlight);
-        color: var(--boxel-dark);
-        --icon-color: var(--boxel-dark);
+        background: color-mix(
+          in oklch,
+          var(--boxel-light) 18%,
+          var(--boxel-dark-40)
+        );
+        color: var(--boxel-highlight);
+        --icon-color: var(--boxel-highlight);
       }
       .tile-favorite-btn.is-favorited {
         color: var(--boxel-highlight);
@@ -849,9 +855,11 @@ export default class Workspace extends Component<Signature> {
         backdrop-filter: blur(6px);
       }
       .workspace-card:hover .tile-menu-btn:hover {
-        background: var(--boxel-highlight);
-        color: var(--boxel-dark);
-        --icon-color: var(--boxel-dark);
+        background: color-mix(
+          in oklch,
+          var(--boxel-light) 18%,
+          var(--boxel-dark-40)
+        );
       }
       /* Keyboard focus also needs the standard focus ring every other control
          gets. The inner trigger button's own outline is clipped by this
