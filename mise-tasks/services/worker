@@ -51,6 +51,7 @@ NODE_ENV=development \
   --port="${WORKER_PORT}" \
   --matrixURL="${MATRIX_URL_VAL}" \
   --prerendererUrl="${PRERENDER_MGR_URL}" \
+  --indexingDashboard \
   \
   --fromUrl='https://cardstack.com/base/' \
   --toUrl="${REALM_BASE_URL}/base/" \

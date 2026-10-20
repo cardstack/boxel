@@ -31,6 +31,9 @@ const require = createRequire(import.meta.url);
 const boxel = require('@cardstack/eslint-plugin-boxel');
 const MISSING_INVOKABLES_CONFIG = require('../runtime-common/etc/eslint/missing-invokables-config');
 const { DATA_TEST_SELECTORS } = require('../../eslint/data-test-selectors.cjs');
+const {
+  CLOUD_PROVIDER_SDK_RULE,
+} = require('../../eslint/cloud-provider-sdk-imports.cjs');
 
 const esmParserOptions = {
   ecmaFeatures: { modules: true },
@@ -147,6 +150,17 @@ export default defineConfig([
     rules: {
       // require relative imports use full extensions
       'import/extensions': ['error', 'always', { ignorePackages: true }],
+    },
+  },
+  {
+    // Cloud provider SDKs only in adapter modules, and boxel-ui has none
+    // (ADR 003 §1.2).
+    files: ['src/**/*'],
+    plugins: {
+      '@cardstack/boxel': boxel,
+    },
+    rules: {
+      '@cardstack/boxel/no-cloud-provider-sdk': CLOUD_PROVIDER_SDK_RULE,
     },
   },
   {
