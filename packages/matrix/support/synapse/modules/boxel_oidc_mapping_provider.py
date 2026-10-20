@@ -17,8 +17,9 @@ Behaviour:
     impossible (admin-API or migration bypasses), and silently picking one
     would be an account-takeover surface too.
   - On no match, creates a new account whose localpart derives from the email's
-    local part (sanitized to the characters Matrix permits in a user ID),
-    suffixed until it does not collide with an existing account. The collision
+    local part (sanitized to the characters Matrix permits in a user ID, and
+    kept clear of the forms Synapse reserves), suffixed until it does not
+    collide with an existing account. The collision
     check is mandatory here: `allow_existing_users` links the Google identity to
     any existing localpart we return, so an unchecked derived localpart would be
     an account-takeover surface.
@@ -44,12 +45,25 @@ from synapse.types import JsonDict, UserID
 # otherwise the no-match new-user path would fail registration for those users.
 _DISALLOWED_LOCALPART_CHARS = re.compile(r"[^a-z0-9._=\-/+]")
 
+# Synapse's registration refuses an all-digit localpart, which it reserves for
+# guest users (`GUEST_USER_ID_PATTERN` in `synapse.types`). Spelled `[0-9]`
+# rather than `\d` so it means the same as the realm server's copy of this rule.
+_ALL_DIGITS = re.compile(r"[0-9]+")
+
 
 def _sanitize_localpart(value: str) -> str:
     sanitized = _DISALLOWED_LOCALPART_CHARS.sub("-", value)
-    # Guard against an email whose local part is entirely disallowed
-    # characters collapsing to an empty/dash-only localpart.
-    return sanitized.strip("-") or "user"
+    # Synapse's registration also refuses a localpart starting with `_`, which
+    # it reserves for application services, so leading `_`s go along with the
+    # leading and trailing `-`s.
+    sanitized = sanitized.lstrip("_-").rstrip("-")
+    # An email whose local part is nothing but disallowed characters and `_`s
+    # leaves nothing behind.
+    if not sanitized:
+        return "user"
+    if _ALL_DIGITS.fullmatch(sanitized):
+        return f"user-{sanitized}"
+    return sanitized
 
 
 class BoxelOidcMappingProvider:

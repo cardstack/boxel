@@ -56,15 +56,24 @@ export interface GoogleAccountLookups {
 // Plane becomes one `-`, not two.
 const DISALLOWED_LOCALPART_CHARS = /[^a-z0-9._=\-/+]/gu;
 
+// Synapse's registration refuses an all-digit localpart, which it reserves for
+// guest users.
+const ALL_DIGITS = /^[0-9]+$/;
+
 // The localpart a new account takes from its email address: the address's
-// local part, lowercased, with each character Matrix forbids replaced by `-`,
-// and `user` when nothing is left.
+// local part, lowercased, with each character Matrix forbids replaced by `-`.
+// Leading `-`s and `_`s go (Synapse reserves a leading `_` for application
+// services), as do trailing `-`s; an all-digit result is prefixed with
+// `user-`, and `user` stands in when nothing is left.
 export function localpartFromEmail(email: string): string {
   let local = email.trim().toLowerCase().split('@', 1)[0];
   let sanitized = local
     .replace(DISALLOWED_LOCALPART_CHARS, '-')
-    .replace(/^-+|-+$/g, '');
-  return sanitized || 'user';
+    .replace(/^[_-]+|-+$/g, '');
+  if (!sanitized) {
+    return 'user';
+  }
+  return ALL_DIGITS.test(sanitized) ? `user-${sanitized}` : sanitized;
 }
 
 // The localparts a new account tries in order: the base, then `base1`,

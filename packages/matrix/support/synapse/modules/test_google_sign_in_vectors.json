@@ -180,6 +180,159 @@
       }
     },
     {
+      "name": "an all-digit local part is prefixed, since Synapse reserves it for guests",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "12345@gmail.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "user-12345",
+        "displayName": "Pat",
+        "email": "12345@gmail.com"
+      }
+    },
+    {
+      "name": "an all-digit local part that is taken suffixes after the prefix",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "12345@gmail.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": ["user-12345"],
+      "expected": {
+        "outcome": "new",
+        "localpart": "user-123451",
+        "displayName": "Pat",
+        "email": "12345@gmail.com"
+      }
+    },
+    {
+      "name": "a leading _ is dropped, since Synapse reserves it for application services",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "_alice@gmail.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "alice",
+        "displayName": "Pat",
+        "email": "_alice@gmail.com"
+      }
+    },
+    {
+      "name": "a leading run of _ and - is dropped",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "_-_alice@gmail.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "alice",
+        "displayName": "Pat",
+        "email": "_-_alice@gmail.com"
+      }
+    },
+    {
+      "name": "an _ after the first character is kept",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "a_lice_@gmail.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "a_lice_",
+        "displayName": "Pat",
+        "email": "a_lice_@gmail.com"
+      }
+    },
+    {
+      "name": "digits left after dropping a leading _ are prefixed",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "__42@gmail.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "user-42",
+        "displayName": "Pat",
+        "email": "__42@gmail.com"
+      }
+    },
+    {
+      "name": "digits left after dropping forbidden characters are prefixed",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "#42!@gmail.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "user-42",
+        "displayName": "Pat",
+        "email": "#42!@gmail.com"
+      }
+    },
+    {
+      "name": "digits with other allowed characters are not prefixed",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "42.7@gmail.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "42.7",
+        "displayName": "Pat",
+        "email": "42.7@gmail.com"
+      }
+    },
+    {
+      "name": "a local part of only _ becomes user",
+      "userinfo": {
+        "sub": "g-1",
+        "email": "___@gmail.com",
+        "email_verified": true,
+        "name": "Pat"
+      },
+      "usersByEmail": [],
+      "existingLocalparts": [],
+      "expected": {
+        "outcome": "new",
+        "localpart": "user",
+        "displayName": "Pat",
+        "email": "___@gmail.com"
+      }
+    },
+    {
       "name": "a new account is never linked into an account that merely has its localpart",
       "userinfo": {
         "sub": "g-1",
