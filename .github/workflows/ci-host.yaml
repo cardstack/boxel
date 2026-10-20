@@ -550,7 +550,13 @@ jobs:
     # test-web-assets build) follow it onto RunsOn under the same variable and
     # guard. Left on ubuntu-latest, they queue behind GitHub's cap and hold the
     # shards back with them.
-    runs-on: ${{ vars.HOST_TEST_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-host-test-{1}/{2}', github.run_id, matrix.shardIndex, vars.HOST_TEST_RUNS_ON) || 'ubuntu-latest' }}
+    #
+    # Pushes to main take on-demand instances (`spot=false`). A spot reclaim
+    # kills every shard on the reclaimed instance type at once, and RunsOn's
+    # retry then re-runs only those shards, whose Percy build holds their
+    # snapshots alone; main's builds are auto-approved into the baseline, so
+    # main is where a partial build does harm. Pull requests stay on spot.
+    runs-on: ${{ vars.HOST_TEST_RUNS_ON && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && format('runs-on={0}-host-test-{1}/{2}{3}', github.run_id, matrix.shardIndex, vars.HOST_TEST_RUNS_ON, (github.event_name == 'push' && github.ref == 'refs/heads/main') && '/spot=false' || '') || 'ubuntu-latest' }}
     # Without this a wedged shard inherits GitHub's 360-minute default and
     # holds a runner for six hours doing nothing, which starves the pool for
     # every other PR in the repo. A healthy shard has never exceeded ~19
@@ -1193,6 +1199,22 @@ jobs:
             echo "::warning::Only $shards of $expected Percy snapshot tallies were uploaded, so snapshot loss on the other $((expected - shards)) shard(s) could not be assessed for this build. A failed tally upload does not fail its shard; look for a failed 'Upload Percy snapshot tally' step on the shards with no tally."
           fi
 
+          # "Re-run failed jobs" — by hand, or RunsOn's automatic retry after a
+          # spot interruption — runs only the shards that failed. The nonce is
+          # attempt-scoped, so they upload into a new Percy build that holds
+          # their snapshots alone, while host-test can read as success because
+          # the earlier attempt's passing shards carry over. In a later attempt a
+          # missing tally therefore most likely means a shard that did not run,
+          # not a failed upload. A full re-run that also loses a tally reads the
+          # same way; on main the cost of that is one build not becoming the
+          # baseline, far less than a partial one becoming it.
+          partial_rerun=false
+          if [ "${{ github.run_attempt }}" -gt 1 ] && [ "$shards" -gt 0 ] && [ "$shards" -lt "$expected" ]; then
+            partial_rerun=true
+            echo "::warning::Attempt ${{ github.run_attempt }} uploaded tallies from $shards of $expected shards, so this Percy build holds only the snapshots of the shards this attempt re-ran."
+          fi
+          echo "partial_rerun=$partial_rerun" >> "$GITHUB_OUTPUT"
+
       - name: Finalise Percy
         id: finalize
         run: |
@@ -1240,13 +1262,14 @@ jobs:
       # would take the snapshots that *did* upload out of review along with
       # the missing one. Losing a snapshot is far more common than losing a
       # shard, so applying it to PRs too would block review on a large share
-      # of builds for no protective gain.
+      # of builds for no protective gain. The partial re-run trigger is scoped
+      # to `main` for the same reason.
       - name: Reject the Percy build when its snapshot set is incomplete
         if: >-
           (
             needs.host-test.result != 'success'
             || (
-              steps.tally.outputs.lost != '0'
+              (steps.tally.outputs.lost != '0' || steps.tally.outputs.partial_rerun == 'true')
               && github.ref == 'refs/heads/main'
             )
           )
@@ -1268,7 +1291,7 @@ jobs:
           (
             needs.host-test.result != 'success'
             || (
-              steps.tally.outputs.lost != '0'
+              (steps.tally.outputs.lost != '0' || steps.tally.outputs.partial_rerun == 'true')
               && github.ref == 'refs/heads/main'
             )
           )
