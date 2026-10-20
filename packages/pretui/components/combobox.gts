@@ -150,18 +150,33 @@ export class Combobox extends Component<ComboboxSignature> {
           position: relative;
           display: block;
           min-width: 0;
-          --boxel-form-control-border-radius: var(--radius);
-          --boxel-border-radius-sm: var(--radius);
+          --boxel-form-control-border-radius: calc(var(--radius) - 0.125rem);
+          --boxel-border-radius-sm: calc(var(--radius) - 0.125rem);
           --boxel-select-trigger-padding: 0;
           --boxel-dropdown-background-color: var(--popover);
           --boxel-dropdown-text-color: var(--foreground);
-          --boxel-dropdown-hover-color: var(--hover, var(--boxel-100));
-          --boxel-dropdown-highlight-color: var(--hover, var(--boxel-100));
+          --boxel-dropdown-hover-color: var(--hover);
+          --boxel-dropdown-highlight-color: var(--hover);
+          /* the trigger's edge, which invalid repoints */
+          --pretui-cbx-edge: var(--input);
+        }
+        /* the invalid edge marks the field at rest; hover and focus draw the
+           field's usual edge, as on Input */
+        .pretui-combobox[data-invalid] {
+          --pretui-cbx-edge: var(--destructive-ink);
+        }
+        @media (hover: hover) {
+          .pretui-combobox[data-invalid]:hover {
+            --pretui-cbx-edge: var(--input);
+          }
+        }
+        .pretui-combobox[data-invalid]:focus-within {
+          --pretui-cbx-edge: var(--input);
         }
         .pretui-cbx-row {
           display: flex;
           align-items: baseline;
-          gap: var(--space-3, 8px);
+          gap: 0.5rem;
           min-width: 0;
         }
         .pretui-cbx-label {
@@ -181,29 +196,32 @@ export class Combobox extends Component<ComboboxSignature> {
       .pretui-combobox :deep(.pretui-pickertrigger.ember-power-select-trigger) {
         display: flex;
         align-items: center;
-        min-height: var(--control-h, 28px);
-        padding: 2px 8px 2px 4px;
-        border: 0;
-        border-radius: var(--radius);
-        background: var(--field, var(--boxel-light));
-        box-shadow: 0 0 0 1px var(--input);
+        min-height: var(--boxel-form-control-height-sm);
+        /* the content box of a 1.75rem field with a 1px border */
+        padding-block: calc(0.125rem - 1px);
+        padding-inline: calc(0.25rem - 1px) calc(0.5rem - 1px);
+        border: 1px solid var(--pretui-cbx-edge);
+        border-radius: calc(var(--radius) - 0.125rem);
+        background-color: var(--field);
         color: var(--foreground);
+        font-size: var(--boxel-font-size-xs);
+        letter-spacing: var(--boxel-lsp-xs);
+        /* power-select's 1.75 line-height outgrows the height at 16px */
+        line-height: var(--boxel-form-control-line-height-sm);
         width: 100%;
       }
-      /* Transparent outline doubles the ring for forced-colors, where a
-         box-shadow is not painted. */
+      /* iOS zooms into inputs under 16px on focus */
+      @media (pointer: coarse) {
+        .pretui-combobox :deep(.pretui-pickertrigger.ember-power-select-trigger) {
+          font-size: var(--boxel-form-control-touch-font-size);
+        }
+      }
       .pretui-combobox
         :deep(.pretui-pickertrigger.ember-power-select-trigger[aria-expanded='true']),
       .pretui-combobox
         :deep(.pretui-pickertrigger.ember-power-select-trigger:focus-within) {
-        outline: 2px solid transparent;
-        outline-offset: 1px;
-        box-shadow: 0 0 0 2px var(--primary),
-          var(--pretui-shadow-inset, inset 0 1px 2px rgb(0 0 0 / 0.16));
-      }
-      .pretui-combobox[data-invalid]
-        :deep(.pretui-pickertrigger.ember-power-select-trigger) {
-        box-shadow: 0 0 0 1px var(--destructive);
+        outline: 2px solid var(--ring);
+        outline-offset: -1px;
       }
       .pretui-combobox[data-disabled]
         :deep(.pretui-pickertrigger.ember-power-select-trigger) {
@@ -265,8 +283,7 @@ export class Combobox extends Component<ComboboxSignature> {
         border: 0;
         background: transparent;
         font: inherit;
-        font-size: var(--text-ui-md, 12.5px);
-        letter-spacing: var(--track-ui, 0.01em);
+        letter-spacing: inherit;
         color: var(--foreground);
       }
       .pretui-combobox
@@ -275,7 +292,7 @@ export class Combobox extends Component<ComboboxSignature> {
       }
       .pretui-combobox
         :deep(input.ember-power-select-trigger-multiple-input::placeholder) {
-        color: var(--ink-3, var(--boxel-400));
+        color: var(--muted-foreground);
       }
       .pretui-combobox
         :deep(.pretui-picker-dropdown.ember-power-select-dropdown) {

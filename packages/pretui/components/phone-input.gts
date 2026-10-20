@@ -4,6 +4,7 @@ import { PhoneInput as BoxelPhoneInput } from '@cardstack/boxel-ui/components';
 import type { NormalizePhoneFormatResult } from '@cardstack/boxel-ui/helpers';
 import { emit, firstDefined } from '../pretui-primitives';
 import type { ControlAliasArgs } from '../pretui-primitives';
+import { TYPED_FONT } from '../internal/extras';
 
 // Same wrap as EmailInput: boxel-ui's awesome-phonenumber machinery
 // (as-you-type formatting, E.164 normalization, region validation) intact,
@@ -56,6 +57,7 @@ export class PhoneInput extends Component<PhoneInputSignature> {
         @disabled={{this.disabled}}
         @required={{this.required}}
         id={{@controlId}}
+        style={{TYPED_FONT}}
       />
     </div>
     <style scoped>
@@ -63,16 +65,22 @@ export class PhoneInput extends Component<PhoneInputSignature> {
         /* Same re-skin channel as EmailInput — see that component's note. */
         .pretui-boxelwrap {
           width: 100%;
-          font-size: var(--text-ui-md, 12.5px);
-          letter-spacing: var(--track-ui, 0.01em);
-          --background: var(--field, var(--boxel-light));
+          font-size: var(--boxel-font-size-xs);
+          letter-spacing: var(--boxel-lsp-xs);
+          --background: var(--field);
           --border: var(--input);
-          --ring: var(--primary);
-          --boxel-form-control-height: var(--control-h, 28px);
-          --boxel-input-height: var(--control-h, 28px);
-          --boxel-form-control-border-radius: var(--radius);
-          --boxel-sp-xs: 5px;
-          --boxel-sp-sm: 9px;
+          --boxel-form-control-height: var(--boxel-form-control-height-sm);
+          --boxel-input-height: var(--boxel-form-control-height-sm);
+          --boxel-form-control-border-radius: calc(var(--radius) - 0.125rem);
+          --boxel-font-size-sm: var(--boxel-font-size-2xs);
+          --boxel-sp-xs: var(--boxel-sp-3xs);
+          --boxel-sp-sm: calc(0.625rem - 1px);
+        }
+        /* iOS zooms into inputs under 16px on focus */
+        @media (pointer: coarse) {
+          .pretui-boxelwrap {
+            font-size: var(--boxel-form-control-touch-font-size);
+          }
         }
       }
     </style>

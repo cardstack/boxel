@@ -273,7 +273,7 @@ export class Button extends Component<ButtonSignature> {
           border: 1px solid var(--pretui-btn-edge, transparent);
           /* a step below the theme's --radius, so a button nests inside a
              card or dialog of that radius */
-          border-radius: var(--pretui-button-radius, calc(var(--radius) - 2px));
+          border-radius: var(--pretui-button-radius, calc(var(--radius) - 0.125rem));
           background: var(--pretui-btn-surface, transparent);
           color: var(--pretui-btn-text, inherit);
           box-shadow: var(--pretui-btn-elevation, none);

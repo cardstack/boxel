@@ -86,7 +86,7 @@ export class ButtonGroup extends Component<ButtonGroupSignature> {
           z-index: 2;
         }
         .pretui-btngroup[data-shape='rounded'] :deep(.pretui-btn) {
-          border-radius: var(--pretui-button-radius, calc(var(--radius) - 2px));
+          border-radius: var(--pretui-button-radius, calc(var(--radius) - 0.125rem));
         }
         .pretui-btngroup[data-shape='pill'] :deep(.pretui-btn) {
           border-radius: var(--pretui-button-radius, var(--boxel-border-radius-pill));

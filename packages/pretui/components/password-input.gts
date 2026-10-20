@@ -8,7 +8,7 @@ import { emit, firstDefined } from '../pretui-primitives';
 import type { ControlAliasArgs } from '../pretui-primitives';
 import { PasswordStrength, estimateWhenIdle, loadPasswordEstimator } from './password-strength';
 import type { StrengthReading } from './password-strength';
-import { TYPED_FONT } from '../internal/extras';
+import { TYPED_BLOCK_RULES, TYPED_FONT, TYPED_INSET } from '../internal/extras';
 
 // BoxelInput @type='password' plus the reveal toggle boxel-ui doesn't
 // ship: an overlay eye button flips the native type to text while pressed
@@ -35,7 +35,7 @@ import { TYPED_FONT } from '../internal/extras';
 // locally and there is no network call on this path.
 
 const PASSWORD_METRICS = htmlSafe(
-  'font: inherit; letter-spacing: inherit; line-height: 18px; padding-block: 4px; padding-right: 30px;',
+  `${TYPED_BLOCK_RULES} padding-inline-start: ${TYPED_INSET}; padding-inline-end: 1.875rem;`,
 );
 
 /** Idle time after the last keystroke before an estimate runs. Long enough
@@ -62,7 +62,7 @@ export interface PasswordInputSignature {
     userInputs?: (string | number)[];
     /** idle ms before an estimate runs — 400 by default */
     strengthDelay?: number;
-    /** replace the five strength labels (localisation, or a house voice) */
+    /** replace the five strength labels (localization, or a house voice) */
     strengthLabels?: readonly string[];
     /** show the meter row before anything has been typed — false by default,
      * so the field does not open with an empty accusation */
@@ -282,35 +282,40 @@ export class PasswordInput extends Component<PasswordInputSignature> {
         .pretui-boxelwrap {
           position: relative;
           width: 100%;
-          font-size: var(--text-ui-md, 12.5px);
-          letter-spacing: var(--track-ui, 0.01em);
-          --background: var(--field, var(--boxel-light));
+          font-size: var(--boxel-font-size-xs);
+          letter-spacing: var(--boxel-lsp-xs);
+          --background: var(--field);
           --border: var(--input);
-          --ring: var(--primary);
-          --muted-foreground: var(--ink-3, var(--boxel-400));
-          --boxel-form-control-height: var(--control-h, 28px);
-          --boxel-input-height: var(--control-h, 28px);
-          --boxel-form-control-border-radius: var(--radius);
-          --boxel-sp-xs: 5px;
-          --boxel-sp-sm: 9px;
+          --boxel-form-control-height: var(--boxel-form-control-height-sm);
+          --boxel-input-height: var(--boxel-form-control-height-sm);
+          --boxel-form-control-border-radius: calc(var(--radius) - 0.125rem);
+          --boxel-font-size-sm: var(--boxel-font-size-2xs);
+          --boxel-sp-xs: var(--boxel-sp-3xs);
+          --boxel-sp-sm: calc(0.625rem - 1px);
+        }
+        /* iOS zooms into inputs under 16px on focus */
+        @media (pointer: coarse) {
+          .pretui-boxelwrap {
+            font-size: var(--boxel-form-control-touch-font-size);
+          }
         }
         .pretui-reveal {
           position: absolute;
-          top: calc((var(--control-h, 28px) - 20px) / 2);
-          right: 5px;
+          top: calc((var(--boxel-input-height) - 1.25rem) / 2);
+          inset-inline-end: var(--boxel-sp-3xs);
           display: grid;
           place-items: center;
-          width: 20px;
-          height: 20px;
+          width: 1.25rem;
+          height: 1.25rem;
           border: 0;
           padding: 0;
-          border-radius: 6px;
+          border-radius: var(--boxel-border-radius-sm);
           background: none;
           color: var(--muted-foreground);
           cursor: pointer;
         }
         .pretui-reveal:hover:not(:disabled) {
-          background: var(--hover, var(--boxel-100));
+          background-color: var(--hover);
           color: var(--foreground);
         }
         .pretui-reveal:disabled {
@@ -321,7 +326,7 @@ export class PasswordInput extends Component<PasswordInputSignature> {
            only thing that changes the wrapper's height, and only when
            @strength is on. */
         .pretui-password-strength {
-          margin-block-start: var(--space-2, 6px);
+          margin-block-start: 0.375rem;
         }
       }
     </style>

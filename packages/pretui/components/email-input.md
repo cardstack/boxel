@@ -20,7 +20,7 @@ This is a **thin runtime wrap of boxel-ui's email input**, per the kit's standin
 
 Against the field: **Web Awesome** has no email input — `wa-input type="email"` plus native constraint validation, with `label`/`hint` props and slots. **React Spectrum** likewise has no dedicated email field; `TextField type="email"` with a `validate` function. **shadcn** has none.
 
-So the honest comparison is against native `type="email"` plus the browser's validation, and the difference is **when the error appears**. Native constraint validation fires on submit and shows a UA bubble that cannot be styled, positioned or announced consistently. The boxel engine's blur-gated, debounced feedback is the behaviour every serious form eventually implements by hand — showing an error while someone is still typing "chris@" is the single most common form-UX mistake.
+So the honest comparison is against native `type="email"` plus the browser's validation, and the difference is **when the error appears**. Native constraint validation fires on submit and shows a UA bubble that cannot be styled, positioned or announced consistently. The boxel engine's blur-gated, debounced feedback is the behavior every serious form eventually implements by hand — showing an error while someone is still typing "chris@" is the single most common form-UX mistake.
 
 Where Pretui adds value over boxel-ui: the callback split (above) and API consistency with the rest of the typed-input family — **PhoneInput**, **UrlInput**, **NumberInput** and **PasswordInput** all take the same shape, so they are interchangeable at a call site.
 
@@ -43,9 +43,9 @@ Gaps:
 
 ## Theming
 
-Consumed: `--field` (control face), `--input` (hairline), `--primary` (focus ring, via `--ring`), `--ink-3` (placeholder ink), `--control-h`, `--radius`, `--text-ui-md`, `--text-ui-sm`, `--text-ui-xs`, `--track-ui`.
+Input's field style: a `--field` face with `--foreground` text, an `--input` edge, a `--muted-foreground` placeholder, Button's corner (`calc(var(--radius) - 0.125rem)`), a 1.75rem height (`--boxel-form-control-height-sm`) and `--boxel-font-size-xs` text. On touch screens (`pointer: coarse`) the text and placeholder are at least 16px (`--boxel-form-control-touch-font-size`), so iOS doesn't zoom into the field on focus.
 
-Forwarded into boxel-ui through the `--boxel-*` channel: the form-control height, radius, font sizes and spacing knobs, exactly as **Input** does — the two are dressed to be pixel-identical, so an email field and a text field in the same form align.
+Forwarded into boxel-ui through the `--boxel-*` channel: the form-control height, radius, font sizes and spacing knobs, as **Input** does, so an email field and a text field in the same form line up.
 
 An inline `style` carries the font inheritance, because the UA font on native controls is one of the two places the custom-property channel cannot reach. The invalid dress arrives through the token channel from an enclosing **Field** (`--border` → `--destructive`), so it works here without the component knowing about it.
 

@@ -900,14 +900,14 @@ export class Autocomplete extends Component<AutocompleteSignature> {
           min-width: 0;
           /* other sizes keep size m's height-to-text ratio */
           min-height: var(--pretui-ac-h, calc(7em / 3));
-          padding-inline: 0.5em;
-          border-radius: calc(var(--radius) - 2px);
-          box-shadow: 0 0 0 1px var(--pretui-ac-edge);
+          padding-inline: calc(0.5em - 1px);
+          border: 1px solid var(--pretui-ac-edge);
+          border-radius: calc(var(--radius) - 0.125rem);
         }
         /* Select's trigger height and inset, whatever --pretui-size-m is */
         .pretui-ac[data-size='m'] .pretui-ac-field {
           min-height: var(--pretui-ac-h, var(--boxel-form-control-height-sm));
-          padding-inline: 0.625rem;
+          padding-inline: calc(0.625rem - 1px);
         }
         /* edges are drawn in the tone's -ink: the fill hue misses the 3:1 a
            field boundary needs */
@@ -956,23 +956,26 @@ export class Autocomplete extends Component<AutocompleteSignature> {
            edge is already strong. Pointer-only, so the edge doesn't stick
            after a tap. */
         @media (hover: hover) {
-          .pretui-ac[data-tone='neutral']:not([data-appearance='outlined'], [data-appearance='accent'], [data-invalid='true'])
+          .pretui-ac[data-tone='neutral']:not([data-appearance='outlined'], [data-appearance='accent'])
             .pretui-ac-field:hover {
             /* Select's hover edge: toward --foreground, in both schemes */
             --pretui-ac-edge: color-mix(in oklch, var(--foreground) 30%, var(--input));
           }
         }
-        .pretui-ac[data-invalid='true'] .pretui-ac-field {
+        /* the invalid edge marks the field at rest; hover and focus draw the
+           field's usual edge, as on Input. The hover rule above outranks the
+           inherit, which hands a toned field back its appearance's edge. */
+        .pretui-ac[data-invalid='true'] .pretui-ac-field:not(:focus-within) {
           --pretui-ac-edge: var(--destructive-ink);
         }
-        /* focus draws the box-shadow itself, so it wins over hover and the
-           invalid edge: a reader must always see where they are */
+        @media (hover: hover) {
+          .pretui-ac[data-invalid='true'] .pretui-ac-field:hover {
+            --pretui-ac-edge: inherit;
+          }
+        }
         .pretui-ac-field:focus-within {
-          /* forced-colors paints no box-shadow, so a transparent outline
-             keeps a focus indicator there */
-          outline: 1.5px solid transparent;
-          outline-offset: 1px;
-          box-shadow: 0 0 0 1.5px var(--ring);
+          outline: 2px solid var(--ring);
+          outline-offset: -1px;
         }
         .pretui-ac[data-disabled='true'] {
           opacity: 0.45;
@@ -1017,17 +1020,21 @@ export class Autocomplete extends Component<AutocompleteSignature> {
         }
         /* The layer renders IN PLACE: a portaled surface cannot
            inherit the theme's tokens, which is the whole theming contract. */
+        /* a row's corner is the list's corner less the list's padding, so the
+           two stay concentric */
         .pretui-ac-list {
+          --pretui-ac-list-radius: calc(var(--radius) - 0.125rem);
+          --pretui-ac-list-inset: 0.25em;
           position: absolute;
           z-index: var(--pretui-z-dropdown, 60);
           inset-inline: 0;
           inset-block-start: calc(100% + var(--boxel-sp-4xs));
           margin: 0;
-          padding: 0.25em;
+          padding: var(--pretui-ac-list-inset);
           max-height: 16em;
           overflow-y: auto;
           list-style: none;
-          border-radius: calc(var(--radius) - 2px);
+          border-radius: var(--pretui-ac-list-radius);
           background-color: var(--popover);
           color: var(--popover-foreground);
           box-shadow:
@@ -1049,7 +1056,9 @@ export class Autocomplete extends Component<AutocompleteSignature> {
           gap: 0.5em;
           min-width: 0;
           padding: 0.34em 0.5em;
-          border-radius: var(--boxel-border-radius-sm);
+          border-radius: calc(
+            var(--pretui-ac-list-radius) - var(--pretui-ac-list-inset)
+          );
           cursor: pointer;
         }
         .pretui-ac-row[data-active='true'] {
@@ -1122,9 +1131,11 @@ export class Autocomplete extends Component<AutocompleteSignature> {
         @media (pointer: coarse) {
           /* iOS zooms into inputs under 16px on focus; the suggestions
              follow the input, as Select's options follow its trigger.
-             Input's line-height keeps the rows as tall as Select's options. */
+             Input's line-height keeps the rows as tall as Select's options.
+             The list takes the size, not the rows, so the list's em inset
+             and the rows' corners resolve against the same font. */
           .pretui-ac-input,
-          .pretui-ac-row {
+          .pretui-ac-list {
             font-size: var(--boxel-form-control-touch-font-size);
             line-height: var(--boxel-form-control-line-height-sm);
           }

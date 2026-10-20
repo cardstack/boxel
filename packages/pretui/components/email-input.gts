@@ -4,6 +4,7 @@ import { EmailInput as BoxelEmailInput } from '@cardstack/boxel-ui/components';
 import type { EmailFormatValidationError } from '@cardstack/boxel-ui/helpers';
 import { emit, firstDefined } from '../pretui-primitives';
 import type { ControlAliasArgs } from '../pretui-primitives';
+import { TYPED_FONT } from '../internal/extras';
 
 // boxel-ui's validation engine (format checks, debounced feedback,
 // blur-gated error surfacing) is the value; only the cloth changes. The
@@ -55,27 +56,32 @@ export class EmailInput extends Component<EmailInputSignature> {
         @disabled={{this.disabled}}
         @required={{this.required}}
         id={{@controlId}}
+        style={{TYPED_FONT}}
       />
     </div>
     <style scoped>
       @layer PretComponent {
-        /* Pretui control dress fed into boxel-ui's Input via its token
-           channel: semantic vars (--background/--border/--ring read the
-           Pretui field tokens) plus the --boxel-* dimension knobs. The two
-           --boxel-sp-* overrides tune boxel's inner padding so the control
-           lands on the h28 / 0-9px Pretui input geometry. */
+        /* Input's field style, fed into boxel-ui's Input through its token
+           channel: --background and --border plus the --boxel-* dimension
+           knobs */
         .pretui-boxelwrap {
           width: 100%;
-          font-size: var(--text-ui-md, 12.5px);
-          letter-spacing: var(--track-ui, 0.01em);
-          --background: var(--field, var(--boxel-light));
+          font-size: var(--boxel-font-size-xs);
+          letter-spacing: var(--boxel-lsp-xs);
+          --background: var(--field);
           --border: var(--input);
-          --ring: var(--primary);
-          --boxel-form-control-height: var(--control-h, 28px);
-          --boxel-input-height: var(--control-h, 28px);
-          --boxel-form-control-border-radius: var(--radius);
-          --boxel-sp-xs: 5px;
-          --boxel-sp-sm: 9px;
+          --boxel-form-control-height: var(--boxel-form-control-height-sm);
+          --boxel-input-height: var(--boxel-form-control-height-sm);
+          --boxel-form-control-border-radius: calc(var(--radius) - 0.125rem);
+          --boxel-font-size-sm: var(--boxel-font-size-2xs);
+          --boxel-sp-xs: var(--boxel-sp-3xs);
+          --boxel-sp-sm: calc(0.625rem - 1px);
+        }
+        /* iOS zooms into inputs under 16px on focus */
+        @media (pointer: coarse) {
+          .pretui-boxelwrap {
+            font-size: var(--boxel-form-control-touch-font-size);
+          }
         }
       }
     </style>

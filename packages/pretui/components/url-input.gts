@@ -111,18 +111,22 @@ export class UrlInput extends Component<UrlInputSignature> {
         /* Same re-skin channel as EmailInput — see that component's note. */
         .pretui-boxelwrap {
           width: 100%;
-          font-size: var(--text-ui-md, 12.5px);
-          letter-spacing: var(--track-ui, 0.01em);
-          --background: var(--field, var(--boxel-light));
+          font-size: var(--boxel-font-size-xs);
+          letter-spacing: var(--boxel-lsp-xs);
+          --background: var(--field);
           --border: var(--input);
-          --ring: var(--primary);
-          --muted-foreground: var(--ink-3, var(--boxel-400));
-          --boxel-form-control-height: var(--control-h, 28px);
-          --boxel-input-height: var(--control-h, 28px);
-          --boxel-form-control-border-radius: var(--radius);
-          --boxel-font-size-sm: var(--text-ui-sm, 11.5px);
-          --boxel-sp-xs: 5px;
-          --boxel-sp-sm: 9px;
+          --boxel-form-control-height: var(--boxel-form-control-height-sm);
+          --boxel-input-height: var(--boxel-form-control-height-sm);
+          --boxel-form-control-border-radius: calc(var(--radius) - 0.125rem);
+          --boxel-font-size-sm: var(--boxel-font-size-2xs);
+          --boxel-sp-xs: var(--boxel-sp-3xs);
+          --boxel-sp-sm: calc(0.625rem - 1px);
+        }
+        /* iOS zooms into inputs under 16px on focus */
+        @media (pointer: coarse) {
+          .pretui-boxelwrap {
+            font-size: var(--boxel-form-control-touch-font-size);
+          }
         }
       }
     </style>

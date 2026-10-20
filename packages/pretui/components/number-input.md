@@ -45,7 +45,7 @@ An `<input type="number">` supplies the role and the `aria-value*` properties im
 
 ## Theming
 
-Consumed: `--field`, `--input`, `--primary` (focus ring via `--ring`), `--ink-3` (placeholder), `--control-h`, `--radius`, `--text-ui-md`, `--text-ui-sm`, `--text-ui-xs`, `--track-ui`.
+Input's field style: a `--field` face with `--foreground` text, an `--input` edge, a `--muted-foreground` placeholder, Button's corner (`calc(var(--radius) - 0.125rem)`), a 1.75rem height (`--boxel-form-control-height-sm`) and `--boxel-font-size-xs` text. On touch screens (`pointer: coarse`) the text and placeholder are at least 16px (`--boxel-form-control-touch-font-size`), so iOS doesn't zoom into the field on focus.
 
 Forwarded into boxel-ui through the `--boxel-*` channel, matching **Input**'s metrics so a numeric field and a text field align in the same form.
 

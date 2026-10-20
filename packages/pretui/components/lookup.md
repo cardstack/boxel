@@ -24,7 +24,7 @@ A record search field: type, results arrive from wherever you fetch them, pick o
 
 **SLDS's lookup** is the direct ancestor — the entity option row, the pill for the selection, the "Account • location" meta line. **React Spectrum** has no lookup; `ComboBox` with async `items` is the nearest. **Web Awesome** has none. **Radix** has none; shadcn's recipe is Command inside a Popover.
 
-The combobox behaviour is **ember-power-select's**, and the source is explicit about why: roles, `aria-autocomplete="list"`, `aria-activedescendant` tracking, `role="listbox"`/`option`, DOM focus staying in the input, arrow navigation and scroll-into-view are all supplied whole rather than reimplemented.
+The combobox behavior is **ember-power-select's**, and the source is explicit about why: roles, `aria-autocomplete="list"`, `aria-activedescendant` tracking, `role="listbox"`/`option`, DOM focus staying in the input, arrow navigation and scroll-into-view are all supplied whole rather than reimplemented.
 
 Where Pretui adds real value over both:
 
@@ -45,14 +45,14 @@ Present: `role="combobox"` with `aria-expanded`, `aria-controls`, `aria-autocomp
 Gaps:
 
 - **`@label` is optional** and is the combobox's accessible name. Without it the field is unnamed; there is no `@controlId`, so **Field**/**FormField** cannot wire a `<label for>` either.
-- **The result count is announced but the results themselves are not enumerated** — a user must arrow through to discover them, which is correct behaviour but means an empty result set needs its own clear announcement. That announcement comes from power-select's own `role="status"` region, which also says "No results found" for an empty set.
+- **The result count is announced but the results themselves are not enumerated** — a user must arrow through to discover them, which is correct behavior but means an empty result set needs its own clear announcement. That announcement comes from power-select's own `role="status"` region, which also says "No results found" for an empty set.
 - **`@invalid` sets `aria-invalid` but carries no message.** Issues render in the field wrapper, so a bare Lookup outside a **FormField** shows an error dress that announces nothing.
 - **The pills are inside the control**, so a selection of eight records adds eight tab stops before anything after the field.
 - **Debouncing is yours, and so is the announcement cadence.** A caller who fires `@onSearch` per keystroke with no debounce will produce a live region that re-announces a changing count continuously.
 
 ## Theming
 
-Trigger and input: `--field`, `--input`, `--primary` (via `--ring`), `--ink-3`, `--control-h`, `--radius`, `--text-ui-md`. Dropdown: `--popover`, `--hover`, `--pretui-shadow-overlay`. Rows: **RecordFace**'s tokens plus the `<mark>` highlight dress. Pills: **RecordPill**'s. Invalid: `--destructive` through the **Field** token channel.
+The trigger has Input's field style: a `--field` face with `--foreground` text, an `--input` edge, a `--muted-foreground` placeholder, Button's corner (`calc(var(--radius) - 0.125rem)`), a 1.75rem height (`--boxel-form-control-height-sm`) and `--boxel-font-size-xs` text. On touch screens (`pointer: coarse`) the text and placeholder are at least 16px (`--boxel-form-control-touch-font-size`), so iOS doesn't zoom into the field on focus. Dropdown: `--popover`, `--hover`, `--pretui-shadow-overlay`. Rows: **RecordFace**'s tokens plus the `<mark>` highlight dress. Pills: **RecordPill**'s. Invalid makes the edge `--destructive-ink` at rest; hover and focus show the usual edge and the 2px `--ring`, as on Input.
 
 The `<mark>` on the matched term is the one thing to check per theme: it must be legible against both the resting and highlighted row backgrounds, and since **RecordFace** tints it with `--primary` at 22%, a theme with a pale `--primary` produces a highlight that is barely visible.
 

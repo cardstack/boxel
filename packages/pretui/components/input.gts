@@ -4,6 +4,8 @@ import { htmlSafe } from '@ember/template';
 import { BoxelInput } from '@cardstack/boxel-ui/components';
 import { emit, firstDefined } from '../pretui-primitives';
 import type { ControlAliasArgs } from '../pretui-primitives';
+import { TYPED_BLOCK_RULES } from '../internal/extras';
+import { SEARCH_START_PADDING, SearchGlyph } from '../internal/search-glyph';
 
 export interface InputSignature {
   Args: ControlAliasArgs & {
@@ -20,7 +22,7 @@ export interface InputSignature {
     errorMessage?: string;
     /** additive — native required; also suppresses the optional indicator */
     required?: boolean;
-    /** additive — renders boxel-ui's 'Optional' indicator above the control */
+    /** additive — renders an 'Optional' indicator above the control */
     optional?: boolean;
     /** additive — native readonly */
     readonly?: boolean;
@@ -34,24 +36,22 @@ export interface InputSignature {
 
 // Input wraps boxel-ui's BoxelInput, which carries the machinery —
 // validation-state plumbing, aria-invalid/aria-errormessage/aria-describedby
-// wiring, error + helper message rows, optional indicator — while the
-// wrapper div re-dresses it through the semantic-token + --boxel-*
-// custom-property channel (same pattern as EmailInput/PhoneInput; no CSS
-// reaches into boxel-ui markup). The inline style beats the two spots the
-// channel cannot reach — the UA font on native controls and element-local
+// wiring, error + helper message rows — while the wrapper div re-dresses it
+// through the semantic-token + --boxel-* custom-property channel (same
+// pattern as EmailInput/PhoneInput; no CSS reaches into boxel-ui markup). The
+// inline style beats the two spots the channel cannot reach — the UA font on native controls and element-local
 // var definitions in boxel's own sheet; splatted attributes land on the
 // inner input, so aria-label / autocomplete / min / max keep working.
-// `--boxel-input-height` is a MIN-height; the natural height is
-// border + padding-block + line-height, and the inherited `normal`
-// line-height overshoots it, so an Input would sit taller than every other
-// control in the kit. The wrapper token channel cannot reach the UA
-// line-height; the inline constant can. Borders, padding-block and
-// --boxel-form-control-line-height-sm add up to
-// --boxel-form-control-height-sm (1.75rem); the line-height token assumes
-// this padding-block, so change them together. A color input keeps
+// The inline style carries TYPED_BLOCK_RULES (see internal/extras). The
+// inline inset is left to the wrapper's --boxel-sp-sm and
+// --boxel-input-padding-inline-end, so BoxelInput can reserve the validation
+// icon's column. A search input draws the kit's magnifier and clears it with
+// its start padding; Input renders the Optional label itself, so the
+// magnifier's positioned box is the field alone. A color input keeps
 // BoxelInput's `padding: 0`, or its swatch shrinks inside the fixed box.
-const INPUT_FONT = htmlSafe(
-  'font: inherit; letter-spacing: inherit; line-height: var(--boxel-form-control-line-height-sm); padding-block: 0.25rem;',
+const INPUT_FONT = htmlSafe(TYPED_BLOCK_RULES);
+const SEARCH_INPUT_FONT = htmlSafe(
+  `${TYPED_BLOCK_RULES} ${SEARCH_START_PADDING}`,
 );
 const COLOR_INPUT_FONT = htmlSafe('font: inherit; letter-spacing: inherit;');
 
@@ -75,11 +75,28 @@ export class Input extends Component<InputSignature> {
   get helperText() {
     return firstDefined(this.args.helperText, this.args.description);
   }
+  get isSearch() {
+    return this.args.type === 'search';
+  }
+  // BoxelInput's search variant is its own dark dress; a search Input is a
+  // text field with the kit's magnifier.
+  get boxelType() {
+    return this.isSearch || !this.args.type ? 'text' : this.args.type;
+  }
+  get dimmed() {
+    return Boolean(this.disabled) || Boolean(this.readonly);
+  }
+  get showOptional() {
+    return Boolean(this.args.optional) && !this.required;
+  }
   get state() {
     return this.invalid ? 'invalid' : 'none';
   }
   get inputStyle() {
-    return this.args.type === 'color' ? COLOR_INPUT_FONT : INPUT_FONT;
+    if (this.args.type === 'color') {
+      return COLOR_INPUT_FONT;
+    }
+    return this.isSearch ? SEARCH_INPUT_FONT : INPUT_FONT;
   }
   handleInput = (value: string) => {
     emit(
@@ -93,22 +110,29 @@ export class Input extends Component<InputSignature> {
       data-invalid={{if this.invalid 'true'}}
       data-test-pretui-input
     >
-      <BoxelInput
-        @id={{@controlId}}
-        @type={{if @type @type 'text'}}
-        @value={{@value}}
-        @placeholder={{@placeholder}}
-        @disabled={{this.disabled}}
-        @readonly={{this.readonly}}
-        @state={{this.state}}
-        @errorMessage={{unless this.disabled @errorMessage}}
-        @helperText={{this.helperText}}
-        @required={{this.required}}
-        @optional={{@optional}}
-        @onInput={{this.handleInput}}
-        style={{this.inputStyle}}
-        ...attributes
-      />
+      {{#if this.showOptional}}
+        <span class='pretui-inputoptional'>Optional</span>
+      {{/if}}
+      <div class='pretui-inputfield'>
+        <BoxelInput
+          @id={{@controlId}}
+          @type={{this.boxelType}}
+          @value={{@value}}
+          @placeholder={{@placeholder}}
+          @disabled={{this.disabled}}
+          @readonly={{this.readonly}}
+          @state={{this.state}}
+          @errorMessage={{unless this.disabled @errorMessage}}
+          @helperText={{this.helperText}}
+          @required={{this.required}}
+          @onInput={{this.handleInput}}
+          style={{this.inputStyle}}
+          ...attributes
+        />
+        {{#if this.isSearch}}
+          <SearchGlyph @dimmed={{this.dimmed}} />
+        {{/if}}
+      </div>
     </div>
     <style scoped>
       @layer PretComponent {
@@ -125,11 +149,9 @@ export class Input extends Component<InputSignature> {
           --border: var(--input);
           --boxel-form-control-height: var(--boxel-form-control-height-sm);
           --boxel-input-height: var(--boxel-form-control-height-sm);
-          --boxel-form-control-border-radius: calc(var(--radius) - 2px);
-          /* the helper and error rows and the Optional label, a step below
-             the field's text */
+          --boxel-form-control-border-radius: calc(var(--radius) - 0.125rem);
+          /* the helper and error rows, a step below the field's text */
           --boxel-font-size-sm: var(--boxel-font-size-2xs);
-          --boxel-input-optional-font-size: var(--boxel-font-size-2xs);
           --boxel-sp-xs: var(--boxel-sp-3xs);
           /* Select's 0.625rem text inset on both sides, less this edge's 1px
              border. While the invalid icon shows, BoxelInput reserves its
@@ -178,6 +200,17 @@ export class Input extends Component<InputSignature> {
         .pretui-inputwrap:has(input:focus) {
           --boxel-input-outline: 2px solid transparent;
           --boxel-input-invalid-color: var(--ring);
+        }
+        .pretui-inputoptional {
+          display: block;
+          margin-block-end: var(--boxel-sp-3xs);
+          font-size: var(--boxel-font-size-2xs);
+          font-style: oblique;
+          text-align: end;
+          opacity: 0.75;
+        }
+        .pretui-inputfield {
+          position: relative;
         }
         /* iOS zooms into inputs under 16px on focus */
         @media (pointer: coarse) {
