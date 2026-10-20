@@ -4,13 +4,14 @@ import {
   isMarkdownFile,
 } from '@cardstack/runtime-common/paths';
 import { DelegatedUserRealmSessionError } from '@cardstack/runtime-common/user-delegated-realm-server-session';
+import { READ_REALM_FILE_TOOL_NAME } from '@cardstack/runtime-common/ai';
 import type { Tool } from '@cardstack/base/matrix-event';
 import type { DelegatedUserRealmSessionManager } from '../../user-delegated-realm-server-session.ts';
 import { parseLenientJson } from '../../lenient-json.ts';
 
 let log = logger('ai-bot:read-realm-file');
 
-export const READ_REALM_FILE_TOOL_NAME = 'readRealmFile';
+export { READ_REALM_FILE_TOOL_NAME };
 
 // On-demand file reading. The model calls `readRealmFile` to pull files'
 // contents only when it needs them — most often a skill's SKILL.md or the

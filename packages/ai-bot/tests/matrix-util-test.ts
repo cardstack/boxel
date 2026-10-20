@@ -11,6 +11,10 @@ import {
   APP_BOXEL_COMPACTION_EVENT_TYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
   APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+  APP_BOXEL_TOOL_REQUESTS_KEY,
+  APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+  APP_BOXEL_TOOL_RESULT_REL_TYPE,
+  APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
 } from '@cardstack/runtime-common';
 import {
   getPromptParts,
@@ -77,6 +81,7 @@ function compactionEvent(
   id: string,
   upToEventId: string,
   toolSourceEventIds: string[] | null = [],
+  skillFileEventIds: string[] = [],
 ) {
   return {
     event_id: id,
@@ -87,7 +92,7 @@ function compactionEvent(
       upToEventId,
       summary: 'summary',
       ...(toolSourceEventIds
-        ? { toolSourceEventIds, usedToolCallIds: [] }
+        ? { toolSourceEventIds, usedToolCallIds: [], skillFileEventIds }
         : {}),
     },
     room_id: 'test-room-id',
@@ -347,6 +352,53 @@ test('getRoomEvents - fetches back the tool-source events a compaction lists fro
   );
 });
 
+test('getRoomEvents - fetches back the skill-file reads a compaction lists from before its cut', async function (assert) {
+  const timeline = createRoomTimeline(3000);
+  placeAt(
+    timeline,
+    1700,
+    compactionEvent(
+      'compaction',
+      'event1500',
+      ['event20', 'event40'],
+      ['event40', 'event30'],
+    ),
+  );
+  const { client, eventRequests } = createMockedClient(timeline);
+
+  const result = await getRoomEvents('room123', client, 'event2999');
+
+  assert.deepEqual(
+    result.slice(0, 4).map((event) => event.event_id),
+    ['event20', 'event30', 'event40', 'event1500'],
+    'skill-file reads join the tool sources in time order, each once',
+  );
+  assert.deepEqual(eventRequests, ['event20', 'event40', 'event30']);
+});
+
+test('getRoomEvents - pages past a compaction that does not list skill-file reads', async function (assert) {
+  const timeline = createRoomTimeline(1500);
+  placeAt(timeline, 1200, {
+    ...compactionEvent('compaction', 'event1100'),
+    content: {
+      status: 'done',
+      upToEventId: 'event1100',
+      summary: 'summary',
+      toolSourceEventIds: [],
+      usedToolCallIds: [],
+    },
+  } as unknown as DiscreteMatrixEvent);
+  const { client } = createMockedClient(timeline);
+
+  const result = await getRoomEvents('room123', client, 'event1499');
+
+  assert.strictEqual(
+    result[0].event_id,
+    'event0',
+    'the whole room is loaded, so the reads before the cut can still be found',
+  );
+});
+
 test('getRoomEvents - stops after ROOM_EVENTS_MAX_PAGES pages in a room with no compaction', async function (assert) {
   const timeline = createRoomTimeline(
     (ROOM_EVENTS_MAX_PAGES + 2) * ROOM_EVENTS_PAGE_SIZE,
@@ -562,7 +614,7 @@ test('getRoomEvents - stops paging when the end token does not advance', async f
   assert.strictEqual(requests.length, 2);
 });
 
-test('getRoomEvents - a history cut by a compaction builds the same tools and model as the whole room', async function (assert) {
+test('getRoomEvents - a history cut by a compaction builds the same prompt as the whole room', async function (assert) {
   const timeline = createRoomTimeline(3000);
   placeAt(
     timeline,
@@ -588,26 +640,83 @@ test('getRoomEvents - a history cut by a compaction builds the same tools and mo
     } as any;
     placeAt(timeline, index, event);
   }
+  // A skill file the model read before the cut, which the prompt carries
+  // after the summary.
+  const skillMediaUrl =
+    'http://localhost:8008/_matrix/media/v3/download/localhost/windowed-skill';
+  placeAt(timeline, 60, {
+    event_id: 'read-request',
+    type: 'm.room.message',
+    sender: AI_BOT_USER_ID,
+    content: {
+      body: '',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      isStreamingFinished: true,
+      data: {},
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        { id: 'read-1', name: 'readRealmFile', arguments: '{"urls":[]}' },
+      ],
+    },
+    room_id: 'test-room-id',
+  } as unknown as DiscreteMatrixEvent);
+  placeAt(timeline, 61, {
+    event_id: 'read-result',
+    type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+    sender: AI_BOT_USER_ID,
+    content: {
+      msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+      commandRequestId: 'read-1',
+      'm.relates_to': {
+        rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+        key: 'applied',
+        event_id: 'read-request',
+      },
+      data: {
+        attachedFiles: [
+          {
+            sourceUrl: 'http://localhost:4201/skills/catalog-reuse/SKILL.md',
+            url: skillMediaUrl,
+            name: 'SKILL.md',
+            contentType: 'text/plain',
+            contentSize: 'Search the catalog.'.length,
+          },
+        ],
+      },
+    },
+    room_id: 'test-room-id',
+  } as unknown as DiscreteMatrixEvent);
   placeAt(
     timeline,
     1700,
-    compactionEvent('compaction', 'event1500', [
-      'tools-first-tool',
-      'tools-second-tool',
-    ]),
+    compactionEvent(
+      'compaction',
+      'event1500',
+      ['tools-first-tool', 'tools-second-tool'],
+      ['read-result'],
+    ),
   );
   const { client } = createMockedClient(timeline);
+  const originalFetch = globalThis.fetch;
+  (globalThis as any).fetch = async (url: string) =>
+    url === skillMediaUrl
+      ? { ok: true, status: 200, text: async () => 'Search the catalog.' }
+      : { ok: false, status: 404, text: async () => '' };
 
-  const windowed = await getPromptParts(
-    await getRoomEvents('room123', client, 'event2999'),
-    AI_BOT_USER_ID,
-    client,
-  );
-  const whole = await getPromptParts(
-    await getRoomEvents('room123', client, 'event2999', { wholeRoom: true }),
-    AI_BOT_USER_ID,
-    client,
-  );
+  let windowed, whole;
+  try {
+    windowed = await getPromptParts(
+      await getRoomEvents('room123', client, 'event2999'),
+      AI_BOT_USER_ID,
+      client,
+    );
+    whole = await getPromptParts(
+      await getRoomEvents('room123', client, 'event2999', { wholeRoom: true }),
+      AI_BOT_USER_ID,
+      client,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 
   assert.strictEqual(windowed.model, 'anthropic/claude-sonnet-4.6');
   assert.deepEqual(
@@ -615,11 +724,120 @@ test('getRoomEvents - a history cut by a compaction builds the same tools and mo
     ['first-tool', 'second-tool'],
   );
   assert.deepEqual(windowed.tools, whole.tools);
+  assert.true(
+    JSON.stringify(windowed.messages?.[2]).includes('Search the catalog.'),
+    'the skill file read before the cut follows the summary',
+  );
   // Up to the context message, which carries the current time.
   assert.deepEqual(
     JSON.stringify(windowed.messages?.slice(0, -1)),
     JSON.stringify(whole.messages?.slice(0, -1)),
   );
+});
+
+// A bot read before the cut whose result attached a skill file and
+// discovered a tool from it.
+function skillReadWithTool(timeline: DiscreteMatrixEvent[]) {
+  placeAt(timeline, 60, {
+    event_id: 'read-request',
+    type: 'm.room.message',
+    sender: AI_BOT_USER_ID,
+    content: {
+      body: '',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      isStreamingFinished: true,
+      data: {},
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        { id: 'read-1', name: 'readRealmFile', arguments: '{"urls":[]}' },
+      ],
+    },
+    room_id: 'test-room-id',
+  } as unknown as DiscreteMatrixEvent);
+  placeAt(timeline, 61, {
+    event_id: 'read-result',
+    type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+    sender: AI_BOT_USER_ID,
+    content: {
+      msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+      commandRequestId: 'read-1',
+      'm.relates_to': {
+        rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+        key: 'applied',
+        event_id: 'read-request',
+      },
+      data: {
+        attachedFiles: [
+          {
+            sourceUrl: 'http://localhost:4201/skills/catalog-reuse/SKILL.md',
+            url: 'http://localhost:8008/_matrix/media/v3/download/localhost/tool-skill',
+            name: 'SKILL.md',
+            contentType: 'text/plain',
+            contentSize: 'Search the catalog.'.length,
+          },
+        ],
+        discoveredTools: [
+          {
+            sourceSkillUrl:
+              'http://localhost:4201/skills/catalog-reuse/SKILL.md',
+            definition: {
+              type: 'function',
+              function: {
+                name: 'search-catalog',
+                description: 'Searches the catalog',
+                parameters: {},
+              },
+            },
+          },
+        ],
+      },
+    },
+    room_id: 'test-room-id',
+  } as unknown as DiscreteMatrixEvent);
+}
+
+test('getRoomEvents - a read listed only for its skill files keeps its tools', async function (assert) {
+  const originalFetch = globalThis.fetch;
+  (globalThis as any).fetch = async () => ({
+    ok: true,
+    status: 200,
+    text: async () => 'Search the catalog.',
+  });
+  try {
+    const listed = createRoomTimeline(3000);
+    skillReadWithTool(listed);
+    placeAt(
+      listed,
+      1700,
+      compactionEvent('compaction', 'event1500', [], ['read-result']),
+    );
+    const listedClient = createMockedClient(listed).client;
+    const kept = await getPromptParts(
+      await getRoomEvents('room123', listedClient, 'event2999'),
+      AI_BOT_USER_ID,
+      listedClient,
+    );
+    assert.deepEqual(
+      kept.tools?.map((tool) => tool.function.name),
+      ['search-catalog'],
+      'the tool comes back with the skill file read',
+    );
+
+    const unlisted = createRoomTimeline(3000);
+    skillReadWithTool(unlisted);
+    placeAt(unlisted, 1700, compactionEvent('compaction', 'event1500', [], []));
+    const unlistedClient = createMockedClient(unlisted).client;
+    const dropped = await getPromptParts(
+      await getRoomEvents('room123', unlistedClient, 'event2999'),
+      AI_BOT_USER_ID,
+      unlistedClient,
+    );
+    assert.notOk(
+      dropped.tools?.some((tool) => tool.function.name === 'search-catalog'),
+      'a read in neither list leaves its tool behind',
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test('sendErrorEvent - uses provider metadata when available', async function (assert) {
