@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "assistantPrompt": "Add a bottle of wine to my workspace: 2015 Château Margaux, from Château Margaux, which we paid 650 USD for. Show it to me.",
+      "followUpPrompts": [],
+      "successCriteria": "1. Before writing anything, the assistant searches the catalog inside a `run-realm-code` script, with `realm.entries.search` or `realm.cards.search` and a `matches` filter on `Spec` — not with `search-entries` and not with a `search-cards` tool (`SearchCardsByQueryCommand`, `SearchCardsByTypeAndTitleCommand`).\n2. The search reaches the catalog's realm root. With `realm.entries.search`, the call passes no `realms` option or one that names the catalog's root in any form: `realm.current.url` of a script run in the catalog, the catalog's URL, or `@cardstack/catalog/`. With `realm.cards.search`, the query carries no `realm` or `realms` key and the script's `realm` is the catalog's realm root, not a module folder inside it.\n3. It finds the catalog's `WineBottle` Spec (`@cardstack/catalog/4b6602-wine-cellar-card-definition/wine-bottle`) and reuses that definition: the new instance adopts from it, or a card it writes `extends` it. It does not author a wine card of its own from scratch.\n4. The instance carries the producer, the 2015 vintage and the 650 USD purchase price in the definition's own fields (`producer`, `vintage`, `purchasePrice`).\n5. The instance is shown on screen and renders with no error boundary.",
+      "cardInfo": {
+        "name": "Search route: catalog Spec for one instance",
+        "summary": "One prompt asks for a single wine bottle, which the catalog's `WineBottle` definition already answers. This eval tests whether the assistant searches the catalog in a `run-realm-code` script, with `realm.entries.search` or `realm.cards.search`, rather than with `search-entries` or a `search-cards` tool, and then reuses the definition.",
+        "notes": "A deliberately small, one-prompt eval: the expected run is one search script, one write of an instance JSON and a show-card. It replaces, for search-route questions, the multi-turn reuse evals, which cost far more per run.\n\n`WineBottle` was chosen because its Spec is in the catalog and its fields cover the prompt without a subclass.",
+        "cardThumbnailURL": null
+      },
+      "skillFeatures": ["catalog-reuse"]
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": null
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../evaluation",
+        "name": "EvaluationCard"
+      }
+    }
+  }
+}
