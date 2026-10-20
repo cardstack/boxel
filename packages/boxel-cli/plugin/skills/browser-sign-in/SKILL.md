@@ -28,11 +28,26 @@ The browser that opens is the user's default browser, not one you drive. You can
 
 A published-realm card URL needs no sign-in: `boxel browse <published-url>` opens it as-is.
 
+## Pick the browser
+
+Sign in the browser the work happens in. Sessions live in each browser's own storage, so signing in one doesn't sign in another.
+
+| Browser                                                     | How                                                                                                         |
+| ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| The user's default browser                                  | `boxel browse … --profile <id>`, as above                                                                   |
+| A specific browser, such as Chrome for debugging            | macOS: `open -a "Google Chrome" "$(boxel browse … --profile <id> --print-url)"`. Linux: `google-chrome "$(…)"` |
+| A browser you drive through the user's Chrome (an extension) | the Chrome row, then drive the tab it opens                                                                 |
+| A browser you drive that is separate from the user's (an in-app browser pane, a headless browser) | the user pastes the URL: see below                                                                          |
+
+In the Chrome row the URL goes from the CLI straight to Chrome inside the command substitution, so it never reaches the output. Run exactly that shape: don't assign it to a variable you print, and don't add `echo`. Chrome opens the URL in its last-used profile; if the user has several Chrome profiles, have them bring the right one forward first.
+
+**A browser you drive that isn't the user's.** You would have to navigate it to the URL yourself, which puts the token in your hands, so don't. Open that browser on the host, run `boxel browse … --profile <id> --print-url | pbcopy` (or the platform's clipboard tool), and ask the user to paste into its address bar within 2 minutes. Pass `--host-url` when that browser is on a local or custom origin.
+
 ## Keep the token out of your context
 
 The login URL is a credential: until it is redeemed, anyone holding it signs in as that account. Running `boxel browse` without `--print-url` keeps it out of your hands, which is why that is the default.
 
-- Don't use `--print-url` when the shell runs on the user's machine. It prints the URL to stdout, which puts the token in your context. It exists for remote shells with no local browser; there, pipe it straight to the user's clipboard tool and never echo it.
+- Never let `--print-url` output reach your terminal output. Send it straight into a browser launcher (`open -a … "$(…)"`) or a clipboard tool (`| pbcopy`), as in the table above.
 - If the CLI can't launch a browser, it prints the URL as a fallback. Don't repeat it, open it, or paste it anywhere; tell the user to sign in another way or re-run on their machine.
 - It is single-use and expires in about 2 minutes, so mint it when the browser should open, not ahead of time.
 

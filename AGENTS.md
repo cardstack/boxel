@@ -115,7 +115,7 @@ Prefer the headless `vite build --mode development && pnpm exec ember test --pat
 
 #### Signing a browser into a host
 
-- A host on any origin other than the environment's own (for example `http://localhost:<port>/` against staging) can't use the email/password sign-in form: the form is a secure-origin frame those origins may not embed, so it shows up blank. When the user wants a browser signed in, run `boxel browse --profile <id> --host-url <host origin>` for them: it opens their default browser already signed in, as a one-time login whose token never reaches the terminal or the chat. Don't use `--print-url` on the user's machine, since it prints that token. The `boxel-cli:browser-sign-in` skill (`packages/boxel-cli/plugin/skills/browser-sign-in/SKILL.md`) has the details.
+- A host on any origin other than the environment's own (for example `http://localhost:<port>/` against staging) can't use the email/password sign-in form: the form is a secure-origin frame those origins may not embed, so it shows up blank. When the user wants a browser signed in, run `boxel browse --profile <id> --host-url <host origin>` for them: it opens their default browser already signed in, as a one-time login whose token never reaches the terminal or the chat. To sign in a specific browser such as Chrome, or a browser you drive, follow the skill: `--print-url` prints the token, so its output only ever goes straight into a browser launcher or the clipboard. The `boxel-cli:browser-sign-in` skill (`packages/boxel-cli/plugin/skills/browser-sign-in/SKILL.md`) has the details.
 
 #### CSS Guidance
 
