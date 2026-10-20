@@ -23,6 +23,11 @@ Behaviour:
     any existing localpart we return, so an unchecked derived localpart would be
     an account-takeover surface.
 
+The realm server's own Google sign-in on the secure origin applies the same
+rules (packages/realm-server/lib/google-account.ts). Change them in both
+places: test_google_sign_in_vectors.json runs against each, so they can't
+diverge unnoticed.
+
 References:
   - Synapse OidcMappingProvider interface: synapse/handlers/oidc.py
 """

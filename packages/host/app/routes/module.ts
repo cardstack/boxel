@@ -228,7 +228,10 @@ export default class ModuleRoute extends Route<Model> {
   // reset the loader on every render for the length of the batch. Separate
   // keys cost a tab one extra reset per epoch — each series synchronizes
   // independently — and a reset only ever leaves the loader fresher than the
-  // other series assumes.
+  // other series assumes. One caller is an exception: the index runner's
+  // canary module render threads its batch's uncommitted epoch. It runs only
+  // after a pass's renders keep timing out, and each switch between its epoch
+  // and the committed one costs the tab an extra reset.
   #synchronizeLoaderEpoch(loaderEpoch: string | undefined) {
     if (loaderEpoch === undefined) {
       return;

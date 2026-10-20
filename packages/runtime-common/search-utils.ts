@@ -51,7 +51,44 @@ export async function parseSearchRequestPayload(
   }
 }
 
-export function parseRealmsFromPayload(payload: unknown): string[] {
+// The parts of a VirtualNetwork `registeredRealmURL` reads.
+interface RealmURLNetwork {
+  isRegisteredPrefix(reference: string): boolean;
+  toURL(reference: string): URL;
+  mapURL(
+    url: string,
+    direction: 'virtual-to-real' | 'real-to-virtual',
+  ): URL | undefined;
+}
+
+// The URL a realm server registers a realm under, for a realm a federated
+// request names. A federated request may name a realm by its registered
+// prefix (`@cardstack/catalog/`), by the URL it is registered under, or by the
+// URL it is served from: the server's URL mappings run from each realm's
+// registered `--fromUrl` to the URL it is served at, so mapping a served URL
+// back names the realm it registered (the base realm is registered under
+// `https://cardstack.com/base/` and served elsewhere). Anything else comes
+// back unchanged, so an unknown realm is still reported as the caller named it.
+export function registeredRealmURL(
+  virtualNetwork: RealmURLNetwork,
+  realm: string,
+): string {
+  let href = virtualNetwork.isRegisteredPrefix(realm)
+    ? virtualNetwork.toURL(realm).href
+    : realm;
+  if (!href.startsWith('http://') && !href.startsWith('https://')) {
+    return href;
+  }
+  return virtualNetwork.mapURL(href, 'real-to-virtual')?.href ?? href;
+}
+
+// `canonicalize`, when given, rewrites each realm to the form the caller keys
+// realms by (see `registeredRealmURL`); the list is then deduped, first
+// spelling first, so a realm named twice is searched once.
+export function parseRealmsFromPayload(
+  payload: unknown,
+  canonicalize?: (realm: string) => string,
+): string[] {
   let payloadRecord =
     payload && typeof payload === 'object'
       ? (payload as Record<string, unknown>)
@@ -81,7 +118,10 @@ export function parseRealmsFromPayload(payload: unknown): string[] {
     .map((realm) => realm.trim())
     .filter(Boolean)
     .map((realm) => ensureTrailingSlash(realm));
-  return realmList;
+  if (!canonicalize) {
+    return realmList;
+  }
+  return [...new Set(realmList.map((realm) => canonicalize(realm)))];
 }
 
 export async function parseRealmsFromRequest(

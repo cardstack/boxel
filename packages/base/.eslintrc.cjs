@@ -41,6 +41,11 @@ const CARD_CODE_RULES = {
   // `requestAnimationFrame` callbacks that write tracked state run outside
   // Glimmer's render loop and are invisible to the test waiters.
   '@cardstack/boxel/no-raf-for-state': 'error',
+  // A base-realm module is imported by its `@cardstack/base/` prefix, and a
+  // prefix realm is named by its prefix rather than the URL one environment
+  // serves it at.
+  '@cardstack/boxel/no-url-form-base-imports': 'error',
+  '@cardstack/boxel/no-literal-realm-urls': 'error',
 };
 
 module.exports = {

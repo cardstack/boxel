@@ -10,6 +10,7 @@ import {
   logger,
   markPolicyScoped,
   parseRealmsFromPayload,
+  registeredRealmURL,
   parseSearchRequestPayload,
   parseSearchEntryQueryFromPayload,
   policyScopedQuery,
@@ -149,7 +150,9 @@ export default function handleSearch(opts: {
     // reads, one reached only through its policy, or one nothing is served
     // from — an archived realm, which contributes no rows to anyone, or one a
     // realm-authority principal cannot read.
-    let named = parseRealmsFromPayload(payload);
+    let named = parseRealmsFromPayload(payload, (realm) =>
+      registeredRealmURL(virtualNetwork, realm),
+    );
     // The realms the request named, before a declaration narrows them. The
     // policy-scoped mark names these, so it never says which of them a
     // declaration searched.

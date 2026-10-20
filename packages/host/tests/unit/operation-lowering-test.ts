@@ -2600,6 +2600,47 @@ module('Unit | operation lowering', function (hooks) {
     assert.deepEqual(codes(splicedValue), ['unencoded-path-parameter']);
   });
 
+  for (let value of [
+    'org/name',
+    'org\\name',
+    '{{apiKey}}/v2',
+    '',
+    '.',
+    '..',
+    'a\ud800',
+  ]) {
+    test(`a path value written as ${JSON.stringify(value)}, which no request can send, is refused`, async function (assert) {
+      let result = await lowerRequest({
+        url: 'https://api.example.com/models/{model}',
+        path: { model: value },
+      });
+      assert.deepEqual(codes(result), ['invalid-request']);
+      assert.strictEqual(result.issues[0].path, 'path.model');
+      assert.true(
+        result.issues[0].message.includes('`url`'),
+        'the message points the author to the URL',
+      );
+      assert.true(result.operations.fetch.invalid, 'stored invalid');
+    });
+  }
+
+  test('a path value written as text that fills one segment lowers', async function (assert) {
+    let result = await lowerRequest({
+      url: 'https://api.example.com/models/{model}',
+      path: { model: 'gpt-4.1' },
+    });
+    assert.deepEqual(codes(result), []);
+    assert.deepEqual(result.operations.fetch.callApi?.path, {
+      model: 'gpt-4.1',
+    });
+
+    let paired = await lowerRequest({
+      url: 'https://api.example.com/tags/{tag}',
+      path: { tag: 'party-🎉' },
+    });
+    assert.deepEqual(codes(paired), [], 'a surrogate pair is valid Unicode');
+  });
+
   test('a slot outside a header value, a query value, a path value and the body is refused', async function (assert) {
     let inURL = await lowerRequest({
       url: 'https://api.example.com/items?key={{apiKey}}',

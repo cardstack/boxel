@@ -9,7 +9,13 @@ import type { AddressInfo } from 'net';
 import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
-import { getOrCreateUser, upsertSessionRoom } from '@cardstack/runtime-common';
+import {
+  clearSessionRoom,
+  fetchSessionRoom,
+  getOrCreateUser,
+  upsertSessionRoom,
+} from '@cardstack/runtime-common';
+import { APP_BOXEL_REALMS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import {
   setupDB,
   setupSimpleRealmServerTemplate,
@@ -28,7 +34,13 @@ import {
   retrieveTokenClaim,
 } from '../utils/jwt.ts';
 import { createJWT as createRealmJWT } from '../jwt.ts';
-import { getMatrixAdminToken, registerUser } from '../synapse.ts';
+import {
+  fetchAccountData,
+  getMatrixAdminToken,
+  impersonateAsMatrixAdmin,
+  logoutMatrixAccessToken,
+  registerUser,
+} from '../synapse.ts';
 import { keepsMethodAndPathOnly } from '../lib/request-telemetry.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 import {
@@ -98,6 +110,65 @@ async function linkGoogle(userId: string, sub: string) {
   await updateAccount(userId, {
     external_ids: [{ auth_provider: 'oidc-google', external_id: sub }],
   });
+}
+
+async function account(userId: string) {
+  let response = await adminRequest(
+    `_synapse/admin/v2/users/${encodeURIComponent(userId)}`,
+  );
+  return (await response.json()) as Record<string, any>;
+}
+
+function sortedExternalIds(account: Record<string, any>) {
+  return (
+    (account.external_ids ?? []) as {
+      auth_provider: string;
+      external_id: string;
+    }[]
+  )
+    .map(({ auth_provider, external_id }) => ({ auth_provider, external_id }))
+    .sort((a, b) => a.auth_provider.localeCompare(b.auth_provider));
+}
+
+// The realms the user's account data lists, as the app reads them.
+async function accountRealms(userId: string): Promise<string[]> {
+  let accessToken = await impersonateAsMatrixAdmin({ ...ADMIN, userId });
+  try {
+    let { realms } = await fetchAccountData(
+      matrixURL,
+      userId,
+      accessToken,
+      APP_BOXEL_REALMS_EVENT_TYPE,
+    );
+    return (realms ?? []) as string[];
+  } finally {
+    await logoutMatrixAccessToken({ matrixURL, accessToken });
+  }
+}
+
+async function setAccountRealms(userId: string, realms: string[]) {
+  let accessToken = await impersonateAsMatrixAdmin({ ...ADMIN, userId });
+  try {
+    let response = await fetch(
+      new URL(
+        `_matrix/client/v3/user/${encodeURIComponent(userId)}/account_data/${APP_BOXEL_REALMS_EVENT_TYPE}`,
+        matrixURL,
+      ),
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ realms }),
+      },
+    );
+    if (!response.ok) {
+      throw new Error(`could not set account data: ${response.status}`);
+    }
+  } finally {
+    await logoutMatrixAccessToken({ matrixURL, accessToken });
+  }
 }
 
 async function threepids(userId: string) {
@@ -515,10 +586,6 @@ module(basename(import.meta.filename), function () {
       let sub = `google-${randomUUID()}`;
       await linkGoogle(userId, sub);
 
-      let unlinked = await googleSignIn(google.issue(`google-${randomUUID()}`));
-      assert.strictEqual(unlinked.status, 403, 'an unlinked Google account');
-      assert.strictEqual(unlinked.body.errors[0].code, 'not-linked');
-
       let wrongNonce = await googleSignIn({
         ...google.issue(sub),
         nonce: 'another-sign-in',
@@ -555,6 +622,288 @@ module(basename(import.meta.filename), function () {
       let response = await googleSignIn(google.issue(sub));
       assert.strictEqual(response.status, 403);
       assert.strictEqual(response.body.errors[0].code, 'deactivated');
+      assert.strictEqual(
+        response.body.errors[0].detail,
+        'Sign-in failed. Please check your credentials and try again.',
+        "the app's words for a deactivated account",
+      );
+    });
+
+    test('a locked account is refused with Google', async function (assert) {
+      let { userId } = await registerPasswordUser(dbAdapter);
+      let email = `${userId.slice(1).split(':')[0]}@example.com`;
+      let linkedSub = `google-${randomUUID()}`;
+      await linkGoogle(userId, linkedSub);
+      await updateAccount(userId, {
+        threepids: [{ medium: 'email', address: email }],
+        locked: true,
+      });
+
+      let byLink = await googleSignIn(google.issue(linkedSub));
+      assert.strictEqual(byLink.status, 403, 'through its link');
+      assert.strictEqual(byLink.body.errors[0].code, 'locked');
+
+      let byEmail = await googleSignIn(
+        google.issue(`google-${randomUUID()}`, {
+          claims: { email, email_verified: true },
+        }),
+      );
+      assert.strictEqual(byEmail.status, 403, 'through its email');
+      assert.strictEqual(byEmail.body.errors[0].code, 'locked');
+      assert.deepEqual(
+        sortedExternalIds(await account(userId)),
+        [{ auth_provider: 'oidc-google', external_id: linkedSub }],
+        'nothing more is linked to it',
+      );
+    });
+
+    test('an unlinked Google account is linked to the one account holding its verified email', async function (assert) {
+      let { userId } = await registerPasswordUser(dbAdapter);
+      let email = `${userId.slice(1).split(':')[0]}@example.com`;
+      // Synapse outlives a test run, so every external id is unique.
+      let otherId = `other-${randomUUID()}`;
+      await updateAccount(userId, {
+        threepids: [{ medium: 'email', address: email }],
+        external_ids: [{ auth_provider: 'oidc-other', external_id: otherId }],
+      });
+      let sub = `google-${randomUUID()}`;
+
+      let response = await googleSignIn(
+        google.issue(sub, {
+          claims: {
+            email: email.toUpperCase(),
+            email_verified: true,
+            name: 'Someone Else',
+          },
+        }),
+      );
+      assert.strictEqual(response.status, 201, response.text);
+      assert.strictEqual(response.body.data.attributes.user, userId);
+      let linked = await account(userId);
+      assert.deepEqual(
+        sortedExternalIds(linked),
+        [
+          { auth_provider: 'oidc-google', external_id: sub },
+          { auth_provider: 'oidc-other', external_id: otherId },
+        ],
+        'the Google identity is linked, and the account keeps its other links',
+      );
+      assert.strictEqual(
+        linked.displayname,
+        userId.slice(1).split(':')[0],
+        'the account keeps its display name',
+      );
+
+      // The link signs in from then on, whatever Google says about the email.
+      let again = await googleSignIn(google.issue(sub));
+      assert.strictEqual(again.status, 201, again.text);
+      assert.strictEqual(again.body.data.attributes.user, userId);
+    });
+
+    test('a Google account with no verified email and no link is refused', async function (assert) {
+      let { userId } = await registerPasswordUser(dbAdapter);
+      let email = `${userId.slice(1).split(':')[0]}@example.com`;
+      await updateAccount(userId, {
+        threepids: [{ medium: 'email', address: email }],
+      });
+      for (let claims of [
+        { email, email_verified: false },
+        { email, email_verified: 'true' },
+        {},
+      ]) {
+        let response = await googleSignIn(
+          google.issue(`google-${randomUUID()}`, { claims }),
+        );
+        assert.strictEqual(response.status, 403, JSON.stringify(claims));
+        assert.deepEqual(
+          {
+            code: response.body.errors[0].code,
+            detail: response.body.errors[0].detail,
+          },
+          {
+            code: 'unverified-email',
+            detail: 'Google sign-in requires a verified email address.',
+          },
+        );
+      }
+      assert.deepEqual(
+        sortedExternalIds(await account(userId)),
+        [],
+        'nothing is linked',
+      );
+    });
+
+    test('a new Google account gets an account, set up as a first sign-in to Boxel', async function (assert) {
+      // The localpart the email suggests already belongs to an account that
+      // doesn't hold the email, which the new account must not land in.
+      let { userId: taken } = await registerPasswordUser(dbAdapter);
+      let base = taken.slice(1).split(':')[0];
+      let email = `${base}@example.com`;
+      let sub = `google-${randomUUID()}`;
+      let issue = () =>
+        google.issue(sub, {
+          claims: { email, email_verified: true, name: 'New Googler' },
+        });
+
+      let response = await googleSignIn(issue());
+      assert.strictEqual(response.status, 201, response.text);
+      let user = response.body.data.attributes.user;
+      assert.strictEqual(
+        user,
+        `@${base}1:localhost`,
+        'the next free localpart',
+      );
+      let created = await account(user);
+      assert.strictEqual(created.displayname, 'New Googler');
+      assert.deepEqual(
+        created.threepids.map(
+          ({ medium, address }: { medium: string; address: string }) => ({
+            medium,
+            address,
+          }),
+        ),
+        [{ medium: 'email', address: email }],
+      );
+      assert.deepEqual(sortedExternalIds(created), [
+        { auth_provider: 'oidc-google', external_id: sub },
+      ]);
+      assert.deepEqual(
+        sortedExternalIds(await account(taken)),
+        [],
+        'the account that had the localpart is untouched',
+      );
+      assert.ok(
+        await fetchSessionRoom(dbAdapter, user),
+        'the user has a session room',
+      );
+      let realms = await accountRealms(user);
+      assert.deepEqual(
+        realms.map((url) => new URL(url).pathname.split('/').slice(-3)),
+        [[`${base}1`, 'personal', '']],
+        'the user has a personal realm',
+      );
+
+      let again = await googleSignIn(issue());
+      assert.strictEqual(again.status, 201, again.text);
+      assert.strictEqual(
+        again.body.data.attributes.user,
+        user,
+        'signing in again uses the same account',
+      );
+      assert.strictEqual(
+        (await adminRequest(`_synapse/admin/v2/users/@${base}2:localhost`))
+          .status,
+        404,
+        'no second account is made',
+      );
+      assert.deepEqual(await accountRealms(user), realms, 'nor a second realm');
+    });
+
+    test('a first sign-in that stopped part way sets up again, without a second realm', async function (assert) {
+      let base = `secure-${randomBytes(6).toString('hex')}`;
+      let sub = `google-${randomUUID()}`;
+      let issue = () =>
+        google.issue(sub, {
+          claims: {
+            email: `${base}@example.com`,
+            email_verified: true,
+            name: 'Interrupted Googler',
+          },
+        });
+      let first = await googleSignIn(issue());
+      assert.strictEqual(first.status, 201, first.text);
+      let user = first.body.data.attributes.user;
+      let realms = await accountRealms(user);
+      assert.strictEqual(realms.length, 1, 'the first sign-in made a realm');
+
+      // As if the first sign-in had made the realm and stopped before
+      // recording it or the session room.
+      let sessionRoom = (await fetchSessionRoom(dbAdapter, user))!;
+      await clearSessionRoom(dbAdapter, user, sessionRoom);
+      await setAccountRealms(user, []);
+
+      let again = await googleSignIn(issue());
+      assert.strictEqual(again.status, 201, again.text);
+      assert.strictEqual(again.body.data.attributes.user, user);
+      assert.deepEqual(
+        await accountRealms(user),
+        realms,
+        'the realm it made is recorded, not made again',
+      );
+      assert.ok(
+        await fetchSessionRoom(dbAdapter, user),
+        'the session room is made again',
+      );
+    });
+
+    test("a realm shared with the user before their first sign-in doesn't stand in for their own", async function (assert) {
+      // An account that has never signed in to Boxel, already granted
+      // someone else's realm, which puts that realm in its account data.
+      let { userId } = await registerPasswordUser(dbAdapter, {
+        boxelAccount: false,
+      });
+      let localpart = userId.slice(1).split(':')[0];
+      let email = `${localpart}@example.com`;
+      await updateAccount(userId, {
+        threepids: [{ medium: 'email', address: email }],
+      });
+      let shared = 'http://127.0.0.1:4444/someone-else/shared/';
+      await setAccountRealms(userId, [shared]);
+
+      let response = await googleSignIn(
+        google.issue(`google-${randomUUID()}`, {
+          claims: { email, email_verified: true },
+        }),
+      );
+      assert.strictEqual(response.status, 201, response.text);
+      assert.strictEqual(response.body.data.attributes.user, userId);
+      let realms = await accountRealms(userId);
+      assert.strictEqual(realms[0], shared, 'the shared realm is kept');
+      assert.deepEqual(
+        realms
+          .slice(1)
+          .map((url) => new URL(url).pathname.split('/').slice(-3)),
+        [[localpart, 'personal', '']],
+        'and the user gets their own personal realm',
+      );
+    });
+
+    test('an account a new Google sign-in could not finish is not signed into later', async function (assert) {
+      let base = `secure-${randomBytes(6).toString('hex')}`;
+      let sub = `google-${randomUUID()}`;
+      // An address Synapse can't store as a third-party id, so the account is
+      // made and linked, and then setting it up fails.
+      let failed = await googleSignIn(
+        google.issue(sub, {
+          claims: { email: `${base}@@example.com`, email_verified: true },
+        }),
+      );
+      assert.strictEqual(failed.status, 500, 'the sign-in fails');
+      let abandoned = await account(`@${base}:localhost`);
+      assert.true(abandoned.deactivated, 'the account it made is deactivated');
+      assert.deepEqual(
+        sortedExternalIds(abandoned),
+        [],
+        'and unlinked from the Google identity',
+      );
+
+      let next = await googleSignIn(
+        google.issue(sub, {
+          claims: { email: `${base}@example.com`, email_verified: true },
+        }),
+      );
+      assert.strictEqual(next.status, 201, next.text);
+      assert.strictEqual(
+        next.body.data.attributes.user,
+        `@${base}1:localhost`,
+        'the next sign-in makes a complete account',
+      );
+      assert.deepEqual(
+        (await account(`@${base}1:localhost`)).threepids.map(
+          ({ address }: { address: string }) => address,
+        ),
+        [`${base}@example.com`],
+      );
     });
 
     test('a Google sign-in signs in once, even after its session ends', async function (assert) {

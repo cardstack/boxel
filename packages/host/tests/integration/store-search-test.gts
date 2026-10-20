@@ -125,6 +125,31 @@ module('Integration | store search public API', function (hooks) {
     );
   });
 
+  test('search and searchEntries find the realm a registered prefix names', async function (assert) {
+    let { virtualNetwork } = getService('network');
+    // Mapping a prefix onto a realm that is already loaded changes the form
+    // its modules and cards canonicalize to, so a type filter or a hydrated
+    // instance would not match even by URL. An untyped search and the
+    // server's count are what show the request reached the realm.
+    virtualNetwork.addRealmMapping('@test/mapped/', testRealmURL);
+    try {
+      let { meta } = await storeService.searchWithMeta({}, ['@test/mapped/']);
+      assert.strictEqual(meta.page.total, 2, 'search finds the books');
+
+      let doc = await storeService.searchEntries(
+        { scope: 'cards', fields: { entry: ['item'] } },
+        ['@test/mapped/'],
+      );
+      assert.deepEqual(
+        doc.data.map((entry) => entry.id).sort(),
+        [`${testRealmURL}books/1`, `${testRealmURL}books/2`],
+        'searchEntries finds the books',
+      );
+    } finally {
+      virtualNetwork.removeRealmMapping('@test/mapped/');
+    }
+  });
+
   test('search rejects the removed asData path', async function (assert) {
     await assert.rejects(
       storeService.search({ filter: { type: bookRef }, asData: true } as any, [

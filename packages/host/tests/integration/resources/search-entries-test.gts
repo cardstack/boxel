@@ -2019,6 +2019,61 @@ module('Integration | search-entries resource', function (hooks) {
     }
   });
 
+  test('a realm named by a registered prefix is searched, tagged and refreshed by the spelling the caller used', async function (assert) {
+    let { virtualNetwork } = getService('network');
+    virtualNetwork.addRealmMapping('@test/mapped/', testRealm2URL);
+    let fetchedRealms: string[][] = [];
+    let originalSearchEntries = storeService.searchEntries.bind(storeService);
+    storeService.searchEntries = async (query, realms) => {
+      fetchedRealms.push(realms ?? []);
+      return await originalSearchEntries(query, realms);
+    };
+
+    try {
+      let search = getResourceForTest(storeService, () => ({
+        named: {
+          query: {
+            filter: { 'item.on': bookRef },
+            realms: [testRealmURL, '@test/mapped/'],
+          },
+        },
+      }));
+      await search.loaded;
+
+      assert.strictEqual(search.entries.length, 3, 'both realms answer');
+      let realm1EntriesBefore = search.entries.filter(
+        (entry) => entry.realmUrl === testRealmURL,
+      );
+      assert.strictEqual(realm1EntriesBefore.length, 2);
+      assert.deepEqual(
+        search.entries
+          .filter((entry) => entry.realmUrl === '@test/mapped/')
+          .map((entry) => entry.id),
+        [`${testRealm2URL}books/other`],
+        "the prefixed realm's row carries the realm as the caller named it",
+      );
+
+      await realm2.write('books/another.json', bookDoc('Hassan'));
+      await waitUntil(() => search.entries.length === 4, { timeout: 10_000 });
+
+      assert.deepEqual(
+        fetchedRealms[fetchedRealms.length - 1],
+        ['@test/mapped/'],
+        'the event on the backing realm refreshes that realm alone',
+      );
+      for (let entryBefore of realm1EntriesBefore) {
+        assert.strictEqual(
+          search.entries.find((entry) => entry.id === entryBefore.id),
+          entryBefore,
+          `the other realm's row ${entryBefore.id} keeps its identity`,
+        );
+      }
+    } finally {
+      storeService.searchEntries = originalSearchEntries;
+      virtualNetwork.removeRealmMapping('@test/mapped/');
+    }
+  });
+
   test("an event in realm 2 refreshes realm 2's rows", async function (assert) {
     let search = getResourceForTest(storeService, () => ({
       named: {

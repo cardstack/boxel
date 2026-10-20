@@ -24,12 +24,12 @@ import {
   contains,
   field,
   linksTo,
-} from 'https://cardstack.com/base/card-api';
+} from '@cardstack/base/card-api';
 import type { RealmResourceIdentifier } from '@cardstack/runtime-common';
-import StringField from 'https://cardstack.com/base/string';
-import MarkdownField from 'https://cardstack.com/base/markdown';
-import DateField from 'https://cardstack.com/base/date';
-import enumField from 'https://cardstack.com/base/enum';
+import StringField from '@cardstack/base/string';
+import MarkdownField from '@cardstack/base/markdown';
+import DateField from '@cardstack/base/date';
+import enumField from '@cardstack/base/enum';
 import { FittedCard } from '@cardstack/boxel-ui/components';
 import StickyNoteIcon from '@cardstack/boxel-icons/sticky-note';
 import { on } from '@ember/modifier';

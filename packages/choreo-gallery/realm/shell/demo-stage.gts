@@ -23,7 +23,11 @@ export class DemoStage extends Component<Signature> {
   }
 
   <template>
-    <div class='demo-stage' data-demo-tuning={{this.labSlug}}>
+    <div
+      class='demo-stage'
+      data-demo-tuning={{this.labSlug}}
+      data-test-demo-stage
+    >
       {{#if this.Stage}}
         <this.Stage
           @face={{@face}}

@@ -105,6 +105,22 @@ const MODELS = (process.env.EVAL_MODELS ?? 'Claude Sonnet 4.6')
   .map((m) => m.trim())
   .filter(Boolean);
 
+// Skill sections behind a feature flag (`<!-- feature:<name> -->`) are left
+// out of the prompt unless the room enabled them. Each name here is enabled
+// in the room with `boxel-debug:feature:enable:<name>` before the first
+// prompt, in addition to the evaluation's own `skillFeatures`, so a run can
+// measure the assistant with a feature on that the evaluation leaves off. A
+// name with a leading `-` leaves out one the evaluation switches on, so the
+// two arms of an A/B run use the same card.
+const SKILL_FEATURE_NAMES = (process.env.EVAL_SKILL_FEATURES ?? '')
+  .split(',')
+  .map((f) => f.trim())
+  .filter(Boolean);
+const SKILL_FEATURES = SKILL_FEATURE_NAMES.filter((f) => !f.startsWith('-'));
+const SKILL_FEATURES_OFF = SKILL_FEATURE_NAMES.filter((f) =>
+  f.startsWith('-'),
+).map((f) => f.slice(1));
+
 function slugify(s: string) {
   return s
     .toLowerCase()
@@ -148,23 +164,22 @@ async function loginViaLocalStorage(page: Page, username: string) {
   return credentials;
 }
 
-// An endpoint the realm server has not seen before. The name has a 60
-// character budget, so the cut falls on the label and never on the tail: the
-// model, the time and the session suffix are what make the name unique, and a
-// cut that reached them left every run of one evaluation on one day asking for
-// the name the first run already took.
-const ENDPOINT_MAX = 60;
-
-function workspaceEndpoint(label: string, modelSlug: string, stamp: string) {
+// An endpoint the realm server has not seen before, kept short: the model
+// copies the workspace URL into tool calls, and a weaker model mangles a long
+// one (GPT-6 Luna dropped whole runs of a URL that repeated "eval"). The
+// workspace's display name carries the evaluation; the endpoint is only the
+// model, the time and the session suffix, which is what makes it unique.
+function workspaceEndpoint(modelSlug: string, now: Date) {
   let session = (SESSION_ID ?? '').split('-').pop() ?? '';
   let suffix = slugify(session) || Math.random().toString(36).slice(2, 6);
-  let tail = `${modelSlug}-${slugify(stamp)}-${suffix}`.slice(0, ENDPOINT_MAX);
-  let room = ENDPOINT_MAX - tail.length - 1;
-  if (room <= 0) {
-    return tail;
-  }
-  let head = slugify(label).slice(0, room).replace(/-+$/, '');
-  return head ? `${head}-${tail}` : tail;
+  let pad = (n: number) => String(n).padStart(2, '0');
+  let time = `${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(
+    now.getHours(),
+  )}${pad(now.getMinutes())}`;
+  // A long model id is cut so the endpoint stays well inside the realm
+  // server's limit; the time and suffix keep it unique.
+  let model = modelSlug.slice(0, 40).replace(/-+$/, '');
+  return `${model}-${time}-${suffix}`;
 }
 
 async function createWorkspace(
@@ -392,6 +407,9 @@ interface Activity {
   botMessages: number;
   applying: number;
   generating: boolean;
+  // Tool calls the host holds until the user approves them. Nobody approves
+  // in a run, so a turn that ends on one would wait forever.
+  awaitingApproval: number;
   errorAlerts: number;
   // Length of all bot text on the page: a turn that is "generating" while this
   // stays flat for minutes is a stalled provider or ai-bot, not a slow model.
@@ -438,37 +456,62 @@ async function readActivityOnce(page: Page): Promise<Activity> {
     let loading = q('[data-test-session-preparation]');
     let pending = q('[data-test-ai-assistant-message-pending="true"]');
     let generating = q('[data-test-stop-generating]') > 0;
+    let awaitingApproval = q('[data-test-tool-call-approval]');
     let irregularities: string[] = [];
     let failed = q('[data-test-apply-state="failed"]');
     let invalid = q('[data-test-apply-state="invalid"]');
     let errorAlerts = q('[data-test-boxel-alert="error"]');
     // A failed or rejected call is something a model can notice and correct:
     // the host tells it what was wrong, and a normal repair takes two or three
-    // rounds, each of which can fail once more before it lands. Only a fourth
-    // failing turn reads as a run going sideways; stopping at two cut off a
-    // Haiku run two seconds before its card appeared. Count turns, not pills:
-    // one fix reply can carry several calls that all fail together.
-    let messagesWithFailures = Array.from(
+    // rounds, each of which can fail once more before it lands. A failure the
+    // next turn repairs is graded afterwards (too many failed calls reads
+    // ROUGH), not stopped: across a run with follow-ups, scattered slips that
+    // were each fixed added up to a stop after the last prompt's work was on
+    // screen. So the run stops on three failing turns in a row, the model not
+    // getting out of it, and on eight in all as a backstop for one that
+    // alternates. Count turns, not pills: one fix reply can carry several
+    // calls that all fail together. A finished turn shows its token usage; a
+    // turn with neither a failure nor usage (a correctness note) leaves the
+    // streak as it is.
+    let failingTurns = 0;
+    let failingStreak = 0;
+    let longestFailingStreak = 0;
+    for (let m of Array.from(
       document.querySelectorAll('[data-test-message-idx]'),
-    ).filter(
-      (m) =>
+    )) {
+      let failing =
         m.querySelector(
           '[data-test-apply-state="failed"], [data-test-apply-state="invalid"]',
-        ) || m.querySelector('[data-test-boxel-alert="error"]'),
-    ).length;
-    if (messagesWithFailures >= 4) {
+        ) || m.querySelector('[data-test-boxel-alert="error"]');
+      if (failing) {
+        failingTurns++;
+        failingStreak++;
+        longestFailingStreak = Math.max(longestFailingStreak, failingStreak);
+      } else if (m.querySelector('[data-test-token-usage]')) {
+        failingStreak = 0;
+      }
+    }
+    if (longestFailingStreak >= 3) {
       irregularities.push(
-        `${messagesWithFailures} turns had a failed or rejected tool call (${failed} failed, ${invalid} invalid, ${errorAlerts} error alerts)`,
+        `${longestFailingStreak} turns in a row had a failed or rejected tool call (${failingTurns} failing turns in all; ${failed} failed, ${invalid} invalid, ${errorAlerts} error alerts)`,
+      );
+    } else if (failingTurns >= 8) {
+      irregularities.push(
+        `${failingTurns} turns had a failed or rejected tool call (${failed} failed, ${invalid} invalid, ${errorAlerts} error alerts)`,
       );
     }
     // A loop: the same tool call, with the same arguments, three times. The
     // bot's own checkCorrectness is left out: it repeats with the same
-    // arguments on every repair round by design.
+    // arguments on every repair round by design. So is a call rejected as
+    // invalid: it never ran, its pill shows no arguments, so several of them
+    // in one turn look identical, and the failed-turn count above already
+    // covers them.
     let toolElements = Array.from(
       document.querySelectorAll<HTMLElement>('[data-tool-name]'),
     );
     let calls = toolElements
       .filter((el) => el.dataset.toolName !== 'checkCorrectness')
+      .filter((el) => !el.querySelector('[data-test-apply-state="invalid"]'))
       .map(
         (el) =>
           `${el.dataset.toolName}|${el.dataset.toolArgumentsLength}|${(
@@ -497,6 +540,7 @@ async function readActivityOnce(page: Page): Promise<Activity> {
       botMessages: q('[data-test-token-usage]'),
       applying,
       generating,
+      awaitingApproval,
       errorAlerts,
       irregularities,
       // Streamed tool arguments count too: a long tool call grows only in its
@@ -529,11 +573,47 @@ async function stopGeneration(page: Page) {
 // expensive runs are not stopped; they are graded afterwards.
 // `botMessagesBefore` is how many finished bot turns the room already had
 // when the prompt went out; a follow-up prompt waits for a new one.
+// Some tools open a room of their own and move the assistant panel to it:
+// `listing-remix`, for one, starts a "Remixing …" session. The evaluation's
+// conversation carries on in its own room, but the panel no longer shows it,
+// so everything read from the page would describe the wrong room. When the
+// panel is on another room, reopen the evaluation's room from past sessions.
+// Returns true when it switched back. It runs on every poll, so reading the
+// current room never waits, and a switch that fails (the past-sessions button
+// disabled, the host reloading) returns false for the next poll to retry
+// rather than failing the run.
+async function returnToRoom(page: Page, roomId: string): Promise<boolean> {
+  let current = await page
+    .evaluate(
+      () =>
+        document
+          .querySelector('[data-test-room]')
+          ?.getAttribute('data-test-room') ?? null,
+    )
+    .catch(() => null);
+  if (!current || current === roomId) {
+    return false;
+  }
+  try {
+    await page.locator('[data-test-past-sessions-button]').click();
+    await page.locator(`[data-test-enter-room="${roomId}"]`).click();
+    await page
+      .locator(`[data-test-room="${roomId}"]`)
+      .waitFor({ timeout: 60_000 });
+    await page.locator('[data-test-room-settled]').waitFor({ timeout: 60_000 });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function waitForIdle(
   page: Page,
   deadline: number,
   botMessagesBefore = 0,
   onActivity?: (activity: Activity) => void,
+  roomId?: string,
+  roomReturns: { count: number } = { count: 0 },
 ): Promise<{ stoppedBy: RunResult['stoppedBy']; irregularities: string[] }> {
   let idleSince: number | undefined;
   let applyingSince: number | undefined;
@@ -541,6 +621,9 @@ async function waitForIdle(
   let lastTextLength = -1;
   let startedAt = Date.now();
   for (;;) {
+    if (roomId && (await returnToRoom(page, roomId))) {
+      roomReturns.count++;
+    }
     let now = Date.now();
     let activity = await readActivity(page);
     onActivity?.(activity);
@@ -577,6 +660,11 @@ async function waitForIdle(
         stoppedBy: 'irregularity',
         irregularities: activity.irregularities,
       };
+    }
+    // The room looks idle while a call waits for approval, so without this
+    // the next prompt would go out over a turn that never finished.
+    if (activity.awaitingApproval > 0 && !activity.generating) {
+      return { stoppedBy: 'approval', irregularities: [] };
     }
     if (activity.idle && activity.botMessages > botMessagesBefore) {
       idleSince ??= now;
@@ -723,9 +811,21 @@ function classify(
     );
     return { verdict: 'model-failure', reasons };
   }
+  if (stoppedBy === 'approval') {
+    reasons.push(
+      'the assistant stopped to wait for the user to approve a tool call (for example a readUrl of a URL the model composed itself)',
+    );
+    return { verdict: 'model-failure', reasons };
+  }
   if (stoppedBy === 'stuck') {
     reasons.push('a tool pill stayed in "applying" past the host tool timeout');
     return { verdict: 'host-failure', reasons };
+  }
+  if (stoppedBy === 'no-reply' && analysis.emptyBotReplies > 0) {
+    reasons.push(
+      `the bot posted an empty reply (no text, no tool call, no usage): the provider returned no content, and the ai-bot finalized it; its log for that turn shows the generation id`,
+    );
+    return { verdict: 'bot-failure', reasons };
   }
   if (stoppedBy === 'no-reply') {
     reasons.push(
@@ -745,8 +845,11 @@ function classify(
     );
     return { verdict: 'host-failure', reasons };
   }
-  if (analysis.realmCodeWrites === 0) {
-    reasons.push('no file was written (no applied run-realm-code write)');
+  let writes = analysis.realmCodeWrites + analysis.toolWrites;
+  if (writes === 0) {
+    reasons.push(
+      'no file was written (no applied run-realm-code or other writing tool call)',
+    );
   }
   if (!cardId) {
     reasons.push(...cardReasons);
@@ -761,7 +864,7 @@ function classify(
   if (
     cardId &&
     cardReasons.length === 0 &&
-    analysis.realmCodeWrites > 0 &&
+    writes > 0 &&
     promptsSent === promptsTotal
   ) {
     return { verdict: 'pass', reasons };
@@ -783,6 +886,9 @@ async function runModel(
 ): Promise<RunResult> {
   let slug = slugify(requestedModel);
   let startedAt = Date.now();
+  // When the first prompt went out: the time target covers the prompts, not
+  // logging in and creating the workspace.
+  let promptStartedAt: number | undefined;
   let consoleErrors: string[] = [];
   page.on('console', (message) => {
     if (message.type() === 'error') {
@@ -813,6 +919,8 @@ async function runModel(
     initialCards: [],
     initialFiles: [],
     skillsUsed: [],
+    skillFeatures: [],
+    roomReturns: 0,
     username,
     stoppedBy: 'error',
     irregularities: [],
@@ -838,6 +946,7 @@ async function runModel(
     let { evaluation, prompts } = await loadPrompts();
     result.prompts = prompts;
     result.evalCardUrl = evaluation?.url;
+    result.secondsPerPrompt = evaluation?.secondsPerPrompt;
     // Human-readable stamp so the workspace list reads "Models Claude Opus
     // 4.8 2026-09-07 12:43"; the endpoint gets the same stamp, slug-safe.
     let now = new Date();
@@ -850,7 +959,7 @@ async function runModel(
     result.realmUrl = await createWorkspace(
       page,
       `${label} ${requestedModel} ${stamp}`,
-      workspaceEndpoint(label, slug, stamp),
+      workspaceEndpoint(slug, now),
     );
     if (evaluation) {
       setStep('copy the initial cards and files into the workspace');
@@ -871,14 +980,48 @@ async function runModel(
     await ensureActMode(page, requestedModel);
     setStep('confirm the tab is inside the new workspace');
     await ensureInsideWorkspace(page, result.realmUrl, result.initialCards);
+    // The evaluation's own features, plus any EVAL_SKILL_FEATURES adds, less
+    // any it turns off.
+    let skillFeatures = [
+      ...new Set([...(evaluation?.skillFeatures ?? []), ...SKILL_FEATURES]),
+    ].filter((feature) => !SKILL_FEATURES_OFF.includes(feature));
+    for (let [index, feature] of skillFeatures.entries()) {
+      setStep(`enable skill feature ${feature}`);
+      await sendPrompt(
+        page,
+        result.roomId,
+        `boxel-debug:feature:enable:${feature}`,
+        index + 1,
+      );
+      // The bot answers the command itself, without the model; its reply
+      // carries no usage, so it is not counted as a turn. A name the bot
+      // does not know gets "There is no feature named …" instead, which ends
+      // the run straight away rather than at the timeout.
+      let enabled = page.getByText(`${feature} is now enabled`).first();
+      let unknown = page.getByText('There is no feature named').first();
+      await expect(enabled.or(unknown)).toBeVisible({ timeout: NO_REPLY_MS });
+      if (await unknown.isVisible()) {
+        throw new Error(
+          `The ai-bot has no skill feature named "${feature}"; check the evaluation's skillFeatures and EVAL_SKILL_FEATURES.`,
+        );
+      }
+    }
+    result.skillFeatures = skillFeatures;
     // One safety clock for the whole run, follow-ups included.
     let deadline = Date.now() + MAX_MINUTES * 60_000;
     let botMessagesBefore = 0;
+    let roomReturns = { count: 0 };
     for (let [index, prompt] of prompts.entries()) {
       setStep(
         index === 0 ? 'send prompt' : `send follow-up prompt ${index + 1}`,
       );
-      await sendPrompt(page, result.roomId, prompt, index + 1);
+      await sendPrompt(
+        page,
+        result.roomId,
+        prompt,
+        skillFeatures.length + index + 1,
+      );
+      promptStartedAt ??= Date.now();
       result.promptsSent = index + 1;
       setStep(
         index === 0
@@ -904,6 +1047,8 @@ async function runModel(
             });
           }
         },
+        result.roomId,
+        roomReturns,
       );
       result.stoppedBy = waited.stoppedBy;
       result.irregularities = waited.irregularities;
@@ -912,6 +1057,10 @@ async function runModel(
       }
       botMessagesBefore = (await readActivity(page)).botMessages;
     }
+    if (result.roomId && (await returnToRoom(page, result.roomId))) {
+      roomReturns.count++;
+    }
+    result.roomReturns = roomReturns.count;
     setStep('check render');
 
     let rendered = await findRenderedCard(
@@ -941,6 +1090,19 @@ async function runModel(
     );
     result.verdict = verdict.verdict;
     result.reasons = verdict.reasons;
+    // An enabled feature whose skill the model never opened means the run
+    // did not exercise it, whatever the verdict says. This assumes each
+    // feature's skill lives in a skills/<feature name>/SKILL.md directory.
+    for (let feature of result.skillFeatures) {
+      let read = result.analysis.filesRead.some((url) =>
+        url.endsWith(`/skills/${feature}/SKILL.md`),
+      );
+      if (!read) {
+        result.reasons.push(
+          `skill feature "${feature}" was enabled but skills/${feature}/SKILL.md was never read`,
+        );
+      }
+    }
   } catch (error) {
     result.error = error instanceof Error ? error.message : String(error);
     result.reasons.push(
@@ -968,6 +1130,9 @@ async function runModel(
   } finally {
     result.endedAt = new Date().toISOString();
     result.durationSeconds = Math.round((Date.now() - startedAt) / 1000);
+    if (promptStartedAt !== undefined) {
+      result.promptSeconds = Math.round((Date.now() - promptStartedAt) / 1000);
+    }
     result.consoleErrors = consoleErrors.slice(0, 50);
     // Read the workspace back before writing the result, so a judge scores
     // what the assistant left behind rather than what it said it did. A run
@@ -1108,9 +1273,14 @@ test.afterAll(async () => {
               ([name, count]) =>
                 `${name.replace(/_[0-9a-f]{4}$/, '')}×${count}`,
             )
-            .join(', ')
+            .join(', ') +
+          (Object.keys(a.realmSearches ?? {}).length > 0
+            ? ` (realm searches: ${Object.entries(a.realmSearches)
+                .map(([realm, count]) => `${realm}×${count}`)
+                .join(', ')})`
+            : '')
         : '';
-      let writes = a ? `${a.realmCodeWrites}` : '';
+      let writes = a ? `${a.realmCodeWrites + a.toolWrites}` : '';
       return `| ${graded.grade} | ${r.modelId ?? r.requestedModel} | ${r.reasoningEffort ?? '–'} | ${r.verdict} | ${
         a?.turns ?? '–'
       } | ${tools} | ${writes} | ${a ? `$${a.costUsd.toFixed(3)}` : '–'} | ${

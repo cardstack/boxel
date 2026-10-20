@@ -454,7 +454,7 @@ async function appendStringToUserAccountDataArray({
   );
 }
 
-async function fetchAccountData(
+export async function fetchAccountData(
   matrixURL: URL,
   userId: string,
   userAccessToken: string,

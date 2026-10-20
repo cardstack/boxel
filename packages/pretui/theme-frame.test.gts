@@ -6,7 +6,7 @@ import { module, test } from 'qunit';
 import { render, click } from '@ember/test-helpers';
 import { setupCardTest } from '@cardstack/host/tests/helpers';
 import { ThemeFrame } from './components/theme-frame';
-import { realmURL } from 'https://cardstack.com/base/card-api';
+import { realmURL } from '@cardstack/base/card-api';
 
 const THEME = {
   id: 'https://test.example/theme/probe',

@@ -17,11 +17,13 @@ import { on } from '@ember/modifier';
 import { tracked } from '@glimmer/tracking';
 import type { ComponentLike } from '@glint/template';
 import { modifier } from 'ember-modifier';
+import { MotionConfig } from 'glimmer-motion';
 
 import type { ChoreoGallery } from './gallery';
 import type { FilmLink } from './lib/film-link';
 import { pointerOnly } from './lib/focus';
 import { labSlug, LabState } from './lib/lab';
+import { MotionHold, wakeOnTouch } from './lib/motion-hold';
 import { restWhenOff } from './lib/onstage';
 import { openThroughHost, ownClicks, ownControlClicks } from './lib/pointer';
 import { realmFile } from './lib/realm-url';
@@ -32,6 +34,7 @@ import { DemoStage } from './shell/demo-stage';
 import { GuideLink } from './shell/guide-link';
 import { LabPanel } from './shell/lab-panel';
 import { LabToggle } from './shell/lab-toggle';
+import { MotionToggle } from './shell/motion-toggle';
 import { SiteFrame } from './shell/site-frame';
 
 /** the gallery's sections, in the order its filters list them */
@@ -164,6 +167,7 @@ class Isolated extends Component<typeof GalleryDemo> {
  */
 class Embedded extends Component<typeof GalleryDemo> {
   readonly lab = new LabState();
+  readonly hold = new MotionHold();
 
   get demo() {
     return this.args.model as GalleryDemo;
@@ -179,11 +183,24 @@ class Embedded extends Component<typeof GalleryDemo> {
 
   toggleLab = () => this.lab.toggle(this.labSlug);
 
+  /** a replay, or a change of motion policy, mounts the stage afresh */
+  get take(): string {
+    return `${this.lab.replays}:${this.hold.reducedMotion}`;
+  }
+
   <template>
     <ChoreoRoot class='tile'>
-      <div class='tile-stage' {{ownClicks}}>
-        {{#each (array this.lab.replays) key='@identity'}}
-          <DemoStage @demo={{this.demo}} @face='tile' />
+      <div
+        class='tile-stage'
+        data-motion-hold={{this.hold.state}}
+        {{restWhenOff}}
+        {{wakeOnTouch this.hold}}
+        {{ownClicks}}
+      >
+        {{#each (array this.take) key='@identity'}}
+          <MotionConfig @reducedMotion={{this.hold.reducedMotion}}>
+            <DemoStage @demo={{this.demo}} @face='tile' />
+          </MotionConfig>
         {{/each}}
       </div>
       <div class='tile-meta'>
@@ -191,6 +208,7 @@ class Embedded extends Component<typeof GalleryDemo> {
         <span class='tile-title'>{{@model.title}}</span>
         <span class='tile-lede'>{{@model.lede}}</span>
         <span class='tile-links' {{ownClicks}}>
+          <MotionToggle @hold={{this.hold}} />
           {{#if this.labSlug}}
             <LabToggle @open={{this.labOpen}} @onToggle={{this.toggleLab}} />
           {{/if}}
@@ -223,6 +241,13 @@ class Embedded extends Component<typeof GalleryDemo> {
         container-name: platter;
         container-type: size;
         background: var(--bg);
+      }
+
+      /* a stage nobody can see, or one waiting to be asked to move, holds
+         its animations where they stand */
+      .tile-stage.is-resting,
+      .tile-stage.is-resting :deep(*) {
+        animation-play-state: paused !important;
       }
 
       .tile-meta {
@@ -294,6 +319,8 @@ class Fitted extends Component<typeof GalleryDemo> {
   @tracked roomy = false;
   /** how much of the name and group a tile too short for a stage can show */
   @tracked fit: 'is-short' | 'is-tiny' | undefined;
+  /** a tile moves only once the viewer reaches into it: see MotionHold */
+  readonly hold = new MotionHold();
 
   get demo() {
     return this.args.model as GalleryDemo;
@@ -355,7 +382,10 @@ class Fitted extends Component<typeof GalleryDemo> {
           demo's page }}
         <div
           class='tile-stage'
+          data-motion-hold={{this.hold.state}}
+          data-test-tile-stage
           {{restWhenOff}}
+          {{wakeOnTouch this.hold}}
           {{ownControlClicks}}
           {{pointerOnly}}
         >
@@ -417,8 +447,9 @@ class Fitted extends Component<typeof GalleryDemo> {
           var(--bg);
       }
 
-      /* A tile nobody can see holds its animations where they stand —
-         paused, so coming back does not restart every loop */
+      /* A tile nobody can see, or one waiting to be asked to move, holds
+         its animations where they stand — paused, so coming back does not
+         restart every loop */
       .tile-stage.is-resting,
       .tile-stage.is-resting :deep(*) {
         animation-play-state: paused !important;

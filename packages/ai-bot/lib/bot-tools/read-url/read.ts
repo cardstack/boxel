@@ -11,6 +11,7 @@ import type {
   Tool,
 } from '@cardstack/base/matrix-event';
 import { parseLenientJson } from '../../lenient-json.ts';
+import { humanMessageContexts } from '../realm-prefixes.ts';
 import {
   getToolRequests,
   isToolResultEventType,
@@ -339,10 +340,10 @@ const BOXEL_HOST_SHELL_RE =
   /<meta\s[^>]*name=["']@cardstack\/host\/config\/environment["']/i;
 
 // The origins of the realms the room's messages point at: the realm the user
-// is in, their workspaces, the cards they have open, and the file open in
-// code mode, as the host reports them in each human message's context. A
-// readUrl call on one of these origins is a realm read
-// and is refused without a request being made.
+// is in, their workspaces, the cards they have open, the file open in code
+// mode, and the realms the registered prefixes stand for, as the host reports
+// them in each human message's context. A readUrl call on one of these origins
+// is a realm read and is refused without a request being made.
 export function knownRealmOrigins(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
@@ -357,32 +358,17 @@ export function knownRealmOrigins(
       origins.add(origin);
     }
   };
-  for (let event of history) {
-    if (event.sender === aiBotUserId) {
-      continue;
+  for (let context of humanMessageContexts(history, aiBotUserId)) {
+    add(context.realmUrl);
+    for (let workspace of context.workspaces ?? []) {
+      add(workspace?.url);
     }
-    let data = (event.content as { data?: unknown })?.data;
-    if (typeof data === 'string') {
-      // Raw room events carry `data` as serialized JSON.
-      try {
-        data = JSON.parse(data);
-      } catch {
-        data = undefined;
-      }
+    for (let cardId of context.openCardIds ?? []) {
+      add(cardId);
     }
-    let context =
-      data && typeof data === 'object'
-        ? (data as { context?: Record<string, any> }).context
-        : undefined;
-    if (context) {
-      add(context.realmUrl);
-      for (let workspace of context.workspaces ?? []) {
-        add(workspace?.url);
-      }
-      for (let cardId of context.openCardIds ?? []) {
-        add(cardId);
-      }
-      add(context.codeMode?.currentFile);
+    add(context.codeMode?.currentFile);
+    for (let url of Object.values(context.realmPrefixes ?? {})) {
+      add(url);
     }
   }
   return origins;

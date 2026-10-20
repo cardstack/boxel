@@ -548,10 +548,8 @@ export default class RealmServerService
 
     for (let realmURL of realms) {
       let normalizedRealmURL = ensureTrailingSlash(realmURL);
-      // A realm identifier may be a registered prefix, which neither carries an
-      // origin to compare nor matches the URL a session token is filed under.
-      // Resolve once and let both questions below ask in URL form, so the
-      // function is form-agnostic end to end rather than only at the skip.
+      // A realm identifier may be a registered prefix, which carries no origin
+      // to compare, so the skip below asks in resolved URL form.
       let resolvedRealmURL = resolvedRealmURLHref(
         this.network.virtualNetwork,
         normalizedRealmURL,
@@ -564,15 +562,12 @@ export default class RealmServerService
       ) {
         continue;
       }
-      // A token is filed under the realm resource's own url, which is whatever
-      // spelling created the resource — so try the identifier as given and its
-      // resolved form. Missing the token does not fail loudly: the loop would
-      // `continue`, and a realm that is the only entry would leave the set
-      // empty and answer with this realm server instead of the realm's.
-      let token =
-        sessionTokens[normalizedRealmURL] ??
-        sessionTokens[realmURL] ??
-        sessionTokens[resolvedRealmURL];
+      // Missing the token does not fail loudly: the loop would `continue`,
+      // and a realm that is the only entry would leave the set empty and
+      // answer with this realm server instead of the realm's.
+      // An expired token still names the realm server that issued it, which
+      // is all this reads, so the first one found will do.
+      let [token] = this.sessionTokensFor(sessionTokens, realmURL);
       if (!token) {
         continue;
       }
@@ -1833,16 +1828,46 @@ export default class RealmServerService
     return this.token;
   }
 
+  // Every token filed for a realm, in the order its spellings are tried. A
+  // token is filed under the realm resource's own url, which is whatever
+  // spelling created the resource: a registered prefix, the URL it is served
+  // from, or its alias (`equivalentURLForms` yields all three). A realm
+  // reached under two spellings across visits can hold a token under each,
+  // and a refresh rewrites only one of them, so one may be stale.
+  private sessionTokensFor(
+    sessionTokens: Record<string, string>,
+    realm: string,
+  ): string[] {
+    let { virtualNetwork } = this.network;
+    let normalized = ensureTrailingSlash(realm);
+    let spellings = new Set([
+      normalized,
+      realm,
+      ...virtualNetwork.equivalentURLForms(
+        resolvedRealmURLHref(virtualNetwork, normalized),
+      ),
+    ]);
+    return [
+      ...new Set(
+        [...spellings]
+          .map((spelling) => sessionTokens[spelling])
+          .filter((token): token is string => Boolean(token)),
+      ),
+    ];
+  }
+
   private getRealmTokenForRealms(realms: string[]): string | undefined {
     let sessionTokens = this.readSessionTokens();
     for (let realmURL of realms) {
-      let normalizedRealmURL = ensureTrailingSlash(realmURL);
-      let token = sessionTokens[normalizedRealmURL] ?? sessionTokens[realmURL];
       // An expired token buys nothing: the server rejects it, so sending it
       // spends a round trip to learn what its own `exp` claim already says.
       // Skipping it lets a publicly-readable realm answer the unauthenticated
-      // request, and leaves the 401 path to mint a realm-server session.
-      if (token && !isTokenExpired(token)) {
+      // request, and leaves the 401 path to mint a realm-server session. A
+      // stale token under one spelling does not hide a live one under another.
+      let token = this.sessionTokensFor(sessionTokens, realmURL).find(
+        (candidate) => !isTokenExpired(candidate),
+      );
+      if (token) {
         return token;
       }
     }

@@ -171,6 +171,15 @@ Practical consequences:
 - Don't thread a `VirtualNetwork` into rendering, serialization, or store code
   to resolve something. Reaching for VN at an in-memory site is a signal that
   resolution is happening at the wrong layer.
+- A realm list, and any realm the server names (a search row's realm,
+  `realmTotals`, `policyScopedRealms`, a seed's realm, a realm event's
+  `realmURL`), is canonicalized with `unresolveURL` like every other
+  identifier (`canonicalRealmIdentifier` / `canonicalRealmIdentifiers` in
+  `packages/host/app/lib/realm-utils.ts`), and compared with plain
+  `RealmPaths` or string tests after that. The base realm's alias, the URL it
+  is served from and `@cardstack/base/` are all `@cardstack/base/`.
+  `MessageService` keys realm subscriptions the same way, so a subscriber may
+  name a realm by any spelling.
 - Serialization writes RRI form. Deserialization canonicalizes to RRI on entry,
   which is what makes the rule hold for data arriving from the network.
 
@@ -185,7 +194,14 @@ Realm request handling accepts RRI-form identifiers where clients send them for
 the same reason — a client shouldn't have to know a realm's serving URL to
 reference a card in it. Atomic-operation hrefs are the clearest example: the
 realm resolves a registered prefix to a real URL before doing path math, and
-leaves plain URL and relative hrefs untouched.
+leaves plain URL and relative hrefs untouched. The realm server's federated
+endpoints (`_federated-search`, `_federated-info`, `_federated-types`,
+`_federated-index-counts`) do the same for the realms a request names: each
+may be a registered prefix, the URL the realm is registered under, or the URL
+it is served from, and `registeredRealmURL` (`packages/runtime-common/search-utils.ts`)
+reads all three as the registered URL. The host sends a realm list as its
+caller spelled it and canonicalizes what the server sends back, so it never
+has to know the URL a realm is registered under.
 
 ## RealmPaths
 
@@ -311,12 +327,14 @@ be retired.
 Two lint rules keep the URL form from creeping back into source:
 
 - `@cardstack/boxel/no-url-form-base-imports` flags (and auto-fixes)
-  `https://cardstack.com/base/…` in static imports, dynamic `import()`, and
-  `loader.import()`. It deliberately ignores the URL in fetch targets, alias
+  `https://cardstack.com/base/…` in static imports, dynamic `import()`,
+  `loader.import()` and `importResource()`, including a template literal that
+  starts with it. It deliberately ignores the URL in fetch targets, alias
   registration, and tests that assert on served content — those are legitimate.
 - `@cardstack/boxel/no-literal-realm-urls` flags environment-specific realm
-  URLs (`http://localhost:4201/catalog/`, `https://app.boxel.ai/catalog/`, …)
-  that should be written as the prefix instead.
+  URLs for every registered prefix realm (`http://localhost:4201/catalog/`,
+  `https://app.boxel.ai/skills/`, …) that should be written as the prefix
+  instead.
 
 ## Migrating existing realm data
 

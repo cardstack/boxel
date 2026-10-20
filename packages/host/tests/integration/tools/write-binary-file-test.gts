@@ -26,6 +26,10 @@ let fetch: NetworkService['fetch'];
 const TINY_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQABNjN9GQAAAABJRkhJRkFJAA==';
 
+// A realm-prefix spelling of the test realm, registered per test, so the tool
+// receives the realm identifier in prefix form from `realmOf`.
+const testRealmPrefix = '@test/write-realm/';
+
 class StubRealmService extends RealmService {
   get defaultReadableRealm() {
     return {
@@ -38,6 +42,9 @@ class StubRealmService extends RealmService {
     let str = input instanceof URL ? input.href : input;
     if (str.startsWith(testRealmURL)) {
       return testRealmURL;
+    }
+    if (str.startsWith(testRealmPrefix)) {
+      return testRealmPrefix as ReturnType<RealmService['realmOf']>;
     }
     return undefined;
   }
@@ -91,6 +98,46 @@ module('Integration | tools | write-binary-file', function (hooks) {
       Array.from(expectedBytes),
       'stored file bytes match the decoded base64 content',
     );
+  });
+
+  test('writes a binary file into a realm registered in prefix form', async function (assert) {
+    let { virtualNetwork } = getService('network');
+    virtualNetwork.addRealmMapping(testRealmPrefix, testRealmURL);
+    try {
+      let toolService = getService('tool-service');
+      let cardService = getService('card-service');
+      await cardService.saveSource(
+        new URL('prefixed.png', testRealmURL),
+        'placeholder',
+        'create-file',
+      );
+      let writeBinaryFileCommand = new WriteBinaryFileTool(
+        toolService.toolContext,
+      );
+      let result = await writeBinaryFileCommand.execute({
+        path: 'prefixed.png',
+        base64Content: TINY_PNG_BASE64,
+        realm: testRealmPrefix,
+        useNonConflictingFilename: true,
+      });
+      assert.strictEqual(
+        result.fileIdentifier,
+        `${testRealmPrefix}prefixed-1.png`,
+        'the result keeps the prefix-form identifier',
+      );
+      let response = await fetch(new URL('prefixed-1.png', testRealmURL));
+      assert.strictEqual(response.status, 200);
+      let expectedBytes = Uint8Array.from(atob(TINY_PNG_BASE64), (char) =>
+        char.charCodeAt(0),
+      );
+      assert.deepEqual(
+        Array.from(new Uint8Array(await response.arrayBuffer())),
+        Array.from(expectedBytes),
+        'stored file bytes match the decoded base64 content',
+      );
+    } finally {
+      virtualNetwork.removeRealmMapping(testRealmPrefix);
+    }
   });
 
   test('a 403 from WAF is surfaced in the error message', async function (assert) {

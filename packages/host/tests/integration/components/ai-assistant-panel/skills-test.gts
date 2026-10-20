@@ -639,7 +639,7 @@ Instructions live in the markdown body.
     await click('[data-test-submode-switcher] button');
     await click('[data-test-boxel-menu-item-text="Code"]');
     await click('[data-test-skill-menu]');
-    let initialCodePath = operatorModeStateService.codePathString;
+    let initialCodePath = operatorModeStateService.state.codePath;
 
     await click(`[data-test-skill-options-button="${skillId}"]`);
     await waitFor('[data-test-boxel-menu-item-text="Open Skill Card"]');
@@ -647,14 +647,14 @@ Instructions live in the markdown body.
 
     await waitUntil(
       () =>
-        operatorModeStateService.codePathString &&
-        operatorModeStateService.codePathString !== initialCodePath &&
-        operatorModeStateService.codePathString.includes('skill'),
+        operatorModeStateService.state.codePath &&
+        operatorModeStateService.state.codePath !== initialCodePath &&
+        operatorModeStateService.state.codePath.includes('skill'),
       { timeoutMessage: 'timed out waiting for code mode to open skill card' },
     );
 
     assert.ok(
-      operatorModeStateService.codePathString?.includes('skill'),
+      operatorModeStateService.state.codePath?.includes('skill'),
       'skill definition is opened in code mode',
     );
   });
