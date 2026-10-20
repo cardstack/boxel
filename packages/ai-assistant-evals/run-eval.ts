@@ -264,6 +264,8 @@ async function createResultCard(
         toolCalls: toolCallsText(result),
         notes: [
           `grade ${graded.grade}`,
+          // The two arms of an A/B run differ only here.
+          `skill features: ${result.skillFeatures.length ? result.skillFeatures.join(', ') : 'none'}`,
           ...result.reasons,
           ...graded.misses,
           ...(a && a.realmCodeWrites + a.toolWrites

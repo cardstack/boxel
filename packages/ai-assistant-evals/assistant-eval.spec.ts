@@ -109,11 +109,17 @@ const MODELS = (process.env.EVAL_MODELS ?? 'Claude Sonnet 4.6')
 // out of the prompt unless the room enabled them. Each name here is enabled
 // in the room with `boxel-debug:feature:enable:<name>` before the first
 // prompt, in addition to the evaluation's own `skillFeatures`, so a run can
-// measure the assistant with a feature on that the evaluation leaves off.
-const SKILL_FEATURES = (process.env.EVAL_SKILL_FEATURES ?? '')
+// measure the assistant with a feature on that the evaluation leaves off. A
+// name with a leading `-` leaves out one the evaluation switches on, so the
+// two arms of an A/B run use the same card.
+const SKILL_FEATURE_NAMES = (process.env.EVAL_SKILL_FEATURES ?? '')
   .split(',')
   .map((f) => f.trim())
   .filter(Boolean);
+const SKILL_FEATURES = SKILL_FEATURE_NAMES.filter((f) => !f.startsWith('-'));
+const SKILL_FEATURES_OFF = SKILL_FEATURE_NAMES.filter((f) =>
+  f.startsWith('-'),
+).map((f) => f.slice(1));
 
 function slugify(s: string) {
   return s
@@ -958,10 +964,11 @@ async function runModel(
     await ensureActMode(page, requestedModel);
     setStep('confirm the tab is inside the new workspace');
     await ensureInsideWorkspace(page, result.realmUrl, result.initialCards);
-    // The evaluation's own features, plus any EVAL_SKILL_FEATURES adds.
+    // The evaluation's own features, plus any EVAL_SKILL_FEATURES adds, less
+    // any it turns off.
     let skillFeatures = [
       ...new Set([...(evaluation?.skillFeatures ?? []), ...SKILL_FEATURES]),
-    ];
+    ].filter((feature) => !SKILL_FEATURES_OFF.includes(feature));
     for (let [index, feature] of skillFeatures.entries()) {
       setStep(`enable skill feature ${feature}`);
       await sendPrompt(

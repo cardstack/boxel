@@ -32,7 +32,8 @@ endpoint is the URL.
   test workspace before the prompt (same path relative to the realm root, so
   relative `adoptsFrom` references keep working; the cards are opened in the
   stack so they are in the message context), `skillFeatures` switched on in
-  each room before the first prompt (added to `EVAL_SKILL_FEATURES`),
+  each room before the first prompt (`EVAL_SKILL_FEATURES` adds more, and a
+  name with a leading `-` leaves one out),
   `secondsPerPrompt` replacing the default 200 s time target for each prompt,
   and a query-backed `sessionReports` list.
 - **EvaluationResult**: one per model per session. The runner fills the
