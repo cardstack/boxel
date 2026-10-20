@@ -9,13 +9,15 @@
 // The Matrix server's own failure limit doesn't cover these sign-ins: the
 // password is checked by a user-interactive auth check, and a wrong password
 // there is answered as an incomplete auth, which that limit doesn't count.
-// So the realm server keeps the count, and its limit is never lower than the
-// Matrix server's own failure limit for the app's logins.
+// So the realm server keeps the count, with the Matrix server's default
+// failure limit for the app's logins.
 //
-// An account may also have only so many sign-ins in flight at once. Failures
-// are counted as each attempt finishes, so without this cap a batch of
-// guesses sent together would all be checked before any of them counted. No
-// one signing in by hand has that many in flight.
+// Failures are counted as each attempt finishes, so attempts in flight could
+// otherwise all be checked before any of them counted. Once an account has
+// failures, its attempts in flight count against the burst as if they will
+// fail too, so guesses can't be batched past the failure rate. An account
+// with no failures may have several sign-ins in flight, up to a cap; no one
+// signing in by hand has that many.
 //
 // Counts are kept per process; with several realm-server processes each allows
 // its own share.
@@ -37,8 +39,8 @@ export const DEFAULT_SIGN_IN_LIMITS: SignInLimits = {
   inFlight: 10,
 };
 
-// `retryAfterMs` is undefined when the wait isn't known, as for an account
-// with too many sign-ins in flight.
+// `retryAfterMs` is undefined when the wait isn't known, as when an account
+// is refused for its sign-ins in flight.
 export type SignInCheck =
   | { allowed: true }
   | { allowed: false; retryAfterMs?: number };
@@ -79,7 +81,10 @@ export class SignInLimiter {
       };
     }
     let inFlight = this.inFlight.get(account) ?? 0;
-    if (inFlight >= this.limits.inFlight) {
+    if (
+      (count > 0 && count + inFlight > this.limits.burstCount - 1) ||
+      inFlight >= this.limits.inFlight
+    ) {
       return { allowed: false };
     }
     this.inFlight.set(account, inFlight + 1);

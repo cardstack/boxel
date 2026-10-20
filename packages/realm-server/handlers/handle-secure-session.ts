@@ -186,8 +186,8 @@ async function sendSession(ctxt: Koa.Context, session: unknown) {
 }
 
 // POST /_secure-session: signs in with a username, email address or Matrix id
-// and the account's password. Failed sign-ins are limited per account, never
-// more tightly than the Matrix server limits failed logins to the app.
+// and the account's password. Failed sign-ins are limited per account, with the
+// Matrix server's default limit on failed logins to the app.
 export function handlePasswordSignIn(args: CreateRoutesArgs): Handler {
   let limiter = new SignInLimiter();
   return secureSessionHandler(async (ctxt) => {

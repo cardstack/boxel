@@ -89,6 +89,43 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('once an account has failures, its sign-ins in flight count against the burst', function (assert) {
+      let { limiter: l } = limiter();
+      attempt(l, '@a:x', true);
+      assert.true(l.start('@a:x').allowed, 'a second may be in flight');
+      assert.true(l.start('@a:x').allowed, 'and a third');
+      let refused = l.start('@a:x');
+      assert.false(refused.allowed, 'but not a fourth, past the burst');
+      assert.strictEqual(retryAfterMs(refused), undefined, 'for no known time');
+      l.finish('@a:x', { failed: false });
+      assert.true(
+        l.start('@a:x').allowed,
+        'one may start once the other finishes',
+      );
+    });
+
+    test('guesses sent in batches are held to the failure rate', function (assert) {
+      let { limiter: l, clock } = limiter();
+      let guesses = 0;
+      let tenMinutes = 10 * 60 * 1000;
+      let end = clock.now + tenMinutes;
+      // Starts as many as the limiter allows each tick, then fails them all.
+      for (; clock.now < end; clock.now += 100) {
+        let started = 0;
+        while (l.start('@a:x').allowed) {
+          started++;
+        }
+        for (let i = 0; i < started; i++) {
+          l.finish('@a:x', { failed: true });
+        }
+        guesses += started;
+      }
+      assert.true(
+        guesses <= 3 + (tenMinutes / 1000) * 0.17 * 1.1,
+        `${guesses} guesses in ten minutes is about the failure rate`,
+      );
+    });
+
     test('failures drain at the configured rate', function (assert) {
       let { limiter: l, clock } = limiter();
       for (let failure = 0; failure < 3; failure++) {
