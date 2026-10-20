@@ -228,9 +228,49 @@ export default class InputUsage extends Component {
           @description='Outline of the field (defaults to 1px solid transparent; the focused field sets its own outline color)'
         />
         <Css.Basic
+          @name='--boxel-input-outline-offset'
+          @type='outline-offset'
+          @description='Offset of the field outline (defaults to 0)'
+        />
+        <Css.Basic
           @name='--boxel-input-optional-font-size'
           @type='font-size'
           @description='Size of the Optional label (defaults to --boxel-font-size-xs)'
+        />
+        <Css.Basic
+          @name='--boxel-input-hover-border-color'
+          @type='border-color'
+          @description='Border color on hover (defaults to currentColor)'
+        />
+        <Css.Basic
+          @name='--boxel-input-disabled-opacity'
+          @type='opacity'
+          @description='Opacity of a disabled field (defaults to 0.5)'
+        />
+        <Css.Basic
+          @name='--boxel-input-readonly-opacity'
+          @type='opacity'
+          @description='Opacity of a read-only field that isn’t disabled (defaults to 0.5)'
+        />
+        <Css.Basic
+          @name='--boxel-input-invalid-color'
+          @type='color'
+          @description='Border and ring color of an invalid field (defaults to --destructive)'
+        />
+        <Css.Basic
+          @name='--boxel-input-invalid-box-shadow'
+          @type='box-shadow'
+          @description='Box shadow of an invalid field (defaults to a 1px ring)'
+        />
+        <Css.Basic
+          @name='--boxel-input-invalid-focus-outline'
+          @type='outline'
+          @description='Outline of a focused invalid field (defaults to 1px solid transparent)'
+        />
+        <Css.Basic
+          @name='--boxel-input-invalid-focus-box-shadow'
+          @type='box-shadow'
+          @description='Box shadow of a focused invalid field (defaults to a 1.5px ring)'
         />
         <Css.Basic
           @name='--boxel-input-search-color'
