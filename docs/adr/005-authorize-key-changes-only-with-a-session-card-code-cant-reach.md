@@ -7,6 +7,9 @@ scope:
   - packages/realm-server/lib/google-sign-in.ts
   - packages/realm-server/lib/google-account.ts
   - packages/realm-server/lib/sign-in-limiter.ts
+  - packages/realm-server/lib/key-shares.ts
+  - packages/postgres/migrations/1792187770930_add-key-shares.js
+  - packages/realm-server/handlers/realm-destruction-utils.ts
   - packages/realm-server/handlers/handle-secure-session.ts
   - packages/realm-server/handlers/handle-user-keys.ts
   - packages/realm-server/utils/jwt.ts

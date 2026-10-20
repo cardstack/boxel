@@ -75,7 +75,7 @@ Work through the diff as if inheriting the code, not skimming it.
     - it is not self-marked `accepted` (§1.6);
     - its `scope` globs match the code it governs, and the index row is added (§1.2);
     - its structure and length follow §1.3 and §1.5;
-    - if it is `proposed`, it ends with a Remediation section that lists, by file, the gaps you can find in its scope, or says there are none (§1.3, §1.6). A missing section or a missing gap is a finding;
+    - if it is `proposed`, it ends with a Remediation section that lists, by file, the gaps you can find in its scope, or says there are none (§1.3, §1.6). A missing section, a missing gap, or an entry whose file its `scope` doesn't match is a finding;
     - in a retroactive ADR, every reason cites a source or sits under Open questions (§1.7). An uncited "why" is a finding even when it sounds right.
 
 ## Phase 3 — Classify every finding

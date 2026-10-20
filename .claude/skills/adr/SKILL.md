@@ -55,7 +55,8 @@ listed, add it.
      under Remediation, the last section, by file (and symbol, when the gap
      is narrower) with the requirement it breaks. Don't fix them in the ADR's
      PR unless the fix is small. The ADR can merge first, and the remediation
-     follows in separate PRs. If there are no gaps, write "No known gaps."
+     follows in separate PRs. If a gap is in a file outside `scope`, widen
+     `scope` to cover it. If there are no gaps, write "No known gaps."
      Never leave the section out: a proposed ADR without one can't be told
      apart from one nobody surveyed.
 4. **Make the deletion pass** (§1.5). Reread the draft only to cut: restated

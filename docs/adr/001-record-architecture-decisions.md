@@ -104,7 +104,8 @@ Accepting it records that the code conforms.
 A proposed ADR MUST have a Remediation section that lists each known gap: a
 place where the code does not meet a MUST or MUST NOT of its Decision. Each
 entry MUST name a file and the requirement it breaks. It SHOULD also name the
-symbol when the gap is narrower than the file. When no gaps are known, the
+symbol when the gap is narrower than the file. The file MUST match the ADR's
+`scope`, so `scripts/adr-for.mts` shows the ADR to anyone changing it. When no gaps are known, the
 section MUST say so. A change that closes a gap MUST remove its entry.
 
 A person SHOULD set `accepted` when no gaps remain. The change that sets
