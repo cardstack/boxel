@@ -1150,7 +1150,11 @@ jobs:
           taken=0
           shards=0
           expected=0
-          for f in /tmp/percy-tallies/*/percy-tally.txt; do
+          # download-artifact puts each artifact in a directory named for it,
+          # except when the pattern matches only one: that one is extracted
+          # straight into the path. A one-shard re-run uploads one tally, so
+          # both places are read.
+          for f in /tmp/percy-tallies/percy-tally.txt /tmp/percy-tallies/*/percy-tally.txt; do
             [ -f "$f" ] || continue
             shards=$((shards + 1))
             a=$(sed -n 's/^attempted=//p' "$f")
@@ -1208,10 +1212,18 @@ jobs:
           # not a failed upload. A full re-run that also loses a tally reads the
           # same way; on main the cost of that is one build not becoming the
           # baseline, far less than a partial one becoming it.
+          #
+          # No tally at all also counts. The shard count comes from the tallies,
+          # so with none of them there is nothing to compare against, and a
+          # re-run whose only tally upload failed would otherwise pass.
           partial_rerun=false
-          if [ "${{ github.run_attempt }}" -gt 1 ] && [ "$shards" -gt 0 ] && [ "$shards" -lt "$expected" ]; then
+          if [ "${{ github.run_attempt }}" -gt 1 ] && { [ "$shards" -eq 0 ] || [ "$shards" -lt "$expected" ]; }; then
             partial_rerun=true
-            echo "::warning::Attempt ${{ github.run_attempt }} uploaded tallies from $shards of $expected shards, so this Percy build holds only the snapshots of the shards this attempt re-ran."
+            if [ "$shards" -eq 0 ]; then
+              echo "::warning::Attempt ${{ github.run_attempt }} uploaded no Percy snapshot tallies, so this Percy build cannot be shown to hold every shard's snapshots."
+            else
+              echo "::warning::Attempt ${{ github.run_attempt }} uploaded tallies from $shards of $expected shards, so this Percy build holds only the snapshots of the shards this attempt re-ran."
+            fi
           fi
           echo "partial_rerun=$partial_rerun" >> "$GITHUB_OUTPUT"
 
