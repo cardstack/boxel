@@ -1382,7 +1382,6 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         {
           cardId: authorId,
           format: 'atom',
-          url: `${testRealmURL}author.gts`,
         },
         'local storage is updated',
       );
@@ -1403,7 +1402,6 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
         {
           cardId: categoryId2,
           format: 'embedded',
-          url: `${testRealmURL}blog-post.gts`,
         },
         'local storage is updated',
       );
@@ -1415,7 +1413,6 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.deepEqual(getPlaygroundSelections()?.[blogPostModuleId], {
         cardId: blogPostId1,
         format: 'fitted',
-        url: `${testRealmURL}blog-post.gts`,
       });
       await click('[data-test-instance-chooser]');
       await click('[data-option-index="1"]'); // change selected instance
@@ -1423,7 +1420,6 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
       assert.deepEqual(getPlaygroundSelections()?.[blogPostModuleId], {
         cardId: blogPostId2,
         format: 'fitted',
-        url: `${testRealmURL}blog-post.gts`,
       });
 
       assert.strictEqual(
@@ -1432,17 +1428,14 @@ module('Acceptance | code-submode | card playground', function (_hooks) {
           [`${authorModuleId}`]: {
             cardId: authorId,
             format: 'atom',
-            url: `${testRealmURL}author.gts`,
           },
           [`${categoryModuleId}`]: {
             cardId: categoryId2,
             format: 'embedded',
-            url: `${testRealmURL}blog-post.gts`,
           },
           [`${blogPostModuleId}`]: {
             cardId: blogPostId2,
             format: 'fitted',
-            url: `${testRealmURL}blog-post.gts`,
           },
         }),
       );

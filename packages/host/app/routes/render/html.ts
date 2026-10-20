@@ -8,6 +8,7 @@ import {
   isRealmIndexCardId,
   isValidFormat,
   realmURL,
+  rri,
   type CodeRef,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
@@ -153,7 +154,7 @@ export default class RenderHtmlRoute extends Route<Model> {
     if (
       !cardRealmURL ||
       !isRealmIndexCardId(
-        instance.id,
+        instance.id ? rri(instance.id) : undefined,
         cardRealmURL,
         this.network.virtualNetwork,
       )

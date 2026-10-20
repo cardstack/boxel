@@ -12,6 +12,7 @@ import {
   selectReadRealmFileUrls,
   type ReadRealmFileTool,
 } from './read.ts';
+import { resolveRealmPrefix } from '../realm-prefixes.ts';
 import { publishToolResult, uploadToMatrix } from '../results.ts';
 import type { BotToolCall } from '../types.ts';
 import type { DiscoveredToolDefinition } from '@cardstack/base/matrix-event';
@@ -38,6 +39,9 @@ export interface ReadRealmFileFulfillmentDeps {
     'getToken' | 'invalidate'
   >;
   fetch?: typeof globalThis.fetch;
+  // The realm prefixes the room's context reports, for reading a file the
+  // model names in prefix form (`@cardstack/base/card-api.gts`).
+  realmPrefixes?: Map<string, string>;
   // Injectable for tests; defaults to uploading to the Matrix media repo.
   uploadText?: (content: string, contentType: string) => Promise<string>;
 }
@@ -127,10 +131,11 @@ function discoveredToolDefinitions(
 // Reads and uploads a single file of a call. An upload failure is folded into
 // the same shape as a read failure so the caller reports both alike.
 async function readAndUpload(
-  url: string,
+  reference: string,
   deps: ReadRealmFileFulfillmentDeps,
   upload: (content: string, contentType: string) => Promise<string>,
 ): Promise<FileRead> {
+  let url = resolveRealmPrefix(reference, deps.realmPrefixes ?? new Map());
   let result = await executeReadRealmFile(url, {
     onBehalfOf: deps.onBehalfOf,
     delegatedUserRealmSessions: deps.delegatedUserRealmSessions,

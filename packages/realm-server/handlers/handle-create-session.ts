@@ -1,15 +1,11 @@
 import {
   EXTENDED_SESSION_TOKEN_TTL,
-  fetchSessionRoom,
-  getOrCreateUser,
   logger,
   SESSION_TOKEN_TTL,
   SupportedMimeType,
-  upsertSessionRoom,
 } from '@cardstack/runtime-common';
 import type { Utils } from '@cardstack/runtime-common/matrix-backend-authentication';
 import { MatrixBackendAuthentication } from '@cardstack/runtime-common/matrix-backend-authentication';
-import { addToCreditsLedger } from '@cardstack/billing/billing-queries';
 import type Koa from 'koa';
 import { createJWT } from '../utils/jwt.ts';
 import {
@@ -18,7 +14,7 @@ import {
   setContextResponse,
 } from '../middleware/index.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
-import { getLowCreditThreshold } from '../lib/daily-credit-grant-config.ts';
+import { ensureSessionRoom } from '../lib/session-room.ts';
 
 const log = logger('realm-server');
 
@@ -55,31 +51,12 @@ export default function handleCreateSessionRequest({
             ? EXTENDED_SESSION_TOKEN_TTL
             : SESSION_TOKEN_TTL,
         ),
-      ensureSessionRoom: async (userId: string, registrationToken?: string) => {
-        let sessionRoom = await fetchSessionRoom(dbAdapter, userId);
-
-        if (!sessionRoom) {
-          let { user, created } = await getOrCreateUser(
-            dbAdapter,
-            userId,
-            registrationToken,
-          );
-          if (created) {
-            let lowCreditThreshold = getLowCreditThreshold();
-            if (lowCreditThreshold != null) {
-              await addToCreditsLedger(dbAdapter, {
-                userId: user.id,
-                creditAmount: lowCreditThreshold,
-                creditType: 'daily_credit',
-                subscriptionCycleId: null,
-              });
-            }
-          }
-          sessionRoom = await matrixClient.createDM(userId);
-          await upsertSessionRoom(dbAdapter, userId, sessionRoom);
-        }
-        return sessionRoom;
-      },
+      ensureSessionRoom: async (userId: string, registrationToken?: string) =>
+        await ensureSessionRoom(
+          { dbAdapter, matrixClient },
+          userId,
+          registrationToken,
+        ),
     } as Utils,
   );
 

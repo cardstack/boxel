@@ -16,10 +16,13 @@ import {
   findCompactionCut,
   getLatestCompaction,
   getPromptParts,
+  skillFileEventIdsToCarry,
+  toolSourceEventIdsToCarry,
   type CompactionEventContent,
   type PromptParts,
 } from '@cardstack/runtime-common/ai';
 import { buildChatCompletionRequest } from './chat-completion-request.ts';
+import { collectUsedToolCallIds, toolCallIdsToCarry } from './tool-call-ids.ts';
 
 let log = logger('ai-bot:compaction');
 
@@ -151,11 +154,8 @@ export async function compactRoomHistory(opts: {
   ) => Promise<void>;
 }): Promise<CompactionResult> {
   let { client, roomId, aiBotUserId, eventList, history } = opts;
-  let cut = findCompactionCut(
-    history,
-    aiBotUserId,
-    getLatestCompaction(eventList, aiBotUserId),
-  );
+  let currentCompaction = getLatestCompaction(eventList, aiBotUserId);
+  let cut = findCompactionCut(history, aiBotUserId, currentCompaction);
   let anchorIndex = cut
     ? eventList.findIndex((event) => event.event_id === cut.anchorEventId)
     : -1;
@@ -206,12 +206,22 @@ export async function compactRoomHistory(opts: {
     await sendCompactionEvent({ status: 'failed' });
     return { compacted: false, nothingToCompact: false, reason: reason! };
   }
-  let { event_id, content } = await sendCompactionEvent({
-    status: 'done',
-    upToEventId: cut.upToEventId,
-    summary,
-    summaryVersion: COMPACTION_SUMMARY_VERSION,
-  });
+  let { event_id, content } = await sendCompactionEvent(
+    fitCompactionContent({
+      status: 'done',
+      upToEventId: cut.upToEventId,
+      summary,
+      summaryVersion: COMPACTION_SUMMARY_VERSION,
+      usedToolCallIds: toolCallIdsToCarry(collectUsedToolCallIds(eventList)),
+      toolSourceEventIds: toolSourceEventIdsToCarry(eventList, aiBotUserId),
+      skillFileEventIds: skillFileEventIdsToCarry(
+        history,
+        aiBotUserId,
+        cut.upToEventId,
+        currentCompaction,
+      ),
+    }),
+  );
   return {
     compacted: true,
     eventList: [
@@ -226,6 +236,75 @@ export async function compactRoomHistory(opts: {
       } as unknown as DiscreteMatrixEvent,
     ],
   };
+}
+
+// Matrix rejects an event over 65536 bytes, its signatures and hashes
+// included, so a compaction's content stays well under that.
+export const MAX_COMPACTION_CONTENT_BYTES = 60_000;
+
+// The content with what it carries trimmed until it fits
+// `MAX_COMPACTION_CONTENT_BYTES`: a tenth at a time from whichever list is
+// largest, the oldest used tool-call ids, the latest tool sources
+// (`getTools` keeps the first definition of each tool) and the oldest skill
+// file reads first. A summary too large by itself is left for the server to
+// reject.
+//
+// A trimmed compaction is still a stop point for `getRoomEvents`, so what
+// trimming drops is lost: a dropped tool-call id can be issued again, which
+// the host then skips as already run, the skill files of a dropped read
+// leave the files carried after the summary, and the tools of a dropped tool
+// source leave the prompt, unless its read is also listed in
+// `skillFileEventIds`: `getRoomEvents` fetches it back for its skill files,
+// and `getTools` takes the tools of every event it is given. A summary near
+// the limit can empty all three lists.
+export function fitCompactionContent(
+  content: Omit<CompactionEventContent, 'responseEventId'>,
+): Omit<CompactionEventContent, 'responseEventId'> {
+  let bytes = (value: unknown) =>
+    Buffer.byteLength(JSON.stringify(value), 'utf8');
+  let usedToolCallIds = content.usedToolCallIds ?? [];
+  let toolSourceEventIds = content.toolSourceEventIds ?? [];
+  let skillFileEventIds = content.skillFileEventIds ?? [];
+  let fitted = content;
+  while (
+    bytes(fitted) > MAX_COMPACTION_CONTENT_BYTES &&
+    (usedToolCallIds.length ||
+      toolSourceEventIds.length ||
+      skillFileEventIds.length)
+  ) {
+    let largest = Math.max(
+      bytes(usedToolCallIds),
+      bytes(toolSourceEventIds),
+      bytes(skillFileEventIds),
+    );
+    if (bytes(usedToolCallIds) === largest) {
+      usedToolCallIds = toolCallIdsToCarry(
+        usedToolCallIds,
+        Math.floor(usedToolCallIds.length * 0.9),
+      );
+    } else if (bytes(toolSourceEventIds) === largest) {
+      toolSourceEventIds = toolSourceEventIds.slice(
+        0,
+        Math.floor(toolSourceEventIds.length * 0.9),
+      );
+    } else {
+      skillFileEventIds = skillFileEventIds.slice(
+        skillFileEventIds.length - Math.floor(skillFileEventIds.length * 0.9),
+      );
+    }
+    fitted = {
+      ...content,
+      usedToolCallIds,
+      toolSourceEventIds,
+      skillFileEventIds,
+    };
+  }
+  if (fitted !== content) {
+    log.warn(
+      `Trimmed the compaction to ${usedToolCallIds.length} used tool-call ids, ${toolSourceEventIds.length} tool sources and ${skillFileEventIds.length} skill file reads to fit the event size limit`,
+    );
+  }
+  return fitted;
 }
 
 // The events the accepted turn built its prompt from: everything before its

@@ -7,6 +7,7 @@ import {
   containsMany,
   getComponent,
   getRelationshipMembershipState,
+  instanceRealmId,
   linksTo,
   realmURL,
   type CardContext,
@@ -961,11 +962,17 @@ class PolicyStanding extends GlimmerComponent<PolicyStandingSignature> {
   }
 
   // Only the realm's own config card names the realm's policy. A RealmConfig
-  // stored anywhere else governs nothing.
+  // stored anywhere else governs nothing. The id is canonical RRI, so the
+  // realm is compared in the id's own form.
   private get realm(): string | undefined {
     let realm = this.args.config[realmURL];
+    let realmId = instanceRealmId(this.args.config);
     let id = this.args.config.id;
-    if (!realm || !id || id !== new URL('realm', realm).href) {
+    if (!realm || !realmId || !id) {
+      return undefined;
+    }
+    let paths = new RealmPaths(realmId);
+    if (!paths.inRealm(rri(id)) || paths.local(rri(id)) !== 'realm') {
       return undefined;
     }
     return realm.href;
@@ -1457,7 +1464,7 @@ const NEW_POLICY_SAVE_WAIT_MS = 30_000;
 // it yet, so the pointer can name the card before it is there.
 function newCardIdOf(localId: string, ref: CodeRef, realm: URL): string {
   let paths = new RealmPaths(realm);
-  return `${paths.url}${getCardDirectoryName(ref, paths)}/${localId}`;
+  return `${paths.url}${getCardDirectoryName(ref)}/${localId}`;
 }
 
 interface PolicyPointerEditorSignature {

@@ -5,6 +5,7 @@ import type { ChatCompletion } from 'openai/resources/chat/completions';
 import {
   APP_BOXEL_COMPACTION_EVENT_TYPE,
   APP_BOXEL_MESSAGE_MSGTYPE,
+  APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
   APP_BOXEL_TOOL_REQUESTS_KEY,
   APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
   APP_BOXEL_TOOL_RESULT_REL_TYPE,
@@ -16,12 +17,16 @@ import {
   constructHistory,
   findCompactionCut,
   getPromptParts,
+  isSkillFileUrl,
+  MAX_CARRIED_SKILL_FILE_BYTES,
   type PromptParts,
 } from '@cardstack/runtime-common/ai';
 import {
   buildCompactionRequest,
   compactRoomHistory,
+  fitCompactionContent,
   isContextLengthExceededError,
+  MAX_COMPACTION_CONTENT_BYTES,
   summaryFromCompletion,
 } from '../lib/compaction.ts';
 import { FakeMatrixClient } from './helpers/fake-matrix-client.ts';
@@ -119,6 +124,7 @@ function compactionEvent(
   upToEventId: string,
   summary: string,
   sender = aiBotUserId,
+  carried: Record<string, unknown> = {},
 ): DiscreteMatrixEvent {
   return {
     type: APP_BOXEL_COMPACTION_EVENT_TYPE,
@@ -126,7 +132,13 @@ function compactionEvent(
     sender,
     event_id: eventId,
     origin_server_ts: ts++,
-    content: { status: 'done', upToEventId, summary, summaryVersion: 1 },
+    content: {
+      status: 'done',
+      upToEventId,
+      summary,
+      summaryVersion: 1,
+      ...carried,
+    },
   } as unknown as DiscreteMatrixEvent;
 }
 
@@ -195,6 +207,605 @@ module('compaction', (hooks) => {
 
   hooks.beforeEach(() => {
     client = new FakeMatrixClient();
+  });
+
+  module('carrying the skill files read before the cut', (nestedHooks) => {
+    const skillsRealm = 'http://localhost:4201/skills/';
+    const catalogReuse = `${skillsRealm}catalog-reuse/SKILL.md`;
+    const catalogReuseRef = `${skillsRealm}catalog-reuse/references/search.md`;
+    const sourceEditing = `${skillsRealm}source-code-editing/SKILL.md`;
+    const sourceFile = 'http://localhost:4201/user/desk/ticket.gts';
+
+    // Matrix media is cached by URL across tests, so every file a test
+    // attaches gets a media id of its own. The mock answers by media id, as
+    // a download falls back from the http URL to one derived from its mxc
+    // URL.
+    let mediaCount = 0;
+    let mediaTexts: Map<string, string>;
+    // Statuses to answer a media id with before its text, one per request.
+    let mediaFailures: Map<string, number[]>;
+    // The media ids requested, once each.
+    let fetchedMedia: Set<string>;
+    let mediaDelayMs: number;
+    let inFlight: number;
+    let maxInFlight: number;
+    let originalFetch: typeof globalThis.fetch;
+
+    const mediaId = (url: string) => /file-\d+/.exec(url)?.[0] ?? url;
+
+    nestedHooks.beforeEach(() => {
+      mediaTexts = new Map();
+      mediaFailures = new Map();
+      fetchedMedia = new Set();
+      mediaDelayMs = 0;
+      inFlight = 0;
+      maxInFlight = 0;
+      originalFetch = globalThis.fetch;
+      (globalThis as any).fetch = async (url: string) => {
+        let id = mediaId(url);
+        fetchedMedia.add(id);
+        inFlight++;
+        maxInFlight = Math.max(maxInFlight, inFlight);
+        try {
+          if (mediaDelayMs) {
+            await new Promise((resolve) => setTimeout(resolve, mediaDelayMs));
+          }
+          let failure = mediaFailures.get(id)?.shift();
+          let body = mediaTexts.get(id);
+          if (failure !== undefined || body === undefined) {
+            return { ok: false, status: failure ?? 404, text: async () => '' };
+          }
+          return { ok: true, status: 200, text: async () => body };
+        } finally {
+          inFlight--;
+        }
+      };
+    });
+
+    nestedHooks.afterEach(() => {
+      globalThis.fetch = originalFetch;
+    });
+
+    function readCall(
+      eventId: string,
+      toolCallId: string,
+      name = 'readRealmFile',
+    ) {
+      return botMessage(eventId, '', {
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+          { id: toolCallId, name, arguments: JSON.stringify({ urls: [] }) },
+        ],
+      });
+    }
+
+    function readResult(
+      eventId: string,
+      requestEventId: string,
+      toolCallId: string,
+      files: Record<string, string | undefined>,
+      opts: {
+        sender?: string;
+        key?: string;
+        // A recorded size per file in place of its text's length; null
+        // records none.
+        sizes?: Record<string, number | null>;
+      } = {},
+    ): DiscreteMatrixEvent {
+      let attachedFiles = Object.entries(files).map(([sourceUrl, body]) => {
+        let url = `http://localhost:8008/_matrix/media/v3/download/localhost/file-${mediaCount++}`;
+        if (body !== undefined) {
+          mediaTexts.set(mediaId(url), body);
+        }
+        let size =
+          opts.sizes && sourceUrl in opts.sizes
+            ? opts.sizes[sourceUrl]
+            : (body?.length ?? 16);
+        return {
+          sourceUrl,
+          url,
+          name: sourceUrl.split('/').pop(),
+          contentType: 'text/plain',
+          ...(size === null ? {} : { contentSize: size }),
+        };
+      });
+      return {
+        type: APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
+        room_id: 'room-1',
+        sender: opts.sender ?? aiBotUserId,
+        event_id: eventId,
+        origin_server_ts: ts++,
+        content: {
+          'm.relates_to': {
+            event_id: requestEventId,
+            rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
+            key: opts.key ?? 'applied',
+          },
+          msgtype: APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
+          commandRequestId: toolCallId,
+          data: JSON.stringify({ context: {}, attachedFiles }),
+        },
+      } as unknown as DiscreteMatrixEvent;
+    }
+
+    // A room where the model read two skills and a source file, then the
+    // history through u2 was compacted.
+    function room(
+      read: DiscreteMatrixEvent[],
+      carried: Record<string, unknown> = {},
+    ) {
+      return [
+        userMessage('u1', 'Build a service desk from the catalog'),
+        readCall('b1', 'call-1'),
+        ...read,
+        botMessage('b2', 'I read the skills.'),
+        userMessage('u2', 'Add a ticket card'),
+        botMessage('b3', 'Added a ticket card.'),
+        compactionEvent(
+          'c1',
+          'u2',
+          'We are reusing catalog cards.',
+          aiBotUserId,
+          carried,
+        ),
+        userMessage('u3', 'Add a priority field'),
+      ];
+    }
+
+    test('follows the summary with the skill files read before the cut', async () => {
+      let eventList = room([
+        readResult('r1', 'b1', 'call-1', {
+          [catalogReuse]: 'Search the catalog before writing a card.',
+          [sourceFile]: 'export class Ticket {}',
+        }),
+      ]);
+      let { messages } = await getPromptParts(eventList, aiBotUserId, client);
+
+      assert.true(text(messages![1]).includes('We are reusing catalog cards.'));
+      assert.strictEqual(messages![2].role, 'user');
+      let carried = text(messages![2]);
+      assert.true(
+        carried.includes(
+          `[SKILL.md](${catalogReuse}):\n  1: Search the catalog before writing a card.`,
+        ),
+        'the skill file is carried as the model first read it',
+      );
+      assert.false(
+        messages!.map(text).join('\n').includes('export class Ticket'),
+        'a file that is not part of a skill is not carried',
+      );
+      assert.deepEqual(messages!.slice(3, -1).map(text), [
+        'Added a ticket card.',
+        'Add a priority field',
+      ]);
+    });
+
+    test('carries only the reads a compaction lists, when it lists them', async () => {
+      let read = () =>
+        readResult('r1', 'b1', 'call-1', {
+          [catalogReuse]: 'Search the catalog before writing a card.',
+        });
+      let listed = await getPromptParts(
+        room([read()], { skillFileEventIds: ['r1'] }),
+        aiBotUserId,
+        client,
+      );
+      assert.true(
+        text(listed.messages![2]).includes('Search the catalog'),
+        'a listed read is carried',
+      );
+      let unlisted = await getPromptParts(
+        room([read()], { skillFileEventIds: [] }),
+        aiBotUserId,
+        client,
+      );
+      assert.false(
+        unlisted.messages!.map(text).join('\n').includes('Search the catalog'),
+      );
+    });
+
+    test('carries a listed read without the request that made it', async () => {
+      // `getRoomEvents` fetches a listed read back on its own: the answer
+      // that called readRealmFile is before the cut and is not loaded.
+      let eventList = [
+        readResult('r1', 'b1', 'call-1', {
+          [catalogReuse]: 'Search the catalog before writing a card.',
+        }),
+        userMessage('u2', 'Add a ticket card'),
+        botMessage('b3', 'Added a ticket card.'),
+        compactionEvent('c1', 'u2', 'Summary.', aiBotUserId, {
+          skillFileEventIds: ['r1'],
+          toolSourceEventIds: [],
+          usedToolCallIds: [],
+        }),
+        userMessage('u3', 'Add a priority field'),
+      ];
+      let { messages } = await getPromptParts(eventList, aiBotUserId, client);
+      assert.true(text(messages![2]).includes('Search the catalog'));
+    });
+
+    test('carries the newest read of a file once, in the order the files were read', async () => {
+      let eventList = room([
+        readResult('r1', 'b1', 'call-1', {
+          [catalogReuse]: 'Old catalog guidance.',
+          [catalogReuseRef]: 'Search answers are entries.',
+        }),
+        readCall('b1b', 'call-2'),
+        readResult('r2', 'b1b', 'call-2', {
+          [sourceEditing]: 'Edit with realm.fs.replace.',
+          [catalogReuse]: 'New catalog guidance.',
+        }),
+      ]);
+      let { messages } = await getPromptParts(eventList, aiBotUserId, client);
+      let carried = text(messages![2]);
+      assert.false(carried.includes('Old catalog guidance.'));
+      let order = [
+        'Search answers are entries.',
+        'Edit with realm.fs.replace.',
+        'New catalog guidance.',
+      ].map((line) => carried.indexOf(line));
+      assert.true(order.every((index) => index >= 0));
+      assert.deepEqual(
+        order,
+        [...order].sort((a, b) => a - b),
+      );
+    });
+
+    test('keeps the carried files byte-stable while the conversation goes on', async () => {
+      let eventList = room([
+        readResult('r1', 'b1', 'call-1', {
+          [catalogReuse]: 'Search the catalog before writing a card.',
+        }),
+      ]);
+      let first = await getPromptParts(eventList, aiBotUserId, client);
+      let later = await getPromptParts(
+        [
+          ...eventList,
+          readCall('b4', 'call-3'),
+          readResult('r3', 'b4', 'call-3', {
+            [catalogReuse]: 'Edited catalog guidance.',
+          }),
+          botMessage('b5', 'Added a priority field.'),
+          userMessage('u4', 'Add an assignee'),
+        ],
+        aiBotUserId,
+        client,
+      );
+      assert.strictEqual(
+        JSON.stringify(later.messages!.slice(0, 3)),
+        JSON.stringify(first.messages!.slice(0, 3)),
+        'a read after the cut does not change what is carried',
+      );
+    });
+
+    test('names the files past the size limit for the model to read again', async () => {
+      let big = (letter: string) =>
+        letter.repeat(Math.floor(MAX_CARRIED_SKILL_FILE_BYTES * 0.4));
+      let read = readResult('r1', 'b1', 'call-1', {
+        [catalogReuse]: big('a'),
+        [catalogReuseRef]: big('b'),
+        [sourceEditing]: big('c'),
+      });
+      let oldestId = mediaId(
+        JSON.parse((read.content as any).data).attachedFiles[0].url,
+      );
+      let { messages } = await getPromptParts(
+        room([read]),
+        aiBotUserId,
+        client,
+      );
+      let carried = text(messages![2]);
+      assert.false(
+        carried.includes(big('a')),
+        'the oldest read is not carried',
+      );
+      assert.false(fetchedMedia.has(oldestId), 'nor downloaded');
+      assert.true(carried.includes(big('b')));
+      assert.true(carried.includes(big('c')));
+      assert.true(
+        carried.includes(
+          `Read them again with readRealmFile before relying on them:\n${catalogReuse}`,
+        ),
+      );
+    });
+
+    test('carries an older file that still fits after a newer one that does not', async () => {
+      let sized = (letter: string, share: number) =>
+        letter.repeat(Math.floor(MAX_CARRIED_SKILL_FILE_BYTES * share));
+      let eventList = room([
+        readResult('r1', 'b1', 'call-1', {
+          [catalogReuse]: sized('a', 0.3),
+          [catalogReuseRef]: sized('b', 0.5),
+          [sourceEditing]: sized('c', 0.6),
+        }),
+      ]);
+      let { messages } = await getPromptParts(eventList, aiBotUserId, client);
+      let carried = text(messages![2]);
+      assert.true(carried.includes(sized('c', 0.6)), 'the newest is carried');
+      assert.false(carried.includes(sized('b', 0.5)), 'the next does not fit');
+      assert.true(carried.includes(sized('a', 0.3)), 'the oldest still fits');
+      assert.true(
+        carried.includes(`before relying on them:\n${catalogReuseRef}`),
+      );
+    });
+
+    test('names a file the media server no longer has for the model to read again', async () => {
+      let eventList = room([
+        readResult('r1', 'b1', 'call-1', {
+          [catalogReuse]: undefined,
+          [sourceEditing]: 'Edit with realm.fs.replace.',
+        }),
+      ]);
+      let { messages } = await getPromptParts(eventList, aiBotUserId, client);
+      let carried = text(messages![2]);
+      assert.true(carried.includes('Edit with realm.fs.replace.'));
+      assert.true(carried.includes(`before relying on them:\n${catalogReuse}`));
+      assert.false(carried.includes('Error loading attached file'));
+    });
+
+    test('fails the prompt when a chosen file fails to download for another reason', async () => {
+      let read = readResult('r1', 'b1', 'call-1', {
+        [catalogReuse]: 'Search the catalog before writing a card.',
+      });
+      let id = mediaId(
+        JSON.parse((read.content as any).data).attachedFiles[0].url,
+      );
+      mediaFailures.set(id, [500, 500]);
+      let eventList = room([read]);
+      let failure: Error | undefined;
+      try {
+        await getPromptParts(eventList, aiBotUserId, client);
+      } catch (error) {
+        failure = error as Error;
+      }
+      assert.true(
+        /catalog-reuse\/SKILL\.md/.test(failure?.message ?? ''),
+        'the prompt fails, naming the file',
+      );
+
+      // Once the download works, the message is what it would have been.
+      let later = await getPromptParts(eventList, aiBotUserId, client);
+      let again = await getPromptParts(eventList, aiBotUserId, client);
+      assert.true(text(later.messages![2]).includes('Search the catalog'));
+      assert.strictEqual(
+        JSON.stringify(later.messages!.slice(0, 3)),
+        JSON.stringify(again.messages!.slice(0, 3)),
+      );
+    });
+
+    test('names a file with no recorded size without downloading it', async () => {
+      let read = readResult(
+        'r1',
+        'b1',
+        'call-1',
+        {
+          [catalogReuse]: 'Search the catalog before writing a card.',
+          [sourceEditing]: 'Edit with realm.fs.replace.',
+        },
+        { sizes: { [catalogReuse]: null } },
+      );
+      let unsizedId = mediaId(
+        JSON.parse((read.content as any).data).attachedFiles[0].url,
+      );
+      let { messages } = await getPromptParts(
+        room([read]),
+        aiBotUserId,
+        client,
+      );
+      let carried = text(messages![2]);
+      assert.true(carried.includes('Edit with realm.fs.replace.'));
+      assert.false(carried.includes('Search the catalog'));
+      assert.true(carried.includes(`before relying on them:\n${catalogReuse}`));
+      assert.false(fetchedMedia.has(unsizedId), 'it is not downloaded');
+    });
+
+    test('budgets the files as rendered, line numbers included', async () => {
+      // Half the budget as text, but two bytes a line, so its line numbers
+      // take it far past the budget.
+      let shortLines = 'x\n'.repeat(MAX_CARRIED_SKILL_FILE_BYTES / 4);
+      let eventList = room([
+        readResult('r1', 'b1', 'call-1', {
+          [catalogReuse]: 'Search the catalog before writing a card.',
+        }),
+        readCall('b1b', 'call-2'),
+        readResult('r2', 'b1b', 'call-2', { [sourceEditing]: shortLines }),
+      ]);
+      let { messages } = await getPromptParts(eventList, aiBotUserId, client);
+      let carried = text(messages![2]);
+      assert.true(carried.includes('Search the catalog'));
+      assert.false(carried.includes('  1: x'), 'the newer file is not carried');
+      assert.true(
+        carried.includes(`before relying on them:\n${sourceEditing}`),
+      );
+      assert.true(
+        Buffer.byteLength(carried) <= MAX_CARRIED_SKILL_FILE_BYTES + 1024,
+        'the carried text stays near the budget',
+      );
+    });
+
+    test('downloads the chosen files a few at a time', async () => {
+      mediaDelayMs = 5;
+      let files = Object.fromEntries(
+        Array.from({ length: 25 }, (_, i) => [
+          `${skillsRealm}skill-${i}/SKILL.md`,
+          `Guidance ${i}.`,
+        ]),
+      );
+      let { messages } = await getPromptParts(
+        room([readResult('r1', 'b1', 'call-1', files)]),
+        aiBotUserId,
+        client,
+      );
+      let carried = text(messages![2]);
+      assert.true(
+        Array.from({ length: 25 }, (_, i) => `Guidance ${i}.`).every((line) =>
+          carried.includes(line),
+        ),
+        'every file is carried',
+      );
+      assert.true(maxInFlight > 1, 'downloads overlap');
+      assert.true(maxInFlight <= 10, `at most 10 at once (${maxInFlight})`);
+    });
+
+    test('leaves out the files of a skill the user disabled', async () => {
+      let disabledSkillUrl = `http://localhost:8008/_matrix/media/v3/download/localhost/file-${mediaCount++}`;
+      mediaTexts.set(
+        mediaId(disabledSkillUrl),
+        '---\nboxel:\n  kind: skill\n---\nSearch the catalog.',
+      );
+      let eventList = room([
+        {
+          type: APP_BOXEL_ROOM_SKILLS_EVENT_TYPE,
+          room_id: 'room-1',
+          sender: userId,
+          event_id: 'skills',
+          state_key: '',
+          origin_server_ts: ts++,
+          content: {
+            enabledSkillCards: [],
+            disabledSkillCards: [
+              {
+                sourceUrl: catalogReuse,
+                url: disabledSkillUrl,
+                name: 'SKILL.md',
+                contentType: 'text/markdown',
+              },
+            ],
+          },
+        } as unknown as DiscreteMatrixEvent,
+        readResult('r1', 'b1', 'call-1', {
+          [catalogReuse]: 'Search the catalog before writing a card.',
+          [catalogReuseRef]: 'Search answers are entries.',
+          [sourceEditing]: 'Edit with realm.fs.replace.',
+        }),
+      ]);
+      let { messages } = await getPromptParts(eventList, aiBotUserId, client);
+      let all = messages!.map(text).join('\n');
+      assert.true(all.includes('Edit with realm.fs.replace.'));
+      assert.false(all.includes('Search the catalog'));
+      assert.false(all.includes('Search answers are entries.'));
+      assert.false(
+        text(messages![2]).includes(catalogReuse),
+        'nor is it named to read again',
+      );
+    });
+
+    test('ignores skill-named files that did not come from an applied readRealmFile', async () => {
+      let eventList = room([
+        readResult(
+          'r1',
+          'b1',
+          'call-1',
+          { [catalogReuse]: 'A failed read.' },
+          { key: 'failed' },
+        ),
+        readResult(
+          'r1b',
+          'b1',
+          'call-1',
+          { [sourceEditing]: 'Posted by the user.' },
+          { sender: userId },
+        ),
+        readCall('b1b', 'call-2', 'readUrl'),
+        readResult('r2', 'b1b', 'call-2', {
+          'https://example.com/skills/evil/SKILL.md': 'A web page.',
+        }),
+      ]);
+      let { messages } = await getPromptParts(eventList, aiBotUserId, client);
+      assert.strictEqual(
+        messages!.length,
+        5,
+        'only the system message, the summary, two history messages and the context',
+      );
+    });
+
+    test('a compaction lists the reads before its cut and carries them forward', async () => {
+      let eventList = [
+        userMessage('u1', 'Build a service desk'),
+        readCall('b1', 'call-1'),
+        readResult('r1', 'b1', 'call-1', {
+          [catalogReuse]: 'Search the catalog before writing a card.',
+        }),
+        botMessage('b2', 'I read the skill.'),
+        userMessage('u2', 'Add a ticket card'),
+        readCall('b3', 'call-2'),
+        readResult('r2', 'b3', 'call-2', {
+          [sourceEditing]: 'Edit with realm.fs.replace.',
+        }),
+        botMessage('b4', 'Added a ticket card.'),
+        userMessage('u3', 'Add a priority field'),
+      ];
+      let compact = async (events: DiscreteMatrixEvent[]) => {
+        let { openai } = fakeOpenAI(completion());
+        return await compactRoomHistory({
+          openai,
+          client,
+          roomId: 'room-1',
+          aiBotUserId,
+          eventList: events,
+          history: await constructHistory(events, client),
+          senderMatrixUserId: userId,
+          botTools: [],
+          recordCost: async () => {},
+        });
+      };
+
+      let result = await compact(eventList);
+      assert.true(result.compacted);
+      let sent = client.getSentEvents();
+      assert.deepEqual(sent[sent.length - 1].content.skillFileEventIds, [
+        'r1',
+        'r2',
+      ]);
+      if (!result.compacted) {
+        return;
+      }
+      let carried = text(
+        (await getPromptParts(result.eventList, aiBotUserId, client))
+          .messages![2],
+      );
+      assert.true(carried.includes('Search the catalog'));
+      assert.true(carried.includes('Edit with realm.fs.replace.'));
+
+      // The next compaction keeps listing r1 although the request that
+      // made it is no longer loaded, as `getRoomEvents` returns it.
+      let compaction = result.eventList[result.eventList.length - 1];
+      let next = await compact([
+        eventList[2],
+        ...eventList.slice(6),
+        compaction,
+        botMessage('b5', 'Added a priority field.'),
+        userMessage('u4', 'Add an assignee'),
+      ]);
+      assert.true(next.compacted);
+      sent = client.getSentEvents();
+      assert.deepEqual(sent[sent.length - 1].content.skillFileEventIds, [
+        'r1',
+        'r2',
+      ]);
+    });
+  });
+
+  module('isSkillFileUrl', () => {
+    test("recognizes a skill's SKILL.md and its references", () => {
+      assert.true(isSkillFileUrl('http://localhost:4201/skills/a/SKILL.md'));
+      assert.true(
+        isSkillFileUrl('http://localhost:4201/skills/a/references/b.md'),
+      );
+      assert.true(isSkillFileUrl('http://localhost:4201/skills/a/SKILL.md?x'));
+      assert.false(isSkillFileUrl('http://localhost:4201/skills/a/notes.md'));
+      assert.false(
+        isSkillFileUrl('http://localhost:4201/skills/a/references/b.gts'),
+      );
+      assert.false(
+        isSkillFileUrl('http://localhost:4201/skills/a/references/c/b.md'),
+        'only a file directly in references/',
+      );
+      assert.false(
+        isSkillFileUrl('http://localhost:4201/user/references/notes/b.md'),
+      );
+      assert.false(isSkillFileUrl('SKILL.md'));
+      assert.false(isSkillFileUrl(undefined));
+    });
   });
 
   module('isContextLengthExceededError', () => {
@@ -650,6 +1261,9 @@ module('compaction', (hooks) => {
         upToEventId: 'u2',
         summary: 'Objective: build a wedding planner.',
         summaryVersion: 1,
+        usedToolCallIds: [],
+        toolSourceEventIds: [],
+        skillFileEventIds: [],
       });
 
       assert.true(result.compacted);
@@ -667,6 +1281,67 @@ module('compaction', (hooks) => {
       assert.deepEqual(messages!.slice(2, -1).map(text), [
         'Added a guest list field',
         'Add a budget',
+      ]);
+    });
+
+    test('carries forward the tool-call ids the room has used', async () => {
+      eventList = [
+        {
+          type: APP_BOXEL_COMPACTION_EVENT_TYPE,
+          sender: aiBotUserId,
+          event_id: 'earlier-compaction',
+          origin_server_ts: 0,
+          room_id: 'room-1',
+          content: {
+            status: 'done',
+            upToEventId: 'before-this-history',
+            summary: 'Objective: plan a wedding.',
+            summaryVersion: 1,
+            usedToolCallIds: ['x:0', 'x:0_1', 'x:0_2'],
+          },
+        } as unknown as DiscreteMatrixEvent,
+        ...eventList,
+        {
+          type: 'app.boxel.toolResult',
+          sender: userId,
+          event_id: 'result-1',
+          origin_server_ts: 6,
+          room_id: 'room-1',
+          content: { commandRequestId: 'y:0' },
+        } as unknown as DiscreteMatrixEvent,
+      ];
+      let { result } = await compact(completion());
+
+      assert.true(result.compacted);
+      assert.deepEqual(client.getSentEvents()[1].content.usedToolCallIds, [
+        'x:0',
+        'x:0_2',
+        'y:0',
+      ]);
+    });
+
+    test('carries forward the events that contributed tools', async () => {
+      eventList[0] = {
+        ...eventList[0],
+        content: {
+          ...eventList[0].content,
+          data: {
+            context: {
+              tools: [
+                {
+                  type: 'function',
+                  function: { name: 'planWedding', parameters: {} },
+                },
+              ],
+            },
+          },
+        },
+      } as unknown as DiscreteMatrixEvent;
+      let { result } = await compact(completion());
+
+      assert.true(result.compacted);
+      assert.deepEqual(client.getSentEvents()[1].content.toolSourceEventIds, [
+        'u1',
       ]);
     });
 
@@ -733,5 +1408,63 @@ module('compaction', (hooks) => {
       assert.strictEqual(requests.length, 0);
       assert.strictEqual(client.getSentEvents().length, 0);
     });
+  });
+});
+
+module('fitCompactionContent', () => {
+  test('trims what a compaction carries to fit the event size limit', () => {
+    let content = {
+      status: 'done' as const,
+      upToEventId: '$cut',
+      summary: 'x'.repeat(40_000),
+      summaryVersion: 1,
+      usedToolCallIds: Array.from(
+        { length: 600 },
+        (_, i) => `toolu_${String(i).padStart(30, '0')}`,
+      ),
+      toolSourceEventIds: Array.from(
+        { length: 200 },
+        (_, i) => `$${String(i).padStart(43, '0')}`,
+      ),
+      skillFileEventIds: Array.from(
+        { length: 250 },
+        (_, i) => `$skill${String(i).padStart(38, '0')}`,
+      ),
+    };
+    let fitted = fitCompactionContent(content);
+
+    assert.true(
+      Buffer.byteLength(JSON.stringify(fitted)) <= MAX_COMPACTION_CONTENT_BYTES,
+    );
+    assert.strictEqual(fitted.summary, content.summary);
+    assert.true(fitted.usedToolCallIds!.length < 600);
+    assert.deepEqual(
+      fitted.usedToolCallIds,
+      content.usedToolCallIds.slice(-fitted.usedToolCallIds!.length),
+      'the most recent used ids are kept',
+    );
+    assert.deepEqual(
+      fitted.toolSourceEventIds,
+      content.toolSourceEventIds.slice(0, fitted.toolSourceEventIds!.length),
+      'the earliest tool sources are kept',
+    );
+    assert.true(fitted.skillFileEventIds!.length < 250);
+    assert.deepEqual(
+      fitted.skillFileEventIds,
+      content.skillFileEventIds.slice(-fitted.skillFileEventIds!.length),
+      'the latest skill file reads are kept',
+    );
+  });
+
+  test('leaves content that fits as it is', () => {
+    let content = {
+      status: 'done' as const,
+      upToEventId: '$cut',
+      summary: 'summary',
+      summaryVersion: 1,
+      usedToolCallIds: ['x:0'],
+      toolSourceEventIds: ['$source'],
+    };
+    assert.strictEqual(fitCompactionContent(content), content);
   });
 });

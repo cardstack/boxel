@@ -248,16 +248,14 @@ export default class SubmodeLayout extends Component<Signature> {
 
         if (currentSubmode === Submodes.Code) {
           // Check if current code path is a card instance ID
-          let codePathString = this.operatorModeStateService.codePathString;
-          if (codePathString) {
-            let cardId = codePathString.replace(/\.json$/, '');
+          let codePath = this.operatorModeStateService.state.codePath;
+          if (codePath) {
+            let cardId = codePath.replace(/\.json$/, '');
             let card = this.store.peek(cardId);
 
             if (card && this.isCardInstance(card)) {
               // Current code path is a card instance, use it directly
-              this.operatorModeStateService.setHostModePrimaryCard(
-                codePathString,
-              );
+              this.operatorModeStateService.setHostModePrimaryCard(codePath);
             } else {
               // Current code path is a card definition, try to get card ID from playground panel
               let playgroundSelection =
@@ -269,7 +267,7 @@ export default class SubmodeLayout extends Component<Signature> {
               } else {
                 // Try to find any card instance related to this definition
                 let relatedCardId =
-                  await this.findRelatedCardInstance(codePathString);
+                  await this.findRelatedCardInstance(codePath);
                 if (relatedCardId) {
                   this.operatorModeStateService.setHostModePrimaryCard(
                     relatedCardId + '.json',

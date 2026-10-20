@@ -18,6 +18,7 @@ import {
   calcGeneratorDuration,
   generateLinearEasing,
   maxGeneratorDuration,
+  positionalKeys,
   spring,
 } from 'motion-dom';
 
@@ -188,6 +189,23 @@ const TRANSFORMS: Record<string, (v: string) => string> = {
   y: (v) => `translateY(${v}px)`,
 };
 
+/**
+ * cue.target without the keys that move a box: the positional keys motion-dom
+ * jumps rather than animates when motion is reduced. Opacity, colour and
+ * filters are left to animate.
+ */
+export function withoutMovement(
+  target: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key in target) {
+    if (!positionalKeys.has(key)) {
+      out[key] = target[key];
+    }
+  }
+  return out;
+}
+
 /** cue.target, as WAAPI property-indexed keyframes */
 export function keyframesOf(
   target: Record<string, unknown>,
@@ -279,8 +297,12 @@ export interface Delivery {
   speed(rate: number): void;
 }
 
-/** play one delivery cue: split, animate the slots, restore, land the end values */
-export function deliver(cue: Cue, speed: number): Delivery {
+/**
+ * play one delivery cue: split, animate the slots, restore, land the end
+ * values. With `reduced`, the slots keep their windows but not their
+ * movement: a word fades in where it stands rather than rising into place.
+ */
+export function deliver(cue: Cue, speed: number, reduced = false): Delivery {
   const { by, order, stagger } = cue.delivery!;
   if (by === 'item') {
     throw new Error('choreo: item delivery is the ladder, not a split');
@@ -289,9 +311,11 @@ export function deliver(cue: Cue, speed: number): Delivery {
   const ranks = ladder(parts.slots.length, order);
   const spans = windows(parts.slots.length, cue.duration, stagger);
   const times = cue.transition?.times as number[] | undefined;
+  const target = reduced ? withoutMovement(cue.target) : (cue.target ?? {});
   const keyframes = keyframesOf(
-    cue.target ?? {},
-    times,
+    target,
+    // offsets with no values left to place are not keyframes
+    Object.keys(target).length ? times : undefined,
     cssEasing(cue.transition?.ease as Easing | undefined, cue.duration),
   );
   const isSpring = cue.kind === 'spring';

@@ -6,7 +6,9 @@ import type {
   VirtualNetwork,
 } from '@cardstack/runtime-common';
 import {
+  acceptedDiagnosticClaim,
   archivedRealmURLs,
+  DIAGNOSTIC_SESSION_LOG_CHANNEL,
   ensureTrailingSlash,
   fetchUserPermissions,
   isSessionRevoked,
@@ -14,7 +16,9 @@ import {
   MAX_REALMS_PER_SEARCH_REQUEST,
   param,
   parseRealmsFromPayload,
+  registeredRealmURL,
   parseSearchRequestPayload,
+  presentsAsDiagnosticSession,
   query,
   SearchRequestError,
   separatedByCommas,
@@ -35,6 +39,7 @@ import type { RealmRegistryReconciler } from '../lib/realm-registry-reconciler.t
 import { mayNameRealmPolicy } from '../lib/realm-policy-pointer.ts';
 import { resolveRealmsForFederatedRequest } from '../lib/realm-routing.ts';
 import {
+  retrieveDiagnosticSessionClaim,
   retrieveTokenClaim,
   type RealmServerTokenClaim,
 } from '../utils/jwt.ts';
@@ -81,6 +86,7 @@ export type MultiRealmAuthorizationState = {
 
 const MULTI_REALM_AUTH_STATE = 'multiRealmAuthorization';
 const log = logger('realm-server:multi-realm-authorization');
+const diagnosticLog = logger(DIAGNOSTIC_SESSION_LOG_CHANNEL);
 const SEARCH_REQUEST_PAYLOAD_STATE = 'searchRequestPayload';
 
 export function multiRealmAuthorization(
@@ -117,7 +123,12 @@ export function multiRealmAuthorization(
     let realmList: string[];
     try {
       let payload = await parseSearchRequestPayload(request);
-      realmList = parseRealmsFromPayload(payload);
+      // A realm may be named by its registered prefix or by the URL it is
+      // served from; every check below, and every handler after it, asks in
+      // the URL the realm is registered under.
+      realmList = parseRealmsFromPayload(payload, (realm) =>
+        registeredRealmURL(virtualNetwork, realm),
+      );
       (ctxt.state as Record<string, unknown>)[SEARCH_REQUEST_PAYLOAD_STATE] =
         payload;
     } catch (e: any) {
@@ -172,7 +183,7 @@ export function multiRealmAuthorization(
     if (unknownRealms.length > 0) {
       await sendResponseForNotFound(
         ctxt,
-        `Realms not found: ${unknownRealms.join(', ')}`,
+        `Realms not found: ${unknownRealms.join(', ')}. Each entry in realms must be the URL of a realm on this server, or an identifier registered for one such as @cardstack/catalog/`,
       );
       return;
     }
@@ -230,7 +241,11 @@ export function multiRealmAuthorization(
     } else {
       let token: RealmServerTokenClaim & { iat: number; exp: number };
       try {
-        token = retrieveTokenClaim(authorization, realmSecretSeed);
+        token = presentsAsDiagnosticSession(
+          authorization.replace('Bearer ', ''),
+        )
+          ? retrieveDiagnosticSessionClaim(authorization, realmSecretSeed)
+          : retrieveTokenClaim(authorization, realmSecretSeed);
         if (await isSessionRevoked(dbAdapter, token.user, token.iat)) {
           throw new AuthenticationError(
             AuthenticationErrorMessages.SessionRevoked,
@@ -260,6 +275,26 @@ export function multiRealmAuthorization(
           );
           return;
         }
+      }
+
+      // A diagnostic session scoped to its card's realm authenticates here only
+      // for a request that names that realm alone. One scoped to the owner's
+      // read set authenticates as the owner, and the realms the owner can't
+      // read are judged below as they are for any of the owner's sessions.
+      // Each use is logged on the diagnostic channel with the mint it came
+      // from.
+      if (token.diagnostic) {
+        let claim = acceptedDiagnosticClaim(token, realmList);
+        if (!claim) {
+          await sendResponseForUnauthorizedRequest(
+            ctxt,
+            AuthenticationErrorMessages.TokenInvalid,
+          );
+          return;
+        }
+        diagnosticLog.info(
+          `diagnostic session ${claim.id} read ${ctxt.method} ${ctxt.path} for realms ${realmList.join(', ')} as ${token.user}; minted for card ${claim.card}, operator note: ${JSON.stringify(claim.note)}`,
+        );
       }
 
       // Only the session's own claim makes a request a realm-authority

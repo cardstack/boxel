@@ -1037,7 +1037,7 @@ export class RenderRunner {
     this.#nonce++;
     let affinityKey = toAffinityKey({ affinityType, affinityValue, auth });
     log.info(
-      `module prerendering url ${url}, nonce=${this.#nonce} affinity=${affinityKey} realm=${realm}`,
+      `module prerendering url ${url}, nonce=${this.#nonce} affinity=${affinityKey} realm=${realm} loaderEpoch=${renderOptions?.loaderEpoch ?? 'none'}`,
     );
 
     const { page, reused, launchMs, waits, pageId, release } =

@@ -27,6 +27,7 @@ import {
   handleReplaceSystemKey,
   handleShowSystemKey,
 } from './handlers/handle-system-keys.ts';
+import { handleDiagnosticRenderToken } from './handlers/handle-diagnostic-render-token.ts';
 import handleFetchCatalogRealmsRequest from './handlers/handle-fetch-catalog-realms.ts';
 import handleFetchPublicRealmsRequest from './handlers/handle-fetch-public-realms.ts';
 import handleFetchUserRequest from './handlers/handle-fetch-user.ts';
@@ -103,6 +104,8 @@ import handleCapture from './handlers/handle-capture.ts';
 import { buildCreatePrerenderAuth } from './prerender/auth.ts';
 import type { RealmRegistryReconciler } from './lib/realm-registry-reconciler.ts';
 import {
+  KEY_SHARE_NOTICES_PATH,
+  KEY_SHARES_PATH,
   KEY_WRITE_TICKETS_PATH,
   OPENROUTER_PASSTHROUGH_PATH,
   REQUEST_FORWARD_PATH,
@@ -125,6 +128,15 @@ import {
   handleReplaceUserKey,
   handleShowUserKey,
 } from './handlers/handle-user-keys.ts';
+import {
+  handleListKeyShareNotices,
+  handleListKeyShares,
+  handleResumeKeyShare,
+  handleShareKey,
+  handleSuspendKeyShare,
+  handleSwapKeyIntoShare,
+  handleUnshareKey,
+} from './handlers/handle-key-shares.ts';
 
 export type CreateRoutesArgs = {
   serverURL: string;
@@ -171,6 +183,8 @@ export type CreateRoutesArgs = {
     boxelSite?: string;
   };
   assetsURL: URL;
+  // The host app's origin, where the render route is served.
+  hostURL: URL;
   prerenderer?: Prerenderer;
   // Reports the current host-shell token to the prerender manager. The
   // post-deployment hook calls it so the fleet's recycle signal is refreshed
@@ -274,7 +288,10 @@ export function createRoutes(args: CreateRoutesArgs) {
   router.get('/_secure-origin', handleSecureOriginInfo(args));
   router.post(SECURE_SESSION_PATH, handlePasswordSignIn(args));
   router.get(`${SECURE_SESSION_PATH}/google`, handleGoogleSignInStart(args));
-  router.post(`${SECURE_SESSION_PATH}/google`, handleGoogleSignIn(args));
+  router.post(
+    `${SECURE_SESSION_PATH}/google`,
+    handleGoogleSignIn(args, createRealmDeps),
+  );
   router.delete(
     SECURE_SESSION_PATH,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
@@ -309,6 +326,41 @@ export function createRoutes(args: CreateRoutesArgs) {
     `${USER_KEYS_PATH}/:keyId`,
     jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
     handleDeleteUserKey(args),
+  );
+  router.get(
+    KEY_SHARES_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleListKeyShares(args),
+  );
+  router.post(
+    KEY_SHARES_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleShareKey(args),
+  );
+  router.delete(
+    `${KEY_SHARES_PATH}/:shareId`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleUnshareKey(args),
+  );
+  router.post(
+    `${KEY_SHARES_PATH}/:shareId/suspend`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleSuspendKeyShare(args),
+  );
+  router.post(
+    `${KEY_SHARES_PATH}/:shareId/resume`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleResumeKeyShare(args),
+  );
+  router.post(
+    `${KEY_SHARES_PATH}/:shareId/swap`,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleSwapKeyIntoShare(args),
+  );
+  router.get(
+    KEY_SHARE_NOTICES_PATH,
+    jwtMiddleware(args.realmSecretSeed, args.dbAdapter),
+    handleListKeyShareNotices(args),
   );
   router.post(
     REQUEST_FORWARD_PATH,
@@ -491,6 +543,19 @@ export function createRoutes(args: CreateRoutesArgs) {
     '/_system-keys/:id',
     systemKeysAuthorization,
     handleDeleteSystemKey(args),
+  );
+
+  // Diagnostic sessions: what an operator renders a live card under to see it
+  // as the indexer does. Only an operator token for `diagnostic-render`
+  // reaches this.
+  router.post(
+    '/_diagnostic-render-token',
+    operatorAuthorization(
+      args.realmSecretSeed,
+      'diagnostic-render',
+      args.serverURL,
+    ),
+    handleDiagnosticRenderToken(args),
   );
 
   // Grafana operator-action endpoints. All POST-only with

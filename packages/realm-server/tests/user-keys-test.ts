@@ -719,6 +719,8 @@ module(basename(import.meta.filename), function () {
       let { ticket } = await mintKeyWriteTicket(dbAdapter, OWNER, {
         action: 'add',
         keyId: null,
+        realmURL: null,
+        shareId: null,
       });
       return await addUserKey(dbAdapter, sealWith, {
         owner: OWNER,
@@ -958,6 +960,8 @@ module(basename(import.meta.filename), function () {
       await mintKeyWriteTicket(dbAdapter, OWNER, {
         action: 'add',
         keyId: null,
+        realmURL: null,
+        shareId: null,
       });
 
       async function selectAs(role: string, sql: string) {

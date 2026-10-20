@@ -28,6 +28,7 @@ import { module, test } from 'qunit';
 
 import {
   isCardInstance,
+  isFileDefInstance,
   localId,
   baseCardRef,
   realmURL,
@@ -37,6 +38,7 @@ import {
   type Realm,
   type SingleCardDocument,
   type LooseSingleCardDocument,
+  type StoreReadType,
 } from '@cardstack/runtime-common';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 
@@ -208,6 +210,47 @@ module('Integration | Store', function (hooks) {
         delete cardService.fetchJSON;
       },
     };
+  }
+
+  // Wait for a resource's card or file to load and render. The resource's read
+  // is a realm round trip whose length has no bound on a loaded runner, and it
+  // holds a store test waiter for its whole length (for both read types), so
+  // `settled()` covers it where a selector poll with a fixed timeout does not.
+  // When the item is still not in the DOM after the store settles, log what the
+  // store holds for it, so a failure tells a read that ended as an error or
+  // never landed in the identity map apart from a slow one.
+  async function settleCardRender(
+    assert: Assert,
+    id: string,
+    selector: string,
+    opts?: { type?: StoreReadType },
+  ) {
+    let start = performance.now();
+    await settled();
+    let elapsedMs = Math.round(performance.now() - start);
+    if (!find(selector)) {
+      let held = storeService.peek(id, { type: opts?.type });
+      let error = storeService.peekError(id, { type: opts?.type });
+      console.error(
+        [
+          `[card-render-diag] ${selector} is not rendered after settled() (${elapsedMs}ms)`,
+          `reference count: ${storeService.getReferenceCount(id)}`,
+          `peek: ${
+            held === undefined
+              ? '<nothing>'
+              : isCardInstance(held) || isFileDefInstance(held)
+                ? `instance ${held.id}`
+                : `error ${JSON.stringify(held)}`
+          }`,
+          `peekError: ${error ? JSON.stringify(error) : '<none>'}`,
+        ].join('\n'),
+      );
+    } else if (elapsedMs > 1000) {
+      console.warn(
+        `[card-render-diag] ${selector} took ${elapsedMs}ms to load and render`,
+      );
+    }
+    assert.dom(selector).exists(`${id} is rendered`);
   }
 
   hooks.beforeEach(async function (this: RenderingTestContext) {
@@ -4528,7 +4571,7 @@ module('Integration | Store', function (hooks) {
       args: null,
     });
     await started.promise;
-    let pendingCallers = () =>
+    let pendingCallers = (): (string | null)[] =>
       ((queue as any).jobs as { jobType: string; args: any }[])
         .filter((job) => job.jobType === 'incremental-index')
         .flatMap((job) =>
@@ -4537,7 +4580,56 @@ module('Integration | Store', function (hooks) {
               caller.clientRequestId,
           ),
         );
-    return { holder, release, pendingCallers };
+    // A writer reaches the held pass when its publish lands on the queue, and
+    // how long its write takes to get there varies with the machine. So a
+    // test waits on the publish itself rather than polling against a clock.
+    let published: { jobType: string; at: number }[] = [];
+    let arrivals: { ready: () => boolean; deferred: Deferred<void> }[] = [];
+    let heldAt = performance.now();
+    let publish = queue.publish.bind(queue);
+    queue.publish = (async (args: Parameters<typeof queue.publish>[0]) => {
+      let job = await publish(args);
+      published.push({
+        jobType: args.jobType,
+        at: Math.round(performance.now() - heldAt),
+      });
+      for (let arrival of [...arrivals]) {
+        if (arrival.ready()) {
+          arrivals.splice(arrivals.indexOf(arrival), 1);
+          arrival.deferred.fulfill();
+        }
+      }
+      return job;
+    }) as typeof queue.publish;
+    let callersArrive = async (
+      description: string,
+      ready: (callers: (string | null)[]) => boolean,
+    ) => {
+      if (ready(pendingCallers())) {
+        return;
+      }
+      let deferred = new Deferred<void>();
+      let arrival = { ready: () => ready(pendingCallers()), deferred };
+      arrivals.push(arrival);
+      // Only a guard, so a lost publish fails with what the hold saw instead
+      // of hanging until the test times out.
+      let guard = setTimeout(() => {
+        arrivals.splice(arrivals.indexOf(arrival), 1);
+        deferred.reject(
+          new Error(
+            `the held index pass never had ${description}: ` +
+              `callers=${JSON.stringify(pendingCallers())} ` +
+              `publishes=${JSON.stringify(published)}`,
+          ),
+        );
+      }, 20_000);
+      try {
+        await deferred.promise;
+      } finally {
+        clearTimeout(guard);
+      }
+    };
+    return { holder, release, pendingCallers, callersArrive };
   }
 
   test("this client's own write, announced under another writer's id in a pass they shared, is not read back", async function (assert) {
@@ -4572,13 +4664,16 @@ module('Integration | Store', function (hooks) {
         } as LooseSingleCardDocument),
         { clientRequestId: 'instance:another-tab' },
       );
-      await waitUntil(() =>
-        hold!.pendingCallers().includes('instance:another-tab'),
+      await hold.callersArrive("the other writer's write", (callers) =>
+        callers.includes('instance:another-tab'),
       );
       let instance = storeService.peek(mine) as CardDef;
       (instance as any).name = 'Mine Edited';
       let ownSave = storeService.save(mine);
-      await waitUntil(() => hold!.pendingCallers().length === 2);
+      await hold.callersArrive(
+        "this client's save",
+        (callers) => callers.length === 2,
+      );
       hold.release.fulfill();
       await Promise.all([theirWrite, ownSave, hold.holder.done]);
       await settled();
@@ -4801,7 +4896,11 @@ module('Integration | Store', function (hooks) {
     let hassan = `${testRealmURL}Person/hassan`;
 
     driver.id = hassan;
-    await waitFor(`[data-test-rendered-card="${hassan}"]`);
+    await settleCardRender(
+      assert,
+      hassan,
+      `[data-test-rendered-card="${hassan}"]`,
+    );
     assert.strictEqual(
       storeService.getReferenceCount(jade),
       0,
@@ -4814,7 +4913,7 @@ module('Integration | Store', function (hooks) {
     );
 
     driver.id = jade;
-    await waitFor(`[data-test-rendered-card="${jade}"]`);
+    await settleCardRender(assert, jade, `[data-test-rendered-card="${jade}"]`);
     assert.strictEqual(
       storeService.getReferenceCount(jade),
       1,
@@ -4873,7 +4972,12 @@ module('Integration | Store', function (hooks) {
 
     driver.showComponent = true;
     driver.id = firstFile;
-    await waitFor(`[data-test-rendered-file="${firstFile}"]`);
+    await settleCardRender(
+      assert,
+      firstFile,
+      `[data-test-rendered-file="${firstFile}"]`,
+      { type: 'file-meta' },
+    );
     assert.strictEqual(
       storeService.getReferenceCount(firstFile),
       1,
@@ -4886,7 +4990,12 @@ module('Integration | Store', function (hooks) {
     );
 
     driver.id = secondFile;
-    await waitFor(`[data-test-rendered-file="${secondFile}"]`);
+    await settleCardRender(
+      assert,
+      secondFile,
+      `[data-test-rendered-file="${secondFile}"]`,
+      { type: 'file-meta' },
+    );
     assert.strictEqual(
       storeService.getReferenceCount(firstFile),
       0,
@@ -4985,7 +5094,11 @@ module('Integration | Store', function (hooks) {
     let hassan = `${testRealmURL}Person/hassan`;
 
     driver.id = hassan;
-    await waitFor(`[data-test-rendered-card="${hassan}"]`);
+    await settleCardRender(
+      assert,
+      hassan,
+      `[data-test-rendered-card="${hassan}"]`,
+    );
     assert.strictEqual(
       storeService.getReferenceCount(jade),
       0,
@@ -4998,7 +5111,7 @@ module('Integration | Store', function (hooks) {
     );
 
     driver.id = jade;
-    await waitFor(`[data-test-rendered-card="${jade}"]`);
+    await settleCardRender(assert, jade, `[data-test-rendered-card="${jade}"]`);
     assert.strictEqual(
       storeService.getReferenceCount(jade),
       1,

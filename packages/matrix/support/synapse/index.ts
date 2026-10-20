@@ -764,6 +764,7 @@ export interface UpdateUserOptions {
   displayname?: string;
   avatar_url?: string;
   emailAddresses?: string[];
+  deactivated?: boolean;
   matrixURL?: string;
 }
 
@@ -775,6 +776,7 @@ export async function updateUser(
     displayname,
     avatar_url,
     emailAddresses,
+    deactivated,
     matrixURL,
   }: UpdateUserOptions,
 ) {
@@ -798,6 +800,7 @@ export async function updateUser(
             })),
           }
         : {}),
+      ...(deactivated !== undefined ? { deactivated } : {}),
     }),
   });
   if (!res.ok) {

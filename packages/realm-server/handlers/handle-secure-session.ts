@@ -10,6 +10,7 @@ import {
   setContextResponse,
 } from '../middleware/index.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
+import type { CreateRealmDeps } from './create-realm.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import {
   endSecureSession,
@@ -38,7 +39,10 @@ type Handler = (ctxt: Koa.Context, next: Koa.Next) => Promise<void>;
 
 const CLIENTS = new Set<SecureSessionClient>(['window', 'cli']);
 
-function deps(args: CreateRoutesArgs): SecureSessionDeps {
+function deps(
+  args: CreateRoutesArgs,
+  createRealm?: CreateRealmDeps,
+): SecureSessionDeps {
   return {
     dbAdapter: args.dbAdapter,
     matrixClient: args.matrixClient,
@@ -47,6 +51,7 @@ function deps(args: CreateRoutesArgs): SecureSessionDeps {
     matrixAdminPassword: args.matrixAdminPassword,
     secureOriginURL: args.secureOriginURL,
     googleSignIn: args.googleSignIn,
+    createRealm,
   };
 }
 
@@ -210,14 +215,18 @@ export function handleGoogleSignInStart(args: CreateRoutesArgs): Handler {
 
 // POST /_secure-session/google: signs in with the authorization code Google
 // sent to the secure origin's callback, with the PKCE verifier and nonce the
-// window started the sign-in with.
-export function handleGoogleSignIn(args: CreateRoutesArgs): Handler {
+// window started the sign-in with. A user's first sign-in to Boxel makes their
+// personal realm, hence the realm deps.
+export function handleGoogleSignIn(
+  args: CreateRoutesArgs,
+  createRealm: CreateRealmDeps,
+): Handler {
   return secureSessionHandler(async (ctxt) => {
     requireSecureOrigin(ctxt, args.secureOriginURL);
     let attributes = await readAttributes(ctxt, 'google-sign-in');
     await sendSession(
       ctxt,
-      await signInWithGoogle(deps(args), {
+      await signInWithGoogle(deps(args, createRealm), {
         code: textOf(attributes, 'code'),
         codeVerifier: textOf(attributes, 'codeVerifier'),
         nonce: textOf(attributes, 'nonce'),

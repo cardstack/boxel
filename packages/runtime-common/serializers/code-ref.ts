@@ -166,16 +166,14 @@ function maybeSerializeCodeRef(
     let base =
       stack.length > 0 ? stack.find((i) => (i as any).id)?.id : undefined;
     // `queryableValue` / `formatQuery` don't receive a VirtualNetwork, so
-    // we can't resolve registered prefixes here. URL-like refs join
-    // against the base; bare specifiers and absolute URLs pass through.
+    // the join stays in RRI space: a relative module resolves against a
+    // URL-form or prefix-form base and keeps the base's form. Bare specifiers
+    // and absolute identifiers pass through.
     if (isUrlLike(codeRef.module) && typeof base === 'string') {
       try {
-        // Guarded by `isUrlLike` above — a prefix form takes the as-is branch
-        // instead — and wrapped in a catch for a malformed URL.
-        // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
-        return `${new URL(codeRef.module, base).href}/${codeRef.name}`;
+        return `${resolveRRIReference(codeRef.module, rri(base))}/${codeRef.name}`;
       } catch {
-        // fall through to the as-is shape below
+        // a malformed URL-form base falls through to the as-is shape below
       }
     }
     return `${codeRef.module}/${codeRef.name}`;

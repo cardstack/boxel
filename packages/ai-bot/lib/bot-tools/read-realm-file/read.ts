@@ -4,13 +4,14 @@ import {
   isMarkdownFile,
 } from '@cardstack/runtime-common/paths';
 import { DelegatedUserRealmSessionError } from '@cardstack/runtime-common/user-delegated-realm-server-session';
+import { READ_REALM_FILE_TOOL_NAME } from '@cardstack/runtime-common/ai';
 import type { Tool } from '@cardstack/base/matrix-event';
 import type { DelegatedUserRealmSessionManager } from '../../user-delegated-realm-server-session.ts';
 import { parseLenientJson } from '../../lenient-json.ts';
 
 let log = logger('ai-bot:read-realm-file');
 
-export const READ_REALM_FILE_TOOL_NAME = 'readRealmFile';
+export { READ_REALM_FILE_TOOL_NAME };
 
 // On-demand file reading. The model calls `readRealmFile` to pull files'
 // contents only when it needs them — most often a skill's SKILL.md or the
@@ -56,7 +57,9 @@ export const readRealmFileTool: Tool = {
           description:
             'Full URLs of the files to read, each exactly as it appears in ' +
             "the skill (a link there is already absolute — don't shorten " +
-            'or rewrite it). List each URL once, at most ' +
+            'or rewrite it). An identifier in a realm-prefix form ' +
+            '(`@cardstack/base/card-api.gts`) is read from the realm the ' +
+            'prefix stands for. List each URL once, at most ' +
             `${READ_REALM_FILE_MAX_URLS} per call. The realm each file ` +
             'lives in is worked out for you.',
         },

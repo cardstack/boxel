@@ -8,6 +8,8 @@ interface Args {
     setValue: (val: string) => Promise<void>;
     setValueError: string | null;
     resetValueError: () => void;
+    // Returns why `val` cannot be submitted, or undefined when it can.
+    validate: (val: string) => string | undefined;
   };
 }
 
@@ -20,13 +22,16 @@ export default class URLBarResource extends Resource<Args> {
   setValue?: (val: string) => Promise<void>;
   setValueError?: string | null;
   resetValueError?: () => void;
+  private validator?: (val: string) => string | undefined;
 
   modify(_positional: never[], named: Args['named']) {
-    let { getValue, setValue, resetValueError, setValueError } = named;
+    let { getValue, setValue, resetValueError, setValueError, validate } =
+      named;
     this.value = getValue();
     this.setValue = setValue;
     this.resetValueError = resetValueError;
     this.setValueError = setValueError;
+    this.validator = validate;
   }
 
   get url() {
@@ -43,10 +48,8 @@ export default class URLBarResource extends Resource<Args> {
     }
     if (this.setValueError) {
       return this.setValueError;
-    } else if (!this.validate(this.url)) {
-      return 'Not a valid URL';
     }
-    return;
+    return this.validator?.(this.url);
   }
 
   async onKeyPress(event: KeyboardEvent) {
@@ -93,12 +96,7 @@ export default class URLBarResource extends Resource<Args> {
     if (url === null) {
       return false;
     }
-    try {
-      new URL(url);
-      return true;
-    } catch (e) {
-      return false;
-    }
+    return this.validator?.(url) === undefined;
   }
 
   async setURL(newURL: string) {

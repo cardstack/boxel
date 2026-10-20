@@ -838,7 +838,7 @@ describe('browse', () => {
 
   it('warns with the URL when the browser cannot be opened', async () => {
     // spawn failed → the URL (a live single-use credential) is surfaced on
-    // stderr so the user can finish by hand.
+    // stderr so the user at the terminal can finish by hand.
     let openBrowserFn = vi.fn().mockResolvedValue(false);
     let stderr = vi
       .spyOn(process.stderr, 'write')
@@ -851,10 +851,40 @@ describe('browse', () => {
         .mockResolvedValue({ loginToken: 'lt_abc', expiresInMs: 120000 }),
       openBrowserFn,
       log: () => {},
+      isInteractive: () => true,
     });
 
     let written = stderr.mock.calls.map((c) => String(c[0])).join('');
     expect(written).toContain('https://localhost:4200/?loginToken=lt_abc');
     stderr.mockRestore();
+  });
+
+  it('errors without printing the URL when the browser cannot be opened in a non-interactive shell', async () => {
+    let openBrowserFn = vi.fn().mockResolvedValue(false);
+    let stderr = vi
+      .spyOn(process.stderr, 'write')
+      .mockImplementation(() => true);
+    let stdout = vi
+      .spyOn(process.stdout, 'write')
+      .mockImplementation(() => true);
+
+    await expect(
+      browse(undefined, {
+        profileManager: fakeProfileManager(),
+        requestLoginToken: vi
+          .fn()
+          .mockResolvedValue({ loginToken: 'lt_abc', expiresInMs: 120000 }),
+        openBrowserFn,
+        log: () => {},
+        isInteractive: () => false,
+      }),
+    ).rejects.toThrow(/not printed to a non-interactive shell/);
+
+    let written = [...stderr.mock.calls, ...stdout.mock.calls]
+      .map((c) => String(c[0]))
+      .join('');
+    expect(written).not.toContain('lt_abc');
+    stderr.mockRestore();
+    stdout.mockRestore();
   });
 });

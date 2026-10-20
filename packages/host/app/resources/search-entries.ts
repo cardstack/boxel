@@ -25,7 +25,6 @@ import {
   isIconResource,
   logger as runtimeLogger,
   resourceIdentity,
-  ri,
   rri,
   stringifyErrorForLog,
   wireFilterHasMatches,
@@ -51,7 +50,10 @@ import {
   LiveSearchTypeGate,
   stripJsonSuffix,
 } from '../lib/live-search-type-gate';
-import { normalizeRealms } from '../lib/realm-utils';
+import {
+  canonicalRealmIdentifier,
+  dedupeRealmsByIdentity,
+} from '../lib/realm-utils';
 import { searchErrorEntry } from '../lib/search-error-entry';
 
 import type LoaderService from '../services/loader-service';
@@ -333,7 +335,15 @@ export class SearchEntriesResource extends Resource<Args> {
     // realms array turns a render into a federated scan across the whole
     // server. A host-owned search (not card-initiated) keeps the all-realms
     // default.
-    let realms = normalizeRealms(
+    //
+    // The list keeps the caller's spelling of each realm (a registered prefix
+    // such as `@cardstack/catalog/`, or a URL), so rows carry `realmUrl` as
+    // the caller named the realm. What the server sends back names a realm by
+    // its URL; `realmUrlResolver` folds both sides to the form card ids carry
+    // before matching, and realm events reach a subscription under any
+    // spelling (MessageService keys them the same way).
+    let realms = dedupeRealmsByIdentity(
+      this.network.virtualNetwork,
       query.realms && query.realms.length > 0
         ? query.realms
         : this.#cardInitiated
@@ -892,17 +902,21 @@ export class SearchEntriesResource extends Resource<Args> {
   // Resolves a URL to the searched realm holding it, in the form entry rows
   // carry as `realmUrl`. One RealmPaths per searched realm per call.
   private realmUrlResolver(): (id: string) => string {
-    let realmPaths = this.realmsToSearch.map(
-      (realm) => new RealmPaths(ri(realm)),
-    );
+    let { virtualNetwork } = this.network;
+    let targets = this.realmsToSearch.map((realm) => ({
+      realm,
+      paths: new RealmPaths(canonicalRealmIdentifier(virtualNetwork, realm)),
+    }));
     return (id: string): string => {
-      let idRRI = rri(id);
-      for (let paths of realmPaths) {
+      // The server names an entry, and a realm in `realmTotals`, by its URL;
+      // folded, it compares with the searched realms in one form.
+      let idRRI = rri(virtualNetwork.unresolveURL(id));
+      for (let { realm, paths } of targets) {
         if (paths.inRealm(idRRI)) {
-          return paths.url;
+          return realm;
         }
       }
-      return new RealmPaths(this.network.virtualNetwork.toURL(id)).url;
+      return new RealmPaths(virtualNetwork.toURL(id)).url;
     };
   }
 

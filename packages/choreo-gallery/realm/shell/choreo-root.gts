@@ -138,7 +138,9 @@ export const ChoreoRoot: TOC<Signature> = <template>
     }
 
     /* Light mode. The accents carry over unchanged as fills and rules; every
-       ink that sets text gets a darker value that holds 4.5:1 on cream. */
+       ink that sets text gets a darker value that holds 4.5:1 on cream. The
+       one exception is the hero's gradient word in gallery-grid.gts, which
+       keeps the bright accents on purpose (see the comment there). */
     .choreo-site[data-theme='light'] {
       color-scheme: light;
       --bg-well: #e2dccf;

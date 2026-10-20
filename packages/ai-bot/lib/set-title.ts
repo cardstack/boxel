@@ -14,6 +14,7 @@ import {
   isToolResultStatusApplied,
   attachedCardsToMessage,
   getRelevantCards,
+  fetchRoomEventsBackwards,
 } from '@cardstack/runtime-common/ai';
 import { getToolRequests } from '@cardstack/runtime-common/matrix-constants';
 
@@ -150,6 +151,20 @@ export const roomTitleAlreadySet = (rawEventLog: IRoomEvent[]) => {
     false
   );
 };
+
+// Whether the room has its title, from the room's latest two name events
+// alone, so a room that has one needs no history fetched.
+export async function roomHasTitle(
+  roomId: string,
+  client: MatrixClient,
+): Promise<boolean> {
+  let { events } = await fetchRoomEventsBackwards(roomId, client, {
+    types: ['m.room.name'],
+    limit: 2,
+    maxPages: 1,
+  });
+  return roomTitleAlreadySet(events);
+}
 
 const userAlreadyHasSentNMessages = (
   rawEventLog: IRoomEvent[],
