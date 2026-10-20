@@ -256,7 +256,7 @@ export async function isIndexedCardInstance(
       FROM modules
       WHERE
     `,
-    ...indexCandidateExpressions(candidates),
+    ...indexCandidateExpressions(candidates, undefined, { hashedURL: true }),
     `
       LIMIT 1
     `,

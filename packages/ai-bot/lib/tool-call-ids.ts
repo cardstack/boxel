@@ -1,5 +1,8 @@
 import type { MatrixEvent as DiscreteMatrixEvent } from '@cardstack/base/matrix-event';
-import { getToolRequests } from '@cardstack/runtime-common/matrix-constants';
+import {
+  APP_BOXEL_COMPACTION_EVENT_TYPE,
+  getToolRequests,
+} from '@cardstack/runtime-common/matrix-constants';
 
 // The host, ai-bot and prompt building all identify a tool call by its id
 // (`toolRequest.id`, echoed as `commandRequestId` on its result) across the
@@ -8,14 +11,43 @@ import { getToolRequests } from '@cardstack/runtime-common/matrix-constants';
 // a reused id makes the host skip the new call as already run. So each call
 // keeps the provider's id unless the room has used it already, in which case
 // it gets a suffix that makes it unique.
+//
+// The room history ai-bot loads starts at the latest compaction's cut point,
+// so the ids used before it travel on the compaction event
+// (`usedToolCallIds`).
 
-// Every tool-call id the room has used, on bot messages and on results. A
-// streamed bot message carries its requests only on its latest edit, which the
-// server aggregates under `unsigned['m.relations']['m.replace']`.
+// The most ids a compaction event carries, which keeps it well inside
+// Matrix's event size limit next to the summary.
+export const MAX_CARRIED_TOOL_CALL_IDS = 500;
+
+const SUFFIXED_ID = /^(.*)_(\d+)$/;
+
+// Every tool-call id the room has used, on bot messages, on results, and
+// carried by compaction events for the history before their cut. A streamed
+// bot message carries its requests only on its latest edit, which the server
+// aggregates under `unsigned['m.relations']['m.replace']`. Carried ids come
+// first, as they are the oldest.
 export function collectUsedToolCallIds(
   eventList: DiscreteMatrixEvent[],
 ): Set<string> {
   let used = new Set<string>();
+  for (let event of eventList) {
+    let { type, content } = event as {
+      type: string;
+      content?: { status?: string; usedToolCallIds?: unknown };
+    };
+    if (
+      type === APP_BOXEL_COMPACTION_EVENT_TYPE &&
+      content?.status === 'done' &&
+      Array.isArray(content.usedToolCallIds)
+    ) {
+      for (let id of content.usedToolCallIds) {
+        if (typeof id === 'string') {
+          used.add(id);
+        }
+      }
+    }
+  }
   let addFrom = (content: Record<string, any> | undefined | null) => {
     if (!content || typeof content !== 'object') {
       return;
@@ -38,6 +70,65 @@ export function collectUsedToolCallIds(
     addFrom(raw.unsigned?.['m.relations']?.['m.replace']?.content);
   }
   return used;
+}
+
+// The used ids a compaction event carries forward. `ToolCallIds` suffixes a
+// used id past the highest suffix in use, so of `x`, `x_1` and `x_2` only `x`
+// and `x_2` need to be kept. When there are still more than `max`, the most
+// recent are kept, and a base id stays as long as its highest suffix does:
+// with the base gone, the provider's next `x` would be issued as `x` again.
+export function toolCallIdsToCarry(
+  used: Iterable<string>,
+  max = MAX_CARRIED_TOOL_CALL_IDS,
+): string[] {
+  let ids = [...used];
+  let present = new Set(ids);
+  let highestSuffix = new Map<string, number>();
+  for (let id of ids) {
+    let match = SUFFIXED_ID.exec(id);
+    if (match && present.has(match[1])) {
+      let n = Number(match[2]);
+      highestSuffix.set(
+        match[1],
+        Math.max(n, highestSuffix.get(match[1]) ?? 0),
+      );
+    }
+  }
+  let carried = ids.filter((id) => {
+    let match = SUFFIXED_ID.exec(id);
+    return !(
+      match &&
+      highestSuffix.has(match[1]) &&
+      Number(match[2]) < highestSuffix.get(match[1])!
+    );
+  });
+  if (carried.length <= max) {
+    return carried;
+  }
+  // Each base id goes with its highest suffix, and the pair is as recent as
+  // that suffix.
+  let lineage = (id: string) => {
+    let match = SUFFIXED_ID.exec(id);
+    return match && highestSuffix.has(match[1]) ? match[1] : id;
+  };
+  let lastPosition = new Map<string, number>();
+  carried.forEach((id, position) => lastPosition.set(lineage(id), position));
+  let size = new Map<string, number>();
+  for (let id of carried) {
+    size.set(lineage(id), (size.get(lineage(id)) ?? 0) + 1);
+  }
+  let kept = new Set<string>();
+  let count = 0;
+  for (let key of [...lastPosition.keys()].sort(
+    (a, b) => lastPosition.get(b)! - lastPosition.get(a)!,
+  )) {
+    if (count + size.get(key)! > max) {
+      break;
+    }
+    kept.add(key);
+    count += size.get(key)!;
+  }
+  return carried.filter((id) => kept.has(lineage(id)));
 }
 
 // Assigns the ids for one reply's tool calls, by their position in the
@@ -64,12 +155,29 @@ export class ToolCallIds {
       this.used.delete(existing.id);
     }
     let id = providerId;
-    for (let n = 1; this.used.has(id); n++) {
+    if (this.used.has(id)) {
+      // Past the highest suffix in use, not the lowest free one: a carried
+      // list may have dropped the lower suffixes, which the room still holds.
+      let n = this.highestSuffix(providerId) + 1;
       id = `${providerId}_${n}`;
+      while (this.used.has(id)) {
+        id = `${providerId}_${++n}`;
+      }
     }
     this.used.add(id);
     this.assigned.set(index, { providerId, id });
     return id;
+  }
+
+  private highestSuffix(providerId: string): number {
+    let highest = 0;
+    for (let id of this.used) {
+      let match = SUFFIXED_ID.exec(id);
+      if (match && match[1] === providerId) {
+        highest = Math.max(highest, Number(match[2]));
+      }
+    }
+    return highest;
   }
 
   // A copy of each call with its assigned id; the calls themselves (the

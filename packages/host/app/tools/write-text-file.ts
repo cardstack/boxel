@@ -1,12 +1,17 @@
 import { service } from '@ember/service';
 
-import { rri } from '@cardstack/runtime-common';
+import {
+  RealmPaths,
+  rri,
+  type RealmResourceIdentifier,
+} from '@cardstack/runtime-common';
 
 import HostBaseTool from '../lib/host-base-tool';
 import { findNonConflictingFilename } from '../utils/file-name';
 
 import type CardService from '../services/card-service';
 import type { SaveType } from '../services/card-service';
+import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type * as BaseToolModule from '@cardstack/base/command';
 
@@ -16,6 +21,7 @@ export default class WriteTextFileTool extends HostBaseTool<
 > {
   @service declare private cardService: CardService;
   @service declare private realm: RealmService;
+  @service declare private network: NetworkService;
 
   description = `Write a text file to a realm, such as a module or a card.`;
   static actionVerb = 'Write';
@@ -47,34 +53,41 @@ export default class WriteTextFileTool extends HostBaseTool<
     if (path.startsWith('/')) {
       path = path.slice(1);
     }
-    // `realm` comes from `realmOf`, which answers with a realm identifier.
-    // No form guard, and reachability by a prefix form is unverified.
-    // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
-    let url = new URL(path, realm);
-    let finalUrl = url;
+    // `realm` is in whichever form the realm was registered under, so the
+    // target stays an identifier until the write resolves it to a URL.
+    let fileId: RealmResourceIdentifier;
+    if (realm) {
+      fileId = new RealmPaths(realm).fileRRI(path);
+    } else {
+      // Without a realm the path must be a complete identifier; `toURL`
+      // throws for one that resolves nowhere.
+      this.network.virtualNetwork.toURL(path);
+      fileId = rri(path);
+    }
+    let finalFileId = fileId;
     let shouldWrite = true;
     if (!input.overwrite) {
       if (input.useNonConflictingFilename) {
-        let existing = await this.cardService.getSource(url);
+        let existing = await this.cardService.getSource(fileId);
         if (existing.status === 404) {
           shouldWrite = true;
         } else if (existing.status === 200) {
           if (existing.content.trim() !== '') {
-            let nonConflictingUrl = await findNonConflictingFilename(
-              url.href,
-              (candidateUrl) => this.fileExists(candidateUrl),
+            finalFileId = rri(
+              await findNonConflictingFilename(fileId, (candidate) =>
+                this.fileExists(candidate),
+              ),
             );
-            finalUrl = new URL(nonConflictingUrl);
           } else {
             shouldWrite = input.content.trim() !== '';
           }
         } else {
           throw new Error(
-            `Error checking if file exists at ${url}: ${existing.status}`,
+            `Error checking if file exists at ${fileId}: ${existing.status}`,
           );
         }
       } else {
-        let existing = await this.cardService.getSource(url);
+        let existing = await this.cardService.getSource(fileId);
         if (existing.status === 200 || existing.status === 406) {
           throw new Error(`File already exists: ${path}`);
         }
@@ -91,12 +104,16 @@ export default class WriteTextFileTool extends HostBaseTool<
     }
     if (shouldWrite) {
       let saveType: SaveType = input.overwrite ? 'editor' : 'create-file';
-      await this.cardService.saveSource(finalUrl, input.content, saveType);
+      await this.cardService.saveSource(
+        this.network.virtualNetwork.toURL(finalFileId),
+        input.content,
+        saveType,
+      );
     }
 
     let commandModule = await this.loadToolModule();
     const { FileIdentifierCard } = commandModule;
-    return new FileIdentifierCard({ fileIdentifier: finalUrl.href });
+    return new FileIdentifierCard({ fileIdentifier: finalFileId });
   }
 
   private async fileExists(fileUrl: string): Promise<boolean> {

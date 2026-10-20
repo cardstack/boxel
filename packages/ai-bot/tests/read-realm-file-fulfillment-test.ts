@@ -300,6 +300,35 @@ module('fulfillReadRealmFileCalls', () => {
     assert.strictEqual(data.context.agentId, AGENT_ID);
   });
 
+  test('a file named in prefix form is read from the URL its prefix stands for', async () => {
+    let { client, sent } = fakeClient();
+    let fetched: string[] = [];
+    let fetch = (async (url: string) => {
+      fetched.push(url);
+      return new Response('export class CardDef {}', { status: 200 });
+    }) as unknown as typeof globalThis.fetch;
+
+    let outcomes = await fulfillReadRealmFileCalls(
+      [readRealmFileCall('c1', { urls: ['@cardstack/base/card-api.gts'] })],
+      baseDeps(client, {
+        fetch,
+        realmPrefixes: new Map([
+          ['@cardstack/base/', 'https://localhost:4201/base/'],
+        ]),
+        uploadText: async () => 'https://localhost/media/card-api',
+      }),
+    );
+
+    assert.deepEqual(outcomes, [
+      { commandRequestId: 'c1', ok: true, published: true },
+    ]);
+    assert.deepEqual(fetched, ['https://localhost:4201/base/card-api.gts']);
+    assert.strictEqual(
+      dataOf(sent[0]).attachedFiles[0].sourceUrl,
+      'https://localhost:4201/base/card-api.gts',
+    );
+  });
+
   test('one call with many urls reads them all into a single result event', async () => {
     let { client, sent } = fakeClient();
     let otherUrl = 'https://localhost:4201/user/jane/notes.md';

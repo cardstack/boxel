@@ -47,6 +47,7 @@ import { createSendEvent } from '@cardstack/runtime-common/send-event';
 import { createServeFromRealm } from './handlers/serve-from-realm.ts';
 import { createServeIndex } from './handlers/serve-index.ts';
 import { findOrMountRealm } from './lib/realm-routing.ts';
+import type { GoogleSignInConfig } from './lib/google-sign-in.ts';
 import {
   createSecureOrigin,
   secureOriginGate,
@@ -700,6 +701,7 @@ export class RealmServer {
   private definitionLookup: DefinitionLookup;
   private mediaCacheAdapter: MediaCacheAdapter | undefined;
   private assetsURL: URL;
+  private hostURL: URL;
   private getIndexHTML: () => Promise<string>;
   private serverURL: URL;
   private matrixRegistrationSecret: string | undefined;
@@ -726,6 +728,7 @@ export class RealmServer {
   private linkShapePolicy: LinkShapePolicy | undefined;
   private clientAddress: ReturnType<typeof clientAddressSettingsFromEnv>;
   private secureOrigin: SecureOrigin | undefined;
+  private googleSignIn: GoogleSignInConfig | undefined;
   private cachedApp: ReturnType<RealmServer['buildApp']> | undefined;
 
   constructor({
@@ -744,6 +747,7 @@ export class RealmServer {
     definitionLookup,
     mediaCacheAdapter,
     assetsURL,
+    hostURL,
     getIndexHTML,
     matrixRegistrationSecret,
     matrixAdminUsername,
@@ -758,6 +762,7 @@ export class RealmServer {
     clientAddress: clientAddressSettings,
     secureOriginURL,
     secureOriginAppOrigins = [],
+    googleSignIn,
   }: {
     serverURL: URL;
     realms: Realm[];
@@ -776,6 +781,10 @@ export class RealmServer {
     // absent means the POST capture endpoint captures without persisting.
     mediaCacheAdapter?: MediaCacheAdapter;
     assetsURL: URL;
+    // The host app's origin, where the render route is served. Defaults to
+    // `assetsURL`, which is the host app unless its assets are served from
+    // somewhere else.
+    hostURL?: URL;
     getIndexHTML: () => Promise<string>;
     matrixRegistrationSecret?: string;
     matrixAdminUsername?: string;
@@ -814,6 +823,9 @@ export class RealmServer {
     // Origins of app pages, besides `serverURL`'s, that may frame the secure
     // origin's credential fields (the host's own dev server, in development).
     secureOriginAppOrigins?: string[];
+    // The Google client the secure window signs in with (see
+    // `lib/google-sign-in.ts`). Unset, it offers only a password.
+    googleSignIn?: GoogleSignInConfig;
   }) {
     if (!matrixRegistrationSecret && !getRegistrationSecret) {
       throw new Error(
@@ -849,6 +861,7 @@ export class RealmServer {
     this.definitionLookup = definitionLookup;
     this.mediaCacheAdapter = mediaCacheAdapter;
     this.assetsURL = assetsURL;
+    this.hostURL = hostURL ?? assetsURL;
     this.getIndexHTML = getIndexHTML;
     this.matrixRegistrationSecret = matrixRegistrationSecret;
     this.matrixAdminUsername = matrixAdminUsername;
@@ -868,16 +881,23 @@ export class RealmServer {
     this.linkShapePolicy = linkShapePolicy;
     this.clientAddress =
       clientAddressSettings ?? clientAddressSettingsFromEnv(process.env);
+    this.googleSignIn = googleSignIn;
     this.secureOrigin = secureOriginURL
-      ? createSecureOrigin(secureOriginURL, {
-          matrixURL: matrixClient.matrixURL,
-          appOrigins: [
-            ...new Set([
-              serverURL.origin,
-              ...secureOriginAppOrigins.map((origin) => new URL(origin).origin),
-            ]),
-          ],
-        })
+      ? createSecureOrigin(
+          secureOriginURL,
+          {
+            matrixURL: matrixClient.matrixURL,
+            appOrigins: [
+              ...new Set([
+                serverURL.origin,
+                ...secureOriginAppOrigins.map(
+                  (origin) => new URL(origin).origin,
+                ),
+              ]),
+            ],
+          },
+          { realmServerURL: serverURL },
+        )
       : undefined;
   }
 
@@ -1012,6 +1032,7 @@ export class RealmServer {
           queue: this.queue,
           realms: this.realms,
           assetsURL: this.assetsURL,
+          hostURL: this.hostURL,
           realmsRootPath: this.realmsRootPath,
           getMatrixRegistrationSecret: this.getMatrixRegistrationSecret,
           matrixAdminUsername: this.matrixAdminUsername,
@@ -1024,6 +1045,7 @@ export class RealmServer {
           liveSearchCache: this.liveSearchCache,
           linkShapePolicy: this.linkShapePolicy,
           secureOriginURL: this.secureOrigin?.url,
+          googleSignIn: this.googleSignIn,
         }),
       )
       .use(

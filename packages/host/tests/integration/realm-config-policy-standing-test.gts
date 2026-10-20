@@ -107,7 +107,10 @@ module('Integration | realm config policy standing', function (hooks) {
   async function renderConfig(
     pointer: string | undefined,
     format: 'isolated' | 'edit' = 'isolated',
-    { awaitStanding = true }: { awaitStanding?: boolean } = {},
+    {
+      awaitStanding = true,
+      realmPrefix,
+    }: { awaitStanding?: boolean; realmPrefix?: string } = {},
   ): Promise<{ realm: Realm; config: RealmConfig }> {
     let { realm } = await setupIntegrationTestRealm({
       mockMatrixUtils,
@@ -124,6 +127,12 @@ module('Integration | realm config policy standing', function (hooks) {
         'notes/n1.json': note,
       },
     });
+    if (realmPrefix) {
+      getService('network').virtualNetwork.addRealmMapping(
+        realmPrefix,
+        testRealmURL,
+      );
+    }
     await getService('realm').login(testRealmURL);
     // Looking the service up arms the transport the card's own
     // `operations()` call sends its validate through.
@@ -136,7 +145,10 @@ module('Integration | realm config policy standing', function (hooks) {
         <template><OperatorMode @onClose={{noop}} /></template>
       },
     );
-    await waitFor(`[data-test-stack-card="${CONFIG}"]`);
+    // The stack card carries the card's id, which is in prefix form when the
+    // realm is registered under a prefix.
+    let configId = realmPrefix ? `${realmPrefix}realm` : CONFIG;
+    await waitFor(`[data-test-stack-card="${configId}"]`);
     if (awaitStanding) {
       await waitFor('[data-test-realm-policy-standing="answered"]', {
         timeout: 10_000,
@@ -172,6 +184,25 @@ module('Integration | realm config policy standing', function (hooks) {
     assert
       .dom(`[data-test-stack-card-index="1"][data-test-stack-card="${POLICY}"]`)
       .exists('clicking the card opens the policy in a new stack item');
+  });
+
+  test('a realm registered under a prefix recognises its own config card', async function (assert) {
+    let virtualNetwork = getService('network').virtualNetwork;
+    try {
+      let { config } = await renderConfig(POLICY, 'isolated', {
+        realmPrefix: '@test/cards/',
+      });
+      assert.strictEqual(
+        config.id,
+        '@test/cards/realm',
+        'the config card is identified in prefix form',
+      );
+      assert
+        .dom('[data-test-realm-policy-status="in-force"]')
+        .hasText('In force', 'the standing view asked the realm');
+    } finally {
+      virtualNetwork.removeRealmMapping('@test/cards/');
+    }
   });
 
   test('a view someone is looking at stays live while the tab renders a card for its own index', async function (assert) {

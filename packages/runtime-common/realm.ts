@@ -185,6 +185,13 @@ import {
   type CaptureURLTokenClaims,
 } from './capture-url-token.ts';
 import {
+  acceptedDiagnosticClaim,
+  DIAGNOSTIC_SESSION_LOG_CHANNEL,
+  diagnosticSessionSecret,
+  presentsAsDiagnosticSession,
+  type DiagnosticSessionClaim,
+} from './diagnostic-session.ts';
+import {
   DEFAULT_AUDIO_SIZE_LIMIT_BYTES,
   DEFAULT_CARD_SIZE_LIMIT_BYTES,
   DEFAULT_FILE_SIZE_LIMIT_BYTES,
@@ -209,6 +216,7 @@ import {
   formattedError,
   stringifyErrorForLog,
   unsupportedMediaType,
+  type RenderErrorSummary,
   type SerializedError,
 } from './error.ts';
 import { formatRFC7231 } from 'date-fns';
@@ -1258,7 +1266,7 @@ const SOURCE_ETAG_VARIANT = 'source';
 const CONDITIONAL_WRITE_INDEX_SETTLE_BUDGET_MS = 1_000;
 const CONDITIONAL_WRITE_INDEX_SETTLE_POLL_MS = 250;
 
-// Card+JSON ETag is `"<indexed_at>-<realmInfoHash>[-<captures>]:card"`
+// Card+JSON ETag is `"<indexed_at>-<realmInfoHash>[-<renderChannel>]:card"`
 // — quoted per RFC 9110 §8.8.3 so CDNs / browsers don't re-quote inbound
 // validators and split the cache key. Three inputs feed the base:
 //   - `indexed_at` on the primary card's index row, which bumps on
@@ -1268,9 +1276,10 @@ const CONDITIONAL_WRITE_INDEX_SETTLE_POLL_MS = 250;
 //     injects `meta.realmInfo` (name / icon / `lastPublishedAt`)
 //     into the assembled response at request time and that field
 //     can change without any card being re-indexed;
-//   - a fingerprint of the joined capture manifest, which lands on
-//     the prerendered_html channel without moving `indexed_at` (see
-//     `capturesEtagFingerprint`).
+//   - a fingerprint of what the response joins from the prerendered_html
+//     channel — the capture manifest and the current render error — which
+//     lands without moving `indexed_at` (see
+//     `renderChannelEtagFingerprint`).
 // `buildCardJsonEtag()` constructs the value; cards with foreign-
 // realm instance deps suppress emission entirely because cross-realm
 // invalidation doesn't cascade `indexed_at` today.
@@ -1697,15 +1706,16 @@ function buildEtag(
   return variant ? `${baseStr}:${variant}` : baseStr;
 }
 
-// Card+JSON ETag = `"<indexed_at>-<realmInfoHash>[-<capturesFingerprint>]:card"`.
+// Card+JSON ETag = `"<indexed_at>-<realmInfoHash>[-<renderChannelFingerprint>]:card"`.
 // The value is wrapped in double quotes to satisfy RFC 9110 §8.8.3 — CDNs and
 // browsers don't re-quote inbound validators and an unquoted token
 // would fail strict-validator parsing in some intermediaries.
 // `indexedAt` captures direct + dep-cascaded writes; the
 // `realmInfoHash` captures `attachRealmInfo()`'s request-time
 // injection of `meta.realmInfo` (which can flip without re-indexing
-// any card); the captures fingerprint captures the joined
-// `meta.captures` (see `capturesEtagFingerprint`). A null
+// any card); the render-channel fingerprint captures the joined
+// `meta.captures` and `meta.renderError` (see
+// `renderChannelEtagFingerprint`). A null
 // `indexedAt` suppresses ETag emission entirely.
 //
 // How much of a card's link graph a card+json body carries. `full` side-loads
@@ -1759,14 +1769,14 @@ function cardJsonShapeFor(links: LinkStrategy): CardJsonShape {
 function buildCardJsonEtag(
   indexedAt: number | null | undefined,
   realmInfoHash: string | undefined,
-  capturesFingerprint?: string,
+  renderChannelFingerprint?: string,
   shape: CardJsonShape = 'full',
   unboundedAssembly = false,
 ): string | undefined {
   if (indexedAt == null) {
     return undefined;
   }
-  let base = [`${indexedAt}`, realmInfoHash, capturesFingerprint]
+  let base = [`${indexedAt}`, realmInfoHash, renderChannelFingerprint]
     .filter(Boolean)
     .join('-');
   // A response that carries less of the card's link graph than a full read
@@ -1814,6 +1824,31 @@ function capturesEtagFingerprint(
     return undefined;
   }
   return computeContentHash(stableStringify(manifest) ?? '').slice(0, 8);
+}
+
+// Everything a card+json response joins from the prerendered_html channel,
+// as one validator component: the capture manifest (above) and the current
+// render error served as `meta.renderError`. A render error lands, and clears
+// when a later render succeeds, without moving `indexed_at`, so without it a
+// client would be 304'd past either change. A card with no render error gets
+// exactly the captures fingerprint, so its validator is unaffected.
+function renderChannelEtagFingerprint({
+  captures,
+  renderError,
+}: {
+  captures: CaptureManifest | null | undefined;
+  renderError: RenderErrorSummary | null | undefined;
+}): string | undefined {
+  let capturesFingerprint = capturesEtagFingerprint(captures);
+  if (!renderError) {
+    return capturesFingerprint;
+  }
+  let renderErrorFingerprint = computeContentHash(
+    stableStringify(renderError) ?? '',
+  ).slice(0, 8);
+  return [capturesFingerprint, `rerr${renderErrorFingerprint}`]
+    .filter(Boolean)
+    .join('-');
 }
 
 // The card+html / file-meta+html GET's composite validator. It encodes both
@@ -2132,6 +2167,13 @@ export interface TokenClaims {
   // written for. A render a user asks for — a capture, a command — carries that
   // user's ordinary session instead.
   realmAuthority?: true;
+  // Set on a diagnostic session (see `diagnostic-session.ts`): read-only,
+  // within its scope (the card's realm, or the realms its owner may read),
+  // minted for the operator its note names.
+  // Like a delegated session it carries only ['read'], so request
+  // authorization treats it specially. It is signed under its own key, which
+  // `Realm.#verifySession` picks for a token carrying this claim.
+  diagnostic?: DiagnosticSessionClaim;
 }
 
 export interface AdapterWriteResult {
@@ -2469,6 +2511,13 @@ export type RequestContext = {
   // other than the one the request was sent to, and has to know the caller
   // there as someone that realm would itself accept.
   principal?: string;
+  // Set when the request's session is a diagnostic session
+  // (`TokenClaims.diagnostic`). Its `authenticatedUser` is the realm owner it
+  // reads as, which the session is good for only within its own requests,
+  // its scope and its fifteen minutes. So anything that would carry that
+  // identity past the request — a capture drawn as its reader, a signed
+  // capture URL — treats the caller as no one.
+  diagnosticSession?: true;
   // Set when the request's token is a realm-authority session
   // (`TokenClaims.realmAuthority`): a realm rendering its own cards, whose
   // `authenticatedUser` is the identity it reads as rather than someone a
@@ -2644,6 +2693,7 @@ export class Realm {
   #testOnlyCoarseAdmission: CoarseAdmission | undefined;
   #testOnlyBeforeBatchLock: (() => Promise<void>) | undefined;
   #log = logger('realm');
+  #diagnosticLog = logger(DIAGNOSTIC_SESSION_LOG_CHANNEL);
   // Anchors the render-hold cap across back-to-back bulk commits, per render
   // lane held; see `_commitBatchUnlocked`. A lane has an entry only while a
   // commit holds it.
@@ -7572,9 +7622,14 @@ export class Realm {
   // to end, a capture-URL token (minted only for a reader this vouched for —
   // see `signCaptureURLs`), or a token a public realm's read path took
   // without checking it, once it passes those checks here. A delegated session
-  // reads this realm as the user it acts for. Anyone else is
+  // reads this realm as the user it acts for. A diagnostic session is drawn
+  // as no one: a capture outlives its request, and a capture-URL token its
+  // session (see `RequestContext.diagnosticSession`). Anyone else is
   // `ANONYMOUS_RENDER`, drawn with no session at all.
   async #captureReader(requestContext: RequestContext): Promise<string> {
+    if (requestContext.diagnosticSession) {
+      return ANONYMOUS_RENDER;
+    }
     let session = requestContext.unvouchedSession;
     if (session) {
       let vouched =
@@ -9822,8 +9877,8 @@ export class Realm {
     let dependencyKeys = extractModuleDependencyKeys(
       transpiled,
       fileRef.path,
-      this.url,
       this.paths,
+      this.#virtualNetwork,
     );
     this.#recordCompile(canonicalPath, source.length, compileStart);
 
@@ -11209,14 +11264,45 @@ export class Realm {
       // the assumed-user tag the same client's writes carry, since writes
       // always take the main path.
       let publicAuthHeader = request.headers.get('Authorization');
+      // A diagnostic session is read-only even where the realm lets anyone
+      // write, so a write presented with one is refused rather than answered
+      // as an anonymous one. The token's own claim decides it, before
+      // verification and before any assume-user indirection, so the refusal
+      // holds for a session that has expired too.
+      if (
+        publicAuthHeader &&
+        presentsAsDiagnosticSession(publicAuthHeader.replace('Bearer ', '')) &&
+        requiredPermission !== 'read' &&
+        !answersWithoutCredentials
+      ) {
+        warnRefusal(
+          `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), a diagnostic session attempted ${requiredPermission}; diagnostic sessions are read-only`,
+        );
+        throw new AuthorizationError('Diagnostic sessions are read-only');
+      }
       if (!publicAuthHeader) {
         requestContext.anonymous = true;
       } else if (!request.headers.get('X-Boxel-Assume-User')) {
+        let publicToken:
+          | (TokenClaims & { iat: number; exp: number })
+          | undefined;
         try {
-          let publicToken = this.#adapter.verifyJWT(
+          publicToken = this.#verifySession(
             publicAuthHeader.replace('Bearer ', ''),
-            this.#realmSecretSeed,
           );
+        } catch (e) {
+          // fall through with no identity
+        }
+        if (publicToken?.diagnostic) {
+          await this.#admitDiagnosticSession(
+            request,
+            requestContext,
+            publicToken,
+            { warnRefusal, recordOnly: true },
+          );
+          return;
+        }
+        if (publicToken) {
           requestContext.authenticatedUser = publicToken.user;
           if (publicToken.realmAuthority) {
             requestContext.realmAuthority = true;
@@ -11227,8 +11313,6 @@ export class Realm {
             delegated: Boolean(publicToken.delegated),
             realm: publicToken.realm,
           };
-        } catch (e) {
-          // fall through with no identity
         }
       }
       return;
@@ -11248,7 +11332,7 @@ export class Realm {
     let token: TokenClaims & { iat: number; exp: number };
 
     try {
-      token = this.#adapter.verifyJWT(tokenString, this.#realmSecretSeed);
+      token = this.#verifySession(tokenString);
       if (token.realmAuthority) {
         requestContext.realmAuthority = true;
       }
@@ -11271,6 +11355,27 @@ export class Realm {
       );
 
       let user = token.user;
+
+      if (token.diagnostic) {
+        if (requiredPermission !== 'read') {
+          warnRefusal(
+            `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), diagnostic session ${token.diagnostic.id} attempted ${requiredPermission}; diagnostic sessions are read-only`,
+          );
+          throw new AuthorizationError('Diagnostic sessions are read-only');
+        }
+        if (!(await realmPermissionChecker.can(user, 'read'))) {
+          warnRefusal(
+            `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), diagnostic session ${token.diagnostic.id} reads as ${user}, who lacks read permission`,
+          );
+          throw new AuthenticationError(
+            AuthenticationErrorMessages.PermissionMismatch,
+          );
+        }
+        await this.#admitDiagnosticSession(request, requestContext, token, {
+          warnRefusal,
+        });
+        return;
+      }
 
       // Delegated read-only session (minted by the realm-server's
       // /_delegate-session endpoint for ai-bot — CS-11552). It is bound to a
@@ -11375,6 +11480,64 @@ export class Realm {
       }
       throw e;
     }
+  }
+
+  // Verifies a session presented to this realm: a diagnostic session under its
+  // own key, any other under the realm secret seed. The token's own claim
+  // picks the key, so one that claims to be a diagnostic session and is not
+  // fails verification.
+  #verifySession(
+    tokenString: string,
+  ): TokenClaims & { iat: number; exp: number } {
+    return this.#adapter.verifyJWT(
+      tokenString,
+      presentsAsDiagnosticSession(tokenString)
+        ? diagnosticSessionSecret(this.#realmSecretSeed)
+        : this.#realmSecretSeed,
+    );
+  }
+
+  // Admits a verified diagnostic session to a read: the caller is the realm
+  // owner the session names, reading with realm authority as the indexer's
+  // render does, and the use is logged on the diagnostic channel with the
+  // mint it came from. A session whose scope doesn't cover this realm, or
+  // outside its lifetime, is refused. `recordOnly` is for a request the realm answers
+  // without credentials, which the session identifies but does not authorize;
+  // there a session that is not valid here, or whose owner's sessions have
+  // been revoked since it was minted, leaves the caller unidentified rather
+  // than failing a request the realm would answer anyway. The main path has
+  // checked revocation before it gets here.
+  async #admitDiagnosticSession(
+    request: Request,
+    requestContext: RequestContext,
+    token: TokenClaims & { iat: number; exp: number },
+    {
+      warnRefusal,
+      recordOnly = false,
+    }: { warnRefusal: (message: string) => void; recordOnly?: boolean },
+  ): Promise<void> {
+    let claim = acceptedDiagnosticClaim(token, [this.url]);
+    if (
+      recordOnly &&
+      (!claim ||
+        (await isSessionRevoked(this.#dbAdapter, token.user, token.iat)))
+    ) {
+      return;
+    }
+    if (!claim) {
+      warnRefusal(
+        `auth failed for ${request.method} ${maskLoggedURL(request.url)} (accept: ${request.headers.get('accept')}), diagnostic session ${token.diagnostic?.id} is not valid for realm ${this.url}`,
+      );
+      throw new AuthenticationError(AuthenticationErrorMessages.TokenInvalid);
+    }
+    requestContext.authenticatedUser = token.user;
+    requestContext.diagnosticSession = true;
+    if (token.realmAuthority) {
+      requestContext.realmAuthority = true;
+    }
+    this.#diagnosticLog.info(
+      `diagnostic session ${claim.id} ${recordOnly ? 'presented on' : 'read'} ${request.method} ${maskLoggedURL(request.url)} as ${token.user}; minted for card ${claim.card}, operator note: ${JSON.stringify(claim.note)}`,
+    );
   }
 
   private async upsertCardSource(
@@ -12803,14 +12966,17 @@ export class Realm {
       // server setting, or on whether the caller's last read was a write
       // echo, rather than on anything the caller did.
       let realmInfoHash = this.getCachedRealmInfoHash();
-      let captures = capturesEtagFingerprint(entry!.captures);
+      let renderChannel = renderChannelEtagFingerprint({
+        captures: entry!.captures,
+        renderError: entry!.renderError,
+      });
       let issued = new Set(
         CARD_JSON_SHAPES.flatMap((shape) =>
           [false, true].map((unboundedAssembly) =>
             buildCardJsonEtag(
               entry!.indexedAt,
               realmInfoHash,
-              captures,
+              renderChannel,
               shape,
               unboundedAssembly,
             ),
@@ -13204,11 +13370,15 @@ export class Realm {
         meta: { lastModified, ...(version != null ? { version } : {}) },
       },
     });
-    // The PATCH echo carries the joined `meta.captures` like a GET does —
-    // the store replaces an instance's meta wholesale from a save response, so
-    // an echo without it would wipe the key client-side until the next GET.
-    // The two representations part company on the link graph only, which is
-    // what the `write-echo` validator variant below records.
+    // The PATCH echo carries the joined `meta.captures` and `meta.renderError`
+    // like a GET does — the store replaces an instance's meta wholesale from a
+    // save response, so an echo without them would wipe the keys client-side
+    // until the next GET. The two representations part company on the link
+    // graph only, which is what the `write-echo` validator variant below
+    // records.
+    if (entry.renderError) {
+      doc.meta = { ...doc.meta, renderError: entry.renderError };
+    }
     if (entry.captures) {
       doc.data.meta = {
         ...doc.data.meta,
@@ -13227,7 +13397,7 @@ export class Realm {
       : buildCardJsonEtag(
           entry.indexedAt,
           this.getCachedRealmInfoHash(),
-          capturesEtagFingerprint(entry.captures),
+          renderChannelEtagFingerprint(entry),
           'write-echo',
         );
     this.#serveInstanceIdsAsRRI(doc);
@@ -13960,7 +14130,7 @@ export class Realm {
         : buildCardJsonEtag(
             result.indexedAt,
             this.getCachedRealmInfoHash(),
-            capturesEtagFingerprint(result.captures),
+            renderChannelEtagFingerprint(result),
             // The strategy the read reports, not the one this request asked
             // for: the type's declaration may narrow it further, and a `HEAD`
             // states the validator the `GET` would send.
@@ -14207,7 +14377,10 @@ export class Realm {
           peekEtag = buildCardJsonEtag(
             instanceEntry.indexedAt,
             realmInfoHash,
-            capturesEtagFingerprint(instanceEntry.captures),
+            renderChannelEtagFingerprint({
+              captures: instanceEntry.captures,
+              renderError: instanceEntry.renderError,
+            }),
             cardJsonShapeFor(
               effectiveLinkStrategy(plan.links, resolveLinksOnly),
             ),
@@ -14438,7 +14611,7 @@ export class Realm {
       : buildCardJsonEtag(
           headers.indexedAt,
           this.getCachedRealmInfoHash(),
-          capturesEtagFingerprint(headers.captures),
+          renderChannelEtagFingerprint(headers),
           // Read off the assembly for the same reason `deps` and `indexedAt`
           // are: the strategy this body was assembled under is the read's
           // answer, and the request's own `resolveLinksOnly` is only half of
@@ -14729,6 +14902,16 @@ export class Realm {
           request,
           requestContext,
           `markdown representation unavailable: ${maskLoggedURL(request.url)} has an indexing error`,
+        );
+      }
+      // The markdown is prerendered output, so a current render error makes
+      // it unavailable even though the card's data is intact: the row holds
+      // only the last-known-good markdown, which no longer describes the card.
+      if (instanceEntry.renderError) {
+        return notAcceptable(
+          request,
+          requestContext,
+          `markdown representation unavailable: ${maskLoggedURL(request.url)} has a rendering error`,
         );
       }
       if (instanceEntry.markdown == null) {

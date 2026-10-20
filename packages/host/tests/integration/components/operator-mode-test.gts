@@ -90,7 +90,7 @@ module('Integration | operator-mode | basics', function (hooks) {
       'in code mode',
     );
     assert.strictEqual(
-      ctx.operatorModeStateService.state?.codePath?.href,
+      ctx.operatorModeStateService.state?.codePath,
       `${testRealmURL}ExplodingCard/exploded.json`,
       'codePath is correct',
     );
@@ -220,7 +220,7 @@ module('Integration | operator-mode | basics', function (hooks) {
           'in code mode',
         );
         assert.strictEqual(
-          ctx.operatorModeStateService.state?.codePath?.href,
+          ctx.operatorModeStateService.state?.codePath,
           `${testRealmURL}ExplodingCard/1.json`,
           'codePath is correct',
         );

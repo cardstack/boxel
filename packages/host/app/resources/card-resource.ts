@@ -54,8 +54,14 @@ export class CardResource extends Resource<Args> {
     }
   }
 
+  // A caller that names a type reads only that bucket. An untyped read of a
+  // file URL lands in file-meta, which the store reports once its card read
+  // was answered with the file's metadata.
   private get readType(): StoreReadType {
-    return this.#type ?? 'card';
+    if (this.#type) {
+      return this.#type;
+    }
+    return this.#id ? this.store.readTypeFor(this.#id) : 'card';
   }
 
   private peekForType(type: StoreReadType): unknown {

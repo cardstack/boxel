@@ -1250,7 +1250,6 @@ module('Acceptance | Spec preview', function (hooks) {
       {
         cardId: petId,
         format: 'isolated', // Default format
-        url: `${testRealmURL}pet.gts`,
       },
       'Card selection is persisted in localStorage',
     );
@@ -1335,7 +1334,6 @@ module('Acceptance | Spec preview', function (hooks) {
       {
         cardId: firstPetId,
         format: 'embedded',
-        url: `${testRealmURL}pet.gts`,
       },
       'Format is set to embedded',
     );
@@ -1351,7 +1349,6 @@ module('Acceptance | Spec preview', function (hooks) {
       {
         cardId: secondPetId,
         format: 'embedded',
-        url: `${testRealmURL}pet.gts`,
       },
       'The embedded format is preserved when selecting another card',
     );

@@ -218,6 +218,14 @@ async function readDocument(
         }
       : {}),
   };
+  // The card's data is served even though its render failed: the index visit
+  // that read it succeeded, and a client rendering the card itself does not
+  // need the prerendered output. The failure is reported beside the data, on
+  // the document's own `meta` rather than the resource's, so a client echoing
+  // the resource back in a write never carries it.
+  if (result.renderError) {
+    doc.meta = { ...doc.meta, renderError: result.renderError };
+  }
   return {
     document: doc,
     // The assembled document, unprojected. `runOperation` runs the `output`
@@ -235,6 +243,7 @@ async function readDocument(
       lastModified: numberOrNull(doc.data.meta.lastModified),
       generation: result.generation,
       captures: result.captures,
+      renderError: result.renderError,
       deps: result.deps,
     },
     queryBacked: result.queryBacked,
@@ -285,6 +294,7 @@ async function readHeaders(
         lastModified: file.lastModified,
         generation: file.generation,
         captures: file.captures,
+        renderError: null,
         deps: file.deps,
       };
     }
@@ -319,6 +329,7 @@ async function readHeaders(
     lastModified: row.lastModified,
     generation: row.generation,
     captures: row.captures,
+    renderError: row.renderError,
     deps: row.deps,
   };
 }
@@ -334,6 +345,7 @@ function headersFromDisk(
     lastModified: numberOrNull(document.data.attributes?.lastModified),
     generation: null,
     captures: null,
+    renderError: null,
     deps: null,
   };
 }

@@ -7,6 +7,7 @@ import {
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
 import { secretsKeyring } from '../lib/secrets-at-rest/index.ts';
+import { isSecureSession } from '../lib/secure-session.ts';
 import {
   addUserKey,
   deleteUserKey,
@@ -19,7 +20,8 @@ import {
   type UserKeyMetadata,
 } from '../lib/user-keys.ts';
 
-// The management API for the signed-in user's own keys. Every route answers
+// The management API for the signed-in user's own keys. The shares API
+// (`handle-key-shares.ts`) answers with the same helpers. Every route answers
 // for the token's user alone, and no route returns a key's value. Adding,
 // replacing and deleting a key each take a key write ticket minted for that
 // change. A request body
@@ -50,7 +52,11 @@ function serialize(key: UserKeyMetadata) {
   return { type: 'user-key', id, attributes };
 }
 
-async function sendJSON(ctxt: Koa.Context, status: number, body: unknown) {
+export async function sendJSON(
+  ctxt: Koa.Context,
+  status: number,
+  body: unknown,
+) {
   await setContextResponse(
     ctxt,
     new Response(JSON.stringify(body), {
@@ -64,7 +70,7 @@ async function sendJSON(ctxt: Koa.Context, status: number, body: unknown) {
 // session check ahead of these routes already refuses a delegated session; a
 // realm-authority session is a realm acting on its own authority, not the
 // user, so it is refused here.
-function ownerOf(ctxt: Koa.Context): string {
+export function ownerOf(ctxt: Koa.Context): string {
   let token = ctxt.state.token as RealmServerTokenClaim | undefined;
   if (!token?.user) {
     throw new UserKeyError(403, 'keys are managed by a signed-in user');
@@ -99,7 +105,9 @@ async function readRawBody(ctxt: Koa.Context): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-async function readJSON(ctxt: Koa.Context): Promise<Record<string, unknown>> {
+export async function readJSON(
+  ctxt: Koa.Context,
+): Promise<Record<string, unknown>> {
   let raw = await readRawBody(ctxt);
   let json: unknown;
   try {
@@ -113,7 +121,7 @@ async function readJSON(ctxt: Koa.Context): Promise<Record<string, unknown>> {
   return json as Record<string, unknown>;
 }
 
-function ticketOf(body: { meta?: unknown }): unknown {
+export function ticketOf(body: { meta?: unknown }): unknown {
   let meta = body.meta;
   return meta && typeof meta === 'object'
     ? (meta as Record<string, unknown>).ticket
@@ -157,7 +165,7 @@ function attributesOf(
 // Runs a handler, answering a `UserKeyError` with its status and message and
 // anything else with a bare 500. Only an error's message is logged, never the
 // request.
-function keysHandler(fn: (ctxt: Koa.Context) => Promise<void>): Handler {
+export function keysHandler(fn: (ctxt: Koa.Context) => Promise<void>): Handler {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     try {
       await fn(ctxt);
@@ -194,18 +202,16 @@ function statusText(status: UserKeyError['status']): string {
   }[status];
 }
 
-// Whether this request may mint a key write ticket: one from the secure
-// origin, or one with no `Origin` at all, as the CLI sends. A browser always
+// Whether this request may mint a key write ticket by where it comes from:
+// the secure origin, or no `Origin` at all, as the CLI sends. A browser always
 // sends `Origin` on a POST and page script can't change it, so a request made
 // from the app page, where card code runs, names the app's origin and is
-// refused: card code can't get a ticket, or write a key, from inside the
-// browser.
+// refused.
 //
-// This is not a defence against a session that has left the browser. Card
-// code can read the user's realm-server session, and a client outside a
-// browser can send any `Origin` or none, so a stolen session can mint a
-// ticket exactly as the CLI does. Nothing the server sees tells the two apart;
-// closing that needs card code that can't reach the user's session at all.
+// A client outside a browser can send any `Origin` or none, so this alone
+// doesn't keep a session card code carried out of the browser from minting a
+// ticket. What does is that minting also requires a session signed in on the
+// secure origin (`isSecureSession`), which card code can't obtain.
 export function mayMintKeyWriteTicket(
   ctxt: Koa.Context,
   secureOriginURL: URL | undefined,
@@ -229,6 +235,17 @@ export function handleMintKeyWriteTicket({
         'key write tickets are issued only to the secure window and the CLI',
       );
     }
+    if (
+      !(await isSecureSession(
+        dbAdapter,
+        ctxt.state.token as RealmServerTokenClaim | undefined,
+      ))
+    ) {
+      throw new UserKeyError(
+        403,
+        'key write tickets are issued only to a session signed in on the secure origin',
+      );
+    }
     let body = await readJSON(ctxt);
     let data = body.data as
       | { type?: unknown; attributes?: Record<string, unknown> }
@@ -236,10 +253,12 @@ export function handleMintKeyWriteTicket({
     if (!data || typeof data !== 'object' || data.type !== 'key-write-ticket') {
       throw new UserKeyError(400, `the resource type is 'key-write-ticket'`);
     }
-    let target = validateKeyWriteTarget(
-      data.attributes?.action,
-      data.attributes?.keyId,
-    );
+    let target = validateKeyWriteTarget({
+      action: data.attributes?.action,
+      keyId: data.attributes?.keyId,
+      realm: data.attributes?.realm,
+      shareId: data.attributes?.shareId,
+    });
     let { ticket, expiresAt } = await mintKeyWriteTicket(
       dbAdapter,
       owner,

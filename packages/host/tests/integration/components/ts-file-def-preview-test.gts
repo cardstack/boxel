@@ -3,7 +3,7 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, type Loader } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common';
 
 import { renderCard } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -42,11 +42,11 @@ module('Integration | ts/gts file def preview', function (hooks) {
   hooks.beforeEach(async function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
     TsFileDef = (
-      await loader.import<typeof TsFileDefModule>(`${baseRealm.url}ts-file-def`)
+      await loader.import<typeof TsFileDefModule>(`@cardstack/base/ts-file-def`)
     ).TsFileDef;
     GtsFileDef = (
       await loader.import<typeof GtsFileDefModule>(
-        `${baseRealm.url}gts-file-def`,
+        `@cardstack/base/gts-file-def`,
       )
     ).GtsFileDef;
   });

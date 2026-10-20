@@ -19,6 +19,7 @@ import {
   getSingularRelationship,
   identifyCard,
   isCardInstance,
+  RealmPaths,
   rri,
   THIS_INTERPOLATION_PREFIX,
   THIS_REALM_TOKEN,
@@ -881,13 +882,17 @@ function resolveQueryAndRealm(
     // which realm a reference belongs to — the same boundary `resolveURL` and
     // `canonicalizeId` sit on. A reference the store can't place falls back to
     // the containing realm only when it actually lives there; otherwise the
-    // normalizer drops it rather than searching the wrong realm.
+    // normalizer drops it rather than searching the wrong realm. A prefix-form
+    // reference never reaches this fallback: the store places it whenever it
+    // holds the prefix mapping.
     resolveRealmForReference: (reference) => {
       let realm = store.realmForId(reference);
       if (realm) {
         return realm;
       }
-      return reference.startsWith(realmURL.href) ? realmURL.href : undefined;
+      return new RealmPaths(realmURL).inRealm(rri(reference))
+        ? realmURL.href
+        : undefined;
     },
   });
 

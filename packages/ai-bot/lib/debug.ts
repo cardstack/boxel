@@ -28,8 +28,8 @@ function helpMessage() {
 ### Dumps
 Each reply attaches a JSON file.
 
-- \`boxel-debug:eventlist\` — every event in this room, as the model sees it: streamed messages show their final text, with edits applied and split messages joined.
-- \`boxel-debug:eventlist:raw\` — every event in this room as Matrix stores it: streamed messages show their first placeholder, with the edits nested under it.
+- \`boxel-debug:eventlist\` — the room history the bot loads (from the latest summary of earlier messages onwards), as the model sees it: streamed messages show their final text, with edits applied and split messages joined.
+- \`boxel-debug:eventlist:raw\` — the same history as Matrix stores it: streamed messages show their first placeholder, with the edits nested under it.
 - \`boxel-debug:prompt\` — the full request the bot would send to the model for the last user message: the system prompt, skills, tools, and message history.
 - \`boxel-debug:prompt:(number)\` — the same request, built as if the last (number) events had not happened.
 
