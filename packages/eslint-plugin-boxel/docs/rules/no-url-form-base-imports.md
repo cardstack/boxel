@@ -29,9 +29,9 @@ interpolated first (`` `${'https://cardstack.com/base/'}card-api` ``), or
 ## Every other position
 
 Anywhere else, a string or template literal that contains the alias is flagged,
-as is a `<template>`'s text, attribute value or string argument that contains it.
-These are reported without a fix, unless it sits in one of the positions that define the alias or
-recognize data written in it:
+as is a `<template>`'s text, attribute value or string argument that contains it,
+unless it sits in one of the positions that define the alias or recognize data
+written in it:
 
 - the initializer of `baseRealm`;
 - the functions `equivalentURLForms`, `internalKeyFor` and
@@ -46,6 +46,10 @@ lint, and tsconfig `paths` are JSON.
 
 Where the base realm's registered URL is meant, read `baseRealm.url`. Where a
 base-realm resource is named, write `@cardstack/base/…`.
+
+Only one of these is auto-fixed: a string that is the whole `module` of a code
+ref, which is rewritten to `@cardstack/base/…`. Anywhere else the alias may be a
+URL something fetches or compares, so the rule leaves the rewrite to the author.
 
 ## Options
 

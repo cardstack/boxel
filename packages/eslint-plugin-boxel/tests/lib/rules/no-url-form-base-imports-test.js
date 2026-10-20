@@ -74,8 +74,27 @@ ruleTester.run('no-url-form-base-imports', rule, {
       code: 'let selector = `[data-test-id="https://cardstack.com/base/cards/skill"]`;',
       errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
     },
+    // A code ref's module is rewritten to the prefix
     {
       code: "let ref = { module: 'https://cardstack.com/base/realm-config', name: 'RealmConfig' };",
+      output:
+        "let ref = { module: '@cardstack/base/realm-config', name: 'RealmConfig' };",
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
+    },
+    {
+      code: 'let doc = { meta: { adoptsFrom: { "module": "https://cardstack.com/base/card-api", name: "CardDef" } } };',
+      output:
+        'let doc = { meta: { adoptsFrom: { "module": "@cardstack/base/card-api", name: "CardDef" } } };',
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
+    },
+    // A module that only contains the alias, or a key other than module, is
+    // reported without a fix
+    {
+      code: "let ref = { module: 'see https://cardstack.com/base/card-api' };",
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
+    },
+    {
+      code: "let ref = { url: 'https://cardstack.com/base/card-api' };",
       errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
     },
     {

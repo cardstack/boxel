@@ -218,7 +218,40 @@ module.exports = {
       ) {
         return;
       }
-      context.report({ node, messageId: 'aliasOutsideAllowedPosition' });
+      context.report({
+        node,
+        messageId: 'aliasOutsideAllowedPosition',
+        fix: codeRefModuleFix(node),
+      });
+    }
+
+    // A string that is the whole `module` of a code ref names a base-realm
+    // module, which has a prefix spelling to rewrite it to. Anywhere else the
+    // alias may be a URL something fetches or compares, so it is left for the
+    // author.
+    function codeRefModuleFix(node) {
+      let parent = node.parent;
+      if (
+        node.type !== 'Literal' ||
+        !node.value.startsWith(URL_FORM_PREFIX) ||
+        !parent ||
+        parent.type !== 'Property' ||
+        parent.value !== node ||
+        parent.computed ||
+        !(
+          (parent.key.type === 'Identifier' && parent.key.name === 'module') ||
+          (parent.key.type === 'Literal' && parent.key.value === 'module')
+        )
+      ) {
+        return undefined;
+      }
+      return (fixer) => {
+        let quote = context.sourceCode.getText(node)[0];
+        return fixer.replaceText(
+          node,
+          `${quote}${canonicalFor(node.value)}${quote}`,
+        );
+      };
     }
 
     return {
