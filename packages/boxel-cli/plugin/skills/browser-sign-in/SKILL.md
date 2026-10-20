@@ -10,11 +10,11 @@ Wraps `boxel browse`, which mints a Matrix login token from a saved profile and 
 
 - **A host on another origin.** A host served from `http://localhost:<port>/`, a preview, or any origin other than the environment's own can't use the email/password form: that form is a frame from the secure origin (`secure.stack.cards`, `secure.boxel.ai`), which only the environment's own app origins may frame. The symptom is a sign-in page whose email/password area is blank. `boxel browse --host-url` skips the form entirely. (Google SSO also works there.)
 - **Showing the user a change.** They want to see it signed in, and a profile already has the account.
-- **Opening a card signed in.** Pass the card's path on the realm server, for example `alice/my-realm/Person/1` (owner, realm, then the card), not a path inside one realm. With no card path the app opens on the workspace chooser.
+- **Opening a card signed in.** Pass the card's path on the realm server, for example `example-user/example-realm/Person/1` (owner, realm, then the card), not a path inside one realm. With no card path the app opens on the workspace chooser.
 
 ## Run it yourself
 
-When the user wants a browser signed in, run `boxel browse` for them. Don't hand them a command to run and paste. It is a one-time sign-in: the CLI passes the URL straight to the machine's default browser (`open` / `xdg-open`), so the login token never appears in the terminal output or the chat, and the host strips it from the address bar once it is redeemed.
+When the user wants a browser signed in, run `boxel browse` for them. Don't hand them a command to run and paste. It is a one-time sign-in: the CLI passes the URL straight to the machine's default browser (`open` / `xdg-open`), so the login token never appears in the terminal output or the chat (when no launcher is installed, `browse` exits with an error rather than printing the URL), and the host strips it from the address bar once it is redeemed.
 
 | Situation                             | Run                                                                    |
 | ------------------------------------- | ---------------------------------------------------------------------- |
@@ -48,7 +48,7 @@ In the Chrome row the URL goes from the CLI to Chrome through a shell variable, 
 The login URL is a credential: until it is redeemed, anyone holding it signs in as that account. Running `boxel browse` without `--print-url` keeps it out of your hands, which is why that is the default.
 
 - Never let `--print-url` output reach your terminal output. Send it straight into a browser launcher (`url=$(…) && open -a … "$url"`) or a clipboard tool (`| pbcopy`), as in the table above.
-- If the CLI can't launch a browser, it prints the URL as a fallback. Don't repeat it, open it, or paste it anywhere; tell the user to sign in another way or re-run on their machine.
+- If the machine has no browser launcher (a container, a cloud session, a remote shell), `browse` exits with an error and doesn't print the URL. Tell the user to run `boxel browse` on their own machine. Only a person at an interactive terminal gets the URL printed as a fallback.
 - It is single-use and expires in about 2 minutes, so mint it when the browser should open, not ahead of time.
 
 ## Rate limit
@@ -81,6 +81,7 @@ Open the Boxel app in your browser, already signed in as your active profile (a 
 ## Pitfalls
 
 - **"has no stored Matrix access token".** The profile was saved before boxel-cli stored tokens instead of passwords, so it can't mint a login token. `browse` won't fall back to the stored password. The user has to sign the profile in again with `boxel profile add -u <id> --staging` (or `--production`), which asks for the password: don't type or reuse it yourself. Try another profile meanwhile.
+- **"Stored Matrix token … is no longer valid".** The profile's token was rejected, and the CLI can't prompt for the password in your shell. The error suggests `boxel profile add -u <id> -p <password>`: don't run that, and don't ask the user for the password. Handle it like the case above: the user runs `boxel profile add -u <id> --staging` (or `--production`) themselves, which prompts for the password.
 - **The token lands on the wrong origin.** Browser sessions are origin-scoped. Pass `--host-url` with exactly the origin you'll test on: `http://localhost:4300/` and `https://localhost:4300/` are different origins.
 - **Signed in as someone else.** The browser holds the account in the URL's token, not whatever it held before. Check `--profile` before minting.
 - **The host and the profile must share a Matrix server.** The host redeems the token against the Matrix server it was built for, so a local host built against staging needs a staging profile, not a local one.
