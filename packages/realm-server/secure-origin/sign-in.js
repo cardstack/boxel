@@ -141,6 +141,25 @@ export async function googleCallbackMode(root) {
     return;
   }
   storeSession(session);
+  if (
+    typeof resume?.oauthUid === 'string' &&
+    /^[A-Za-z0-9_-]{1,128}$/.test(resume.oauthUid)
+  ) {
+    history.replaceState(null, '', `/oauth/interaction/${resume.oauthUid}`);
+    let { oauthMode } = await import('./oauth.js');
+    oauthMode(root);
+    return;
+  }
+  if (resume?.mode === 'connected-apps') {
+    history.replaceState(
+      null,
+      '',
+      `${window.location.pathname.replace(GOOGLE_CALLBACK_SUFFIX, '/')}?mode=connected-apps`,
+    );
+    let { oauthGrantsMode } = await import('./oauth.js');
+    oauthGrantsMode(root);
+    return;
+  }
   // Back to the window's own address, so a reload shows the signed-in window
   // rather than this callback.
   history.replaceState(null, '', signInURL());
@@ -196,10 +215,10 @@ function renderSignedIn(root) {
 
 // The sign-in form, laid out like the app's: Google first when this server
 // offers it, then an email address or username and a password.
-function renderSignIn(
+export function renderSignIn(
   root,
   config,
-  { client, cli, username = '', onSignedIn },
+  { client, cli, username = '', resume = {}, onSignedIn },
 ) {
   let error = errorLine();
   let googleSlot = h('div', { class: 'secure-google', hidden: true });
@@ -294,7 +313,7 @@ function renderSignIn(
           button.disabled = true;
           showError(error, undefined);
           try {
-            await beginGoogleSignIn(google, { client, cli });
+            await beginGoogleSignIn(google, { ...resume, client, cli });
           } catch (e) {
             showError(error, e.message);
             button.disabled = false;

@@ -1,0 +1,10 @@
+.git
+**/node_modules
+**/.test-pg-cache
+**/synapse-data*
+**/.pnpm-store
+**/dist
+**/.env
+**/.env.*
+**/.dev.vars*
+**/*.log

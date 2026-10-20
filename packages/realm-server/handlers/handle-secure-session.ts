@@ -38,7 +38,18 @@ type Handler = (ctxt: Koa.Context, next: Koa.Next) => Promise<void>;
 
 const CLIENTS = new Set<SecureSessionClient>(['window', 'cli']);
 
-function deps(args: CreateRoutesArgs): SecureSessionDeps {
+type SecureSignInArgs = Pick<
+  CreateRoutesArgs,
+  | 'dbAdapter'
+  | 'matrixClient'
+  | 'realmSecretSeed'
+  | 'matrixAdminUsername'
+  | 'matrixAdminPassword'
+  | 'secureOriginURL'
+  | 'googleSignIn'
+>;
+
+function deps(args: SecureSignInArgs): SecureSessionDeps {
   return {
     dbAdapter: args.dbAdapter,
     matrixClient: args.matrixClient,
@@ -169,7 +180,7 @@ async function sendSession(ctxt: Koa.Context, session: unknown) {
 
 // POST /_secure-session: signs in with a username, email address or Matrix id
 // and the account's password.
-export function handlePasswordSignIn(args: CreateRoutesArgs): Handler {
+export function handlePasswordSignIn(args: SecureSignInArgs): Handler {
   let limiter = new SignInLimiter();
   return secureSessionHandler(async (ctxt) => {
     requireSecureOrigin(ctxt, args.secureOriginURL);
@@ -197,7 +208,7 @@ export function handlePasswordSignIn(args: CreateRoutesArgs): Handler {
 // GET /_secure-session/google: where the secure window sends the user to sign
 // in with Google, and as which client. 503 when this server has no Google
 // client.
-export function handleGoogleSignInStart(args: CreateRoutesArgs): Handler {
+export function handleGoogleSignInStart(args: SecureSignInArgs): Handler {
   return secureSessionHandler(async (ctxt) => {
     await sendJSON(ctxt, 200, {
       data: {
@@ -211,7 +222,7 @@ export function handleGoogleSignInStart(args: CreateRoutesArgs): Handler {
 // POST /_secure-session/google: signs in with the authorization code Google
 // sent to the secure origin's callback, with the PKCE verifier and nonce the
 // window started the sign-in with.
-export function handleGoogleSignIn(args: CreateRoutesArgs): Handler {
+export function handleGoogleSignIn(args: SecureSignInArgs): Handler {
   return secureSessionHandler(async (ctxt) => {
     requireSecureOrigin(ctxt, args.secureOriginURL);
     let attributes = await readAttributes(ctxt, 'google-sign-in');
@@ -231,7 +242,7 @@ export function handleGoogleSignIn(args: CreateRoutesArgs): Handler {
 // secure window or the CLI.
 export function handleEndSecureSession({
   dbAdapter,
-}: CreateRoutesArgs): Handler {
+}: Pick<CreateRoutesArgs, 'dbAdapter'>): Handler {
   return secureSessionHandler(async (ctxt) => {
     let token = ctxt.state.token as RealmServerTokenClaim | undefined;
     if (!token?.secureSession) {
@@ -251,7 +262,7 @@ export function handleEndSecureSession({
 // to sign in.
 export function handleSecureOriginInfo({
   secureOriginURL,
-}: CreateRoutesArgs): Handler {
+}: Pick<CreateRoutesArgs, 'secureOriginURL'>): Handler {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     if (!secureOriginURL) {
       await sendResponseForError(

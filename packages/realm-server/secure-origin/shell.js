@@ -9,15 +9,20 @@
 // after a sign-in is a mode of its own.
 import { cliSignInMode, googleCallbackMode, signInMode } from './sign-in.js';
 
+import { oauthMode, oauthGrantsMode } from './oauth.js';
+
 const modes = {
   'sign-in': signInMode,
+  'connected-apps': oauthGrantsMode,
   'cli-sign-in': cliSignInMode,
 };
 
 let root = document.getElementById('secure-shell');
 let url = new URL(window.location.href);
 let mode = url.searchParams.get('mode');
-if (root && url.pathname.endsWith('/google-callback')) {
+if (root && /^\/oauth\/interaction\/[A-Za-z0-9_-]{1,128}$/.test(url.pathname)) {
+  oauthMode(root);
+} else if (root && url.pathname.endsWith('/google-callback')) {
   googleCallbackMode(root);
 } else if (root && mode && Object.hasOwn(modes, mode)) {
   modes[mode](root);

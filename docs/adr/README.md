@@ -16,3 +16,4 @@ or backfill one.
 | ---------------------------------------------------------------------------- | --------------------------------------------------------------------------------- | -------- |
 | [001](001-record-architecture-decisions.md)                                  | Record architecture decisions as short, normative ADRs                            | proposed |
 | [005](005-authorize-key-changes-only-with-a-session-card-code-cant-reach.md) | Authorize changes to a user's keys only with a session that card code can't reach | proposed |
+| [007](007-authorize-external-clients-through-boxel-oauth.md)                 | Authorize external clients through Boxel OAuth                                    | proposed |

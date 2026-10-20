@@ -38,6 +38,35 @@ export interface SealedColumn {
 }
 
 export const SEALED_COLUMNS: SealedColumn[] = [
+  {
+    field: 'oauth_grants.permissions',
+    table: 'oauth_grants',
+    idColumn: 'id',
+    keyIdColumn: 'permissions_key_id',
+    nonceColumn: 'permissions_nonce',
+    ciphertextColumn: 'permissions_ciphertext',
+    tagColumn: 'permissions_tag',
+    bindingColumns: ['user_id'],
+    binding: (row) => ({
+      field: 'oauth_grants.permissions',
+      owner: String(row.user_id),
+      id: String(row.id),
+    }),
+  },
+  {
+    field: 'oauth_objects.payload',
+    table: 'oauth_objects',
+    idColumn: 'id',
+    keyIdColumn: 'payload_key_id',
+    nonceColumn: 'payload_nonce',
+    ciphertextColumn: 'payload_ciphertext',
+    tagColumn: 'payload_tag',
+    binding: (row) => ({
+      field: 'oauth_objects.payload',
+      owner: PLATFORM_SECRET_OWNER,
+      id: String(row.id),
+    }),
+  },
   // The platform's own vendor keys, bound to their row and the endpoint url
   // they are sent to (`lib/proxy-endpoint-keys.ts` seals them the same way).
   {

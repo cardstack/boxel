@@ -1,3 +1,8 @@
+import {
+  boxelOAuthConfigFromEnv,
+  createBoxelOAuthProvider,
+  type BoxelOAuthConfig,
+} from './lib/oauth/provider.ts';
 import Koa from 'koa';
 import cors from '@koa/cors';
 import http from 'http';
@@ -762,6 +767,7 @@ export class RealmServer {
     clientAddress: clientAddressSettings,
     secureOriginURL,
     secureOriginAppOrigins = [],
+    oauthConfig,
     googleSignIn,
   }: {
     serverURL: URL;
@@ -823,6 +829,7 @@ export class RealmServer {
     // Origins of app pages, besides `serverURL`'s, that may frame the secure
     // origin's credential fields (the host's own dev server, in development).
     secureOriginAppOrigins?: string[];
+    oauthConfig?: BoxelOAuthConfig;
     // The Google client the secure window signs in with (see
     // `lib/google-sign-in.ts`). Unset, it offers only a password.
     googleSignIn?: GoogleSignInConfig;
@@ -882,6 +889,19 @@ export class RealmServer {
     this.clientAddress =
       clientAddressSettings ?? clientAddressSettingsFromEnv(process.env);
     this.googleSignIn = googleSignIn;
+    oauthConfig ??= boxelOAuthConfigFromEnv();
+    if (oauthConfig && !secureOriginURL) {
+      throw new Error('Boxel OAuth requires the secure origin');
+    }
+    let oauth =
+      oauthConfig && secureOriginURL
+        ? createBoxelOAuthProvider(oauthConfig, {
+            dbAdapter,
+            secureOriginURL,
+            realmSecretSeed,
+            matrixClient,
+          })
+        : undefined;
     this.secureOrigin = secureOriginURL
       ? createSecureOrigin(
           secureOriginURL,
@@ -897,6 +917,7 @@ export class RealmServer {
             ],
           },
           { realmServerURL: serverURL },
+          oauth?.handle,
         )
       : undefined;
   }

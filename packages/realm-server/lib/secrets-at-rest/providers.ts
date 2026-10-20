@@ -6,7 +6,7 @@ import type { DataKey } from './envelope.ts';
 // hand the same envelope a 32-byte key, so development and CI exercise exactly
 // the code a deployed server runs.
 
-export type SecretsProviderName = 'kms' | 'local';
+export type SecretsProviderName = 'kms' | 'secret-store' | 'local';
 
 export interface LoadedDataKeys {
   keys: DataKey[];
@@ -157,6 +157,34 @@ export class KmsKeyProvider implements SecretsKeyProvider {
   }
 }
 
+// Non-AWS deployments may load a dedicated data key from their managed
+// secret store. Unlike the public local-development key, this key must be
+// generated randomly and must never be stored in the database or image.
+export class SecretStoreKeyProvider implements SecretsKeyProvider {
+  readonly name = 'secret-store';
+  #key: Buffer;
+  constructor(value: string) {
+    let key = Buffer.from(value, 'base64');
+    if (
+      key.length !== 32 ||
+      key.toString('base64') !== value ||
+      key.equals(LOCAL_DATA_KEY)
+    ) {
+      throw new Error(
+        'SECRETS_DATA_KEY must be a private, canonical base64 32-byte key',
+      );
+    }
+    this.#key = key;
+  }
+  async loadDataKeys(): Promise<LoadedDataKeys> {
+    let keyId = `secret-store-${createHash('sha256').update(this.#key).digest('hex').slice(0, 16)}`;
+    return {
+      currentKeyId: keyId,
+      keys: [{ keyId, key: Buffer.from(this.#key) }],
+    };
+  }
+}
+
 // A fixed development data key. It is public, so nothing sealed under it is
 // secret; a deployed server refuses to start with this provider.
 export const LOCAL_DATA_KEY_ID = 'local-development';
@@ -211,6 +239,9 @@ export function secretsKeyProviderFromEnv(
     throw new Error(
       'SECRETS_ADDITIONAL_WRAPPED_DATA_KEYS is set, but SECRETS_KMS_KEY_ARN and SECRETS_WRAPPED_DATA_KEY are not',
     );
+  }
+  if (env.SECRETS_DATA_KEY) {
+    return new SecretStoreKeyProvider(env.SECRETS_DATA_KEY);
   }
   return new LocalKeyProvider();
 }
