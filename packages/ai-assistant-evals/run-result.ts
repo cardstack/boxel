@@ -51,6 +51,7 @@ export interface RunResult {
     | 'stuck'
     | 'stalled'
     | 'no-reply'
+    | 'approval'
     | 'irregularity'
     | 'error';
   irregularities: string[];

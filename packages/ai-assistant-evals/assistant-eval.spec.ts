@@ -407,6 +407,9 @@ interface Activity {
   botMessages: number;
   applying: number;
   generating: boolean;
+  // Tool calls the host holds until the user approves them. Nobody approves
+  // in a run, so a turn that ends on one would wait forever.
+  awaitingApproval: number;
   errorAlerts: number;
   // Length of all bot text on the page: a turn that is "generating" while this
   // stays flat for minutes is a stalled provider or ai-bot, not a slow model.
@@ -453,6 +456,7 @@ async function readActivityOnce(page: Page): Promise<Activity> {
     let loading = q('[data-test-session-preparation]');
     let pending = q('[data-test-ai-assistant-message-pending="true"]');
     let generating = q('[data-test-stop-generating]') > 0;
+    let awaitingApproval = q('[data-test-tool-call-approval]');
     let irregularities: string[] = [];
     let failed = q('[data-test-apply-state="failed"]');
     let invalid = q('[data-test-apply-state="invalid"]');
@@ -536,6 +540,7 @@ async function readActivityOnce(page: Page): Promise<Activity> {
       botMessages: q('[data-test-token-usage]'),
       applying,
       generating,
+      awaitingApproval,
       errorAlerts,
       irregularities,
       // Streamed tool arguments count too: a long tool call grows only in its
@@ -655,6 +660,11 @@ async function waitForIdle(
         stoppedBy: 'irregularity',
         irregularities: activity.irregularities,
       };
+    }
+    // The room looks idle while a call waits for approval, so without this
+    // the next prompt would go out over a turn that never finished.
+    if (activity.awaitingApproval > 0 && !activity.generating) {
+      return { stoppedBy: 'approval', irregularities: [] };
     }
     if (activity.idle && activity.botMessages > botMessagesBefore) {
       idleSince ??= now;
@@ -798,6 +808,12 @@ function classify(
   if (stoppedBy === 'wall-clock') {
     reasons.push(
       `still running after ${MAX_MINUTES} minutes, stopped as a safety measure`,
+    );
+    return { verdict: 'model-failure', reasons };
+  }
+  if (stoppedBy === 'approval') {
+    reasons.push(
+      'the assistant stopped to wait for the user to approve a tool call (for example a readUrl of a URL the model composed itself)',
     );
     return { verdict: 'model-failure', reasons };
   }
