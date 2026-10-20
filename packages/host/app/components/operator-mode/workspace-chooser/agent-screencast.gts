@@ -959,11 +959,10 @@ export default class AgentScreencast extends Component<Signature> {
               <span class='url'><span class='boxel-mark'></span>app.boxel.ai /
                 {{this.panelPath}}</span>
             {{else if this.isBoxel}}
-              {{! Boxel in interact mode: the workspace, then the mode. }}
-              <span class='workspace-pill'><span
-                  class='boxel-mark'
-                ></span>offsite</span>
-              <span class='mode-toggle'><b>Interact</b><span>Code</span></span>
+              {{! Boxel's top-left: its button, then the mode switcher, open
+                in Interact. }}
+              <span class='mode-switcher'><span class='boxel-mark'></span>
+                <b>Interact</b><span class='mode-caret'>▾</span></span>
             {{else}}
               <span class='boxel-mark'></span>
               <span class='panel-title'>Boxel</span>
@@ -2639,35 +2638,24 @@ export default class AgentScreencast extends Component<Signature> {
         padding: 0.125rem 0.125rem 0.375rem;
         border-bottom: 0;
       }
-      .workspace-pill {
+      .mode-switcher {
         display: inline-flex;
         align-items: center;
-        gap: 0.3rem;
-        padding: 0.15rem 0.5rem 0.15rem 0.25rem;
+        gap: 0.375rem;
+        padding: 0.2rem 0.5rem 0.2rem 0.25rem;
         border-radius: 0.5rem;
         background-color: color-mix(
           in oklch,
           var(--boxel-light) 9%,
           transparent
         );
+      }
+      .mode-switcher b {
         font-weight: 600;
       }
-      .mode-toggle {
-        display: inline-flex;
-        margin-left: auto;
-        padding: 0.125rem;
-        border-radius: 1rem;
-        background-color: color-mix(in oklch, black 30%, transparent);
-        font-size: 0.5625rem;
-      }
-      .mode-toggle > * {
-        padding: 0.1rem 0.5rem;
-        border-radius: 1rem;
+      .mode-caret {
         color: var(--app-muted);
-      }
-      .mode-toggle b {
-        background-color: var(--boxel-highlight);
-        color: var(--boxel-dark);
+        font-size: 0.5625rem;
       }
       /* The stack: the cards the open one came from peek out above it. */
       .window.is-boxel .stack {
