@@ -878,21 +878,27 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(await accountRealms(user), realms, 'nor a second realm');
     });
 
-    test('a new Google account suffixes past an account whose localpart differs only in case', async function (assert) {
+    test('a new Google account suffixes past accounts whose localparts differ only in case', async function (assert) {
       // Synapse's API can't make a localpart with capitals, which only older
-      // accounts have, so the Matrix server answers the new account's create
-      // as it does when one of those (`@Base`) exists: the admin lookup finds
-      // no `@base`, and registration refuses it as in use.
+      // accounts have, so the Matrix server answers the new account's creates
+      // as it does when those (`@Base`, `@Base1`…) exist: the admin lookup
+      // finds no `@base`, and registration refuses it as in use. More of them
+      // than a sign-in retries lost races.
       let base = `secure-${randomBytes(6).toString('hex')}`;
       let sub = `google-${randomUUID()}`;
-      let refusedPath = `/_synapse/admin/v2/users/${encodeURIComponent(
-        `@${base}:localhost`,
-      )}`;
+      let refusedPaths = new Set(
+        ['', '1', '2', '3', '4', '5'].map(
+          (suffix) =>
+            `/_synapse/admin/v2/users/${encodeURIComponent(
+              `@${base}${suffix}:localhost`,
+            )}`,
+        ),
+      );
       let creates = 0;
       let realFetch = globalThis.fetch;
       globalThis.fetch = async (input, init) => {
         let url = new URL(input instanceof Request ? input.url : input);
-        if (url.pathname === refusedPath && init?.method === 'PUT') {
+        if (refusedPaths.has(url.pathname) && init?.method === 'PUT') {
           creates++;
           return new Response(
             JSON.stringify({
@@ -921,12 +927,16 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(response.status, 201, response.text);
       assert.strictEqual(
         response.body.data.attributes.user,
-        `@${base}1:localhost`,
-        'the next localpart',
+        `@${base}6:localhost`,
+        'the first localpart not refused',
       );
-      assert.strictEqual(creates, 1, 'the refused localpart is tried once');
+      assert.strictEqual(
+        creates,
+        refusedPaths.size,
+        'each refused localpart is tried once',
+      );
       assert.deepEqual(
-        sortedExternalIds(await account(`@${base}1:localhost`)),
+        sortedExternalIds(await account(`@${base}6:localhost`)),
         [{ auth_provider: 'oidc-google', external_id: sub }],
       );
     });

@@ -46,8 +46,10 @@ export interface GoogleAccountLookups {
   // The Matrix ids of the accounts holding the email address as a third-party
   // id, compared without case.
   usersByEmail(email: string): Promise<string[]>;
-  // Whether an account already has the localpart, compared without case, as
-  // Synapse's registration and `check_user_exists` compare it.
+  // Whether an account already has the localpart. Synapse's registration and
+  // `check_user_exists` compare without case; a lookup that can only match
+  // exactly (the secure origin's admin GET) must also count a localpart the
+  // create refused, so the next resolve moves past it.
   localpartTaken(localpart: string): Promise<boolean>;
 }
 
