@@ -66,12 +66,12 @@ export class InputUsage extends Component {
             @controlId={{controlId}}
             @value={{this.value}}
             @type={{this.type}}
-            @placeholder={{this.placeholder}}
+            placeholder={{this.placeholder}}
             @invalid={{this.invalid}}
-            @disabled={{this.disabled}}
+            disabled={{this.disabled}}
             @helperText={{this.helperText}}
             @errorMessage={{this.errorMessage}}
-            @required={{this.required}}
+            required={{this.required}}
             @optional={{this.optionalArg}}
             @onInput={{this.setValue}}
           />

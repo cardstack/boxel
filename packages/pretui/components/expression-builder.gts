@@ -718,8 +718,8 @@ export class ExpressionBuilder extends Component<ExpressionBuilderSignature> {
               <Input
                 @value={{this.customLogic}}
                 @controlId={{controlId}}
-                @placeholder='1 AND (2 OR 3)'
-                @disabled={{this.readonly}}
+                placeholder='1 AND (2 OR 3)'
+                disabled={{this.readonly}}
                 @onInput={{this.setCustomLogic}}
                 data-test-pretui-expression-custom
               />
@@ -827,8 +827,8 @@ export class ExpressionBuilder extends Component<ExpressionBuilderSignature> {
                         <Input
                           @value={{row.condition.value}}
                           @controlId={{row.valueId}}
-                          @placeholder='Value'
-                          @disabled={{this.readonly}}
+                          placeholder='Value'
+                          disabled={{this.readonly}}
                           @onInput={{fn this.setValue row.id}}
                           aria-describedby={{row.messageId}}
                           data-test-pretui-expression-value={{row.number}}
@@ -1045,7 +1045,7 @@ export class ExpressionBuilder extends Component<ExpressionBuilderSignature> {
           align-items: center;
           justify-content: center;
           width: var(--pretui-xb-num-w);
-          height: var(--control-h, 28px);
+          height: var(--boxel-form-control-height-sm);
           font-variant-numeric: tabular-nums;
           font-family: var(--font-mono);
           font-size: var(--text-ui-sm, 11.5px);
@@ -1083,7 +1083,7 @@ export class ExpressionBuilder extends Component<ExpressionBuilderSignature> {
         .xb-novalue {
           display: inline-flex;
           align-items: center;
-          height: var(--control-h, 28px);
+          height: var(--boxel-form-control-height-sm);
           font-size: var(--text-ui-sm, 11.5px);
           color: var(--muted-foreground);
         }
