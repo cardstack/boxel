@@ -101,10 +101,6 @@ declarations.
 The first host integration SHOULD replace one existing animation one-to-one.
 That tests the engine design in host before it spreads.
 
-The look and feel in PR #6325 SHOULD serve as the reference for host motion
-design. Its implementation SHOULD NOT serve as the reference for the
-architecture.
-
 ### 1.5. Motion quality
 
 Each animation SHOULD have a purpose. It SHOULD show where something came from
@@ -222,7 +218,7 @@ correct code more easily against clean state.
   https://github.com/cardstack/boxel/pull/6325#issuecomment-5956990440
 - Review of PR #6325 by burieberry, 2026-09-28 (lost open or close; motion
   left off after a cancelled portal).
-- PR #6325: the motion design reference and the central-service approach.
+- PR #6325: the central-service approach.
 - `.claude/skills/motion-pattern/SKILL.md`: View Transitions freeze live
   content.
 - WCAG 2.2, Success Criteria 2.3.3 (Animation from Interactions) and 2.2.2
