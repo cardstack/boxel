@@ -1,5 +1,5 @@
 ---
-description: Sign a browser into the Boxel app as a boxel-cli profile with `boxel browse`. Use when you or the user need to view, test, or verify the Boxel app in a browser — especially a host running locally or on any custom origin against staging or production, where the email/password form on the sign-in page is blank or won't load. Reach for this before Railway deploys, custom hostnames, or certificates.
+description: Sign a browser into the Boxel app as a boxel-cli profile with `boxel browse`. Use when you or the user need to view, test, or verify the Boxel app in a browser — especially a host running locally or on any custom origin against staging or production, where the email/password form on the sign-in page is blank or won't load. Run it on the user's behalf; reach for it before Railway deploys, custom hostnames, or certificates.
 ---
 
 # Signing a browser in
@@ -9,29 +9,32 @@ Wraps `boxel browse`, which mints a Matrix login token from a saved profile and 
 ## When to use it
 
 - **A host on another origin.** A host served from `http://localhost:<port>/`, a preview, or any origin other than the environment's own can't use the email/password form: that form is a frame from the secure origin (`secure.stack.cards`, `secure.boxel.ai`), which only the environment's own app origins may frame. The symptom is a sign-in page whose email/password area is blank. `boxel browse --host-url` skips the form entirely. (Google SSO also works there.)
-- **Agent-driven verification.** You need a signed-in browser to check a change, and the profile already has the account.
+- **Showing the user a change.** They want to see it signed in, and a profile already has the account.
 - **Opening a card signed in.** Pass the card's realm-relative path.
 
-## Command shapes
+## Run it yourself
 
-| Situation                                     | Run                                                                                  |
-| --------------------------------------------- | ------------------------------------------------------------------------------------ |
-| Human at this machine, environment's own host | `boxel browse [card-path] --profile <id>`                                            |
-| Local or custom host against staging          | `boxel browse --profile <id> --host-url http://localhost:<port>/ --print-url \| pbcopy` |
-| Agent or remote shell                         | add `--print-url \| pbcopy` (or the platform's clipboard tool)                       |
-| Rate-limited                                  | add `--wait`                                                                         |
+When the user wants a browser signed in, run `boxel browse` for them. Don't hand them a command to run and paste. It is a one-time sign-in: the CLI passes the URL straight to the machine's default browser (`open` / `xdg-open`), so the login token never appears in the terminal output or the chat, and the host strips it from the address bar once it is redeemed.
+
+| Situation                             | Run                                                                    |
+| ------------------------------------- | ---------------------------------------------------------------------- |
+| The environment's own host            | `boxel browse [card-path] --profile <id>`                              |
+| Local or custom host against staging  | `boxel browse [card-path] --profile <id> --host-url http://localhost:<port>/` |
+| Rate-limited                          | add `--wait`                                                           |
 
 `boxel profile list` shows the profiles. A staging profile is `@<user>:stack.cards`, with realm server `https://realms-staging.stack.cards/`. Without `--host-url`, the token is redeemed on the profile's realm-server origin (`https://localhost:4200/` for standard local dev).
 
-A published-realm card URL needs no sign-in: `boxel browse <published-url>` opens it as-is, and `--print-url` then prints a plain public link.
+The browser that opens is the user's default browser, not one you drive. It comes up signed in; tell the user it is there.
 
-## The URL is a credential
+A published-realm card URL needs no sign-in: `boxel browse <published-url>` opens it as-is.
 
-The URL `--print-url` prints carries a login token. Anyone holding it signs in as that account.
+## Keep the token out of your context
 
-- Send it to the clipboard (`| pbcopy`). Never let it reach chat, a log, a file, or a commit.
-- Don't open it or paste it into a browser yourself, including one you drive. Tell the human it's on their clipboard and ask them to paste it into their browser's address bar.
-- It is single-use and expires in about 2 minutes. Mint it when the human is ready to paste, not ahead of time.
+The login URL is a credential: until it is redeemed, anyone holding it signs in as that account. Running `boxel browse` without `--print-url` keeps it out of your hands, which is why that is the default.
+
+- Don't use `--print-url` when the shell runs on the user's machine. It prints the URL to stdout, which puts the token in your context. It exists for remote shells with no local browser; there, pipe it straight to the user's clipboard tool and never echo it.
+- If the CLI can't launch a browser, it prints the URL as a fallback. Don't repeat it, open it, or paste it anywhere; tell the user to sign in another way or re-run on their machine.
+- It is single-use and expires in about 2 minutes, so mint it when the browser should open, not ahead of time.
 
 ## Rate limit
 
