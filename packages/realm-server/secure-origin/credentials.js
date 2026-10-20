@@ -22,9 +22,8 @@
 // URL's fragment, which is never sent to the server, so no filter in front of
 // it sees an app origin such as `http://localhost:4200`, which a WAF rule
 // refuses in a query string. A page that is not on the user's own machine
-// passes them in the query as well, and a page built before the fragment was
-// read passes them in the query alone, so the query is read when the fragment
-// has no form.
+// may pass them in the query as well, or in the query alone, so the query is
+// read when the fragment names no form.
 
 import { isListedOrigin } from './app-origins.js';
 import { redactResponse } from './redact.js';
