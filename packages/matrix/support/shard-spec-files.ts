@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'fs';
+import { existsSync, readdirSync, readFileSync } from 'fs';
 import { join, relative, resolve } from 'path';
 
 // Duration-weighted assignment of Playwright spec files to CI shards.
@@ -70,21 +70,71 @@ export function parseShardCoordinates(
   return { index, total };
 }
 
-export function discoverSpecFiles(testDir: string): string[] {
+// The Synapse template a run starts its Synapse from, named after a directory
+// in support/synapse. Most specs run against `test`, which asks for an invite
+// code at registration as staging does.
+export const DEFAULT_SYNAPSE_TEMPLATE = 'test';
+
+// A spec that needs a Synapse configured differently lives under
+// `with-synapse/<template>/` in the test directory, and runs in a pass of
+// its own against a Synapse started from that template — the one Synapse a run
+// has is shared by every spec in it, so a spec can't choose a different one
+// within the run. MATRIX_SYNAPSE_TEMPLATE names the template a run is for.
+export const SYNAPSE_TEMPLATE_SPECS_DIR = 'with-synapse';
+
+export function synapseTemplateOf(raw: string | undefined): string {
+  let template = raw?.trim() || DEFAULT_SYNAPSE_TEMPLATE;
+  if (!/^[a-z0-9-]+$/.test(template)) {
+    throw new Error(
+      `expected a Synapse template name, got ${JSON.stringify(raw)}`,
+    );
+  }
+  return template;
+}
+
+// The spec files a run against `synapseTemplate` runs, relative to the test
+// directory. For the default template that is every spec file outside
+// `with-synapse/`; for any other, those under its own directory there.
+export function discoverSpecFiles(
+  testDir: string,
+  synapseTemplate = DEFAULT_SYNAPSE_TEMPLATE,
+): string[] {
   let root = resolve(testDir);
+  let templateSpecsDir = join(root, SYNAPSE_TEMPLATE_SPECS_DIR);
   let found: string[] = [];
   let walk = (dir: string) => {
     for (let entry of readdirSync(dir, { withFileTypes: true })) {
       let full = join(dir, entry.name);
       if (entry.isDirectory()) {
-        walk(full);
+        if (full !== templateSpecsDir) {
+          walk(full);
+        }
       } else if (SPEC_FILE_PATTERN.test(entry.name)) {
         found.push(relative(root, full).split('\\').join('/'));
       }
     }
   };
-  walk(root);
+  if (synapseTemplate === DEFAULT_SYNAPSE_TEMPLATE) {
+    walk(root);
+  } else {
+    let dir = join(templateSpecsDir, synapseTemplate);
+    if (existsSync(dir)) {
+      walk(dir);
+    }
+  }
   return found.sort();
+}
+
+// Every Synapse template that has specs of its own under `with-synapse/`.
+export function specSynapseTemplates(testDir: string): string[] {
+  let dir = join(resolve(testDir), SYNAPSE_TEMPLATE_SPECS_DIR);
+  if (!existsSync(dir)) {
+    return [];
+  }
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+    .sort();
 }
 
 export function loadSpecTimings(path: string): Record<string, number> {
