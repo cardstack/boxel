@@ -1,32 +1,10 @@
 import Component from '@glimmer/component';
-import type { ComponentLike } from '@glint/template';
 import type { PowerSelectArgs } from 'ember-power-select/components/power-select';
 import PowerSelect from 'ember-power-select/components/power-select';
 import BeforeOptions from 'ember-power-select/components/power-select/before-options';
-import type {
-  Option,
-  PowerSelectAfterOptionsSignature,
-  PowerSelectSelectedItemSignature,
-  Select,
-} from 'ember-power-select/types';
+import type { Option, Select } from 'ember-power-select/types';
 
 import { cn, not } from '../../helpers.gts';
-import { BoxelAfterOptionsComponent } from './after-options.gts';
-import BoxelSelectedItem from './selected-item.gts';
-import BoxelMultiSelectDefaultTrigger from './trigger.gts';
-
-// The default subcomponents are generic classes whose inferred ComponentLike
-// shapes glint cannot match against power-select's expected unions; their
-// signatures are structurally compatible (verified by the suite), so pin
-// them to the expected member types once here.
-const DefaultAfterOptions =
-  BoxelAfterOptionsComponent as unknown as ComponentLike<
-    PowerSelectAfterOptionsSignature<any, any, true>
-  >;
-
-const DefaultSelectedItem = BoxelSelectedItem as unknown as ComponentLike<
-  PowerSelectSelectedItemSignature<any, any, true>
->;
 
 // Everything else is inherited from ember-power-select's own args;
 // options/selected are re-declared only to make them required.
@@ -46,17 +24,11 @@ export interface Signature<ItemT> {
   Element: HTMLElement;
 }
 
-// CUSTOM EDIT YOUR MULTI-SELECT COMPONENT
-// There are a few custom components that you can pass in
-// 1. The selected item component
-// 2. The trigger component
-// 3. The dropdown component (which is generally called within the block in ember-power-select). We don't use the optionsComponent.
-// 4. The afterOptions component
-// 5. The beforeOptions component
-// BoxelMultiSelectBasic gives you the flexibility to pass in these components
-// BoxelMultiSelect has defaults of these components but allows you to optionally pass in your own selectedItemComponent that is used by our custom BoxelTrigger
+// Options render through the default block. Callers may pass their own
+// selectedItem, trigger, beforeOptions and afterOptions components; only
+// beforeOptions has a default (power-select's own BeforeOptions).
 
-export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
+export class BoxelMultiSelect<ItemT> extends Component<Signature<ItemT>> {
   <template>
     <PowerSelect
       class={{cn
@@ -178,50 +150,5 @@ export class BoxelMultiSelectBasic<ItemT> extends Component<Signature<ItemT>> {
   </template>
 }
 
-export default class BoxelMultiSelect<ItemT> extends Component<
-  Signature<ItemT>
-> {
-  <template>
-    <BoxelMultiSelectBasic
-      {{! required args }}
-      @options={{@options}}
-      @selected={{@selected}}
-      @onChange={{@onChange}}
-      {{! basic options }}
-      @placeholder={{@placeholder}}
-      @disabled={{@disabled}}
-      @renderInPlace={{@renderInPlace}}
-      @destination={{@destination}}
-      @matchTriggerWidth={{@matchTriggerWidth}}
-      @searchField={{@searchField}}
-      @searchEnabled={{@searchEnabled}}
-      @closeOnSelect={{@closeOnSelect}}
-      @ariaLabel={{@ariaLabel}}
-      @registerAPI={{@registerAPI}}
-      @initiallyOpened={{@initiallyOpened}}
-      @extra={{@extra}}
-      {{! Do not remove eventType argument
-    This is to ensure that the click event from selected item does not bubble up to the trigger
-     and cause the dropdown to close
-       do not remove eventType argument }}
-      @eventType='click'
-      {{! actions }}
-      @onOpen={{@onOpen}}
-      @onClose={{@onClose}}
-      @onBlur={{@onBlur}}
-      {{! custom components }}
-      @selectedItemComponent={{if
-        @selectedItemComponent
-        @selectedItemComponent
-        DefaultSelectedItem
-      }}
-      @triggerComponent={{BoxelMultiSelectDefaultTrigger}}
-      @beforeOptionsComponent={{BeforeOptions}}
-      @afterOptionsComponent={{DefaultAfterOptions}}
-      ...attributes
-      as |option select|
-    >
-      {{yield option select}}
-    </BoxelMultiSelectBasic>
-  </template>
-}
+/** @deprecated Use BoxelMultiSelect instead */
+export const BoxelMultiSelectBasic = BoxelMultiSelect;

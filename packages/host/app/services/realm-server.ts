@@ -367,6 +367,35 @@ export default class RealmServerService
     ]);
   }
 
+  // Signs the user's secure windows out, as part of signing out of the app.
+  // The app page can neither read the window's storage nor reach the window,
+  // so the realm server ends its session. Best effort, under the session held
+  // when it's called: it is never awaited, so a failing or slow server can't
+  // hold sign-out up, and a failure is only logged.
+  endSecureWindowSessions(): void {
+    let token = this.token;
+    if (!token) {
+      return;
+    }
+    this.network
+      .fetch(`${this.url.href}_secure-sessions?client=window`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+        keepalive: true,
+        signal: AbortSignal.timeout(secureWindowSignOutTimeoutMs),
+      })
+      .then((response) => {
+        if (!response.ok) {
+          console.warn(
+            `Could not sign the secure window out: ${response.status}`,
+          );
+        }
+      })
+      .catch((e) => {
+        console.warn(`Could not sign the secure window out: ${e}`);
+      });
+  }
+
   logout(): void {
     this.loginTask.cancelAll();
     this.tokenRefresher.cancelAll();
@@ -1867,6 +1896,8 @@ export default class RealmServerService
 
 const tokenRefreshPeriodSec = 5 * 60; // 5 minutes
 const sessionLocalStorageKey = RealmServerSessionLocalStorageKey;
+// How long signing the secure window out may take before it is abandoned.
+const secureWindowSignOutTimeoutMs = 10_000;
 
 function claimsFromRawToken(rawToken: string): RealmServerJWTPayload {
   let [_header, payload] = rawToken.split('.');

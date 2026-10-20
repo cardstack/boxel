@@ -88,6 +88,7 @@ Hand-authored / generated from the Commander tree by `pnpm build:plugin`. These 
 | `/boxel-cli:file-ops`             | `boxel file read/write/list/delete/lint/touch` — single-file operations against a realm.             |
 | `/boxel-cli:search`               | `boxel search` — federated search across realms.                                                     |
 | `/boxel-cli:profile`              | `boxel profile list/add/switch/remove/migrate` — managing realm-server credentials.                  |
+| `/boxel-cli:browser-sign-in`      | `boxel browse` — signing a browser in as a profile, including hosts on local or custom origins.      |
 
 ### Skills from `cardstack/boxel-skills`
 

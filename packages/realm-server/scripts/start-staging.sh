@@ -33,6 +33,7 @@ BOXEL_HOMEPAGE_REALM_URL="${RESOLVED_BOXEL_HOMEPAGE_REALM_URL:-$DEFAULT_BOXEL_HO
 echo "[start-staging] pid=$$ ppid=$PPID about to exec node at $(date -Iseconds)" >&2
 
 NODE_NO_WARNINGS=1 \
+  HEALTH_CHECK_USER_AGENTS='ELB-HealthChecker' \
   LOW_CREDIT_THRESHOLD=2000 \
   MATRIX_URL=https://matrix-staging.stack.cards \
   MATRIX_SERVER_NAME=stack.cards \

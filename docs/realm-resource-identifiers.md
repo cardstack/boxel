@@ -157,6 +157,13 @@ the registered mappings, so adding or removing any mapping clears all three.
 Consumers that key their own caches by resolved form can subscribe to
 `onMappingChange` to invalidate alongside them.
 
+Telling the two forms apart needs no VirtualNetwork, and code asks only one
+way: `isPrefixForm(identifier)` from `@cardstack/runtime-common`. It reads the
+spelling, so it answers for an unregistered prefix too. Don't ask a URL parser
+instead: `URL.canParse` answers `false` for a prefix-form identifier, which is
+absolute, and so misreads it as a relative path. Whether a prefix is registered
+is a separate question, and `isRegisteredPrefix` answers it.
+
 ## Resolution belongs at the network boundary
 
 The rule the runtime is built around: **inside the runtime, identifiers stay in
@@ -327,12 +334,16 @@ be retired.
 Two lint rules keep the URL form from creeping back into source:
 
 - `@cardstack/boxel/no-url-form-base-imports` flags (and auto-fixes)
-  `https://cardstack.com/base/…` in static imports, dynamic `import()`, and
-  `loader.import()`. It deliberately ignores the URL in fetch targets, alias
-  registration, and tests that assert on served content — those are legitimate.
+  `https://cardstack.com/base/…` in static imports, dynamic `import()`,
+  `loader.import()` and `importResource()`, including a template literal that
+  starts with it. Elsewhere it flags the alias, without a fix, except where it
+  is defined or recognized: `baseRealm`, `equivalentURLForms`, `internalKeyFor`,
+  `registeredRealmURL`, and tests of alias tolerance, canonicalization or
+  migration that a package's ESLint config names.
 - `@cardstack/boxel/no-literal-realm-urls` flags environment-specific realm
-  URLs (`http://localhost:4201/catalog/`, `https://app.boxel.ai/catalog/`, …)
-  that should be written as the prefix instead.
+  URLs for every registered prefix realm (`http://localhost:4201/catalog/`,
+  `https://app.boxel.ai/skills/`, …) that should be written as the prefix
+  instead.
 
 ## Migrating existing realm data
 

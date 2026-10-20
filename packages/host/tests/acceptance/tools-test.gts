@@ -3,7 +3,6 @@ import { getOwner, setOwner } from '@ember/owner';
 import {
   click,
   waitFor,
-  find,
   findAll,
   waitUntil,
   settled,
@@ -12,6 +11,7 @@ import {
 
 import { fillIn } from '@ember/test-helpers';
 
+import * as cardAPI from '@cardstack/base/card-api';
 import {
   CardDef,
   Component,
@@ -33,6 +33,8 @@ import {
   buildCommandFunctionName,
   buildCommandFunctionNameFromResolvedRef,
   Command,
+  Deferred,
+  localId,
   skillCardRef,
 } from '@cardstack/runtime-common';
 
@@ -86,6 +88,10 @@ import type { Skill } from '@cardstack/base/skill';
 
 let matrixRoomId = '';
 let maybeBoomShouldBoom = true;
+let linkEchoMessages: string[] = [];
+// Runs inside the link-echo tools before they answer, for a test that needs to
+// look at the store while a tool call is in progress.
+let linkEchoProbe: ((input: CardDef) => void) | undefined;
 let savedMeetingCardId: string | undefined;
 
 module('Acceptance | Tools tests', function (hooks) {
@@ -117,8 +123,31 @@ module('Acceptance | Tools tests', function (hooks) {
     createAndJoinRoom,
   } = mockMatrixUtils;
 
+  // The last result event the room holds for a tool call: a call that is
+  // retried gets more than one, and the newest is its current status.
+  function toolResultFor(roomId: string, toolCallId: string) {
+    return getRoomEvents(roomId)
+      .filter(
+        (event) =>
+          event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+          event.content.commandRequestId === toolCallId,
+      )
+      .pop();
+  }
+
+  // Names a tool call's result for an assertion message, so a failed
+  // assertion says whether the call ended invalid or failed, and why.
+  function describeToolResult(roomId: string, toolCallId: string) {
+    let content = toolResultFor(roomId, toolCallId)?.content;
+    return content
+      ? `result is ${content['m.relates_to']?.key} (${content.failureReason ?? 'no failure reason'})`
+      : 'no result event';
+  }
+
   hooks.beforeEach(async function () {
     savedMeetingCardId = undefined;
+    linkEchoMessages = [];
+    linkEchoProbe = undefined;
     matrixRoomId = await createAndJoinRoom({
       sender: '@testuser:localhost',
       name: 'room-test',
@@ -422,22 +451,50 @@ module('Acceptance | Tools tests', function (hooks) {
       @field friends = linksToMany(Pet);
     }
 
+    let echoLinks = (input: LinkEchoInput) => {
+      linkEchoProbe?.(input);
+      let petName = input.pet?.name ?? 'none';
+      let friendNames = (input.friends ?? [])
+        .map((friend) => friend.name)
+        .join(', ');
+      let message = `pet=${petName}; friends=${friendNames}`;
+      linkEchoMessages.push(message);
+      return new GreetingCard({ message });
+    };
+
     class LinkEchoCommand extends Command<
       typeof LinkEchoInput,
       typeof GreetingCard
     > {
       static displayName = 'LinkEchoCommand';
+      requireInputFields = ['pet'];
       async getInputType() {
         return LinkEchoInput;
       }
       protected async run(input: LinkEchoInput): Promise<GreetingCard> {
-        let petName = input.pet?.name ?? 'none';
-        let friendNames = (input.friends ?? [])
-          .map((friend) => friend.name)
-          .join(', ');
-        return new GreetingCard({
-          message: `pet=${petName}; friends=${friendNames}`,
-        });
+        return echoLinks(input);
+      }
+    }
+
+    // Exported from no module, so `identifyCard` has no code ref for it and
+    // the tool service builds the input from the class itself.
+    class UnexportedLinkEchoInput extends CardDef {
+      @field pet = linksTo(Pet);
+      @field friends = linksToMany(Pet);
+    }
+
+    class UnexportedLinkEchoCommand extends Command<
+      typeof UnexportedLinkEchoInput,
+      typeof GreetingCard
+    > {
+      static displayName = 'UnexportedLinkEchoCommand';
+      async getInputType() {
+        return UnexportedLinkEchoInput;
+      }
+      protected async run(
+        input: UnexportedLinkEchoInput,
+      ): Promise<GreetingCard> {
+        return echoLinks(input as unknown as LinkEchoInput);
       }
     }
 
@@ -487,6 +544,9 @@ module('Acceptance | Tools tests', function (hooks) {
           LinkEchoInput,
           default: LinkEchoCommand,
         },
+        'unexported-link-echo-command.ts': {
+          default: UnexportedLinkEchoCommand,
+        },
         'search-and-open-card-command.ts': {
           default: SearchAndOpenCardCommand,
         },
@@ -527,6 +587,52 @@ module('Acceptance | Tools tests', function (hooks) {
                 },
               ],
               cardTitle: 'Useful Commands',
+              cardDescription: null,
+              cardThumbnailURL: null,
+            },
+            meta: {
+              adoptsFrom: skillCardRef,
+            },
+          },
+        },
+        'Skill/link-echo.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              instructions: 'Use link-echo to name the pets you are given.',
+              commands: [
+                {
+                  codeRef: {
+                    name: 'default',
+                    module: '../link-echo-command',
+                  },
+                  requiresApproval: true,
+                },
+              ],
+              cardTitle: 'Link echo',
+              cardDescription: null,
+              cardThumbnailURL: null,
+            },
+            meta: {
+              adoptsFrom: skillCardRef,
+            },
+          },
+        },
+        'Skill/link-echo-unexported.json': {
+          data: {
+            type: 'card',
+            attributes: {
+              instructions: 'Use link-echo to name the pets you are given.',
+              commands: [
+                {
+                  codeRef: {
+                    name: 'default',
+                    module: '../unexported-link-echo-command',
+                  },
+                  requiresApproval: true,
+                },
+              ],
+              cardTitle: 'Link echo (unexported input)',
               cardDescription: null,
               cardThumbnailURL: null,
             },
@@ -1007,7 +1113,6 @@ module('Acceptance | Tools tests', function (hooks) {
     // before clicking apply. The drain acquires a test waiter that blocks settled(),
     // and running it concurrently with the heavy switch-to-code-mode command
     // can exceed CI's browser_disconnect_timeout.
-    await waitFor('[data-test-message-idx="0"]');
     await settled();
     assert
       .dom('[data-test-message-idx="0"] .tool-description')
@@ -1197,7 +1302,6 @@ module('Acceptance | Tools tests', function (hooks) {
         },
       ],
     });
-    await waitFor('[data-test-message-idx="0"]');
     await settled();
 
     // The skill's frontmatter has no requiresApproval on the tool, so
@@ -1268,11 +1372,10 @@ module('Acceptance | Tools tests', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-message-idx="0"]');
-
-    await waitFor(
-      '[data-test-message-idx="0"] [data-test-apply-state="invalid"]',
-    );
+    await settled();
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="invalid"]')
+      .exists('the tool call is invalid');
     assert
       .dom('[data-test-boxel-alert="warning"]')
       .containsText('No command for the name "switch-submode_dd88" was found');
@@ -1280,14 +1383,12 @@ module('Acceptance | Tools tests', function (hooks) {
       .dom('[data-test-submode-switcher=code]')
       .doesNotExist('the forged tool call never executed');
 
-    let message = getRoomEvents(roomId)
-      .filter(
-        (m) =>
-          m.content.msgtype === APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
-      )
-      .pop()!;
+    let message = toolResultFor(roomId, 'call-forged')!;
+    assert.strictEqual(
+      message.content.msgtype,
+      APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
+    );
     assert.strictEqual(message.content['m.relates_to']?.key, 'invalid');
-    assert.strictEqual(message.content.commandRequestId, 'call-forged');
   });
 
   test('rendering a command request without a description fallsback to attributes.description', async function (assert) {
@@ -1418,7 +1519,6 @@ module('Acceptance | Tools tests', function (hooks) {
     await addSkillToAiAssistant(`${testRealmURL}Skill/card-editing`);
     await waitForNewRoomSkillsLoaded(roomId);
     let toolCallId = '1554f297-e9f2-43fe-8b95-55b29251444d';
-    let dispatchedAt = performance.now();
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Show the card',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -1444,123 +1544,16 @@ module('Acceptance | Tools tests', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-message-idx="0"]');
-
     // Note: you don't have to click on apply button, because command on Skill
     // has requireApproval set to false.
-    //
-    // "applied" is the end of a chain that settled() does not track: the
-    // tool queue drains on a debounce, waits out any in-flight room
-    // processing, validates, runs the tool in an ember-concurrency task,
-    // refreshes the room's skills and the AI context, sends the result event
-    // through the mock homeserver's setTimeout delivery, and only then does
-    // room processing fold the result in. That takes 0.5-1.2s locally, at or
-    // past waitFor's 1s default, so the wait gets a budget sized for the
-    // whole chain. Each phase's first sighting is recorded so the log shows
-    // where the time went (or which phase never happened): "executed" is
-    // the tool body returning, "resultSent" is its result event reaching the
-    // room, "applied" is that result folded in and rendered.
-    let toolService = getService('tool-service');
-    let phaseReachedAt: Record<string, number> = {};
-    let notePhase = (phase: string, reached: boolean) => {
-      if (reached && phaseReachedAt[phase] === undefined) {
-        phaseReachedAt[phase] = Math.round(performance.now() - dispatchedAt);
-      }
-    };
-    try {
-      await waitUntil(
-        () => {
-          notePhase(
-            'claimed',
-            toolService.claimedToolRequestIds.has(toolCallId),
-          );
-          notePhase(
-            'executing',
-            toolService.currentlyExecutingToolRequestIds.has(toolCallId),
-          );
-          notePhase(
-            'executed',
-            toolService.executedToolRequestIds.has(toolCallId),
-          );
-          notePhase(
-            'resultSent',
-            getRoomEvents(roomId).some(
-              (event: any) => event.content?.commandRequestId === toolCallId,
-            ),
-          );
-          let applied = Boolean(
-            find(
-              '[data-test-message-idx="0"] [data-test-apply-state="applied"]',
-            ),
-          );
-          notePhase('applied', applied);
-          return applied;
-        },
-        { timeout: 10_000 },
-      );
-      console.log(
-        `[commands-test/show-card-auto-apply] phases reached (ms after the bot message): ${JSON.stringify(phaseReachedAt)}`,
-      );
-    } catch (err) {
-      let applyButtons = findAll('[data-test-tool-call-apply]').map((el) => ({
-        idx: el
-          .closest('[data-test-message-idx]')
-          ?.getAttribute('data-test-message-idx'),
-        state: el.getAttribute('data-test-tool-call-apply'),
-      }));
-      let applyStates = findAll('[data-test-apply-state]').map((el) =>
-        el.getAttribute('data-test-apply-state'),
-      );
-      let warnings = findAll('[data-test-boxel-alert="warning"]').map(
-        (el) => el.textContent?.trim() ?? '',
-      );
-      let roomData = getService('matrix-service').getRoomData(roomId);
-      let roomResource = getService('matrix-service').roomResources.get(roomId);
-      let message = roomResource?.messages[0];
-      console.error(
-        '[commands-test/show-card-auto-apply] timed out waiting for applied state. Diagnostic:',
-        JSON.stringify(
-          {
-            roomId,
-            renderedApplyButtonStates: applyButtons,
-            renderedApplyStates: applyStates,
-            warnings,
-            enabledSkillCards:
-              roomData?.skillsConfig?.enabledSkillCards?.map(
-                (f) => f.sourceUrl,
-              ) ?? null,
-            roomResourceCommandCount: roomResource?.tools?.length ?? null,
-            elapsedMs: Math.round(performance.now() - dispatchedAt),
-            phaseReachedAt,
-            roomIsProcessing: roomResource?.isProcessing ?? null,
-            messageIsStreamingFinished: message?.isStreamingFinished ?? null,
-            messageAgentId: message?.agentId ?? null,
-            sessionAgentId: getService('matrix-service').agentId,
-            messageTools:
-              message?.tools.map((tool) => ({
-                id: tool.id,
-                name: tool.name,
-                status: tool.status,
-                hasCodeRef: Boolean(tool.codeRef),
-                requiresApproval: tool.requiresApproval,
-                claimed: toolService.claimedToolRequestIds.has(tool.id!),
-                executing: toolService.currentlyExecutingToolRequestIds.has(
-                  tool.id!,
-                ),
-                executed: toolService.executedToolRequestIds.has(tool.id!),
-              })) ?? null,
-          },
-          null,
-          2,
-        ),
-      );
-      throw err;
-    }
+    await settled();
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .exists(describeToolResult(roomId, toolCallId));
 
     assert.dom('[data-test-tool-call-id]').doesNotHaveClass('is-failed');
 
     // check we're in interact mode
-    await waitFor('[data-test-submode-switcher=interact]');
     assert.dom('[data-test-submode-switcher=interact]').exists();
 
     // verify that the card is opened
@@ -1572,7 +1565,7 @@ module('Acceptance | Tools tests', function (hooks) {
 
     // verify that command result event was created correctly
     await waitUntil(() => getRoomIds().length > 0);
-    let message = getRoomEvents(roomId).pop()!;
+    let message = toolResultFor(roomId, toolCallId)!;
     assert.strictEqual(
       message.content.msgtype,
       APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
@@ -1646,9 +1639,10 @@ module('Acceptance | Tools tests', function (hooks) {
           context: { agentId: getService('matrix-service').agentId },
         },
       });
-      await waitFor(
-        '[data-test-message-idx="0"] [data-test-apply-state="applied"]',
-      );
+      await settled();
+      assert
+        .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+        .exists(describeToolResult(roomId, 'view-visually-handoff'));
 
       let result = getRoomEvents(roomId)
         .filter(
@@ -1709,9 +1703,10 @@ module('Acceptance | Tools tests', function (hooks) {
         context: { agentId: getService('matrix-service').agentId },
       },
     });
-    await waitFor(
-      '[data-test-message-idx="0"] [data-test-apply-state="applied"]',
-    );
+    await settled();
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .exists(describeToolResult(roomId, 'realm-viewer-request'));
 
     let result = getRoomEvents(roomId)
       .filter(
@@ -1785,11 +1780,12 @@ module('Acceptance | Tools tests', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-message-idx="0"]');
-
-    await waitFor(
-      '[data-test-message-idx="0"] [data-test-apply-state="ready"]',
-    );
+    // settled() holds through the tool drain, so a command the drain had run
+    // anyway would have switched the submode by now.
+    await settled();
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="ready"]')
+      .exists();
 
     assert.dom('[data-test-tool-call-id]').doesNotHaveClass('is-failed');
     assert.dom('[data-test-submode-switcher=interact]').exists();
@@ -1880,10 +1876,12 @@ module('Acceptance | Tools tests', function (hooks) {
       },
     });
 
-    await waitFor('[data-test-message-idx="0"]');
+    // settled() holds through the tool drain and any run it starts, so once
+    // it returns, a command the drain had auto-applied would show as applied.
+    await settled();
     // In 'ask' mode, the apply button should be visible and not auto-applied
     assert
-      .dom('[data-test-tool-call-apply]')
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="ready"]')
       .exists('Apply button is shown in ask mode');
     assert
       .dom('[data-test-apply-state="applied"]')
@@ -1919,13 +1917,12 @@ module('Acceptance | Tools tests', function (hooks) {
       },
     });
 
-    // Wait for the new message to appear and be auto-applied
-    await waitFor(
-      '[data-test-message-idx="1"] [data-test-apply-state="applied"]',
-    );
+    await settled();
     assert
       .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
-      .exists('Command is auto-applied in act mode');
+      .exists(
+        `Command is auto-applied in act mode: ${describeToolResult(matrixRoomId, commandId2)}`,
+      );
 
     // Now test that commands sent BEFORE switching to act mode are NOT auto-applied
     // Switch back to 'ask' mode
@@ -1956,25 +1953,24 @@ module('Acceptance | Tools tests', function (hooks) {
       },
     });
 
-    await waitFor('[data-test-message-idx="2"]');
+    await settled();
     // In 'ask' mode, the apply button should be visible and not auto-applied
     assert
-      .dom('[data-test-message-idx="2"] [data-test-tool-call-apply]')
+      .dom('[data-test-message-idx="2"] [data-test-apply-state="ready"]')
       .exists('Apply button is shown in ask mode');
     assert
       .dom('[data-test-message-idx="2"] [data-test-apply-state="applied"]')
       .doesNotExist('Command is not auto-applied in ask mode');
 
-    // Now switch to 'act' mode again - the previous command should still NOT be auto-applied
+    // Now switch to 'act' mode again - the previous command should still NOT
+    // be auto-applied. The click settles, which includes the mode event's
+    // round trip and any tool drain it causes.
     await click('[data-test-llm-mode-option="act"]');
     assert.dom('[data-test-llm-mode-option="act"]').hasClass('selected');
 
-    // Wait a moment to ensure the mode change is processed
-    await waitFor('[data-test-llm-mode-option="act"].selected');
-
     // The command from message idx 2 should still not be auto-applied because it was sent before act mode
     assert
-      .dom('[data-test-message-idx="2"] [data-test-tool-call-apply]')
+      .dom('[data-test-message-idx="2"] [data-test-apply-state="ready"]')
       .exists('Apply button is still shown for command sent before act mode');
     assert
       .dom('[data-test-message-idx="2"] [data-test-apply-state="applied"]')
@@ -2004,13 +2000,12 @@ module('Acceptance | Tools tests', function (hooks) {
       },
     });
 
-    // Wait for the new message to appear and be auto-applied
-    await waitFor(
-      '[data-test-message-idx="3"] [data-test-apply-state="applied"]',
-    );
+    await settled();
     assert
       .dom('[data-test-message-idx="3"] [data-test-apply-state="applied"]')
-      .exists('New command sent after act mode is auto-applied');
+      .exists(
+        `New command sent after act mode is auto-applied: ${describeToolResult(matrixRoomId, commandId4)}`,
+      );
   });
 
   test('command request with invalid name gets an "invalid" result', async function (assert) {
@@ -2061,11 +2056,10 @@ module('Acceptance | Tools tests', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-message-idx="0"]');
-
-    await waitFor(
-      '[data-test-message-idx="0"] [data-test-apply-state="invalid"]',
-    );
+    await settled();
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="invalid"]')
+      .exists('the tool call is invalid');
     assert
       .dom('[data-test-boxel-alert="warning"]')
       .containsText('No command for the name "no-such-command" was found');
@@ -2073,7 +2067,10 @@ module('Acceptance | Tools tests', function (hooks) {
     assert.dom('[data-test-tool-call-id]').doesNotHaveClass('is-failed');
 
     // verify that command result event was created correctly
-    let message = getRoomEvents(roomId).pop()!;
+    let message = toolResultFor(
+      roomId,
+      '1554f297-e9f2-43fe-8b95-55b29251444d',
+    )!;
     assert.strictEqual(
       message.content.msgtype,
       APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
@@ -2118,6 +2115,7 @@ module('Acceptance | Tools tests', function (hooks) {
     await waitForNewRoomSkillsLoaded(roomId);
     // `description` is only the label the pill shows; a model that leaves it
     // out has still sent everything the command needs.
+    let toolCallId = 'no-description-request';
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       body: 'Show the card',
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -2125,7 +2123,7 @@ module('Acceptance | Tools tests', function (hooks) {
       isStreamingFinished: true,
       [APP_BOXEL_TOOL_REQUESTS_KEY]: [
         {
-          id: 'no-description-request',
+          id: toolCallId,
           name: showCardToolName,
           arguments: JSON.stringify({
             attributes: {
@@ -2140,21 +2138,18 @@ module('Acceptance | Tools tests', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-message-idx="0"]');
-    await waitFor(
-      '[data-test-message-idx="0"] [data-test-apply-state="applied"]',
-    );
+    await settled();
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .exists(describeToolResult(roomId, toolCallId));
     assert.dom('[data-test-boxel-alert="warning"]').doesNotExist();
     assert
       .dom('[data-test-message-idx="0"] [data-test-tool-code-block]')
       .containsText('Show card', 'the pill label falls back to the tool name');
 
-    let message = getRoomEvents(roomId).pop()!;
+    let message = toolResultFor(roomId, toolCallId)!;
     assert.strictEqual(message.content['m.relates_to']?.key, 'applied');
-    assert.strictEqual(
-      message.content.commandRequestId,
-      'no-description-request',
-    );
+    assert.strictEqual(message.content.commandRequestId, toolCallId);
   });
 
   test('command request with arguments that do not match the json schema gets an "invalid" result', async function (assert) {
@@ -2210,11 +2205,10 @@ module('Acceptance | Tools tests', function (hooks) {
         },
       },
     });
-    await waitFor('[data-test-message-idx="0"]');
-
-    await waitFor(
-      '[data-test-message-idx="0"] [data-test-apply-state="invalid"]',
-    );
+    await settled();
+    assert
+      .dom('[data-test-message-idx="0"] [data-test-apply-state="invalid"]')
+      .exists('the tool call is invalid');
     // The CI flake mode for this test is that the warning reads "No command
     // for the name X was found" (skill not yet loaded) instead of the
     // expected JSON-schema validation message. Log enough state to
@@ -2252,7 +2246,10 @@ module('Acceptance | Tools tests', function (hooks) {
     assert.dom('[data-test-tool-call-id]').doesNotHaveClass('is-failed');
 
     // verify that command result event was created correctly
-    let message = getRoomEvents(roomId).pop()!;
+    let message = toolResultFor(
+      roomId,
+      '1554f297-e9f2-43fe-8b95-55b29251444d',
+    )!;
     assert.strictEqual(
       message.content.msgtype,
       APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE,
@@ -2267,6 +2264,256 @@ module('Acceptance | Tools tests', function (hooks) {
       message.content.commandRequestId,
       '1554f297-e9f2-43fe-8b95-55b29251444d',
     );
+  });
+
+  // A tool call names its linked inputs as bare links. The pets it links to are
+  // not opened anywhere in the session, so the store does not hold them when
+  // the call's input is built.
+  async function requestLinkEcho(
+    relationships: Record<string, unknown> | undefined,
+    {
+      tool = 'link-echo',
+    }: { tool?: 'link-echo' | 'unexported-link-echo' } = {},
+  ): Promise<string> {
+    let skill =
+      tool === 'link-echo' ? 'Skill/link-echo' : 'Skill/link-echo-unexported';
+    await visitOperatorMode({
+      stacks: [
+        [
+          {
+            id: `${testRealmURL}${skill}`,
+            format: 'isolated',
+          },
+        ],
+      ],
+      aiAssistantOpen: true,
+    });
+    await waitFor('[data-room-settled]');
+    await addSkillToAiAssistant(`${testRealmURL}${skill}`);
+    let roomId = getRoomIds().pop()!;
+    simulateRemoteMessage(roomId, '@aibot:localhost', {
+      body: '',
+      msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+      format: 'org.matrix.custom.html',
+      isStreamingFinished: true,
+      [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+        {
+          id: 'link-echo-request',
+          name: buildCommandFunctionName(
+            { module: testRRI(`${tool}-command`), name: 'default' },
+            undefined,
+            getService('network').virtualNetwork,
+          ),
+          arguments: JSON.stringify({
+            description: 'Naming the pets',
+            attributes: {},
+            relationships,
+          }),
+        },
+      ],
+    });
+    await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await settled();
+    return roomId;
+  }
+
+  function linkEchoResult(roomId: string) {
+    return getRoomEvents(roomId).find(
+      (event) =>
+        event.type === APP_BOXEL_TOOL_RESULT_EVENT_TYPE &&
+        event.content.commandRequestId === 'link-echo-request',
+    );
+  }
+
+  async function applyLinkEcho(roomId: string) {
+    await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await waitUntil(() => linkEchoResult(roomId), {
+      timeout: 5000,
+      timeoutMessage: 'timed out waiting for the link-echo result',
+    });
+    return linkEchoResult(roomId)!;
+  }
+
+  const allPets = {
+    pet: { links: { self: `${testRealmURL}Pet/ringo` } },
+    friends: [
+      { links: { self: `${testRealmURL}Pet/mango` } },
+      { links: { self: `${testRealmURL}Pet/vangogh` } },
+    ],
+  };
+
+  test('a tool runs with the linked inputs it was given once they load', async function (assert) {
+    let roomId = await requestLinkEcho(allPets);
+    let store = getService('store');
+    let petIds = ['ringo', 'mango', 'vangogh'].map(
+      (name) => `${testRealmURL}Pet/${name}`,
+    );
+    for (let id of petIds) {
+      assert.strictEqual(
+        store.peek(id),
+        undefined,
+        `${id} is not in the store before the tool runs`,
+      );
+    }
+    // Two sweeps evict a card nothing holds, so the pets stay in the store
+    // only if the tool call holds its input, and through it the pets.
+    let duringRun: { inputId: string; references: number; resident: boolean[] };
+    linkEchoProbe = (input) => {
+      (store as any).store.sweep(cardAPI);
+      (store as any).store.sweep(cardAPI);
+      let inputId = input[localId];
+      duringRun = {
+        inputId,
+        references: store.getReferenceCount(inputId),
+        resident: petIds.map((id) => store.peek(id) !== undefined),
+      };
+    };
+
+    let result = await applyLinkEcho(roomId);
+
+    assert.strictEqual(result.content['m.relates_to']?.key, 'applied');
+    assert.deepEqual(linkEchoMessages, ['pet=Ringo; friends=Mango, Van Gogh']);
+    assert.strictEqual(
+      duringRun!.references,
+      1,
+      'the call holds its input while the tool runs',
+    );
+    assert.deepEqual(
+      duringRun!.resident,
+      [true, true, true],
+      'the linked pets survive garbage collection while the tool runs',
+    );
+    await waitUntil(() => store.getReferenceCount(duringRun!.inputId) === 0, {
+      timeoutMessage: 'the call did not release its input',
+    });
+  });
+
+  test('a tool waits only on its own linked inputs, not on other loads in the store', async function (assert) {
+    let roomId = await requestLinkEcho(allPets);
+    let unrelatedLoad = new Deferred<void>();
+    getService('store').trackLoad(unrelatedLoad.promise);
+    try {
+      let result = await applyLinkEcho(roomId);
+      assert.strictEqual(result.content['m.relates_to']?.key, 'applied');
+      assert.deepEqual(linkEchoMessages, [
+        'pet=Ringo; friends=Mango, Van Gogh',
+      ]);
+    } finally {
+      unrelatedLoad.fulfill();
+    }
+  });
+
+  test('a tool whose linked input is already in the store runs with it', async function (assert) {
+    let store = getService('store');
+    await store.get(`${testRealmURL}Pet/ringo`);
+    let roomId = await requestLinkEcho({
+      pet: { links: { self: `${testRealmURL}Pet/ringo` } },
+    });
+
+    let result = await applyLinkEcho(roomId);
+
+    assert.strictEqual(result.content['m.relates_to']?.key, 'applied');
+    assert.deepEqual(linkEchoMessages, ['pet=Ringo; friends=']);
+  });
+
+  test('a linked input that does not exist makes the call invalid, naming the field and the card', async function (assert) {
+    let missing = `${testRealmURL}Pet/does-not-exist`;
+    let roomId = await requestLinkEcho({
+      pet: { links: { self: missing } },
+    });
+
+    let result = await applyLinkEcho(roomId);
+
+    assert.strictEqual(result.content['m.relates_to']?.key, 'invalid');
+    assert.true(
+      result.content.failureReason.startsWith(
+        `Could not load pet "${missing}" (not-found`,
+      ),
+      `failure names the field and the card, got: ${result.content.failureReason}`,
+    );
+    assert.deepEqual(linkEchoMessages, [], 'the tool did not run');
+  });
+
+  test('one missing card in a plural linked input makes the call invalid, naming only that card', async function (assert) {
+    let missing = `${testRealmURL}Pet/does-not-exist`;
+    let roomId = await requestLinkEcho({
+      pet: { links: { self: `${testRealmURL}Pet/ringo` } },
+      friends: [
+        { links: { self: `${testRealmURL}Pet/mango` } },
+        { links: { self: missing } },
+      ],
+    });
+
+    let result = await applyLinkEcho(roomId);
+
+    assert.strictEqual(result.content['m.relates_to']?.key, 'invalid');
+    assert.true(
+      result.content.failureReason.startsWith(
+        `Could not load friends "${missing}" (not-found`,
+      ),
+      `failure names the missing card, got: ${result.content.failureReason}`,
+    );
+    assert.false(
+      result.content.failureReason.includes('Pet/mango'),
+      'the card that loaded is not named',
+    );
+    assert.deepEqual(linkEchoMessages, [], 'the tool did not run');
+  });
+
+  test('a call that leaves out a required linked input is invalid', async function (assert) {
+    let roomId = await requestLinkEcho(undefined);
+
+    let result = await applyLinkEcho(roomId);
+
+    assert.strictEqual(result.content['m.relates_to']?.key, 'invalid');
+    assert.true(
+      result.content.failureReason.startsWith('Missing pet'),
+      `failure names the missing field, got: ${result.content.failureReason}`,
+    );
+    assert.deepEqual(linkEchoMessages, [], 'the tool did not run');
+  });
+
+  test('a call that gives a required linked input an empty link is invalid', async function (assert) {
+    let roomId = await requestLinkEcho({ pet: { links: { self: '' } } });
+
+    let result = await applyLinkEcho(roomId);
+
+    assert.strictEqual(result.content['m.relates_to']?.key, 'invalid');
+    assert.true(
+      result.content.failureReason.startsWith('Missing pet'),
+      `failure names the missing field, got: ${result.content.failureReason}`,
+    );
+    assert.deepEqual(linkEchoMessages, [], 'the tool did not run');
+  });
+
+  test('a tool whose input class is not exported runs with its linked inputs once they load', async function (assert) {
+    let roomId = await requestLinkEcho(allPets, {
+      tool: 'unexported-link-echo',
+    });
+
+    let result = await applyLinkEcho(roomId);
+
+    assert.strictEqual(result.content['m.relates_to']?.key, 'applied');
+    assert.deepEqual(linkEchoMessages, ['pet=Ringo; friends=Mango, Van Gogh']);
+  });
+
+  test('a tool whose input class is not exported reports a linked input that does not exist', async function (assert) {
+    let missing = `${testRealmURL}Pet/does-not-exist`;
+    let roomId = await requestLinkEcho(
+      { pet: { links: { self: missing } } },
+      { tool: 'unexported-link-echo' },
+    );
+
+    let result = await applyLinkEcho(roomId);
+
+    assert.strictEqual(result.content['m.relates_to']?.key, 'invalid');
+    assert.true(
+      result.content.failureReason.startsWith(
+        `Could not load pet "${missing}" (not-found`,
+      ),
+      `failure names the field and the card, got: ${result.content.failureReason}`,
+    );
+    assert.deepEqual(linkEchoMessages, [], 'the tool did not run');
   });
 
   module('suspending global error hook', (hooks) => {

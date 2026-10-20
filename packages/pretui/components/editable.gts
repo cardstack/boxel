@@ -192,8 +192,8 @@ export class Editable extends Component<EditableSignature> {
       {{#if this.editing}}
         <Input
           @value={{this.draft}}
-          @placeholder={{@placeholder}}
-          @disabled={{this.disabled}}
+          placeholder={{@placeholder}}
+          disabled={{this.disabled}}
           @onInput={{this.setDraft}}
           aria-label={{@label}}
           data-test-pretui-editable-field
@@ -229,8 +229,8 @@ export class Editable extends Component<EditableSignature> {
     <style scoped>
       @layer PretComponent {
         .pretui-editable {
-          --ed-h: var(--control-h, 1.75rem);
-          --ed-text: var(--text-ui-md, 0.78rem);
+          --ed-h: var(--boxel-form-control-height-sm);
+          --ed-text: var(--boxel-font-size-xs);
           --ed-pad: var(--space-2, 0.375rem);
           --ed-snap: var(--pretui-dur-snap, 180ms) var(--pretui-ease-snap, ease);
           display: inline-grid;

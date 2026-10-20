@@ -1,6 +1,7 @@
 import { registerDestructor } from '@ember/destroyable';
 import { getOwner } from '@ember/owner';
 import { service } from '@ember/service';
+import { buildWaiter } from '@ember/test-waiters';
 import { isTesting } from '@embroider/macros';
 import { tracked, cached } from '@glimmer/tracking';
 
@@ -112,6 +113,12 @@ export type RoomSkill = {
 };
 
 const responseStreamLog = logger('matrix:response-stream');
+
+// ember-concurrency carries no test-waiter integration, so a room's processing
+// pass (loading its skills and folding its events into messages and tool
+// results) would be invisible to `settled()`. Each pass holds this waiter and
+// releases it in a `finally`, which also runs when a newer pass restarts it.
+const roomProcessingWaiter = buildWaiter('room-resource:processing');
 
 interface Args {
   named: {
@@ -228,6 +235,7 @@ export class RoomResource extends Resource<Args> {
   private processRoomTask = restartableTask(async (roomId: string) => {
     this.notePerformForRestartTrace(roomId);
     this.processingLastStartedAt = Date.now();
+    let waiterToken = roomProcessingWaiter.beginAsync();
     try {
       this.matrixRoom = roomId
         ? await this.matrixService.getRoomData(roomId)
@@ -289,6 +297,8 @@ export class RoomResource extends Resource<Args> {
       }
     } catch (e) {
       throw new Error(`Error loading room ${e}`);
+    } finally {
+      roomProcessingWaiter.endAsync(waiterToken);
     }
   });
 

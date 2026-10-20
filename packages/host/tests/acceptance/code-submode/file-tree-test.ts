@@ -13,7 +13,7 @@ import { getService } from '@universal-ember/test-support';
 import window from 'ember-window-mock';
 import { module, test } from 'qunit';
 
-import { baseRealmRRI } from '@cardstack/runtime-common';
+import { baseRealm, baseRealmRRI } from '@cardstack/runtime-common';
 
 import WriteTextFileTool from '@cardstack/host/tools/write-text-file';
 import { ScrollPositions } from '@cardstack/host/utils/local-storage-keys';
@@ -1031,7 +1031,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       ],
       submode: 'code',
       fileView: 'browser',
-      codePath: `https://cardstack.com/base/cards-grid.gts`,
+      codePath: `${baseRealm.url}cards-grid.gts`,
     });
 
     await waitFor('[data-test-file="cards-grid.gts"]');
@@ -1053,7 +1053,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       ],
       submode: 'code',
       fileView: 'browser',
-      codePath: `https://cardstack.com/base/cards-grid.gts`,
+      codePath: `${baseRealm.url}cards-grid.gts`,
     });
 
     await waitFor('[data-test-togglable-left-panel]');

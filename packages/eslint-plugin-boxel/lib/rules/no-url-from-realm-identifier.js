@@ -60,18 +60,18 @@ module.exports = {
     schema: [],
     messages: {
       urlFromIdentifier:
-        '`new URL()` on a {{brand}} does not survive a prefix-form identifier: it throws with no base, and with one it resolves the prefix as a relative path into a URL that points nowhere. Use `new RealmPaths(ri(x))` for path work, `virtualNetwork.toURL(x)` at a genuine network boundary, or ask the realm server which realm a URL belongs to. If this really is the boundary, disable this rule on the line with a reason.',
+        '`new URL()` on a {{brand}} does not survive a prefix-form identifier: it throws with no base, and with one it resolves the prefix as a relative path into a URL that points nowhere. To make a request, pass the identifier to `virtualNetwork.fetch(x)` as it is. Use `new RealmPaths(ri(x))` for realm membership and path work, and `virtualNetwork.toURL(x)` only where something other than a request needs the URL. Disable this rule on the line only where a guard on the same path admits nothing but URL form, and name that guard in the reason; a `catch` is not a guard.',
       urlBaseFromIdentifier:
-        '`new URL()` with a {{brand}} as its base throws for a prefix-form identifier — a prefix is not a valid base URL. Resolve the base through `virtualNetwork.toURL(x)`, or use `new RealmPaths(ri(x))` and join the path in identifier space. If this really is the boundary, disable this rule on the line with a reason.',
+        '`new URL()` with a {{brand}} as its base throws for a prefix-form identifier — a prefix is not a valid base URL. Join the path in identifier space with `new RealmPaths(ri(x))` and pass the result to `virtualNetwork.fetch()`. Disable this rule on the line only where a guard on the same path admits nothing but URL form, and name that guard in the reason; a `catch` is not a guard.',
       urlProbeOnIdentifier:
-        '`URL.{{method}}()` on a {{brand}} answers as though a prefix-form identifier were not a URL — {{method}} returns {{falsy}} rather than throwing, so the misclassification propagates silently. Ask whether the value is a registered prefix (`virtualNetwork.isRegisteredPrefix(x)`) before asking whether it parses. If this really is the boundary, disable this rule on the line with a reason.',
+        '`URL.{{method}}()` on a {{brand}} answers as though a prefix-form identifier were not a URL — {{method}} returns {{falsy}} rather than throwing, so the misclassification propagates silently. Test which form it has with `isPrefixForm(x)` from `@cardstack/runtime-common`, the one form test for an identifier. Disable this rule on the line only where a guard on the same path admits nothing but URL form, and name that guard in the reason; a `catch` is not a guard.',
     },
   },
 
   create(context) {
     // Type information is only present where the config sets
-    // `parserOptions.project`. Everywhere else this rule is inert rather than
-    // wrong, so it can be enabled repo-wide and tightened per package.
+    // `parserOptions.project`. Without it this rule reports nothing, so a
+    // package that enables it must also give it a TypeScript program.
     const services = context.sourceCode
       ? context.sourceCode.parserServices || context.parserServices
       : context.parserServices;

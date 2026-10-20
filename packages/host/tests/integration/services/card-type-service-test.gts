@@ -36,13 +36,13 @@ module('Integration | services | card-type-service', function (hooks) {
       mockMatrixUtils,
       contents: {
         'colorish.gts': `
-          import StringField from 'https://cardstack.com/base/string';
+          import StringField from '@cardstack/base/string';
           export default class ColorishField extends StringField {
             static displayName = 'Colorish';
           }
         `,
         'theme.gts': `
-          import { contains, field, FieldDef } from 'https://cardstack.com/base/card-api';
+          import { contains, field, FieldDef } from '@cardstack/base/card-api';
           import ColorishField from './colorish';
           export class ThemeField extends FieldDef {
             static displayName = 'Theme';
@@ -60,7 +60,7 @@ module('Integration | services | card-type-service', function (hooks) {
         // assembles every declaration in a module concurrently, so these two
         // become concurrent roots whose traversals reference one another.
         'linked.gts': `
-          import { field, linksTo, linksToMany, CardDef } from 'https://cardstack.com/base/card-api';
+          import { field, linksTo, linksToMany, CardDef } from '@cardstack/base/card-api';
           export class Post extends CardDef {
             static displayName = 'Post';
             @field author = linksTo(() => Author);

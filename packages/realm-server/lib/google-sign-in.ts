@@ -1,11 +1,13 @@
 import { logger } from '@cardstack/runtime-common';
+import type { GoogleIdentity } from './google-account.ts';
 
 // Google sign-in for the secure window, run by the realm server as its own
 // OpenID Connect client. It uses the same Google client as the Matrix server,
 // so a user who signs in to Boxel with Google sees no new consent, and it
 // finds the user's account the way the Matrix server does: by the Google
 // account's subject (`sub`), which Boxel's OIDC mapping provider stores as the
-// account's external id under `oidc-google`.
+// account's external id under `oidc-google`, and otherwise by the mapping
+// provider's rules (`google-account.ts`).
 //
 // What makes this a credential card code can't reach: Google sends the
 // authorization code only to the redirect URI registered for the client — the
@@ -90,7 +92,8 @@ function decodePayload(jwt: string): Record<string, unknown> {
 }
 
 // Exchanges an authorization code for the Google account it signs in, and
-// returns that account's subject. The ID token comes straight from the token
+// returns that account's identity: its subject, email address and name. The
+// ID token comes straight from the token
 // endpoint over TLS in answer to this server's own authenticated request, so
 // its claims are checked rather than its signature (OpenID Connect Core
 // §3.1.3.7); the nonce ties it to the sign-in the window started.
@@ -102,7 +105,7 @@ export async function exchangeGoogleCode(
     nonce,
     redirectURI,
   }: { code: string; codeVerifier: string; nonce: string; redirectURI: string },
-): Promise<string> {
+): Promise<GoogleIdentity> {
   let discovered = await discover(config);
   let response = await fetch(discovered.token_endpoint, {
     method: 'POST',
@@ -145,7 +148,15 @@ export async function exchangeGoogleCode(
       'Google sign-in could not be confirmed; try again',
     );
   }
-  return claims.sub;
+  return {
+    sub: claims.sub,
+    email: typeof claims.email === 'string' ? claims.email : undefined,
+    emailVerified:
+      typeof claims.email_verified === 'boolean'
+        ? claims.email_verified
+        : undefined,
+    name: typeof claims.name === 'string' ? claims.name : undefined,
+  };
 }
 
 export function synapseIdpId(config: GoogleSignInConfig): string {

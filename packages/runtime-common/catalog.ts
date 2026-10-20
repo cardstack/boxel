@@ -10,7 +10,7 @@ import { canonicalModuleKey, resolveAdoptsFrom } from './code-ref.ts';
 import { baseRealmRRI, realmURL } from './constants.ts';
 import { logger } from './log.ts';
 import type { LocalPath } from './paths.ts';
-import { ri, rri } from './realm-identifiers.ts';
+import { isPrefixForm, ri, rri } from './realm-identifiers.ts';
 import type {
   RealmIdentifier,
   RealmResourceIdentifier,
@@ -225,7 +225,7 @@ export class ListingPathResolver {
   // the listing never registered through `addKnownRealmURL` lands here, which
   // is the usual case for an install that registers no foreign realms.
   private localFallback(id: RealmResourceIdentifier): LocalPath {
-    if (id.startsWith('@')) {
+    if (isPrefixForm(id)) {
       return id.split('/').slice(2).join('/').replace(/\/+$/, '');
     }
     let path = id.replace(URL_SCHEME_AND_AUTHORITY, '').replace(/[?#].*$/, '');

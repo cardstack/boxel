@@ -2,15 +2,30 @@ import { createHash, randomBytes, randomUUID } from 'crypto';
 import {
   fetchSessionRoom,
   logger,
+  param,
+  query,
   type DBAdapter,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
+import { APP_BOXEL_REALMS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import {
+  getRandomBackgroundURL,
+  iconURLFor,
+  PERSONAL_REALM_ENDPOINT,
+} from '@cardstack/runtime-common/realm-display-defaults';
+import {
+  appendRealmToUserAccountData,
+  fetchAccountData,
   getMatrixAdminToken,
   impersonateAsMatrixAdmin,
   logoutMatrixAccessToken,
   resolveAdminCreds,
 } from '../synapse.ts';
+import {
+  createRealm,
+  realmURLFor,
+  type CreateRealmDeps,
+} from '../handlers/create-realm.ts';
 import {
   createSecureSessionJWT,
   type RealmServerTokenClaim,
@@ -22,7 +37,15 @@ import {
   synapseIdpId,
   type GoogleSignInConfig,
 } from './google-sign-in.ts';
+import {
+  GoogleAccountRefusal,
+  resolveGoogleAccount,
+  type GoogleAccountLookups,
+  type GoogleIdentity,
+} from './google-account.ts';
 import { GOOGLE_CALLBACK_PATH } from './secure-origin.ts';
+import { ensureSessionRoom } from './session-room.ts';
+import type { SignInLimiter } from './sign-in-limiter.ts';
 
 // A session signed in on the secure origin: the credential that minting a key
 // write ticket requires, which card code can't reach.
@@ -65,14 +88,18 @@ export type SecureSessionClient = 'window' | 'cli';
 export class SecureSessionError extends Error {
   readonly status: 400 | 401 | 403 | 409 | 429 | 503;
   readonly code: string;
+  // For a 429, how long until the caller may try again, when that's known.
+  readonly retryAfterMs?: number;
   constructor(
     status: SecureSessionError['status'],
     code: string,
     message: string,
+    opts: { retryAfterMs?: number } = {},
   ) {
     super(message);
     this.status = status;
     this.code = code;
+    this.retryAfterMs = opts.retryAfterMs;
   }
 }
 
@@ -84,6 +111,9 @@ export interface SecureSessionDeps {
   matrixAdminPassword?: string;
   secureOriginURL?: URL;
   googleSignIn?: GoogleSignInConfig;
+  // What making a personal realm needs, for a user's first sign-in to Boxel
+  // through Google.
+  createRealm?: CreateRealmDeps;
 }
 
 export interface SignedInSession {
@@ -103,11 +133,21 @@ function invalidCredentials() {
   );
 }
 
-function rateLimited() {
+// Too many failed sign-ins for the account, refused by this server's limit or
+// the Matrix server's.
+function rateLimited(retryAfterMs: unknown) {
   return new SecureSessionError(
     429,
     'rate-limited',
-    'too many attempts; wait a moment and try again',
+    'too many failed attempts; try again later',
+    {
+      retryAfterMs:
+        typeof retryAfterMs === 'number' &&
+        Number.isFinite(retryAfterMs) &&
+        retryAfterMs >= 0
+          ? Math.ceil(retryAfterMs)
+          : undefined,
+    },
   );
 }
 
@@ -143,58 +183,105 @@ async function ensureLoggedIn(matrixClient: MatrixClient): Promise<void> {
   }
 }
 
-async function adminGet(
+async function adminRequest(
   deps: SecureSessionDeps,
   path: string,
+  { method = 'GET', body }: { method?: 'GET' | 'PUT'; body?: unknown } = {},
 ): Promise<{ status: number; body: Record<string, any> }> {
   let admin = adminCreds(deps);
   let response = await fetch(new URL(path, admin.matrixURL), {
-    headers: { Authorization: `Bearer ${await getMatrixAdminToken(admin)}` },
+    method,
+    headers: {
+      Authorization: `Bearer ${await getMatrixAdminToken(admin)}`,
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
-  let body: Record<string, any> = {};
+  let json: Record<string, any> = {};
   try {
-    body = (await response.json()) as Record<string, any>;
+    json = (await response.json()) as Record<string, any>;
   } catch {
     // Judged by its status alone.
   }
-  return { status: response.status, body };
+  return { status: response.status, body: json };
 }
 
-// The Matrix user a password sign-in names: a full Matrix id as given, an
-// email address by the account it is bound to, or a bare username on this
-// realm server's Matrix server. Undefined when there is no such account.
+function userPath(user: string) {
+  return `_synapse/admin/v2/users/${encodeURIComponent(user)}`;
+}
+
+// The name of the Matrix server this realm server's own user is on, which
+// every account it resolves by localpart, or the secure origin registers, is
+// on too.
+export async function matrixServerName(
+  deps: Pick<SecureSessionDeps, 'matrixClient'>,
+): Promise<string> {
+  await ensureLoggedIn(deps.matrixClient);
+  let serverName = deps.matrixClient.getUserId()?.split(':').slice(1).join(':');
+  if (!serverName) {
+    throw new Error(`the realm server's Matrix user id names no server`);
+  }
+  return serverName;
+}
+
+// The account holding an email address as a third-party id, by the Matrix
+// server's admin lookup. Undefined when none does.
+async function userByEmail(
+  deps: SecureSessionDeps,
+  email: string,
+): Promise<string | undefined> {
+  let { status, body } = await adminRequest(
+    deps,
+    `_synapse/admin/v1/threepid/email/users/${encodeURIComponent(email)}`,
+  );
+  if (status === 404) {
+    return undefined;
+  }
+  if (status !== 200) {
+    throw new Error(`email lookup failed: HTTP ${status}`);
+  }
+  return typeof body.user_id === 'string' ? body.user_id : undefined;
+}
+
+// The Matrix user a password sign-in names: a full Matrix id on this realm
+// server's Matrix server, an email address by the account it is bound to, or a
+// bare username on that server. Undefined when there is no such account,
+// including for an id on another server, which no account here can be.
 async function resolveMatrixUser(
   deps: SecureSessionDeps,
   username: string,
 ): Promise<string | undefined> {
   let name = username.trim();
   if (name.startsWith('@')) {
-    return /^@[^:\s]+:\S+$/.test(name) ? name : undefined;
+    let match = /^@[^:\s]+:(\S+)$/.exec(name);
+    return match && match[1] === (await matrixServerName(deps))
+      ? name
+      : undefined;
   }
   if (name.includes('@')) {
-    let { status, body } = await adminGet(
-      deps,
-      `_synapse/admin/v1/threepid/email/users/${encodeURIComponent(name.toLowerCase())}`,
-    );
-    if (status === 404) {
-      return undefined;
-    }
-    if (status !== 200) {
-      throw new Error(`email lookup failed: HTTP ${status}`);
-    }
-    return typeof body.user_id === 'string' ? body.user_id : undefined;
+    return await userByEmail(deps, name.toLowerCase());
   }
-  await ensureLoggedIn(deps.matrixClient);
-  let serverName = deps.matrixClient.getUserId()?.split(':').slice(1).join(':');
-  if (!serverName) {
-    throw new Error(`the realm server's Matrix user id names no server`);
-  }
-  return `@${name}:${serverName}`;
+  return `@${name}:${await matrixServerName(deps)}`;
 }
 
 interface MatrixResult {
   status: number;
   body: Record<string, any>;
+  // For a 429, how long the Matrix server asks the caller to wait: the body's
+  // `retry_after_ms`, or else the standard `Retry-After` header, which a
+  // Matrix server may send on its own (the body field is deprecated).
+  retryAfterMs?: number;
+}
+
+function matrixRetryAfterMs(
+  response: Response,
+  body: Record<string, any>,
+): number | undefined {
+  if (typeof body.retry_after_ms === 'number') {
+    return body.retry_after_ms;
+  }
+  let seconds = Number(response.headers.get('Retry-After') ?? NaN);
+  return Number.isFinite(seconds) ? seconds * 1000 : undefined;
 }
 
 // The request whose UIA check confirms a password. It adds a third-party
@@ -227,7 +314,12 @@ async function attemptThreepidAdd(
   } catch {
     // A response that isn't JSON is judged by its status alone.
   }
-  return { status: response.status, body };
+  return {
+    status: response.status,
+    body,
+    retryAfterMs:
+      response.status === 429 ? matrixRetryAfterMs(response, body) : undefined,
+  };
 }
 
 // Runs `fn` with a Matrix access token for `user` minted through the admin
@@ -261,21 +353,77 @@ async function asUser<T>(
 }
 
 // Signs in with a password, checked by the Matrix server's UIA check as
-// described above.
+// described above. Only failures count against the account's limit (see
+// `sign-in-limiter.ts`), and an account over it is refused before its
+// password is checked. Failures are counted as the Matrix server counts failed
+// logins: against the Matrix user id the account resolves to, however it was
+// named, or against the name itself when it names no account.
+//
+// An account that has never signed in to Boxel, as one just registered on the
+// secure origin, gets the app's first-sign-in setup once its password checks
+// out. `registrationToken` is the invite code the account registered with,
+// which the realm-server user it makes records, as the app's first sign-in
+// records it.
 export async function signInWithPassword(
   deps: SecureSessionDeps,
-  {
-    username,
-    password,
-    client,
-  }: { username: string; password: string; client: SecureSessionClient },
+  limiter: SignInLimiter,
+  attempt: {
+    username: string;
+    password: string;
+    client: SecureSessionClient;
+    registrationToken?: string;
+  },
 ): Promise<SignedInSession> {
-  if (!username.trim() || !password) {
+  if (!attempt.username.trim() || !attempt.password) {
     throw invalidCredentials();
   }
-  let user = await resolveMatrixUser(deps, username);
-  if (!user || !(await fetchSessionRoom(deps.dbAdapter, user))) {
+  let user = await resolveMatrixUser(deps, attempt.username);
+  let account = (user ?? attempt.username.trim()).toLowerCase();
+  let check = limiter.start(account);
+  if (!check.allowed) {
+    throw rateLimited(check.retryAfterMs);
+  }
+  let failed = false;
+  try {
+    return await checkPassword(deps, user, attempt);
+  } catch (e) {
+    failed =
+      e instanceof SecureSessionError && e.code === 'invalid-credentials';
+    throw e;
+  } finally {
+    limiter.finish(account, { failed });
+  }
+}
+
+async function checkPassword(
+  deps: SecureSessionDeps,
+  user: string | undefined,
+  {
+    password,
+    client,
+    registrationToken,
+  }: {
+    password: string;
+    client: SecureSessionClient;
+    registrationToken?: string;
+  },
+): Promise<SignedInSession> {
+  if (!user) {
     throw invalidCredentials();
+  }
+  // The admin API mints a token for any user id, so a name that names no
+  // account is caught here, before anything acts as it. Only "no such
+  // account" is the account's answer; any other failure is the Matrix
+  // server's, and isn't counted against the account.
+  let account = await adminRequest(deps, userPath(user));
+  if (account.status === 404) {
+    throw invalidCredentials();
+  }
+  if (account.status !== 200) {
+    log.error(
+      `looking up a secure sign-in's account got HTTP ${account.status}`,
+    );
+    throw unavailable();
   }
   let request = {
     clientSecret: randomBytes(24).toString('hex'),
@@ -289,7 +437,7 @@ export async function signInWithPassword(
     throw invalidCredentials();
   }
   if (started.status === 429) {
-    throw rateLimited();
+    throw rateLimited(started.retryAfterMs);
   }
   let uiaSession = started.body.session;
   if (started.status !== 401 || typeof uiaSession !== 'string') {
@@ -317,7 +465,7 @@ export async function signInWithPassword(
     throw invalidCredentials();
   }
   if (completed.status === 429) {
-    throw rateLimited();
+    throw rateLimited(completed.retryAfterMs);
   }
   if (completed.status === 401) {
     throw invalidCredentials();
@@ -332,6 +480,9 @@ export async function signInWithPassword(
       `completing a secure sign-in got HTTP ${completed.status} ${completed.body.errcode ?? ''}`,
     );
     throw unavailable();
+  }
+  if (!(await fetchSessionRoom(deps.dbAdapter, user))) {
+    await setUpFirstSignIn(deps, user, registrationToken);
   }
   return await createSecureSession(deps, {
     user,
@@ -375,8 +526,31 @@ export async function googleSignInStart(deps: SecureSessionDeps): Promise<{
   };
 }
 
+// The answer the app's sign-in gives an account that can't sign in.
+function cantSignIn(code: 'deactivated' | 'locked') {
+  return new SecureSessionError(
+    403,
+    code,
+    'Sign-in failed. Please check your credentials and try again.',
+  );
+}
+
+// Refuses an account Synapse wouldn't sign in: a deactivated or locked one.
+function refuseUnusable(account: Record<string, any>) {
+  if (account.deactivated) {
+    throw cantSignIn('deactivated');
+  }
+  if (account.locked) {
+    throw cantSignIn('locked');
+  }
+}
+
 // Signs in with an authorization code Google sent to the secure origin's
-// callback, for the account linked to that Google identity.
+// callback. The Google identity resolves to an account exactly as it does
+// when the app signs in through the Matrix server: the account linked to its
+// subject, else the one account holding its verified email (which it is then
+// linked to), else a new account (see `google-account.ts`). A user signing in
+// to Boxel for the first time gets the setup the app's first sign-in does.
 export async function signInWithGoogle(
   deps: SecureSessionDeps,
   {
@@ -392,9 +566,9 @@ export async function signInWithGoogle(
   },
 ): Promise<SignedInSession> {
   let config = googleConfig(deps);
-  let sub: string;
+  let identity: GoogleIdentity;
   try {
-    sub = await exchangeGoogleCode(config, {
+    identity = await exchangeGoogleCode(config, {
       code,
       codeVerifier,
       nonce,
@@ -406,34 +580,313 @@ export async function signInWithGoogle(
     }
     throw e;
   }
-  let linked = await adminGet(
-    deps,
-    `_synapse/admin/v1/auth_providers/${encodeURIComponent(synapseIdpId(config))}/users/${encodeURIComponent(sub)}`,
-  );
-  let user = linked.body.user_id;
-  if (linked.status !== 200 || typeof user !== 'string') {
-    throw new SecureSessionError(
-      403,
-      'not-linked',
-      'this Google account isn’t linked to Boxel; sign in to Boxel with Google first, or use your password',
-    );
+  let user = await userLinkedToGoogle(deps, config, identity.sub);
+  if (user) {
+    let account = await adminRequest(deps, userPath(user));
+    if (account.status !== 200) {
+      throw cantSignIn('deactivated');
+    }
+    refuseUnusable(account.body);
+  } else {
+    try {
+      user = await linkOrCreateForGoogle(deps, config, identity);
+    } catch (e) {
+      if (e instanceof GoogleAccountRefusal) {
+        throw new SecureSessionError(403, e.code, e.message);
+      }
+      throw e;
+    }
   }
-  let account = await adminGet(
-    deps,
-    `_synapse/admin/v2/users/${encodeURIComponent(user)}`,
-  );
-  if (account.status !== 200 || account.body.deactivated) {
-    throw new SecureSessionError(
-      403,
-      'deactivated',
-      'this Boxel account can’t sign in',
-    );
+  if (!(await fetchSessionRoom(deps.dbAdapter, user))) {
+    await setUpFirstSignIn(deps, user);
   }
   return await createSecureSession(deps, {
     user,
     client,
     proof: `google:${createHash('sha256').update(code).digest('hex')}`,
   });
+}
+
+// The account linked to a Google subject: the external id Boxel's OIDC
+// mapping provider, or this module, stores under the Matrix server's name for
+// the provider.
+async function userLinkedToGoogle(
+  deps: SecureSessionDeps,
+  config: GoogleSignInConfig,
+  sub: string,
+): Promise<string | undefined> {
+  let linked = await adminRequest(
+    deps,
+    `_synapse/admin/v1/auth_providers/${encodeURIComponent(synapseIdpId(config))}/users/${encodeURIComponent(sub)}`,
+  );
+  if (linked.status === 404) {
+    return undefined;
+  }
+  if (linked.status !== 200 || typeof linked.body.user_id !== 'string') {
+    throw new Error(`Google link lookup failed: HTTP ${linked.status}`);
+  }
+  return linked.body.user_id;
+}
+
+// How many times a sign-in resolves a Google identity again when another
+// sign-in takes the account or localpart it chose first.
+const MAX_RESOLVE_ATTEMPTS = 5;
+
+// Links an unlinked Google identity to the one account holding its verified
+// email, or makes it a new account, as the mapping provider does.
+async function linkOrCreateForGoogle(
+  deps: SecureSessionDeps,
+  config: GoogleSignInConfig,
+  identity: GoogleIdentity,
+): Promise<string> {
+  let serverName = await matrixServerName(deps);
+  let lookups: GoogleAccountLookups = {
+    // The Matrix server stores an email address lowercased and gives each
+    // address to one account, so the admin lookup by the lowercased address
+    // finds the only account that can hold it. An address stored before
+    // Synapse lowercased them keeps its own spelling, which the lookup
+    // matches only exactly, so the address as Google spells it is looked up
+    // too.
+    usersByEmail: async (email) => {
+      let spellings = new Set([email, identity.email?.trim() ?? email]);
+      let users: string[] = [];
+      for (let spelling of spellings) {
+        let user = await userByEmail(deps, spelling);
+        if (user) {
+          users.push(user);
+        }
+      }
+      return users;
+    },
+    localpartTaken: async (localpart) => {
+      let { status } = await adminRequest(
+        deps,
+        userPath(`@${localpart}:${serverName}`),
+      );
+      if (status !== 200 && status !== 404) {
+        throw new Error(`account lookup failed: HTTP ${status}`);
+      }
+      return status === 200;
+    },
+  };
+  for (let attempt = 0; attempt < MAX_RESOLVE_ATTEMPTS; attempt++) {
+    let resolved = await resolveGoogleAccount(identity, lookups);
+    let user =
+      resolved.kind === 'existing'
+        ? await linkGoogle(deps, config, resolved.user, identity.sub)
+        : await createGoogleAccount(deps, config, {
+            user: `@${resolved.localpart}:${serverName}`,
+            sub: identity.sub,
+            email: resolved.email,
+            displayName: resolved.displayName,
+          });
+    if (user) {
+      return user;
+    }
+  }
+  log.error(
+    `a Google sign-in lost ${MAX_RESOLVE_ATTEMPTS} races for its account`,
+  );
+  throw unavailable();
+}
+
+// The Google identity linked to `user` as well as any identities already
+// linked to it. Undefined when another sign-in linked the identity first.
+async function linkGoogle(
+  deps: SecureSessionDeps,
+  config: GoogleSignInConfig,
+  user: string,
+  sub: string,
+): Promise<string | undefined> {
+  let account = await adminRequest(deps, userPath(user));
+  if (account.status !== 200) {
+    throw new Error(`account lookup failed: HTTP ${account.status}`);
+  }
+  refuseUnusable(account.body);
+  let externalIds = (
+    (account.body.external_ids ?? []) as {
+      auth_provider: string;
+      external_id: string;
+    }[]
+  ).map(({ auth_provider, external_id }) => ({ auth_provider, external_id }));
+  let linked = await adminRequest(deps, userPath(user), {
+    method: 'PUT',
+    body: {
+      external_ids: [
+        ...externalIds,
+        { auth_provider: synapseIdpId(config), external_id: sub },
+      ],
+    },
+  });
+  if (linked.status === 409) {
+    return await userLinkedToGoogle(deps, config, sub);
+  }
+  if (linked.status !== 200) {
+    throw new Error(`linking Google failed: HTTP ${linked.status}`);
+  }
+  return user;
+}
+
+// Makes the account a new Google user gets: the Google identity's link, its
+// display name, and its email address as a third-party id. Undefined when the
+// localpart was taken after it was found free, so the caller resolves again.
+async function createGoogleAccount(
+  deps: SecureSessionDeps,
+  config: GoogleSignInConfig,
+  {
+    user,
+    sub,
+    email,
+    displayName,
+  }: { user: string; sub: string; email: string; displayName?: string },
+): Promise<string | undefined> {
+  // An empty body creates the account, or changes nothing on an account that
+  // appeared since the localpart was found free, so only a 201 means this
+  // sign-in owns it.
+  let created = await adminRequest(deps, userPath(user), {
+    method: 'PUT',
+    body: {},
+  });
+  if (created.status === 200 || created.body.errcode === 'M_USER_IN_USE') {
+    return undefined;
+  }
+  if (created.status !== 201) {
+    throw new Error(
+      `creating an account failed: HTTP ${created.status} ${created.body.errcode ?? ''}`,
+    );
+  }
+  // The account is this sign-in's until it is complete. A failure part way
+  // leaves it unlinked and deactivated, so the next sign-in resolves the
+  // Google identity again rather than following a link into an account
+  // without its email or name.
+  try {
+    // The link comes first: it is unique, so a concurrent first sign-in with
+    // the same Google identity loses here, before it gives the new account
+    // the email address.
+    let linked = await adminRequest(deps, userPath(user), {
+      method: 'PUT',
+      body: {
+        external_ids: [
+          { auth_provider: synapseIdpId(config), external_id: sub },
+        ],
+      },
+    });
+    if (linked.status === 409) {
+      await abandonAccount(deps, user);
+      return await userLinkedToGoogle(deps, config, sub);
+    }
+    if (linked.status !== 200) {
+      throw new Error(`linking Google failed: HTTP ${linked.status}`);
+    }
+    let profile = await adminRequest(deps, userPath(user), {
+      method: 'PUT',
+      body: {
+        ...(displayName ? { displayname: displayName } : {}),
+        threepids: [{ medium: 'email', address: email }],
+      },
+    });
+    if (profile.status !== 200) {
+      throw new Error(`setting up the account failed: HTTP ${profile.status}`);
+    }
+  } catch (e) {
+    await abandonAccount(deps, user).catch((abandonError: any) =>
+      log.error(
+        `could not abandon an incomplete Google account: ${abandonError?.message ?? abandonError}`,
+      ),
+    );
+    throw e;
+  }
+  return user;
+}
+
+// Unlinks and deactivates an account a sign-in made but couldn't finish.
+async function abandonAccount(
+  deps: SecureSessionDeps,
+  user: string,
+): Promise<void> {
+  let abandoned = await adminRequest(deps, userPath(user), {
+    method: 'PUT',
+    body: { external_ids: [], deactivated: true },
+  });
+  if (abandoned.status !== 200) {
+    throw new Error(`abandoning the account failed: HTTP ${abandoned.status}`);
+  }
+}
+
+async function realmRegistered(
+  dbAdapter: DBAdapter,
+  url: string,
+): Promise<boolean> {
+  let rows = await query(dbAdapter, [
+    `SELECT 1 FROM realm_registry WHERE url =`,
+    param(url),
+  ]);
+  return rows.length > 0;
+}
+
+// The setup the app runs on a user's first sign-in to Boxel: their
+// realm-server user (recording the invite code they registered with, if any)
+// and its first credit grant, their personal realm, and the session room the
+// realm server messages them in. The session room comes last, since it is
+// what marks the setup done: a sign-in that fails part way sets up again.
+async function setUpFirstSignIn(
+  deps: SecureSessionDeps,
+  user: string,
+  registrationToken?: string,
+): Promise<void> {
+  if (!deps.createRealm) {
+    throw unavailable();
+  }
+  let account = await adminRequest(deps, userPath(user));
+  let displayName: string =
+    typeof account.body.displayname === 'string' && account.body.displayname
+      ? account.body.displayname
+      : user.slice(1).split(':')[0];
+  let createRealmDeps = deps.createRealm;
+  await asUser(deps, user, async (accessToken) => {
+    let { realms } = await fetchAccountData(
+      deps.matrixClient.matrixURL,
+      user,
+      accessToken,
+      APP_BOXEL_REALMS_EVENT_TYPE,
+    );
+    // The user's own personal realm, as the app judges it: a realm someone
+    // else shared with the user before their first sign-in is in their
+    // account data too, and doesn't count.
+    let realmURL = realmURLFor(
+      createRealmDeps.serverURL,
+      user,
+      PERSONAL_REALM_ENDPOINT,
+    );
+    if (Array.isArray(realms) && realms.includes(realmURL)) {
+      return;
+    }
+    // A realm an earlier, unfinished sign-in made is recorded rather than
+    // made again.
+    if (!(await realmRegistered(deps.dbAdapter, realmURL))) {
+      try {
+        await createRealm(createRealmDeps, {
+          ownerUserId: user,
+          endpoint: PERSONAL_REALM_ENDPOINT,
+          name: `${displayName}'s Workspace`,
+          iconURL: iconURLFor(displayName),
+          backgroundURL: getRandomBackgroundURL(),
+        });
+      } catch (e) {
+        if (!(await realmRegistered(deps.dbAdapter, realmURL))) {
+          throw e;
+        }
+      }
+    }
+    await appendRealmToUserAccountData({
+      matrixURL: deps.matrixClient.matrixURL,
+      userId: user,
+      userAccessToken: accessToken,
+      realmURL,
+    });
+  });
+  await ensureLoggedIn(deps.matrixClient);
+  await ensureSessionRoom(deps, user, registrationToken);
 }
 
 async function createSecureSession(
@@ -445,8 +898,7 @@ async function createSecureSession(
   }: { user: string; client: SecureSessionClient; proof: string },
 ): Promise<SignedInSession> {
   // The room the realm server messages the user in, which their first sign-in
-  // to Boxel creates. A secure session is for someone who already uses Boxel,
-  // so it never creates one.
+  // to Boxel creates (`setUpFirstSignIn`).
   let sessionRoom = await fetchSessionRoom(deps.dbAdapter, user);
   if (!sessionRoom) {
     throw new SecureSessionError(
@@ -519,6 +971,22 @@ export async function endSecureSession(
     { bind: [id, token.user] },
   );
   return rows.length > 0;
+}
+
+// Signs the user's secure windows out, in every browser, when they sign out of
+// the app: the app page can neither read the window's storage nor reach the
+// window, so only the server can end its session. Rows are expired, not
+// deleted, as `endSecureSession` does. The CLI's sessions are left alone; the
+// CLI usually runs on another machine, and `boxel keys sign-out` ends them.
+export async function endWindowSessions(
+  dbAdapter: DBAdapter,
+  user: string,
+): Promise<void> {
+  await dbAdapter.execute(
+    `UPDATE secure_sessions SET expires_at = NOW()
+      WHERE user_id = $1 AND client = 'window' AND expires_at > NOW()`,
+    { bind: [user] },
+  );
 }
 
 function isUUID(value: string): boolean {

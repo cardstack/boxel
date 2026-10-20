@@ -2,6 +2,7 @@ import QUnit from 'qunit';
 const { module, test, assert } = QUnit;
 import {
   getLatestResultMessage,
+  roomHasTitle,
   setTitle,
   shouldSetRoomTitle,
 } from '../lib/set-title.ts';
@@ -918,5 +919,43 @@ module('setTitle', () => {
       undefined,
       'user param is not set when senderMatrixUserId is not provided',
     );
+  });
+});
+
+module('roomHasTitle', () => {
+  function clientWithNameEvents(nameEventCount: number) {
+    const client = new FakeMatrixClient();
+    const requests: Record<string, string>[] = [];
+    client.http = {
+      authedRequest: async (
+        _method: string,
+        _path: string,
+        queryParams: Record<string, string>,
+      ) => {
+        requests.push(queryParams);
+        const types: string[] = JSON.parse(queryParams.filter).types ?? [];
+        const chunk = Array.from({ length: nameEventCount }, (_, i) => ({
+          type: 'm.room.name',
+          event_id: `name-${i}`,
+          content: { name: `Name ${i}` },
+        }))
+          .filter((event) => types.includes(event.type))
+          .slice(0, Number(queryParams.limit));
+        return chunk.length ? { chunk, end: 'next' } : { chunk };
+      },
+    } as any;
+    return { client: client as unknown as MatrixClient, requests };
+  }
+
+  test('a room renamed after its creation has its title, from one name-events request', async () => {
+    const { client, requests } = clientWithNameEvents(3);
+    assert.true(await roomHasTitle('room-1', client));
+    assert.strictEqual(requests.length, 1);
+    assert.deepEqual(JSON.parse(requests[0].filter).types, ['m.room.name']);
+  });
+
+  test('a room with only its creation name has no title', async () => {
+    const { client } = clientWithNameEvents(1);
+    assert.false(await roomHasTitle('room-1', client));
   });
 });

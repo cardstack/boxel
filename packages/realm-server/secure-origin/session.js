@@ -17,12 +17,18 @@ const JSON_API = 'application/vnd.api+json';
 // A session this close to its end is treated as already ended, so a request
 // made with it doesn't fail partway through.
 const EXPIRY_MARGIN_MS = 60 * 1000;
+// How long the window waits to learn whether its session is still signed in
+// before it carries on with the session it has.
+const SESSION_CHECK_TIMEOUT_MS = 10 * 1000;
 
 export class SecureSessionError extends Error {
-  constructor(status, code, message) {
+  // `retryAfterMs`: for a 429, how long until the next attempt may be made,
+  // when the server says.
+  constructor(status, code, message, retryAfterMs) {
     super(message);
     this.status = status;
     this.code = code;
+    this.retryAfterMs = retryAfterMs;
   }
 }
 
@@ -33,7 +39,7 @@ export function readConfig() {
   return { realmServerURL: new URL(meta('boxel-realm-server-url')) };
 }
 
-async function request(url, { method = 'POST', body, token } = {}) {
+async function request(url, { method = 'POST', body, token, signal } = {}) {
   let headers = { Accept: JSON_API };
   if (body !== undefined) {
     headers['Content-Type'] = JSON_API;
@@ -49,6 +55,7 @@ async function request(url, { method = 'POST', body, token } = {}) {
       body: body === undefined ? undefined : JSON.stringify(body),
       credentials: 'omit',
       referrerPolicy: 'no-referrer',
+      signal,
     });
   } catch {
     throw new SecureSessionError(0, 'network', 'Boxel could not be reached.');
@@ -61,31 +68,50 @@ async function request(url, { method = 'POST', body, token } = {}) {
   }
   if (!response.ok) {
     let error = json?.errors?.[0];
+    let retryAfterMs =
+      typeof error === 'object' ? error?.meta?.retryAfterMs : undefined;
     throw new SecureSessionError(
       response.status,
       typeof error === 'object' ? error.code : undefined,
       (typeof error === 'object' ? error.detail : error) ||
         'Something went wrong. Try again.',
+      typeof retryAfterMs === 'number' ? retryAfterMs : undefined,
     );
   }
   return json;
 }
 
 // Signs in with a password. `client` is 'window' for this window's own
-// session, 'cli' for a session handed to the CLI.
+// session, 'cli' for a session handed to the CLI. `registrationToken` is the
+// invite code an account just created here registered with, which its first
+// sign-in to Boxel records.
 export async function signInWithPassword(
   config,
-  { username, password, client },
+  { username, password, client, registrationToken },
 ) {
   let json = await request(new URL('_secure-session', config.realmServerURL), {
     body: {
       data: {
         type: 'secure-session',
-        attributes: { username, password, client },
+        attributes: {
+          username,
+          password,
+          client,
+          ...(registrationToken ? { registrationToken } : {}),
+        },
       },
     },
   });
   return json.data.attributes;
+}
+
+// The name of the Matrix server Boxel's accounts are on, which a username is
+// shown with (`@name:server`).
+export async function matrixServerName(config) {
+  let json = await request(new URL('_secure-origin', config.realmServerURL), {
+    method: 'GET',
+  });
+  return json.data.attributes.matrixServerName;
 }
 
 // Where to send the user to sign in with Google, or undefined when this realm
@@ -116,7 +142,8 @@ function base64url(bytes) {
 
 // Sends this window to Google. The state, nonce and PKCE verifier stay in this
 // origin's session storage; `resume` is whatever the callback needs to carry
-// on with (which client, and the CLI's listener).
+// on with, or to start again from (which client, the CLI's listener, and the
+// username the CLI named).
 export async function beginGoogleSignIn(google, resume) {
   let state = randomToken();
   let nonce = randomToken();
@@ -147,7 +174,8 @@ export async function beginGoogleSignIn(google, resume) {
 
 // Finishes a Google sign-in on the callback page: checks that Google answered
 // the sign-in this window started, and exchanges the code for a session.
-// Returns the session and the `resume` the sign-in began with.
+// Returns the session and the `resume` the sign-in began with. An error thrown
+// once the sign-in is recognised carries that `resume` too.
 export async function finishGoogleSignIn(config) {
   let params = new URL(window.location.href).searchParams;
   let pending;
@@ -167,31 +195,42 @@ export async function finishGoogleSignIn(config) {
       'This sign-in wasn’t started here. Start again.',
     );
   }
-  let code = params.get('code');
-  if (!code) {
-    throw new SecureSessionError(
-      401,
-      'google-cancelled',
-      'Google sign-in didn’t finish. Start again.',
-    );
-  }
-  let json = await request(
-    new URL('_secure-session/google', config.realmServerURL),
-    {
-      body: {
-        data: {
-          type: 'google-sign-in',
-          attributes: {
-            code,
-            codeVerifier: pending.codeVerifier,
-            nonce: pending.nonce,
-            client: pending.resume?.client ?? 'window',
+  // From here on, a failure carries the `resume` the sign-in began with, so the
+  // page can send the user back to where they started.
+  try {
+    let code = params.get('code');
+    if (!code) {
+      // Google answers a sign-in the user declined, by pressing Cancel, with
+      // `error=access_denied`.
+      throw new SecureSessionError(
+        401,
+        params.get('error') === 'access_denied'
+          ? 'google-cancelled'
+          : 'google-failed',
+        'Google sign-in didn’t finish. Start again.',
+      );
+    }
+    let json = await request(
+      new URL('_secure-session/google', config.realmServerURL),
+      {
+        body: {
+          data: {
+            type: 'google-sign-in',
+            attributes: {
+              code,
+              codeVerifier: pending.codeVerifier,
+              nonce: pending.nonce,
+              client: pending.resume?.client ?? 'window',
+            },
           },
         },
       },
-    },
-  );
-  return { session: json.data.attributes, resume: pending.resume };
+    );
+    return { session: json.data.attributes, resume: pending.resume };
+  } catch (e) {
+    e.resume = pending.resume;
+    throw e;
+  }
 }
 
 // The window's session, while it lasts.
@@ -241,13 +280,45 @@ export async function signOut(config) {
   }
 }
 
+// The window's session, if the server still honours it. The server ends it
+// when the user signs out here, signs out of the app, or the session expires;
+// an ended session is forgotten, so the window shows its sign-in. When the
+// server can't be reached or doesn't answer in time, the stored session is
+// kept, since nothing says it has ended.
+export async function liveSession(config) {
+  let session = storedSession();
+  if (!session) {
+    return undefined;
+  }
+  try {
+    await request(new URL('_secure-session', config.realmServerURL), {
+      method: 'GET',
+      token: session.token,
+      signal: AbortSignal.timeout(SESSION_CHECK_TIMEOUT_MS),
+    });
+  } catch (e) {
+    if (e.status === 401) {
+      forgetSession();
+      return undefined;
+    }
+  }
+  return session;
+}
+
+function signedOut() {
+  return new SecureSessionError(401, 'signed-out', 'Sign in to continue.');
+}
+
 // A request to the realm server under the window's own session. A mode that
 // changes a key uses this, so the change is authorized by this session and
-// never by the app's.
+// never by the app's. A refusal because the session has ended forgets it and
+// answers `signed-out`: a key write ticket refuses an ended session with a
+// 403, as it does any session that isn't a secure one, so a 403 is checked
+// against the server.
 export async function authorizedRequest(config, path, options = {}) {
   let session = storedSession();
   if (!session) {
-    throw new SecureSessionError(401, 'signed-out', 'Sign in to continue.');
+    throw signedOut();
   }
   try {
     return await request(new URL(path, config.realmServerURL), {
@@ -257,6 +328,10 @@ export async function authorizedRequest(config, path, options = {}) {
   } catch (e) {
     if (e.status === 401) {
       forgetSession();
+      throw signedOut();
+    }
+    if (e.status === 403 && !(await liveSession(config))) {
+      throw signedOut();
     }
     throw e;
   }

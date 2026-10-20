@@ -63,7 +63,7 @@ export default class PrivateDependencyViolationComponent extends Component<Signa
         color: var(--boxel-550);
         padding: 2px var(--boxel-sp-xxs);
         font-size: var(--boxel-font-size-xs);
-        white-space: nowrap;
+        max-width: 100%;
       }
     </style>
   </template>

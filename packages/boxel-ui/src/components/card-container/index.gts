@@ -110,6 +110,7 @@ const CardContainer: TemplateOnlyComponent<Signature> = <template>
       --boxel-font-size-sm: calc(var(--boxel-font-size) * 0.875);
       --boxel-font-size-xs: calc(var(--boxel-font-size) * 0.75);
       --boxel-font-size-2xs: calc(var(--boxel-font-size) * 0.6875);
+      --boxel-form-control-touch-font-size: max(1rem, var(--boxel-font-size));
 
       /* font-size options based on font-scale */
       --boxel-fs-2xl: calc(var(--boxel-fs-xl) * var(--_boxel-scale)); /* h1 */

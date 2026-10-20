@@ -9,10 +9,11 @@ description: What the secure origin (`secure.boxel.ai` / `secure.stack.cards`, `
 
 ## What it serves
 
-- **The shell**, at the path of the configured URL (`/` deployed, `/secure` in development): `index.html` with no inline script, its one entry point `shell.js`, and `shell.css`. `createSecureOrigin` builds a `routes` table of every path served, and the `SHELL_ASSETS` table names the files.
-- **Modes** are added to `shell.js`'s `modes` table, keyed by the `mode` query parameter. Every mode is the same shell document, with the same headers.
+- **The shell**, at the path of the configured URL (`/` deployed, `/secure` in development): `index.html` with no inline script, its one entry point `shell.js`, the modes' scripts, `shell.css`, and boxel-ui's `variables.css`, `theme.css` and the app's typeface, read from boxel-ui as they are. `createSecureOrigin` builds a `routes` table of every path served, and the `SHELL_ASSETS` table names the files.
+- **Modes** are added to `shell.js`'s `modes` table, keyed by the `mode` query parameter. Every mode is the same shell document, with the same headers. They are `sign-in` and `cli-sign-in` (`sign-in.js`), `register` and `verify-email`, where a registration email's link lands (`register.js`), and `forgot-password` and `reset-password`, where a reset email's link lands (`password-reset.js`); Google returns to `google-callback`, which serves the shell too. An unknown mode renders nothing.
+- **The pages are the app's sign-in screens**, drawn and worded the same: `shell.css` mirrors the host's AuthContainer, Login, RegisterUser, ForgotPassword, AuthButton and AuthFormField and the boxel-ui components they use, over boxel-ui's own tokens, and `dom.js` builds the logo, Google's "G", the check mark and the spinner from boxel-ui's icon components' paths (`secure-origin-test.ts` checks the copies against boxel-ui's). A change to those components' styles or copy needs the same change here: the matrix suite's `secure-origin-pages.spec.ts` compares the app's sign-in, account creation and forgot-password pages with these, pixel for pixel, outside the app's password frame, whose fields it compares by position and computed style, and fails until the change is made here too.
 
-- **The credential fields**, at `credentials` beneath the shell's path: `credentials.html`, its entry point `credentials.js`, `credentials.css`, and the app's typeface, read from boxel-ui (`CREDENTIALS_ASSETS`). See below.
+- **The credential fields**, at `credentials` beneath the shell's path: `credentials.html`, its entry point `credentials.js` and `credentials.css` (`CREDENTIALS_ASSETS`), and the shell's typeface. See below.
 
 Adding to it means adding a mode to `shell.js`, or a file to `SHELL_ASSETS` or `CREDENTIALS_ASSETS`. Each addition must be code this repo owns and reviews. Never add a proxy, a passthrough to realm routing, a CDN script, an analytics snippet or a host-app import.
 
@@ -28,16 +29,15 @@ Every input a password is typed into — sign-in, the CLI sign-in page, registra
 - **It looks like the app because the app styles it.** `credentials.css` mirrors boxel-ui's FieldContainer, Label and BoxelInput and the host's AuthFormField. Every `var(--…)` in it is resolved by the host component at the frame's position and sent over, so a theme or token change reaches the frame. A change to those components' own rules needs the same change in `credentials.css`. A layout that follows the space around it (the settings modal) sets `--credential-layout: narrow`.
 - **A flow that re-sends the password keeps the frame mounted.** Registration and change-email retry their requests across several screens, so their forms stay mounted, hidden, until the flow ends. Unmounting the frame forgets the password.
 
-## How a mode talks to the realm server
+## How a mode talks to the realm server and the Matrix server
 
 A mode reads what it shows from the realm server, and sends what is typed there, never from or to the page that opened it. It does this with `fetch` to the realm server's own origin, cross-origin. The secure origin never serves realm-server endpoints itself: that would be the passthrough forbidden above.
 
-The policy shipped today allows no such request: `default-src 'self'` means `connect-src 'self'`. The first mode that needs the realm server does two things:
+Creating an account and resetting a password are Matrix requests the page makes itself (`matrix.js`): registration's user-interactive auth (the invite code where the Matrix server asks for one, and the email validation it polls for), the email validation links, and setting the new password. The shell's policy names exactly two origins besides its own in `connect-src`, the realm server's (`serverURL`) and the Matrix server's (`--matrixURL`), both from the realm server's configuration and both written into the page's markup, never a wildcard. The endpoints a mode calls answer CORS for the secure origin.
 
-- It adds `connect-src 'self' <realm-server origin>` to the shell's policy, naming that one origin (the realm-server's `serverURL`), never a wildcard.
-- It has the endpoints it calls answer CORS for the secure origin.
+An email link that lands on a mode carries anything secret in its fragment, never its query string, because a load balancer's access log records query strings: `reset-password`'s client secret is in the fragment, and the Matrix server appends the validation session's id after it. The page reads them and takes them out of the address bar.
 
-Submissions go through `fetch`, not a `<form action>`, so `form-action 'self'` stays as it is.
+Submissions go through `fetch`, not a `<form action>`, so `form-action 'self'` stays as it is, but for the CLI's loopback hand-off.
 
 - **Everything else is a 404**, on any method, with the same headers. A non-GET to the shell is a 405.
 

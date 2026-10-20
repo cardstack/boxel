@@ -113,6 +113,10 @@ Diagnosing a stuck test page fast (do this FIRST, before assuming it's a slow bu
 
 Prefer the headless `vite build --mode development && pnpm exec ember test --path dist --filter "…"` path over a second live dev server: the shared `pnpm start` server is env-mode/Traefik-locked (one slug at a time) and switching the shared tree under it triggers a long Vite dep re-optimize + full reloads. The realm-server stack the tests talk to (`../realm-server && pnpm start:all`) is backend-only and can be shared across checkouts on the usual localhost ports.
 
+#### Signing a browser into a host
+
+- A host on any origin other than the environment's own (for example `http://localhost:<port>/` against staging) can't use the email/password sign-in form: the form is a secure-origin frame those origins may not embed, so it shows up blank. When the user wants a browser signed in, run `boxel browse --profile <id> --host-url <host origin>` for them: it opens their default browser already signed in, as a one-time login whose token never reaches the terminal or the chat. To sign in a specific browser such as Chrome, or a browser you drive, follow the skill: `--print-url` prints the token, so its output only ever goes straight into a browser launcher or the clipboard. The `boxel-cli:browser-sign-in` skill (`packages/boxel-cli/plugin/skills/browser-sign-in/SKILL.md`) has the details.
+
 #### CSS Guidance
 
 - Use scalable units such as rem
@@ -291,8 +295,8 @@ Symptom differs from triggers 1–2: the template body is silently dropped, so t
 
 ## Architecture decision records
 
-- `docs/adr/` records why the codebase is shaped as it is, as numbered MUST/SHOULD requirements. ADR 001 defines the format. Each ADR declares `scope` globs for the code it governs. Before reversing or working around an established pattern, run `node scripts/adr-for.mts <path>...` and read the ADRs it lists. Don't silently break a MUST of an `accepted` ADR: follow it, or say that the change needs a superseding ADR. Cite a rule as "ADR NNN §x.y" rather than restating it.
-- When a change makes a decision that outlives its PR (ADR 001 §1.1), load the `adr` skill and draft a `proposed` ADR in the same PR. Only a person marks an ADR `accepted`.
+- `docs/adr/` records why the codebase is shaped as it is, as numbered MUST/SHOULD requirements. ADR 001 defines the format. Each ADR declares `scope` globs for the code it governs. Before reversing or working around an established pattern, run `node scripts/adr-for.mts <path>...` and read the ADRs it lists. Don't silently break a MUST of an `accepted` or `proposed` ADR: follow it, or say that the change needs a superseding ADR (accepted) or an edit to the ADR's Decision (proposed). A proposed ADR's Remediation section lists code that doesn't conform yet. Leave it or fix it, but don't copy it. Cite a rule as "ADR NNN §x.y" rather than restating it.
+- When a change makes a decision that outlives its PR (ADR 001 §1.1), load the `adr` skill and draft a `proposed` ADR in the same PR. A proposed ADR may merge before the code conforms, with the gaps listed under Remediation. Only a person marks an ADR `accepted`, once those gaps are closed (ADR 001 §1.6).
 
 ## Linear Ticket Process (Reusable)
 

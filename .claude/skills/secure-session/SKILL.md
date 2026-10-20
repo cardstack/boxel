@@ -23,6 +23,7 @@ user's session does, and additionally:
 | Gate                       | Requires                                                                    |
 | -------------------------- | --------------------------------------------------------------------------- |
 | `POST /_key-write-tickets` | `isSecureSession`: the claim, naming a row of the token's user, not expired |
+| `GET /_secure-session`     | The same; answers 204, or 401 `signed-out`                                  |
 
 Minting also still requires the request's `Origin` to be the secure origin's
 or absent (the CLI). Only `createSecureSessionJWT` mints the claim (ADR 005
@@ -38,7 +39,7 @@ session minter in `jwt.ts` refuse it.
 | `client`        | `window` (the secure window's own session) or `cli` (`boxel keys`)                                   |
 | `sign_in_proof` | What signed in: `uia:<UIA session>` for a password, `google:<sha256 of the code>` for Google; unique |
 | `created_at`    | `timestamptz`                                                                                        |
-| `expires_at`    | Seven days after sign-in (`SECURE_SESSION_TTL_SECONDS`); signing out sets it to now                  |
+| `expires_at`    | Seven days after sign-in (`SECURE_SESSION_TTL_SECONDS`); signing out sets it to now (see below)      |
 
 Excluded from the SQLite schema dump and withheld from `readonly_role`.
 Signing out expires a row rather than deleting it, and rows are swept two
@@ -46,21 +47,84 @@ days after they expire, so a proof can't sign in again after its session
 ends. To sign a user's secure sessions out, expire their rows; revoking all of
 a user's sessions (`isSessionRevoked`) ends these too.
 
+## What ends a secure session
+
+| What                   | Route                                    | Ends                                                                |
+| ---------------------- | ---------------------------------------- | ------------------------------------------------------------------- |
+| Its seven days pass    | —                                        | That session                                                        |
+| Signing out of it      | `DELETE /_secure-session` (the session)  | That session: `boxelSignOut()` in the window, `boxel keys sign-out` |
+| Signing out of the app | `DELETE /_secure-sessions?client=window` | Every unexpired `window` row of the token's user                    |
+| Revoking all sessions  | —                                        | Every session of the user (`isSessionRevoked`)                      |
+
+The app's sign-out (`MatrixService.logout()`) calls `DELETE
+/_secure-sessions?client=window` with the outgoing account's realm-server
+session, before it drops that session. It is best effort and never awaited, so
+a failing or slow server can't hold sign-out up; a failure is only a console
+warning, and the user's window sessions then last until they expire. The app's
+session is refreshed on a timer that fires late on a slept laptop, so this
+route alone accepts a session that expired up to `SECURE_SESSION_TTL_SECONDS`
+ago (`jwtMiddleware`'s `expiredWithinSeconds`); every other route refuses an
+expired one. The app page can't clear the window's session itself: it can't
+read the secure origin's storage and keeps no handle to the window (ADR 005
+§1.4).
+
+That route takes any session of the user, the app's included, so card code can
+call it. All it can do is sign the user out of key management, which signing
+in again undoes; it answers 204 whether or not a row ended, and reads, lists
+and extends nothing. It ends the user's windows in every browser, since rows
+aren't tied to one, and leaves `cli` rows alone: the CLI usually runs on
+another machine.
+
+The window checks its stored session with `GET /_secure-session` (204 while
+it's live, 401 `signed-out` once it has ended) when it opens, and again when a
+request it makes under the session is refused with a 403, which is how a key
+write ticket refuses an ended session. An ended session is forgotten, and the
+window shows "Sign in to Boxel" with no error. When the check gets no answer
+within ten seconds, or the server can't be reached, the window keeps its
+session.
+
 ## Signing in
 
 Only the user's own credential, presented on the secure origin, signs in (ADR
 005 §1.3).
 
 **Password** — `POST /_secure-session` (`attributes.{username, password,
-client}`), one request. The server resolves the account (Matrix id, email via
+client, registrationToken?}`), one request. The server resolves the account (Matrix id, email via
 the admin threepid lookup, or a bare username), mints a token for it through
 Synapse's admin "log in as user" API, posts `account/3pid/add` with a made-up
 validation session, and completes the UIA password stage with the password.
 Synapse runs the request only once the password is right, and it then fails
 with `M_THREEPID_AUTH_FAILED` having changed nothing — that failure is the
-proof. Both admin-minted tokens are logged out at once. A missing account, one that has never signed in to Boxel (no session room), one
+proof. Both admin-minted tokens are logged out at once. A missing account, one
 with no password and a wrong password all answer the same `401
-invalid-credentials`.
+invalid-credentials`. An account that has never signed in to Boxel (no session
+room) gets the app's first-sign-in setup (step 5 below) once its password checks
+out, with `registrationToken`, the invite code it registered with, recorded on
+its realm-server user. That is how an account created on the secure origin's
+`register` page signs in for the first time: the page registers with the Matrix
+server itself, signs that registration's Matrix session out, and signs in here
+with the new password.
+
+Failed password sign-ins are limited per account (`lib/sign-in-limiter.ts`)
+with the Matrix server's default limit on failed logins to the app
+(`rc_login.failed_attempts`: a burst of 3, draining at 0.17 a second); the
+limits are fixed in code, not read from the Matrix server's configuration.
+Only failures count, a successful sign-in never does, and nothing is
+limited per address. The Matrix server's own failure limit doesn't cover these
+sign-ins, because it doesn't count a wrong password in a UIA check, so the
+realm server keeps the count itself, per process. Failures count against the
+Matrix user id the account resolves to, however it was named (username, Matrix
+id or email), or against the name when it names no account, as the Matrix
+server counts failed logins. Once an account has failures, its sign-ins in
+flight count against the burst too, so guesses sent together can't outrun the
+failure rate; an account with none may have up to 10 in flight. An account over the limit is refused before its
+password is checked, with `429 rate-limited`, a `Retry-After` header, and the
+exact wait in `errors[0].meta.retryAfterMs` (none when refused for sign-ins in flight). A
+Matrix 429's wait (`retry_after_ms`, or its `Retry-After` header) is passed
+through the same way. The window
+shows it in the app's words: "Sign-in failed. Too many failed attempts, try
+again in N minutes." (`secure-origin/sign-in-copy.js`). Google sign-in has no
+limit of its own.
 
 **Google** — the realm server is its own OpenID Connect client, using the
 Matrix server's Google client (`lib/google-sign-in.ts`):
@@ -75,36 +139,71 @@ Matrix server's Google client (`lib/google-sign-in.ts`):
 3. The server redeems the code at Google's token endpoint with the client
    secret, against its own redirect URI, and checks the ID token's issuer,
    audience, expiry and nonce (the token comes straight from Google over TLS,
-   so its claims are checked, not its signature). It finds the account
-   Synapse linked to the Google `sub` — `GET
-/_synapse/admin/v1/auth_providers/oidc-google/users/<sub>`, the external id
-   Boxel's OIDC mapping provider stores — refuses a deactivated account, and
-   mints the session. It never links by email itself.
+   so its claims are checked, not its signature).
+4. It resolves the Google identity to an account exactly as Synapse's sign-in
+   for the app does with Boxel's OIDC mapping provider
+   (`packages/matrix/support/synapse/modules/boxel_oidc_mapping_provider.py`):
+   - **Linked by `sub`**: the account Synapse linked to the Google subject,
+     `GET /_synapse/admin/v1/auth_providers/oidc-google/users/<sub>`. A
+     deactivated or locked account is refused.
+   - **Not linked**: the email must be verified. The account holding it
+     (`GET /_synapse/admin/v1/threepid/email/users/<email>`, lowercased, and
+     as Google spells it) gets the Google link added to its `external_ids`
+     (`PUT /_synapse/admin/v2/users/<user>`, keeping its other links), and
+     signs in. More than one account holding it is refused.
+   - **No account**: a new one is made through the admin API, with the
+     mapping provider's localpart (the email's local part, sanitized, then
+     `alice1`, `alice2`… past taken ones), Google's `name` as its display
+     name, the email as a third-party id, and the Google link. An empty `PUT`
+     makes the account, and only its `201` means this sign-in owns it, so a
+     taken localpart is never changed. A sign-in that fails after making the
+     account unlinks and deactivates it, so the next one resolves again.
+
+   The rules live in `lib/google-account.ts`; the two implementations share
+   `test_google_sign_in_vectors.json`, which both
+   `test_boxel_oidc_mapping_provider.py` and `tests/google-account-test.ts`
+   run. Change both together.
+
+5. An account with no session room gets the app's first-sign-in setup before
+   the session is minted, as a password sign-in's does: the realm-server user and its first credit grant, a
+   personal realm when its account data doesn't list the user's own
+   (`<username>/personal/`; a realm shared with them doesn't count) (one already in
+   `realm_registry` is recorded, not made again), and last the session
+   room, so a sign-in that fails part way sets up again.
 
 Both POSTs answer only a request whose `Origin` is the secure origin's. The
 CLI never calls them: `boxel keys sign-in` opens
 `<secure origin>?mode=cli-sign-in&port=…&state=…`, and the window posts the
 session (`secure_session`, `user_id`, `expires_at`, `state`) to
 `http://127.0.0.1:<port>/callback` (after a Google round trip too; the CLI's
-port and state wait in session storage). The shell's CSP allows that form
-target and `connect-src` to the realm server (ADR 005 §1.4). `DELETE /_secure-session` signs a secure session out.
+port and state wait in session storage). A Google sign-in the user cancels
+(`error=access_denied`) returns the window to the page it started from: the
+`cli-sign-in` page for the same listener, or the window's own sign-in. A
+Google sign-in that fails any other way shows the error, with Start again
+pointing at that same page. The shell's CSP allows that form
+target, and `connect-src` to the realm server and the Matrix server (ADR 005 §1.4).
 
 ## Refusals
 
-| Status, code              | Means                                                                          |
-| ------------------------- | ------------------------------------------------------------------------------ |
-| 403 `forbidden`           | A sign-in not from the secure origin                                           |
-| 401 `invalid-credentials` | Any failed password sign-in (no account, no Boxel account, no password, wrong) |
-| 429 `rate-limited`        | Synapse's rate limit on failed attempts for the account                        |
-| 401 `not-confirmed`       | Google's code didn't redeem, or its ID token didn't fit the sign-in            |
-| 403 `not-linked`          | No Boxel account is linked to that Google account                              |
-| 403 `deactivated`         | The linked account is deactivated                                              |
-| 403 `no-boxel-account`    | The linked account has never signed in to Boxel (no session room)              |
-| 409 `used`                | The proof already signed in                                                    |
-| 503 `unavailable`         | No Synapse admin credentials, or Synapse didn't answer with a challenge        |
-| 503 `google-unavailable`  | This server has no Google client                                               |
+| Status, code              | Means                                                                                |
+| ------------------------- | ------------------------------------------------------------------------------------ |
+| 403 `forbidden`           | A sign-in not from the secure origin                                                 |
+| 401 `invalid-credentials` | Any failed password sign-in (no account, no password, wrong)                         |
+| 401 `signed-out`          | `GET /_secure-session` with a session that isn't, or is no longer, secure            |
+| 429 `rate-limited`        | Too many failed password sign-ins for the account; see `meta.retryAfterMs`           |
+| 401 `not-confirmed`       | Google's code didn't redeem, or its ID token didn't fit the sign-in                  |
+| 403 `unverified-email`    | An unlinked Google account whose email Google hasn't verified                        |
+| 403 `ambiguous-email`     | More than one account holds the unlinked Google account's email                      |
+| 403 `deactivated`         | The Google account's account is deactivated                                          |
+| 403 `locked`              | The Google account's account is locked                                               |
+| 403 `no-boxel-account`    | A session was asked for an account with no session room, which sign-in sets up first |
+| 409 `used`                | The proof already signed in                                                          |
+| 503 `unavailable`         | No Synapse admin credentials, or Synapse didn't answer with a challenge              |
+| 503 `google-unavailable`  | This server has no Google client                                                     |
 
-Logged on `realm:secure-session` by error name and message only. The routes
+A Google refusal's message is the app's own copy: the mapping provider's
+words for an unverified or shared email, and the app's sign-in error for a
+deactivated or locked account. Logged on `realm:secure-session` by error name and message only. The routes
 are key routes in `request-telemetry.ts`, so request logs and Sentry keep only
 their method and path, and no body is ever logged.
 

@@ -453,7 +453,10 @@ export default class BoxelInput extends Component<Signature> {
           justify-self: end;
 
           margin-bottom: var(--boxel-sp-xxxs);
-          font-size: var(--boxel-font-size-xs);
+          font-size: var(
+            --boxel-input-optional-font-size,
+            var(--boxel-font-size-xs)
+          );
           font-style: oblique;
           letter-spacing: var(--boxel-lsp);
           opacity: 0.75;

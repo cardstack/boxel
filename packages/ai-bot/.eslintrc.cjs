@@ -1,11 +1,15 @@
 'use strict';
 
 // `root: true` here, so the root config does not apply and the
-// erasable-syntax rule must be re-declared from the shared list.
+// erasable-syntax and cloud-provider-SDK rules must be re-declared from the
+// shared lists.
 const {
   NO_COMPILATION_REQUIRED_TS_SELECTORS,
   CJS_GLOBALS_IN_ESM,
 } = require('../../eslint/erasable-syntax-selectors.cjs');
+const {
+  CLOUD_PROVIDER_SDK_RULE,
+} = require('../../eslint/cloud-provider-sdk-imports.cjs');
 
 module.exports = {
   root: true,
@@ -20,7 +24,7 @@ module.exports = {
       legacyDecorators: true,
     },
   },
-  plugins: ['ember'],
+  plugins: ['ember', '@cardstack/boxel'],
   extends: [
     'eslint:recommended',
     'plugin:@typescript-eslint/recommended',
@@ -60,6 +64,8 @@ module.exports = {
       { prefer: 'class-property' },
     ],
     'no-restricted-syntax': ['error', ...NO_COMPILATION_REQUIRED_TS_SELECTORS],
+    // Re-declared from the root config (ADR 003 §1.2).
+    '@cardstack/boxel/no-cloud-provider-sdk': CLOUD_PROVIDER_SDK_RULE,
   },
   overrides: [
     {

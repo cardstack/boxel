@@ -183,6 +183,12 @@ const realmEventsLogger = logger('realm:events');
 // This waiter spans those gaps, from the credential exchange through to the
 // router refresh that ends the boot. Compiles to a no-op outside a debug build.
 const signInWaiter = buildWaiter('matrix-service:sign-in');
+// Timeline events are drained on a debounce, which the run loop holds, but the
+// drain itself is async: it decrypts each event, adds it to its room, and
+// queues tool requests for the tool service. This waiter holds `settled()`
+// across that body, so a test that delivers an event and settles sees the
+// room with it. It ends in a `finally`, whether the drain succeeds or throws.
+const timelineDrainWaiter = buildWaiter('matrix-service:timeline-drain');
 
 // Bound on the test-only `postLoginCompleted` transition record below. A boot
 // records one →true and a teardown one →false, so a handful of entries covers
@@ -770,6 +776,10 @@ export default class MatrixService extends Service {
       : this._client;
     let didResetState = false;
     try {
+      // Signing out of the app signs the user out of key management too.
+      // Started first, while the realm-server session is still the outgoing
+      // account's; it is never awaited, so it can't delay sign-out.
+      this.realmServer.endSecureWindowSessions();
       // Logout should synchronously move the app into a logged-out state.
       // Waiting on background Matrix flush promises first can leave the
       // authenticated shell visible for an arbitrarily long time.
@@ -3222,11 +3232,11 @@ export default class MatrixService extends Service {
   }
 
   private async drainTimeline() {
-    await this.flushTimeline;
-
-    let eventsDrained: () => void;
-    this.flushTimeline = new Promise((res) => (eventsDrained = res));
+    let waiterToken = timelineDrainWaiter.beginAsync();
+    let eventsDrained: (() => void) | undefined;
     try {
+      await this.flushTimeline;
+      this.flushTimeline = new Promise((res) => (eventsDrained = res));
       let events = [...this.timelineQueue];
       this.timelineQueue = [];
       for (let { event, oldEventId } of events) {
@@ -3237,7 +3247,8 @@ export default class MatrixService extends Service {
         );
       }
     } finally {
-      eventsDrained!();
+      eventsDrained?.();
+      timelineDrainWaiter.endAsync(waiterToken);
     }
   }
 

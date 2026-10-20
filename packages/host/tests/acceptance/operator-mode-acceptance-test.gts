@@ -28,7 +28,10 @@ import { APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE } from '@cardstack/runtime-common/
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 import ENV from '@cardstack/host/config/environment';
 
-import { tokenRefreshPeriodSec } from '@cardstack/host/services/realm';
+import {
+  claimsFromRawToken,
+  tokenRefreshPeriodSec,
+} from '@cardstack/host/services/realm';
 
 import {
   AiAssistantOpen,
@@ -1760,6 +1763,84 @@ module('Acceptance | operator mode tests', function (hooks) {
       );
 
       assert.dom('[data-test-login-btn]').exists();
+    });
+  });
+
+  module('signing out', function (hooks) {
+    setupRealmCacheTeardown(hooks);
+
+    let signOuts: { method: string; url: string; user?: string }[];
+    let answerSignOut: (response: Response) => void;
+    let signOutAnswered: Promise<Response>;
+
+    hooks.beforeEach(function () {
+      signOuts = [];
+      signOutAnswered = new Promise((resolve) => (answerSignOut = resolve));
+      getService('network').mount(
+        async (req: Request) => {
+          if (new URL(req.url).pathname !== '/_secure-sessions') {
+            return null;
+          }
+          let token = req.headers.get('Authorization')?.replace(/^Bearer /, '');
+          signOuts.push({
+            method: req.method,
+            url: req.url,
+            user: token ? claimsFromRawToken(token).user : undefined,
+          });
+          return await signOutAnswered;
+        },
+        { prepend: true },
+      );
+    });
+
+    async function signOut() {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      });
+      await click('[data-test-profile-icon-button]');
+      // Not awaited: `click` waits for every test waiter to settle, and the
+      // request to the realm server is one of them until it is answered.
+      let signedOut = click('[data-test-signout-button]');
+      await waitFor('[data-test-login-btn]');
+      return signedOut;
+    }
+
+    test("signing out signs the user's secure windows out", async function (assert) {
+      answerSignOut(new Response(null, { status: 204 }));
+      await signOut();
+
+      assert.dom('[data-test-login-btn]').exists();
+      assert.strictEqual(signOuts.length, 1, 'the realm server is told once');
+      let [{ method, url, user }] = signOuts;
+      assert.strictEqual(method, 'DELETE');
+      assert.strictEqual(
+        new URL(url).searchParams.get('client'),
+        'window',
+        "only the secure window's sessions are ended",
+      );
+      assert.strictEqual(
+        user,
+        '@testuser:localhost',
+        "under the outgoing account's session",
+      );
+    });
+
+    test("a realm server that doesn't answer doesn't hold sign-out up", async function (assert) {
+      let signedOut = signOut();
+      await waitFor('[data-test-login-btn]');
+
+      assert.dom('[data-test-login-btn]').exists('signed out');
+      assert.strictEqual(signOuts.length, 1, 'still waiting on the server');
+      answerSignOut(new Response(null, { status: 204 }));
+      await signedOut;
+    });
+
+    test("a realm server that refuses doesn't stop sign-out", async function (assert) {
+      answerSignOut(new Response('unavailable', { status: 503 }));
+      await signOut();
+
+      assert.dom('[data-test-login-btn]').exists('signed out');
+      assert.strictEqual(signOuts.length, 1);
     });
   });
 });
