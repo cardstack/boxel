@@ -25,7 +25,15 @@ import {
   RealmIcon,
   Tooltip,
 } from '@cardstack/boxel-ui/components';
-import { MenuItem, cssVar, gt, or } from '@cardstack/boxel-ui/helpers';
+import {
+  MenuItem,
+  and,
+  cn,
+  cssVar,
+  gt,
+  not,
+  or,
+} from '@cardstack/boxel-ui/helpers';
 import {
   Group,
   IconGlobe,
@@ -63,6 +71,7 @@ import type WorkspaceDuplicationService from '@cardstack/host/services/workspace
 
 import focusWhenSelected from './focus-when-selected';
 import ItemContainer from './item-container';
+import PinnedCards from './pinned-cards';
 import WorkspaceLoadingIndicator from './workspace-loading-indicator';
 
 interface Signature {
@@ -126,60 +135,120 @@ export default class Workspace extends Component<Signature> {
           id={{this.realmURLDescriptionId}}
           class='boxel-sr-only'
         >{{this.realmURLText}}</span>
-        <ItemContainer
-          aria-describedby={{this.realmURLDescriptionId}}
-          data-test-workspace-button={{this.name}}
-          data-nav-index={{@navIndex}}
-          {{on 'click' this.openWorkspace}}
-          {{focusWhenSelected @isSelected}}
-        >
+        {{#if @isFavoritesSection}}
+          {{! A favorite is a surface, not one button: the name pill, each
+              pinned card and the menu are separate controls, and the bare
+              wallpaper opens the workspace for a pointer. The pill carries
+              the arrow-key navigation. }}
           <div
-            class='tile-icon'
+            class={{cn 'desk-surface' has-pins=this.hasPins}}
             style={{cssVar
               workspace-background-image-url=this.backgroundImageURL
             }}
           >
-            {{#if @isFavoritesSection}}
-              <div class='tile-scrim'></div>
-              <div class='tile-content'>
-                <RealmURLTooltip @realmURL={{@realmIdentifier}}>
-                  <div class='realm-icon-wrapper'>
-                    <RealmIcon
-                      class='workspace-realm-icon'
-                      @realmInfo={{this.realmInfo}}
-                      @canAnimate={{true}}
-                    />
-                  </div>
-                </RealmURLTooltip>
-                <div class='tile-text'>
+            <button
+              type='button'
+              class='desk-hit'
+              tabindex='-1'
+              aria-hidden='true'
+              {{on 'click' this.openWorkspace}}
+            ></button>
+            <div class='desk-top'>
+              <button
+                type='button'
+                class='desk-pill'
+                aria-describedby={{this.realmURLDescriptionId}}
+                data-test-workspace-button={{this.name}}
+                data-nav-index={{@navIndex}}
+                {{on 'click' this.openWorkspace}}
+                {{focusWhenSelected @isSelected}}
+              >
+                <RealmIcon
+                  class='desk-pill-icon'
+                  @realmInfo={{this.realmInfo}}
+                />
+                <span
+                  class='desk-pill-name'
+                  data-test-workspace-name
+                >{{this.name}}</span>
+              </button>
+              {{#if this.hasPublishedRealms}}
+                <span class='desk-live'>Live</span>
+              {{/if}}
+            </div>
+            {{#if this.hasPins}}
+              <PinnedCards
+                class='desk-pins'
+                @realmURL={{@realmIdentifier}}
+                @workspaceName={{this.name}}
+              />
+            {{/if}}
+          </div>
+          <div class='desk-caption'>
+            {{! Always rendered so the counts, which load after the tile, fill
+                reserved space instead of growing it. }}
+            <div
+              class='desk-caption-line'
+              data-test-workspace-status-bar={{@realmIdentifier}}
+            >
+              <span class='desk-visibility'>
+                <this.visibilityIcon width='12' height='12' />
+                {{this.visibility}}
+              </span>
+              <span
+                class='desk-stats'
+                data-test-workspace-stats={{@realmIdentifier}}
+              >
+                {{#each this.tileStats as |stat|}}
                   <span
-                    class='tile-name'
-                    data-test-workspace-name
-                  >{{this.name}}</span>
-                  {{! Always rendered so the counts, which load after the tile,
-                      fill reserved space instead of growing it. }}
-                  <div
-                    class='tile-metadata-row'
-                    data-test-workspace-stats={{@realmIdentifier}}
+                    class='desk-stat'
+                    data-test-workspace-stat={{stat.label}}
                   >
-                    {{#each this.tileStats as |stat|}}
-                      <Tooltip @placement='top'>
-                        <:trigger>
-                          <span
-                            class='tile-stat'
-                            data-test-workspace-stat={{stat.label}}
-                          >
-                            <span class='tile-stat-label'>{{stat.label}}</span>
-                            <span class='tile-stat-number'>{{stat.count}}</span>
-                          </span>
-                        </:trigger>
-                        <:content>{{stat.label}} {{stat.count}}</:content>
-                      </Tooltip>
-                    {{/each}}
-                  </div>
-                </div>
+                    <span>{{stat.label}}</span>
+                    <span class='desk-stat-number'>{{stat.count}}</span>
+                  </span>
+                {{/each}}
+                {{#if this.pinCount}}
+                  <span class='desk-stat'>{{this.pinCount}} pinned</span>
+                {{/if}}
+              </span>
+            </div>
+            {{#if this.hasPublishedRealms}}
+              <div class='desk-host-line'>
+                <span class='desk-host-dot' aria-hidden='true'></span>
+                <span>Live at</span>
+                <button
+                  type='button'
+                  class='desk-host-link'
+                  {{on
+                    'click'
+                    (fn this.openPublishedRealm this.primaryPublishedURL)
+                  }}
+                  data-test-desk-host-link={{@realmIdentifier}}
+                >{{this.displayPublishedURL}}
+                  <span aria-hidden='true'>↗</span></button>
+                {{#if (gt this.publishedRealmURLs.length 1)}}
+                  <span
+                    class='desk-host-more'
+                  >+{{this.extraPublishedCount}}</span>
+                {{/if}}
               </div>
-            {{else}}
+            {{/if}}
+          </div>
+        {{else}}
+          <ItemContainer
+            aria-describedby={{this.realmURLDescriptionId}}
+            data-test-workspace-button={{this.name}}
+            data-nav-index={{@navIndex}}
+            {{on 'click' this.openWorkspace}}
+            {{focusWhenSelected @isSelected}}
+          >
+            <div
+              class='tile-icon'
+              style={{cssVar
+                workspace-background-image-url=this.backgroundImageURL
+              }}
+            >
               <RealmURLTooltip @realmURL={{@realmIdentifier}}>
                 <div class='realm-icon-wrapper'>
                   <RealmIcon
@@ -189,9 +258,9 @@ export default class Workspace extends Component<Signature> {
                   />
                 </div>
               </RealmURLTooltip>
-            {{/if}}
-          </div>
-        </ItemContainer>
+            </div>
+          </ItemContainer>
+        {{/if}}
         <div class='tile-favorite-btn {{if this.isFavorited "is-favorited"}}'>
           <Tooltip @placement='top'>
             <:trigger>
@@ -208,32 +277,6 @@ export default class Workspace extends Component<Signature> {
             <:content>{{this.favoriteLabel}}</:content>
           </Tooltip>
         </div>
-        {{#if @isFavoritesSection}}
-          <div
-            class='tile-status-bar'
-            data-test-workspace-status-bar={{@realmIdentifier}}
-          >
-            {{#if this.hasPublishedRealms}}
-              <Tooltip @placement='top'>
-                <:trigger>
-                  <span class='tile-status-icon'>
-                    <Home width='12' height='12' />
-                  </span>
-                </:trigger>
-                <:content>Hosted on the web</:content>
-              </Tooltip>
-            {{/if}}
-            <Tooltip @placement='top'>
-              <:trigger>
-                <span class='tile-status-visibility'>
-                  <this.visibilityIcon width='12' height='12' />
-                  <span class='tile-status-label'>{{this.visibility}}</span>
-                </span>
-              </:trigger>
-              <:content>{{this.visibilityLabel}}</:content>
-            </Tooltip>
-          </div>
-        {{/if}}
         <div class='tile-menu-btn'>
           <BoxelDropdown @contentClass='workspace-menu-dropdown'>
             <:trigger as |bindings|>
@@ -271,7 +314,7 @@ export default class Workspace extends Component<Signature> {
             </:content>
           </BoxelDropdown>
         </div>
-        {{#if this.hasPublishedRealms}}
+        {{#if (and this.hasPublishedRealms (not @isFavoritesSection))}}
           <button
             class='host-trigger'
             type='button'
@@ -625,21 +668,17 @@ export default class Workspace extends Component<Signature> {
         pointer-events: none;
         z-index: 20;
       }
-      .workspace-card.is-enlarged :deep(.workspace) {
+      /* A favorite draws its own frame on the desk surface. */
+      .workspace-card.is-enlarged {
         width: var(
           --favorite-tile-width,
           var(--workspace-chooser-enlarged-tile-width)
         );
-        min-width: var(
-          --favorite-tile-width,
-          var(--workspace-chooser-enlarged-tile-width)
-        );
+        gap: var(--boxel-sp-xs);
+        cursor: default;
       }
       .workspace-card.is-enlarged::after {
-        width: var(
-          --favorite-tile-width,
-          var(--workspace-chooser-enlarged-tile-width)
-        );
+        display: none;
       }
       .workspace-card:hover::after {
         border-color: rgba(255 255 255 / 50%);
@@ -757,52 +796,236 @@ export default class Workspace extends Component<Signature> {
         background: var(--boxel-highlight);
         color: var(--boxel-highlight-foreground);
       }
-      /* Hosted + visibility indicators for the enlarged favorite tile,
-         combined into a single pill to the right of the favorite star,
-         matching its height. Persistently visible (not hover-gated) since
-         it's informational, same as the favorited star. */
-      .tile-status-bar {
-        position: absolute;
-        top: 0.5rem;
-        left: calc(0.5rem + var(--boxel-button-xs) + var(--boxel-sp-3xs));
-        z-index: 3;
-        /* The bar overlays the tile's own open-workspace button. Let clicks on
-           its inert areas fall through to that button (rather than dying on
-           this strip); the tooltip triggers below re-enable pointer events for
-           themselves so hovering the icons still surfaces their tooltips. */
-        pointer-events: none;
+      /* The favorite desk: the wallpaper stays vivid, and legibility comes
+         from glass chips and the cards on it rather than a scrim. */
+      .workspace-card.is-enlarged {
+        --desk-control-size: 2.125rem;
+        --desk-inset: 0.75rem;
+        --desk-glass: color-mix(in oklch, var(--boxel-800) 60%, transparent);
+      }
+      .desk-surface {
+        position: relative;
         box-sizing: border-box;
-        height: var(--boxel-button-xs);
+        height: 17rem;
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-xs);
+        padding: var(--desk-inset);
+        border-radius: 1.5rem;
+        overflow: hidden;
+        background-color: var(--muted);
+        background-image: var(--workspace-background-image-url);
+        background-position: center;
+        background-size: cover;
+        box-shadow:
+          0 0.625rem 1.5rem
+            color-mix(in oklch, var(--boxel-dark) 18%, transparent),
+          inset 0 0 0 1px
+            color-mix(in oklch, var(--boxel-light) 30%, transparent);
+        transition: box-shadow var(--boxel-transition);
+      }
+      /* With cards on it, the wallpaper steps back: a dimmed copy
+         keeps the workspace's colors as its identity while the cards carry
+         the content. Hovering brings a little of it back. */
+      .desk-surface.has-pins::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        background-image: inherit;
+        background-position: center;
+        background-size: cover;
+        filter: brightness(0.55) saturate(1.1);
+        transition: filter 0.4s ease-out;
+      }
+      .workspace-card.is-enlarged:hover .desk-surface.has-pins::before {
+        filter: brightness(0.68) saturate(1.15);
+      }
+      .workspace-card.is-enlarged:hover .desk-surface {
+        box-shadow:
+          0 0.875rem 2rem
+            color-mix(in oklch, var(--boxel-dark) 28%, transparent),
+          inset 0 0 0 1px
+            color-mix(in oklch, var(--boxel-light) 50%, transparent);
+      }
+      .workspace-card.is-enlarged.is-selected .desk-surface {
+        box-shadow:
+          0 0 0 2px var(--boxel-highlight),
+          0 0.625rem 1.5rem
+            color-mix(in oklch, var(--boxel-dark) 18%, transparent);
+      }
+      /* The bare wallpaper opens the workspace for a pointer; keyboard users
+         have the name pill, so this stays out of the tab order. */
+      .desk-hit {
+        position: absolute;
+        inset: 0;
+        padding: 0;
+        border: 0;
+        background: none;
+        cursor: pointer;
+      }
+      .desk-top {
+        position: relative;
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-3xs);
-        padding: 0 var(--boxel-sp-2xs);
-        border-radius: var(--boxel-border-radius-sm);
-        background: var(--boxel-dark-40);
-        backdrop-filter: blur(6px);
+        gap: var(--boxel-sp-xs);
+        min-height: var(--desk-control-size);
+        /* Room for the star (left) and the menu (right), which sit over the
+           surface at the same inset. */
+        padding-inline: calc(var(--desk-control-size) + var(--boxel-sp-4xs));
+        pointer-events: none;
+      }
+      .desk-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-xs);
+        min-width: 0;
+        height: var(--desk-control-size);
+        padding: var(--boxel-sp-5xs) var(--boxel-sp-sm) var(--boxel-sp-5xs)
+          var(--boxel-sp-5xs);
+        border: 0;
+        border-radius: 0.75rem;
+        background-color: var(--desk-glass);
+        backdrop-filter: blur(8px);
         color: var(--boxel-light);
-      }
-      .tile-status-icon {
-        display: flex;
-        align-items: center;
-        color: var(--boxel-highlight);
-        /* Re-enable pointer events so this icon's tooltip still opens on hover
-           (see `.tile-status-bar { pointer-events: none }`). */
+        font-size: var(--boxel-font-size);
+        font-weight: 600;
+        cursor: pointer;
         pointer-events: auto;
       }
-      .tile-status-visibility {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-6xs);
-        --icon-color: var(--boxel-light);
-        /* Re-enable pointer events for this tooltip trigger (see above). */
-        pointer-events: auto;
+      .desk-pill:hover {
+        background-color: color-mix(
+          in oklch,
+          var(--boxel-800) 78%,
+          transparent
+        );
       }
-      .tile-status-label {
+      .desk-pill:focus-visible {
+        outline: 2px solid var(--boxel-highlight);
+        outline-offset: 2px;
+      }
+      .desk-pill-icon {
+        --boxel-realm-icon-size: 1.625rem;
+        --boxel-realm-icon-border-radius: 0.4375rem;
+        --boxel-realm-icon-background-color: var(--boxel-light);
+        flex: none;
+      }
+      .desk-pill-name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .desk-live {
+        margin-left: auto;
+        padding: var(--boxel-sp-6xs) var(--boxel-sp-xs);
+        border-radius: 0.75rem;
+        background-color: var(--desk-glass);
+        backdrop-filter: blur(8px);
+        color: var(--boxel-lime);
+        font-family: var(--boxel-monospace-font-family);
         font-size: var(--boxel-font-size-2xs);
+        font-weight: 600;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+      .desk-live::before {
+        content: '● ';
+      }
+      .desk-pins {
+        position: relative;
+        flex: 1;
+      }
+      /* Star and menu join the desk's top row as glass chips, always shown. */
+      .workspace-card.is-enlarged .tile-favorite-btn,
+      .workspace-card.is-enlarged .tile-menu-btn {
+        top: var(--desk-inset);
+        width: var(--desk-control-size);
+        height: var(--desk-control-size);
+        border-radius: 0.625rem;
+        opacity: 1;
+        background-color: var(--desk-glass);
+        backdrop-filter: blur(8px);
+        --boxel-icon-button-width: var(--desk-control-size);
+        --boxel-icon-button-height: var(--desk-control-size);
+      }
+      .workspace-card.is-enlarged .tile-favorite-btn {
+        left: var(--desk-inset);
+      }
+      .workspace-card.is-enlarged .tile-menu-btn {
+        right: var(--desk-inset);
+      }
+      /* Under the desk, in plain words: who it belongs to, what's in it,
+         and where it lives on the web. */
+      .desk-caption {
+        display: flex;
+        flex-direction: column;
+        gap: var(--boxel-sp-5xs);
+        padding-inline: var(--boxel-sp-4xs);
+        font-size: var(--boxel-font-size-sm);
+        color: var(--muted-foreground);
+      }
+      .desk-caption-line {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--boxel-sp-5xs) var(--boxel-sp-sm);
+        min-height: 1.25rem;
+      }
+      .desk-visibility {
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-5xs);
         text-transform: capitalize;
-        letter-spacing: var(--boxel-lsp);
-        margin-left: 3px;
+        --icon-color: currentColor;
+      }
+      .desk-stats {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: var(--boxel-sp-sm);
+      }
+      .desk-stat {
+        display: inline-flex;
+        gap: var(--boxel-sp-5xs);
+      }
+      .desk-stat-number {
+        color: var(--foreground);
+        font-weight: 600;
+      }
+      .desk-host-line {
+        display: flex;
+        align-items: center;
+        gap: var(--boxel-sp-4xs);
+        min-width: 0;
+        color: var(--foreground);
+      }
+      .desk-host-dot {
+        flex: none;
+        width: 0.4375rem;
+        height: 0.4375rem;
+        border-radius: 50%;
+        background-color: var(--boxel-lime);
+      }
+      .desk-host-link {
+        min-width: 0;
+        padding: 0;
+        border: 0;
+        background: none;
+        color: inherit;
+        font-size: inherit;
+        font-weight: 600;
+        text-decoration: underline;
+        text-underline-offset: 3px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        cursor: pointer;
+      }
+      .desk-host-link:focus-visible {
+        outline: 2px solid var(--boxel-highlight);
+        outline-offset: 2px;
+      }
+      .desk-host-more {
+        color: var(--muted-foreground);
       }
       .tile-icon {
         position: relative;
@@ -828,9 +1051,6 @@ export default class Workspace extends Component<Signature> {
         background-repeat: no-repeat;
         transition: transform 0.4s ease-out;
         z-index: 0;
-      }
-      .workspace-card.is-enlarged:hover .tile-icon::before {
-        transform: scale(1.15);
       }
       .realm-icon-wrapper {
         flex-shrink: 0;
@@ -950,86 +1170,6 @@ export default class Workspace extends Component<Signature> {
         display: flex;
         align-items: center;
         margin-right: var(--boxel-sp-6xs);
-      }
-      /* Sits between the tile's background image and its text/icon
-         content, darkening the image so the name and metadata stay
-         readable regardless of the underlying artwork. */
-      .tile-scrim {
-        position: absolute;
-        inset: 0;
-        background: rgba(0 0 0 / 50%);
-        z-index: 1;
-        pointer-events: none;
-      }
-      /* The icon + name + metadata group, vertically centered as a unit
-         within the tile. padding-top reserves the zone occupied by the
-         favorite star and status bar (see .tile-favorite-btn/.tile-status-bar
-         above) so the centered group never sits under them; padding-bottom
-         stays 0 so centering is computed against the space below that zone,
-         not the full tile height. Nudged up 10px from that centered
-         position per design feedback. Stays visible even when the
-         host-trigger bar is hovered/open (see .host-trigger below) — only
-         the .info block used to need to fade for that, and this group
-         replaced it. */
-      .tile-content {
-        position: absolute;
-        inset: 0;
-        box-sizing: border-box;
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-xs);
-        padding: calc(0.5rem + var(--boxel-button-xs) + var(--boxel-sp-3xs))
-          var(--boxel-sp) 0;
-        transform: translateY(-10px);
-        z-index: 2;
-      }
-      .tile-text {
-        display: flex;
-        flex-direction: column;
-        gap: var(--boxel-sp-5xs);
-        min-width: 0;
-        flex: 1;
-      }
-      .tile-name {
-        font: 400 var(--boxel-font-md);
-        color: var(--boxel-light);
-        text-align: left;
-        display: -webkit-box;
-        -webkit-line-clamp: 2;
-        -webkit-box-orient: vertical;
-        overflow: hidden;
-        overflow-wrap: anywhere;
-      }
-      /* Height is fixed rather than derived from content: the counts are
-         fetched after the tile renders (favorites only), so a row that grew
-         when they landed would shift the tile's centered name. 1lh at the
-         stats' own font-size matches a populated row exactly. On a tile too
-         narrow for every stat, the ones that don't fit wrap onto a second
-         line that's clipped, so a stat is dropped whole, never cut off. */
-      .tile-metadata-row {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: center;
-        column-gap: var(--boxel-sp-sm);
-        height: 1lh;
-        overflow: hidden;
-        font-size: 0.75rem;
-      }
-      .tile-stat {
-        display: flex;
-        white-space: nowrap;
-        align-items: baseline;
-        gap: 0.25rem;
-        font-size: 0.75rem;
-        color: var(--boxel-light);
-        letter-spacing: var(--boxel-lsp);
-        --icon-color: var(--boxel-450);
-      }
-      .tile-stat-label {
-        font-weight: 400;
-      }
-      .tile-stat-number {
-        font-weight: 600;
       }
       .realm-url {
         font-size: var(--boxel-font-xs);
@@ -1962,6 +2102,19 @@ export default class Workspace extends Component<Signature> {
       { label: 'Files', count: counts.fileCount },
       { label: 'Definitions', count: counts.definitionCount },
     ].filter((stat): stat is { label: string; count: number } => !!stat.count);
+  }
+
+  private get pinCount() {
+    return this.matrixService.pinnedCardsFor(this.args.realmIdentifier).length;
+  }
+
+  // Favorites lay their pinned cards out on the wallpaper.
+  private get hasPins() {
+    return Boolean(this.args.isFavoritesSection) && this.pinCount > 0;
+  }
+
+  private get extraPublishedCount() {
+    return Math.max(this.publishedRealmURLs.length - 1, 0);
   }
 
   private get canDeleteWorkspace() {

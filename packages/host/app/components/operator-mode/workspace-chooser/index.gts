@@ -32,6 +32,7 @@ import type RealmServerService from '@cardstack/host/services/realm-server';
 
 import AddWorkspace from './add-workspace';
 import ArchivedWorkspace from './archived-workspace';
+import GetStarted from './get-started';
 import ManageCatalogs from './manage-catalogs';
 import Workspace from './workspace';
 import WorkspaceLoadingIndicator from './workspace-loading-indicator';
@@ -165,6 +166,16 @@ export default class WorkspaceChooser extends Component<Signature> {
 
   private get sortOrder(): 'default' | 'hosted-only' {
     return this.selectedSortOption.value;
+  }
+
+  // "Good morning, Chris" — first name only, and no name rather than a
+  // Matrix id while the profile loads.
+  private get greeting() {
+    let hour = new Date().getHours();
+    let part = hour < 12 ? 'morning' : hour < 18 ? 'afternoon' : 'evening';
+    let displayName = this.matrixService.profile.displayName?.trim();
+    let firstName = displayName?.split(/\s+/)[0];
+    return firstName ? `Good ${part}, ${firstName}` : `Good ${part}`;
   }
 
   private get communityRealmIdentifiers() {
@@ -634,10 +645,20 @@ export default class WorkspaceChooser extends Component<Signature> {
           </div>
         {{/if}}
         <div class='sections-wrapper'>
+          <h1
+            class='greeting'
+            data-test-dashboard-greeting
+          >{{this.greeting}}</h1>
+          <GetStarted />
           <div class='workspace-section' data-test-favorites-section>
             <div class='section-header'>
-              <StarFilled width='20' height='20' class='section-header-icon' />
+              <StarFilled width='14' height='14' class='section-header-icon' />
               <span class='workspace-chooser__title'>Favorites</span>
+              {{#if this.favoriteRealmIdentifiers.length}}
+                <span
+                  class='section-count'
+                >{{this.favoriteRealmIdentifiers.length}}</span>
+              {{/if}}
             </div>
             {{#if this.favoritesEmptyMessage}}
               <span
@@ -668,8 +689,13 @@ export default class WorkspaceChooser extends Component<Signature> {
           </div>
           <div class='workspace-section'>
             <div class='section-header'>
-              <Lock width='20' height='20' class='section-header-icon' />
+              <Lock width='14' height='14' class='section-header-icon' />
               <span class='workspace-chooser__title'>Your Workspaces</span>
+              {{#if this.filteredUserRealmIdentifiers.length}}
+                <span
+                  class='section-count'
+                >{{this.filteredUserRealmIdentifiers.length}}</span>
+              {{/if}}
             </div>
             {{#if this.userWorkspacesEmptyMessage}}
               <span
@@ -708,8 +734,13 @@ export default class WorkspaceChooser extends Component<Signature> {
           </div>
           <div class='workspace-section'>
             <div class='section-header'>
-              <IconGlobe width='20' height='20' class='section-header-icon' />
+              <IconGlobe width='14' height='14' class='section-header-icon' />
               <span class='workspace-chooser__title'>Catalogs</span>
+              {{#if this.filteredCatalogRealmIdentifiers.length}}
+                <span
+                  class='section-count'
+                >{{this.filteredCatalogRealmIdentifiers.length}}</span>
+              {{/if}}
               <ManageCatalogs />
             </div>
             {{#if this.catalogEmptyMessage}}
@@ -749,7 +780,7 @@ export default class WorkspaceChooser extends Component<Signature> {
                 height='12'
                 class='section-disclosure-icon'
               />
-              <ArchiveIcon width='20' height='20' class='section-header-icon' />
+              <ArchiveIcon width='14' height='14' class='section-header-icon' />
               <span class='workspace-chooser__title'>Archived</span>
               {{#if this.showArchivedCount}}
                 <span
@@ -788,10 +819,26 @@ export default class WorkspaceChooser extends Component<Signature> {
       .workspace-chooser {
         position: absolute;
         background-color: var(--boxel-800);
+        /* A faint dot grid gives the dark page a surface to sit on. */
+        background-image: radial-gradient(
+          color-mix(in oklch, var(--boxel-light) 5%, transparent) 1.2px,
+          transparent 1.2px
+        );
+        background-size: 2rem 2rem;
         height: 100%;
         width: 100%;
         z-index: var(--host-workspace-chooser-z-index);
         --workspace-chooser-gutter: 5rem;
+        --workspace-chooser-label-color: color-mix(
+          in oklch,
+          var(--boxel-light) 66%,
+          transparent
+        );
+        --workspace-chooser-count-color: color-mix(
+          in oklch,
+          var(--boxel-light) 42%,
+          transparent
+        );
         --workspace-chooser-card-width: fit-content;
         --workspace-chooser-tile-width: var(--boxel-xxs-container);
         /* Favorites until the grid is measured; capped so the tile never
@@ -855,7 +902,11 @@ export default class WorkspaceChooser extends Component<Signature> {
         height: 100%;
         /* The bottom always clears the floating AI assistant button, which
            sits over the chooser's bottom-right corner. */
-        padding: calc(var(--workspace-chooser-gutter) + 3.75rem)
+        /* Clear the top bar (its controls plus their inset), then breathe. */
+        padding: calc(
+            var(--operator-mode-top-bar-item-height) + 2 *
+              var(--operator-mode-spacing) + var(--boxel-sp-xl)
+          )
           var(--workspace-chooser-gutter)
           max(
             var(--workspace-chooser-gutter),
@@ -887,8 +938,8 @@ export default class WorkspaceChooser extends Component<Signature> {
         gap: var(--boxel-sp-xs);
       }
       .section-header-icon {
-        --icon-color: var(--boxel-teal);
-        color: var(--boxel-teal);
+        --icon-color: var(--workspace-chooser-label-color);
+        color: var(--workspace-chooser-label-color);
         flex-shrink: 0;
       }
       .section-header--toggle {
@@ -909,15 +960,28 @@ export default class WorkspaceChooser extends Component<Signature> {
       .section-header--toggle.is-expanded .section-disclosure-icon {
         transform: rotate(90deg);
       }
+      /* Section titles are quiet labels; the workspaces are the headline. */
+      .workspace-chooser__title,
       .section-count {
-        color: var(--boxel-400);
-        font: 600 var(--boxel-font-sm);
-        letter-spacing: var(--boxel-lsp);
+        font-family: var(--boxel-monospace-font-family);
+        font-size: var(--boxel-font-size-xs);
+        font-weight: 600;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
+        color: var(--workspace-chooser-label-color);
       }
-      .workspace-chooser__title {
+      .section-count {
+        color: var(--workspace-chooser-count-color);
+      }
+      .section-count::before {
+        content: '· ';
+      }
+      .greeting {
+        margin: 0;
+        font-size: 1.625rem;
+        font-weight: 700;
+        letter-spacing: -0.02em;
         color: var(--boxel-light);
-        font: 400 var(--boxel-font-lg);
-        letter-spacing: var(--boxel-lsp);
       }
       .workspace-list {
         display: flex;

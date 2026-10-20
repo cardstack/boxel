@@ -36,6 +36,8 @@ export interface Config {
   workspaceFavorites?: string[];
   // Public realms the user added to their dashboard's Catalogs section.
   catalogRealms?: string[];
+  // The user's dashboard state: onboarding progress and pinned cards.
+  dashboardState?: import('@cardstack/runtime-common/matrix-constants').AppBoxelDashboardContent;
   loginFlowsResponse?: { flows: import('matrix-js-sdk').LoginFlow[] };
   ssoLoginUrl?: string;
   loginWithTokenInterceptor?: (

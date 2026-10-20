@@ -47,6 +47,7 @@ import ChooseSubscriptionPlanModal from './choose-subscription-plan-modal';
 
 import NewFileButton, { type NewFileOptions } from './new-file-button';
 import WorkspaceChooser from './workspace-chooser';
+import NavRail from './workspace-chooser/nav-rail';
 
 import type AiAssistantPanelService from '../../services/ai-assistant-panel-service';
 import type MatrixService from '../../services/matrix-service';
@@ -106,6 +107,7 @@ type PanelWidths = {
 
 const COLLAPSED_TOP_BAR_BUTTONS_WIDTH_REM = 46;
 const COLLAPSED_TOP_BAR_BUTTONS_NOT_EXPANDED_WIDTH_REM = 23;
+const NAV_RAIL_DISMISS_DELAY_MS = 250;
 
 export default class SubmodeLayout extends Component<Signature> {
   @tracked private searchSheetMode: SearchSheetMode = SearchSheetModes.Closed;
@@ -393,6 +395,56 @@ export default class SubmodeLayout extends Component<Signature> {
       !this.operatorModeStateService.workspaceChooserOpened;
   }
 
+  // The dashboard's nav rail is summoned from the wordmark: hover or focus
+  // opens it, and leaving both the wordmark and the rail closes it after a
+  // grace period long enough to travel between them.
+  @tracked private isNavRailOpen = false;
+
+  private get isWorkspaceButtonDisabled() {
+    return (
+      !this.workspaceChooserOpened && this.isToggleWorkspaceChooserDisabled
+    );
+  }
+
+  @action private summonNavRail() {
+    if (!this.workspaceChooserOpened) {
+      return;
+    }
+    this.navRailDismissTask.cancelAll();
+    this.isNavRailOpen = true;
+  }
+
+  @action private scheduleNavRailDismiss() {
+    if (this.isNavRailOpen) {
+      this.navRailDismissTask.perform();
+    }
+  }
+
+  @action private dismissNavRail() {
+    this.navRailDismissTask.cancelAll();
+    this.isNavRailOpen = false;
+  }
+
+  private navRailDismissTask = restartableTask(async () => {
+    await timeout(NAV_RAIL_DISMISS_DELAY_MS);
+    this.isNavRailOpen = false;
+  });
+
+  // With no stack to return to, the chooser can't close, so the wordmark
+  // toggles the nav rail instead — the way in for keyboard and touch.
+  @action private onWorkspaceButtonClick() {
+    if (this.workspaceChooserOpened && this.isToggleWorkspaceChooserDisabled) {
+      if (this.isNavRailOpen) {
+        this.dismissNavRail();
+      } else {
+        this.summonNavRail();
+      }
+      return;
+    }
+    this.dismissNavRail();
+    this.toggleWorkspaceChooser();
+  }
+
   @action private toggleProfileSettings() {
     this.operatorModeStateService.toggleProfileSettings();
 
@@ -464,20 +516,33 @@ export default class SubmodeLayout extends Component<Signature> {
       >
         <ResizablePanel class='main-panel'>
           <div class='submode-layout-top-bar'>
-            <IconButton
-              @icon={{BoxelIconWithText}}
-              @width='160px'
-              @height='40px'
-              disabled={{this.isToggleWorkspaceChooserDisabled}}
-              class={{cn
-                'workspace-button'
-                workspace-button--dark=(not this.workspaceChooserOpened)
-                workspace-button--chooser-open=this.workspaceChooserOpened
-              }}
-              {{on 'click' this.toggleWorkspaceChooser}}
-              data-workspace-chooser-toggle
-              data-test-workspace-chooser-toggle
-            />
+            {{! The wrapper, not the button, listens for the pointer: the button
+                can be disabled, and disabled buttons don't fire mouse events. }}
+            <div
+              class='workspace-button-wrapper'
+              {{on 'mouseenter' this.summonNavRail}}
+              {{on 'mouseleave' this.scheduleNavRailDismiss}}
+            >
+              <IconButton
+                @icon={{BoxelIconWithText}}
+                @width='160px'
+                @height='40px'
+                disabled={{this.isWorkspaceButtonDisabled}}
+                aria-expanded={{if
+                  this.workspaceChooserOpened
+                  (if this.isNavRailOpen 'true' 'false')
+                }}
+                class={{cn
+                  'workspace-button'
+                  workspace-button--dark=(not this.workspaceChooserOpened)
+                  workspace-button--chooser-open=this.workspaceChooserOpened
+                }}
+                {{on 'click' this.onWorkspaceButtonClick}}
+                {{on 'focus' this.summonNavRail}}
+                data-workspace-chooser-toggle
+                data-test-workspace-chooser-toggle
+              />
+            </div>
             {{#if this.workspaceChooserOpened}}
               <div
                 class='submode-layout-top-bar-center'
@@ -533,6 +598,13 @@ export default class SubmodeLayout extends Component<Signature> {
             <WorkspaceChooser
               @topBarCenterElement={{this.topBarCenterElement}}
             />
+            {{#if this.isNavRailOpen}}
+              <NavRail
+                @onPointerEnter={{this.summonNavRail}}
+                @onPointerLeave={{this.scheduleNavRailDismiss}}
+                @onDismiss={{this.dismissNavRail}}
+              />
+            {{/if}}
           {{/if}}
 
           {{yield
@@ -763,6 +835,11 @@ export default class SubmodeLayout extends Component<Signature> {
         border-radius: 50%;
         box-shadow: var(--submode-bar-item-box-shadow);
         z-index: var(--host-profile-z-index);
+      }
+
+      .workspace-button-wrapper {
+        display: flex;
+        flex-shrink: 0;
       }
 
       .workspace-button {
