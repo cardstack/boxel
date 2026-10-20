@@ -1,6 +1,6 @@
 import {
   ensureTrailingSlash,
-  isUrlLike,
+  isPrefixForm,
   RealmPaths,
   ri,
   rri,
@@ -190,7 +190,7 @@ export function realmURLDisplayText(
  * realmIdentifierSegments('https://example.com/')         // []
  */
 export function realmIdentifierSegments(realmIdentifier: string): string[] {
-  if (!isUrlLike(realmIdentifier)) {
+  if (isPrefixForm(realmIdentifier)) {
     return realmIdentifier.split('/').filter(Boolean);
   }
   try {

@@ -19,7 +19,10 @@ import {
 } from './constants.ts';
 import { CardError } from './error.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
-import type { RealmResourceIdentifier } from './realm-identifiers.ts';
+import {
+  isPrefixForm,
+  type RealmResourceIdentifier,
+} from './realm-identifiers.ts';
 import type { LooseCardResource, FileMetaResource } from './index.ts';
 import {
   isUrlLike,
@@ -648,7 +651,7 @@ export function isRelativePath(moduleId: unknown): moduleId is string {
   // canonical spelling of a base-realm module as a relative path.
   // `resolveRRIReference`, which receives whatever this classifies, draws the
   // same line the same way.
-  if (moduleId.startsWith('@')) {
+  if (isPrefixForm(moduleId)) {
     return false;
   }
   if (typeof URL.canParse === 'function') {

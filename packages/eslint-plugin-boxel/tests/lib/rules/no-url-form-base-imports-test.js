@@ -29,10 +29,19 @@ ruleTester.run('no-url-form-base-imports', rule, {
     "let api = await loader.import('@cardstack/base/card-api');",
     "let mod = await import('@cardstack/base/string');",
     "export { Foo } from '@cardstack/base/foo';",
-    // The URL appearing outside an import position is not this rule's concern
-    // (fetch targets, alias registration, assertions on served content).
-    "let url = 'https://cardstack.com/base/card-api';",
-    "fetch('https://cardstack.com/base/file-api');",
+    // The positions that define the alias or recognize data written in it
+    "export const baseRealm = new RealmPaths(new URL('https://cardstack.com/base/'));",
+    "function internalKeyFor(ref) { return ref.module.replace('https://cardstack.com/base/', '@cardstack/base/'); }",
+    "export function registeredRealmURL(vn, realm) { return realm === '@cardstack/base/' ? 'https://cardstack.com/base/' : realm; }",
+    "class VirtualNetwork { equivalentURLForms(url) { return [url, url.replace('@cardstack/base/', 'https://cardstack.com/base/')]; } }",
+    'let equivalentURLForms = (url) => [url, `https://cardstack.com/base/${url}`];',
+    // A test of alias tolerance, canonicalization or migration, outside imports
+    {
+      code: "let url = 'https://cardstack.com/base/card-api';",
+      options: [{ allowAliasOutsideImports: true }],
+    },
+    // The alias in a comment is not code
+    '// resolves https://cardstack.com/base/card-api\nlet x = 1;',
     // Unrelated URL-form imports
     "import x from 'https://example.com/module';",
     // A template literal whose leading spelling is not the alias
@@ -42,17 +51,72 @@ ruleTester.run('no-url-form-base-imports', rule, {
     'let id = `${baseRealm.url}index`;',
     'let mod = await loader.import(`${realm}${baseRealm.url}x`);',
     'let mod = await loader.import(`${other.url}card-api`);',
-    // A template literal outside an import position
-    'let url = `https://cardstack.com/base/${name}`;',
     // `importResource` with a canonical specifier, or one it cannot read
     "let mod = importResource(this, () => '@cardstack/base/card-api');",
     'let mod = importResource(this, () => this.args.url);',
-    "let mod = importResource(this, () => { return 'https://cardstack.com/base/card-api'; });",
-    // Any other function's thunk is not a specifier
-    "let mod = somethingElse(this, () => 'https://cardstack.com/base/card-api');",
   ],
 
   invalid: [
+    // The alias outside an import position and outside the allowed positions
+    {
+      code: "let url = 'https://cardstack.com/base/card-api';",
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
+    },
+    {
+      code: "fetch('https://cardstack.com/base/file-api');",
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
+    },
+    {
+      code: 'let url = `https://cardstack.com/base/${name}`;',
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
+    },
+    {
+      code: 'let selector = `[data-test-id="https://cardstack.com/base/cards/skill"]`;',
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
+    },
+    // A code ref's module is rewritten to the prefix
+    {
+      code: "let ref = { module: 'https://cardstack.com/base/realm-config', name: 'RealmConfig' };",
+      output:
+        "let ref = { module: '@cardstack/base/realm-config', name: 'RealmConfig' };",
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
+    },
+    {
+      code: 'let doc = { meta: { adoptsFrom: { "module": "https://cardstack.com/base/card-api", name: "CardDef" } } };',
+      output:
+        'let doc = { meta: { adoptsFrom: { "module": "@cardstack/base/card-api", name: "CardDef" } } };',
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
+    },
+    // A module that only contains the alias, or a key other than module, is
+    // reported without a fix
+    {
+      code: "let ref = { module: 'see https://cardstack.com/base/card-api' };",
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
+    },
+    {
+      code: "let ref = { url: 'https://cardstack.com/base/card-api' };",
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
+    },
+    {
+      code: "let mod = importResource(this, () => { return 'https://cardstack.com/base/card-api'; });",
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
+    },
+    {
+      code: "let mod = somethingElse(this, () => 'https://cardstack.com/base/card-api');",
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
+    },
+    // A function that only shares a name's prefix with an allowed one
+    {
+      code: "function internalKeyForDisplay() { return 'https://cardstack.com/base/x'; }",
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
+    },
+    // The option leaves import positions checked
+    {
+      code: "import { CardDef } from 'https://cardstack.com/base/card-api';",
+      output: "import { CardDef } from '@cardstack/base/card-api';",
+      options: [{ allowAliasOutsideImports: true }],
+      errors: [{ messageId: 'no-url-form-base-imports' }],
+    },
     {
       code: "import { CardDef } from 'https://cardstack.com/base/card-api';",
       output: "import { CardDef } from '@cardstack/base/card-api';",
@@ -128,6 +192,56 @@ ruleTester.run('no-url-form-base-imports', rule, {
       output:
         'let mod = importResource(this, () => `@cardstack/base/${name}`);',
       errors: [{ messageId: 'no-url-form-base-imports' }],
+    },
+  ],
+});
+
+// Type positions need a TypeScript parser.
+const typeScriptRuleTester = new RuleTester({
+  parser: require.resolve('@typescript-eslint/parser'),
+  parserOptions: {
+    ecmaVersion: 2022,
+    sourceType: 'module',
+  },
+});
+
+typeScriptRuleTester.run('no-url-form-base-imports (TypeScript)', rule, {
+  valid: [
+    "let api = await loader.import<typeof import('@cardstack/base/card-api')>('@cardstack/base/card-api');",
+  ],
+  invalid: [
+    {
+      code: "let api = await loader.import<typeof import('https://cardstack.com/base/card-api')>('@cardstack/base/card-api');",
+      output:
+        "let api = await loader.import<typeof import('@cardstack/base/card-api')>('@cardstack/base/card-api');",
+      errors: [{ messageId: 'no-url-form-base-imports' }],
+    },
+  ],
+});
+
+// `<template>` content needs the Ember parser.
+const templateRuleTester = new RuleTester({
+  parser: require.resolve('ember-eslint-parser'),
+  parserOptions: { ecmaVersion: 2022, sourceType: 'module' },
+});
+
+templateRuleTester.run('no-url-form-base-imports (templates)', rule, {
+  valid: [
+    `<template><a href="https://example.com/base/x">Docs</a></template>`,
+    `<template>{{concat "@cardstack/base/" "card-api"}}</template>`,
+  ],
+  invalid: [
+    {
+      code: `<template><a href="https://cardstack.com/base/cards/skill">Skill</a></template>`,
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
+    },
+    {
+      code: `<template>Served from https://cardstack.com/base/ today</template>`,
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
+    },
+    {
+      code: `<template>{{concat "https://cardstack.com/base/" "card-api"}}</template>`,
+      errors: [{ messageId: 'aliasOutsideAllowedPosition' }],
     },
   ],
 });

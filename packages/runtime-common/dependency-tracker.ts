@@ -1,4 +1,5 @@
 import { executableExtensions } from './index.ts';
+import { isPrefixForm } from './realm-identifiers.ts';
 
 export type RuntimeDependencyNodeKind = 'module' | 'instance' | 'file';
 export type RuntimeDependencyContextMode = 'query' | 'non-query';
@@ -54,7 +55,7 @@ function canonicalURL(url: string): string | undefined {
     !url ||
     (!url.startsWith('http://') &&
       !url.startsWith('https://') &&
-      !url.startsWith('@'))
+      !isPrefixForm(url))
   ) {
     return undefined;
   }

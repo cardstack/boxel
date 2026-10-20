@@ -2,7 +2,7 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 
 import { module, test } from 'qunit';
 
-import type { Realm } from '@cardstack/runtime-common';
+import { baseRealm, type Realm } from '@cardstack/runtime-common';
 
 import {
   getDbAdapter,
@@ -36,7 +36,7 @@ module('Unit | module-transpile-cache', function (hooks) {
       'Content-Type': 'application/javascript',
       'X-Boxel-Canonical-Path': canonicalPath,
     };
-    let dependencyKeys = ['https://cardstack.com/base/card-api'];
+    let dependencyKeys = [`${baseRealm.url}card-api`];
 
     await realm.__testOnlyUpsertTranspileCacheRow({
       canonicalPath,

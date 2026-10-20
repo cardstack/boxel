@@ -41,7 +41,7 @@ module('Unit | realm-utils', function (hooks) {
   module('realmIdentifierSegments', function () {
     test('takes a URL identifier apart by pathname', function (assert) {
       assert.deepEqual(
-        realmIdentifierSegments('https://cardstack.com/base/'),
+        realmIdentifierSegments('https://realms.example.test/base/'),
         ['base'],
         'a single-segment realm path yields that segment',
       );
@@ -71,7 +71,7 @@ module('Unit | realm-utils', function (hooks) {
     test('the last segment names the realm in either form', function (assert) {
       // What the display paths actually read off the end of the array.
       for (let identifier of [
-        'https://cardstack.com/base/',
+        'https://realms.example.test/base/',
         '@cardstack/base/',
       ]) {
         let segments = realmIdentifierSegments(identifier);

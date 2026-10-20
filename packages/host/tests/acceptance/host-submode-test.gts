@@ -261,7 +261,7 @@ module('Acceptance | host submode', function (hooks) {
           },
           meta: {
             adoptsFrom: {
-              module: 'https://cardstack.com/base/realm-config',
+              module: '@cardstack/base/realm-config',
               name: 'RealmConfig',
             },
           },
