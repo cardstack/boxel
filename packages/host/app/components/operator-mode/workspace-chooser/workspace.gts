@@ -387,18 +387,30 @@ export default class Workspace extends Component<Signature> {
               {{! The row's one button: it opens the workspace, carries the
                   keyboard selection and stretches over the whole row. The
                   star, menu and live link sit above it as their own controls. }}
-              <button
-                type='button'
-                class='name row-open'
-                aria-describedby={{this.realmURLDescriptionId}}
-                data-test-workspace-button={{this.name}}
-                data-test-workspace-name
-                data-nav-index={{@navIndex}}
-                {{on 'click' this.openWorkspace}}
-                {{focusWhenSelected @isSelected}}
-              >{{this.name}}</button>
+              {{! Hovering the name shows it whole, over the realm URL that
+                  tells same-named workspaces apart. }}
+              <RealmURLTooltip
+                @realmURL={{@realmIdentifier}}
+                @label={{this.name}}
+              >
+                <button
+                  type='button'
+                  class='name row-open'
+                  aria-describedby={{this.realmURLDescriptionId}}
+                  data-test-workspace-button={{this.name}}
+                  data-test-workspace-name
+                  data-nav-index={{@navIndex}}
+                  {{on 'click' this.openWorkspace}}
+                  {{focusWhenSelected @isSelected}}
+                >{{this.name}}</button>
+              </RealmURLTooltip>
             {{else}}
-              <span class='name' data-test-workspace-name>{{this.name}}</span>
+              <RealmURLTooltip
+                @realmURL={{@realmIdentifier}}
+                @label={{this.name}}
+              >
+                <span class='name' data-test-workspace-name>{{this.name}}</span>
+              </RealmURLTooltip>
             {{/if}}
             <span class='visibility' data-test-workspace-visibility>
               {{#if this.hasPublishedRealms}}
@@ -423,12 +435,15 @@ export default class Workspace extends Component<Signature> {
                 {{this.visibility}}
               </span>
             </span>
+            {{! A row's last change sits in its bottom-right corner, under
+                the menu. }}
             {{#if @compact}}
               {{#if this.updatedAtLabel}}
                 <span
                   class='updated'
+                  title={{this.updatedAtLabel}}
                   data-test-workspace-updated
-                >{{this.updatedAtLabel}}</span>
+                >{{this.updatedAgoLabel}}</span>
               {{/if}}
             {{/if}}
           </div>
@@ -1182,7 +1197,13 @@ export default class Workspace extends Component<Signature> {
       .reindex-error__dismiss:hover {
         background: rgba(255 255 255 / 25%);
       }
-      .info > span {
+      /* The name sits in its tooltip's trigger, which spans the column. */
+      .info > :deep([data-tooltip-trigger]) {
+        width: 100%;
+        min-width: 0;
+      }
+      .info > span,
+      .info .name {
         text-overflow: ellipsis;
         overflow: hidden;
         width: 100%;
@@ -1190,7 +1211,7 @@ export default class Workspace extends Component<Signature> {
         text-align: center;
         letter-spacing: var(--boxel-lsp);
       }
-      .info > .name {
+      .info .name {
         color: var(--boxel-light);
         font: 400 var(--boxel-font-sm);
         display: -webkit-box;
@@ -1330,15 +1351,15 @@ export default class Workspace extends Component<Signature> {
       /* A compact row: the wallpaper shrinks to a thumbnail at the start and
          the name, visibility and last change read beside it. */
       .workspace-card.is-compact {
-        --workspace-chooser-tile-width: 2.75rem;
-        --workspace-chooser-tile-height: 2.75rem;
+        --workspace-chooser-tile-width: 3.25rem;
+        --workspace-chooser-tile-height: 3.25rem;
         width: var(--workspace-chooser-row-width, 16rem);
         box-sizing: border-box;
         flex-direction: row;
         align-items: center;
         gap: var(--boxel-sp-sm);
-        padding: var(--boxel-sp-5xs) 2.25rem var(--boxel-sp-5xs)
-          var(--boxel-sp-5xs);
+        padding: var(--boxel-sp-xs) 3.75rem var(--boxel-sp-xs)
+          var(--boxel-sp-xs);
         border-radius: 1rem;
         background-color: color-mix(
           in oklch,
@@ -1383,7 +1404,7 @@ export default class Workspace extends Component<Signature> {
         opacity: 1;
       }
       /* A button ignores line-clamp, so the name truncates on one line. */
-      .is-compact .info > .row-open {
+      .is-compact .info .row-open {
         position: static;
         display: block;
         width: 100%;
@@ -1419,43 +1440,68 @@ export default class Workspace extends Component<Signature> {
         min-width: 0;
         max-width: none;
         align-items: flex-start;
-        gap: 0;
+        gap: var(--boxel-sp-4xs);
         padding-top: 0;
       }
-      .is-compact .info > span {
+      .is-compact .info > span,
+      .is-compact .info .name {
         text-align: left;
       }
-      .is-compact .info > .name {
+      .is-compact .info .name {
         -webkit-line-clamp: 1;
         font-weight: 600;
       }
       .is-compact .visibility {
         justify-content: flex-start;
       }
-      .is-compact .updated {
+      .is-compact .info > .updated {
+        position: absolute;
+        right: 0.75rem;
+        bottom: var(--boxel-sp-xs);
+        max-width: 6rem;
+        overflow: hidden;
+        text-align: right;
         color: var(--boxel-450);
-        font: 400 var(--boxel-font-xs);
+        text-transform: none;
+        font-size: var(--boxel-font-size-2xs);
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
-      .is-compact .tile-favorite-btn {
-        top: 0.5rem;
-        left: 0.5rem;
+      /* The row's controls gather in its top-right corner, above the time
+         and off the thumbnail: the menu at the end, the star before it and,
+         on a hosted row, the globe before that. */
+      .is-compact {
+        --row-control-inset: 0.375rem;
+        --row-control-step: calc(var(--boxel-button-xs) + 0.25rem);
       }
       .is-compact .tile-menu-btn {
-        top: 50%;
-        right: 0.375rem;
-        transform: translateY(-50%);
+        top: var(--row-control-inset);
+        right: var(--row-control-inset);
       }
-      /* The live-site link folds to its globe icon at the row's end. */
-      .is-compact .host-trigger {
-        top: 50%;
+      .is-compact .tile-favorite-btn {
+        top: var(--row-control-inset);
         left: auto;
-        right: 2.25rem;
-        width: 1.75rem;
-        height: 1.75rem;
+        right: calc(var(--row-control-inset) + var(--row-control-step));
+      }
+      /* The live-site link folds to its globe icon beside the menu. A row
+         already marks a hosted workspace beside its chip, so the button
+         waits for the row's hover. */
+      .is-compact .host-trigger {
+        opacity: 0;
+        transition: opacity var(--boxel-transition);
+        top: var(--row-control-inset);
+        left: auto;
+        right: calc(var(--row-control-inset) + 2 * var(--row-control-step));
+        width: var(--boxel-button-xs);
+        height: var(--boxel-button-xs);
         padding: 0;
         justify-content: center;
-        transform: translateY(-50%);
         border-radius: 50%;
+      }
+      .workspace-card.is-compact:hover .host-trigger,
+      .workspace-card.is-compact.is-open .host-trigger,
+      .is-compact .host-trigger:focus-visible {
+        opacity: 1;
       }
       .is-compact .host-trigger .trigger-url,
       .is-compact .host-trigger .trigger-chevron {
@@ -2349,6 +2395,11 @@ export default class Workspace extends Component<Signature> {
     return formatUpdatedTime(new Date(updatedAt));
   }
 
+  // A row's trailing time drops the "Updated" its position already says.
+  private get updatedAgoLabel() {
+    return this.updatedAtLabel?.replace(UPDATED_PREFIX, '');
+  }
+
   // Compact metadata for the enlarged favorite tile's in-tile content (see
   // .desk-stats below). Label and count stay separate fields so the
   // template can emphasize the count with larger type than its unit label.
@@ -2722,6 +2773,8 @@ export function formatRelativeTime(date: Date): string {
   }
   return formatDate(date, 'EEE, MMM d, yyyy');
 }
+
+const UPDATED_PREFIX = /^Updated /;
 
 export function formatUpdatedTime(date: Date): string {
   // Clamp to 0: a clock skewed slightly ahead of the server (or a
