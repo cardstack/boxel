@@ -203,7 +203,7 @@ export default class Workspace extends Component<Signature> {
               class='desk-caption-line'
               data-test-workspace-status-bar={{@realmIdentifier}}
             >
-              <span class='desk-visibility'>
+              <span class='visibility-chip is-{{this.visibility}}'>
                 <this.visibilityIcon width='12' height='12' />
                 {{this.visibility}}
               </span>
@@ -410,15 +410,17 @@ export default class Workspace extends Component<Signature> {
                   <:content>Hosted on the web</:content>
                 </Tooltip>
               {{/if}}
-              <Tooltip @placement='top'>
-                <:trigger>
-                  <this.visibilityIcon width='12' height='12' />
-                </:trigger>
-                <:content>
-                  {{this.visibilityLabel}}
-                </:content>
-              </Tooltip>
-              <span class='visibility-label'>{{this.visibility}}</span>
+              <span class='visibility-chip is-{{this.visibility}}'>
+                <Tooltip @placement='top'>
+                  <:trigger>
+                    <this.visibilityIcon width='12' height='12' />
+                  </:trigger>
+                  <:content>
+                    {{this.visibilityLabel}}
+                  </:content>
+                </Tooltip>
+                {{this.visibility}}
+              </span>
             </span>
             {{#if @compact}}
               {{#if this.updatedAtLabel}}
@@ -1023,13 +1025,6 @@ export default class Workspace extends Component<Signature> {
         gap: var(--boxel-sp-5xs) var(--boxel-sp-sm);
         min-height: 1.25rem;
       }
-      .desk-visibility {
-        display: inline-flex;
-        align-items: center;
-        gap: var(--boxel-sp-5xs);
-        text-transform: capitalize;
-        --icon-color: currentColor;
-      }
       /* Holds its line before the counts arrive, so they land in reserved
          space instead of growing the caption. */
       .desk-stats {
@@ -1217,8 +1212,38 @@ export default class Workspace extends Component<Signature> {
         display: inline-flex;
         align-items: center;
       }
-      .visibility-label {
-        margin-left: var(--boxel-sp-6xs);
+      /* Who can see the workspace, as a tinted chip so Private, Shared and
+         Public read apart at a glance: private stays neutral, shared takes
+         cyan, public the highlight. Hosted keeps lime for itself. */
+      .visibility-chip {
+        --chip-color: var(--boxel-light);
+        display: inline-flex;
+        align-items: center;
+        gap: var(--boxel-sp-5xs);
+        height: 1.25rem;
+        padding: 0 var(--boxel-sp-xs) 0 var(--boxel-sp-4xs);
+        border: 1px solid
+          color-mix(in oklch, var(--chip-color) 30%, transparent);
+        border-radius: 0.625rem;
+        background-color: color-mix(
+          in oklch,
+          var(--chip-color) 12%,
+          transparent
+        );
+        color: var(--chip-color);
+        font: 600 var(--boxel-font-xs);
+        text-transform: capitalize;
+        white-space: nowrap;
+        --icon-color: currentColor;
+      }
+      .visibility-chip.is-private {
+        --chip-color: color-mix(in oklch, var(--boxel-light) 78%, transparent);
+      }
+      .visibility-chip.is-shared {
+        --chip-color: var(--boxel-cyan);
+      }
+      .visibility-chip.is-public {
+        --chip-color: var(--boxel-highlight);
       }
       .hosted-icon {
         color: var(--boxel-highlight);
