@@ -10,7 +10,7 @@ Wraps `boxel browse`, which mints a Matrix login token from a saved profile and 
 
 - **A host on another origin.** A host served from `http://localhost:<port>/`, a preview, or any origin other than the environment's own can't use the email/password form: that form is a frame from the secure origin (`secure.stack.cards`, `secure.boxel.ai`), which only the environment's own app origins may frame. The symptom is a sign-in page whose email/password area is blank. `boxel browse --host-url` skips the form entirely. (Google SSO also works there.)
 - **Showing the user a change.** They want to see it signed in, and a profile already has the account.
-- **Opening a card signed in.** Pass the card's realm-relative path.
+- **Opening a card signed in.** Pass the card's path on the realm server, for example `ctse/my-realm/Person/1` (owner, realm, then the card), not a path inside one realm. With no card path the app opens on the workspace chooser.
 
 ## Run it yourself
 
@@ -65,6 +65,7 @@ Open the Boxel app in your browser, already signed in as your active profile (a 
 
 ## Pitfalls
 
+- **"has no stored Matrix access token".** The profile was saved before boxel-cli stored tokens instead of passwords, so it can't mint a login token. `browse` won't fall back to the stored password. The user has to sign the profile in again with `boxel profile add -u <id> --staging` (or `--production`), which asks for the password: don't type or reuse it yourself. Try another profile meanwhile.
 - **The token lands on the wrong origin.** Browser sessions are origin-scoped. Pass `--host-url` with exactly the origin you'll test on: `http://localhost:4300/` and `https://localhost:4300/` are different origins.
 - **Signed in as someone else.** The browser holds the account in the URL's token, not whatever it held before. Check `--profile` before minting.
 - **The host and the profile must share a Matrix server.** The host redeems the token against the Matrix server it was built for, so a local host built against staging needs a staging profile, not a local one.
