@@ -22,6 +22,10 @@ import {
   stageRealmSources,
 } from '@cardstack/runtime-common/realm-source-staging';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
+import {
+  diagnosticText,
+  parseTscDiagnostics,
+} from '@cardstack/runtime-common/tsc-diagnostics';
 
 import {
   getProfileManager,
@@ -905,18 +909,13 @@ export async function runGlintCheck(
     let errors: ParseError[] = [];
     let inputDiagnosticLines = 0;
     let stagedDiagnostics = createStagedDiagnosticSink(tempDir);
-    for (let line of output.split('\n')) {
-      let match = line.match(
-        /^(.+?)\((\d+),(\d+)\):\s*error\s+(TS\d+):\s*(.+)/,
-      );
-      if (!match) continue;
-
-      let [, filePath, lineStr, colStr, tsCode, message] = match;
-      let absolutePath = resolve(tempDir, filePath);
+    for (let diagnostic of parseTscDiagnostics(output)) {
+      let { code: tsCode, message } = diagnostic;
+      let absolutePath = resolve(tempDir, diagnostic.file);
       if (
         stagedDiagnostics.trackIfStaged(absolutePath, {
-          line: lineStr,
-          column: colStr,
+          line: String(diagnostic.line),
+          column: String(diagnostic.column),
           tsCode,
           message,
         })
@@ -936,9 +935,9 @@ export async function runGlintCheck(
 
       errors.push({
         file: originalFile.path,
-        line: parseInt(lineStr, 10),
-        column: parseInt(colStr, 10),
-        message: explainDiagnostic(tsCode, message),
+        line: diagnostic.line,
+        column: diagnostic.column,
+        message: explainDiagnostic(tsCode, diagnosticText(diagnostic)),
       });
     }
 

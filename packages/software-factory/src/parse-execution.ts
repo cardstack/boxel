@@ -33,6 +33,10 @@ import {
   isSilentSetupFailure,
   stageRealmSources,
 } from '@cardstack/runtime-common/realm-source-staging';
+import {
+  diagnosticText,
+  parseTscDiagnostics,
+} from '@cardstack/runtime-common/tsc-diagnostics';
 
 import { logger } from './logger.ts';
 import type {
@@ -806,41 +810,14 @@ export async function runGlintCheck(
     let errors: ParseErrorData[] = [];
     let inputDiagnosticLines = 0;
     let stagedDiagnostics = createStagedDiagnosticSink(tempDir);
-    let lines = output.split('\n');
+    for (let diagnostic of parseTscDiagnostics(output)) {
+      let { code: tsCode, message } = diagnostic;
 
-    // tsc elaborates many diagnostics ("Types of property 'x' are
-    // incompatible.", "Type 'A' is not assignable to type 'B'.") as indented
-    // continuation lines under the error line. Those name the actual
-    // incompatibility, so fold them into the error's message instead of
-    // dropping them.
-    let current: ParseErrorData | null = null;
-
-    for (let line of lines) {
-      let match = line.match(
-        /^(.+?)\((\d+),(\d+)\):\s*error\s+(TS\d+):\s*(.+)/,
-      );
-      if (!match) {
-        if (current && /^\s+\S/.test(line)) {
-          current.message += `\n${line.trimEnd()}`;
-        } else if (/^\S/.test(line)) {
-          // A non-indented line that isn't a diagnostic — e.g. an
-          // --explainFiles program-file path under SF_PARSE_DEBUG — ends the
-          // previous diagnostic. Clear `current` so the indented inclusion
-          // reasons that follow it don't fold into an unrelated error.
-          current = null;
-        }
-        continue;
-      }
-
-      current = null;
-
-      let [, filePath, lineStr, colStr, tsCode, message] = match;
-
-      let absolutePath = resolve(tempDir, filePath);
+      let absolutePath = resolve(tempDir, diagnostic.file);
       if (
         stagedDiagnostics.trackIfStaged(absolutePath, {
-          line: lineStr,
-          column: colStr,
+          line: String(diagnostic.line),
+          column: String(diagnostic.column),
           tsCode,
           message,
         })
@@ -864,13 +841,12 @@ export async function runGlintCheck(
         continue;
       }
 
-      current = {
+      errors.push({
         file: originalFile.path,
-        line: parseInt(lineStr, 10),
-        column: parseInt(colStr, 10),
-        message,
-      };
-      errors.push(current);
+        line: diagnostic.line,
+        column: diagnostic.column,
+        message: diagnosticText(diagnostic),
+      });
     }
 
     let stagedWarning = stagedDiagnostics.warning();

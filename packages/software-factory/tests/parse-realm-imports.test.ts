@@ -290,3 +290,31 @@ export class ContributorE extends Profile {
     );
   });
 });
+
+module('parse gate > diagnostic messages', function () {
+  // tsc names the actual incompatibility in indented lines under the error
+  // line; the gate's message has to carry them, not just the headline.
+  test("an error's message carries tsc's elaboration lines", async function (assert) {
+    assert.timeout(180_000);
+    let { errors } = await runGlintCheck([
+      {
+        path: 'nested-mismatch.ts',
+        content: `interface Want {
+  a: { b: number };
+}
+const value = { a: { b: 'not a number' } };
+export const got: Want = value;
+`,
+      },
+    ]);
+
+    assert.deepEqual(
+      errors.map((e) => `${e.file}:${e.line} ${e.message}`),
+      [
+        "nested-mismatch.ts:5 Type '{ a: { b: string; }; }' is not assignable to type 'Want'.\n" +
+          "  The types of 'a.b' are incompatible between these types.\n" +
+          "    Type 'string' is not assignable to type 'number'.",
+      ],
+    );
+  });
+});
