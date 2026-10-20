@@ -54,14 +54,14 @@ Every section is the same dark panel family (`--boxel-700` with a hairline edge,
 
 `catalog-showcase.gts`, the catalog told as stories, the way an app store's Today tab tells its own (after the Home preview's `CatalogStory` cards). The store is the one place the page leaves its dark panels, for tinted paper story cards, the way the catalog's own pages look.
 
-- **Stories:** up to five, in a grid of at most three columns: a lead spanning two, then the rest, so they fill whole rows. Each wears its own paper in turn (warm, ink, mint, lilac, sky) and shows an eyebrow, a headline, art, a short description and an app footer with Open.
+- **Stories:** one row of four equal story cards, so the store stays a shelf beside the workspaces rather than outweighing them. Each wears its own paper in turn (warm, ink, mint, lilac) and shows an eyebrow, a headline, art and an app footer with Open.
 - **Read along:** the whole story opens its listing in Interact mode, and the listing page is the article (hero, remix, what's inside). Open is the keyboard's way in.
 - **Featured** listings come from the catalog's own index card (`featured` links), so the catalog curates what leads; its other listings follow.
 - **Eyebrows** come from the kind: the lead is "<Kind> of the week"; the rest read Try it, New app, New theme, New skill or Build with it.
 - **Every story's art is the listing in use:** each story loads its listing's first example card and renders it from prerendered isolated HTML as a 1000px page zoomed into the frame (the pin collage's `fitPage`). The listing thumbnail stands in until it arrives, and for a listing without one.
-- **Index data only:** the search asks for `item.name`, `item.summary` and `item.cardThumbnailURL` as a sparse fieldset, so no card code loads.
+- **Index data only:** the search asks for `item.name` and `item.cardThumbnailURL` as a sparse fieldset, so no card code loads.
 - **The kind** (Card, App, Field…) comes from the listing's folder (`…/CardListing/<id>`), since search reports the base `Listing` type.
-- **Interim copy cleanup:** names drop "Card Definition", and summaries that describe the code ("The X component…") are hidden. Real headlines and short descriptions need an editorial field on featured listings in boxel-catalog.
+- **Copy:** names drop "Card Definition". The cards carry no description: listing summaries describe the code ("The X component…"), and real short descriptions need an editorial field in boxel-catalog.
 
 ## Agents
 

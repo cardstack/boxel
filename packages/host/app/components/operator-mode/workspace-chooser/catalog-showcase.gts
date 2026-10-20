@@ -31,8 +31,9 @@ const log = logger('component:workspace-chooser/catalog-showcase');
 // wide and zoomed down into the frame.
 const ART_PAGE_WIDTH = 1000;
 
-// Stories on the shelf: the lead and the cards after it.
-const STORY_COUNT = 5;
+// Stories on the shelf: one row, so the store stays a shelf beside the
+// workspaces rather than the page's main event.
+const STORY_COUNT = 4;
 // Listings fetched for the stories: enough to fill them after the featured
 // ones and any without a thumbnail drop out.
 const LISTINGS_FETCHED = 12;
@@ -42,13 +43,12 @@ const TINT_COUNT = 5;
 
 // Only these fields of a listing are read, so the search returns them from
 // the index and no card code loads to draw the shelf.
-const LISTING_FIELDS = ['item.name', 'item.summary', 'item.cardThumbnailURL'];
+const LISTING_FIELDS = ['item.name', 'item.cardThumbnailURL'];
 
 interface ShelfItem {
   id: string;
   kind: string;
   name: string;
-  summary: string | undefined;
   art: string | undefined;
   artCss: string | undefined;
 }
@@ -206,7 +206,7 @@ export default class CatalogShowcase extends Component {
               <div class='stories'>
                 {{#each stories key='id' as |story|}}
                   <article
-                    class='story tint-{{story.tint}} {{if story.isLead "lead"}}'
+                    class='story tint-{{story.tint}}'
                     data-test-catalog-story={{story.id}}
                     data-test-catalog-story-lead={{if story.isLead story.id}}
                   >
@@ -225,9 +225,6 @@ export default class CatalogShowcase extends Component {
                       @listingId={{story.id}}
                       @artCss={{story.artCss}}
                     />
-                    {{#if story.summary}}
-                      <p class='dek'>{{story.summary}}</p>
-                    {{/if}}
                     <span class='foot'>
                       <span
                         class='app-icon'
@@ -268,16 +265,11 @@ export default class CatalogShowcase extends Component {
         flex-direction: column;
         gap: var(--boxel-sp);
       }
-      /* At most three columns, so five stories fill whole rows: the lead
-         and one beside it, then three; or, two up, the lead and two pairs. */
+      /* One row of equal stories that share the width between them. */
       .stories {
-        --story-gap: var(--boxel-sp-lg);
         display: grid;
-        grid-template-columns: repeat(
-          auto-fill,
-          minmax(max(17rem, (100% - 2 * var(--story-gap)) / 3), 1fr)
-        );
-        gap: var(--story-gap);
+        grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+        gap: var(--boxel-sp);
       }
       .story {
         --story-ink: var(--boxel-dark);
@@ -292,16 +284,16 @@ export default class CatalogShowcase extends Component {
         box-sizing: border-box;
         display: flex;
         flex-direction: column;
-        gap: var(--boxel-sp-sm);
+        gap: var(--boxel-sp-xs);
         min-width: 0;
-        padding: var(--boxel-sp-lg);
-        border-radius: 1.375rem;
+        padding: var(--boxel-sp);
+        border-radius: 1.125rem;
         background-color: var(--story-paper);
         color: var(--story-ink);
         box-shadow:
           0 0 0 1px color-mix(in oklch, var(--story-ink) 12%, transparent),
-          0 0.875rem 1.875rem
-            color-mix(in oklch, var(--boxel-dark) 35%, transparent);
+          0 0.375rem 1rem
+            color-mix(in oklch, var(--boxel-dark) 25%, transparent);
         transition: transform 0.2s ease;
       }
       .story:hover {
@@ -357,14 +349,6 @@ export default class CatalogShowcase extends Component {
           var(--boxel-dark)
         );
       }
-      /* The lead spans two columns and gives its art more room. */
-      .lead {
-        grid-column: span 2;
-        --story-art-height: 18rem;
-      }
-      .lead .headline {
-        font-size: 1.875rem;
-      }
       .story-hit {
         position: absolute;
         inset: 0;
@@ -388,35 +372,28 @@ export default class CatalogShowcase extends Component {
       }
       .headline {
         margin: 0;
-        font-size: 1.375rem;
-        font-weight: 700;
-        line-height: 1.12;
-        letter-spacing: -0.015em;
-      }
-      .dek {
-        margin: 0;
-        display: -webkit-box;
-        -webkit-box-orient: vertical;
-        -webkit-line-clamp: 2;
         overflow: hidden;
-        font-size: var(--boxel-font-size-sm);
-        line-height: 1.45;
-        color: color-mix(in oklch, var(--story-ink) 66%, transparent);
+        font-size: 1rem;
+        font-weight: 700;
+        line-height: 1.2;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        letter-spacing: -0.015em;
       }
       .foot {
         display: flex;
         align-items: center;
-        gap: var(--boxel-sp-sm);
+        gap: var(--boxel-sp-xs);
         margin-top: auto;
-        padding-top: var(--boxel-sp-sm);
+        padding-top: var(--boxel-sp-xs);
         border-top: 1px solid
           color-mix(in oklch, var(--story-ink) 12%, transparent);
       }
       .app-icon {
         flex: none;
-        width: 2.5rem;
-        height: 2.5rem;
-        border-radius: 0.625rem;
+        width: 2rem;
+        height: 2rem;
+        border-radius: 0.5rem;
         background-color: var(--boxel-light);
         background-image: var(--story-art);
         background-size: cover;
@@ -441,10 +418,10 @@ export default class CatalogShowcase extends Component {
       }
       .act {
         flex: none;
-        height: 2.25rem;
-        padding: 0 var(--boxel-sp);
+        height: 1.875rem;
+        padding: 0 var(--boxel-sp-sm);
         border: 0;
-        border-radius: 1.125rem;
+        border-radius: 0.9375rem;
         background-color: var(--story-act);
         color: var(--story-act-ink);
         font-size: var(--boxel-font-size-sm);
@@ -475,13 +452,6 @@ export default class CatalogShowcase extends Component {
       }
       .browse:hover {
         color: var(--boxel-light);
-      }
-      /* One column: the lead is one story among the rest. */
-      @media (max-width: 40rem) {
-        .lead {
-          grid-column: auto;
-          --story-art-height: 12.5rem;
-        }
       }
     </style>
   </template>
@@ -557,7 +527,7 @@ class StoryArt extends Component<StoryArtSignature> {
         position: relative;
         display: block;
         flex: none;
-        height: var(--story-art-height, 11rem);
+        height: 7rem;
         overflow: hidden;
         border-radius: 0.875rem;
         background-color: var(--boxel-light);
@@ -637,7 +607,6 @@ function toShelfItem(entry: RenderableSearchEntryLike): ShelfItem {
     id: entry.id,
     kind: kindOf(entry),
     name: shelfName(text(attributes.name)),
-    summary: shelfSummary(text(attributes.summary)),
     art,
     artCss: art ? `url("${art}")` : undefined,
   };
@@ -649,15 +618,6 @@ const DEFINITION_SUFFIX = /\s+(?:(?:card|field|app)\s+)?definition$/i;
 
 function shelfName(name: string | undefined) {
   return name ? name.replace(DEFINITION_SUFFIX, '') : 'Untitled listing';
-}
-
-// A summary that opens by describing the code ("The WineCellar component
-// serves as…") is documentation, not a pitch, so the shelf leaves it out
-// until the catalog carries editorial copy for what it features.
-const CODE_DESCRIPTION = /^the\s+\S+\s+(?:component|card|field)\b/i;
-
-function shelfSummary(summary: string | undefined) {
-  return summary && !CODE_DESCRIPTION.test(summary) ? summary : undefined;
 }
 
 const artPageWidth = `${ART_PAGE_WIDTH}px`;
