@@ -1473,15 +1473,15 @@ module('Acceptance | workspace-chooser', function (hooks) {
       try {
         await visitOperatorMode({ workspaceChooserOpened: true });
 
-        assert.dom('[data-test-agent-setup-progress]').hasText('0 of 5 copied');
+        assert.dom('[data-test-agent-setup-progress]').hasText('0 of 6 copied');
         assert
           .dom('[data-test-agent-step="1"] [data-test-agent-command]')
-          .hasText('/plugin marketplace add cardstack/boxel');
+          .hasText('npm install -g @cardstack/boxel-cli');
 
         await click('[data-test-agent-copy="1"]');
 
-        assert.deepEqual(copied, ['/plugin marketplace add cardstack/boxel']);
-        assert.dom('[data-test-agent-setup-progress]').hasText('1 of 5 copied');
+        assert.deepEqual(copied, ['npm install -g @cardstack/boxel-cli']);
+        assert.dom('[data-test-agent-setup-progress]').hasText('1 of 6 copied');
         let matrixService = getService('matrix-service') as MatrixService;
         assert.strictEqual(matrixService.dashboardState.agentSetupDone, 1);
         assert.true(matrixService.dashboardState.agentCommandCopied);
@@ -1494,7 +1494,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
       await visitOperatorMode({ workspaceChooserOpened: true });
 
       let matrixService = getService('matrix-service') as MatrixService;
-      await matrixService.updateDashboardState({ agentSetupDone: 2 });
+      await matrixService.updateDashboardState({ agentSetupDone: 3 });
       await settled();
 
       assert.dom('[data-test-agent-workspace]').exists({ count: 2 });
@@ -1502,8 +1502,64 @@ module('Acceptance | workspace-chooser', function (hooks) {
       await click(`[data-test-agent-workspace="${realmBURL}"]`);
 
       assert
-        .dom('[data-test-agent-step="3"] [data-test-agent-command]')
+        .dom('[data-test-agent-step="4"] [data-test-agent-command]')
         .hasText(`Work on my Boxel workspace ${realmBURL}`);
+    });
+
+    test('each agent gets the setup its own docs give', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+      let matrixService = getService('matrix-service') as MatrixService;
+
+      // Each step's command shows while that step is open; opening one at a
+      // time reads them in order.
+      async function setupCommands(count: number) {
+        let commands = [];
+        for (let number = 1; number <= count; number++) {
+          await click(
+            `[data-test-agent-step="${number}"] [data-test-agent-step-head]`,
+          );
+          commands.push(
+            document
+              .querySelector(
+                `[data-test-agent-step="${number}"] [data-test-agent-command]`,
+              )
+              ?.textContent?.trim(),
+          );
+        }
+        return commands;
+      }
+
+      await matrixService.updateDashboardState({ agent: 'claude' });
+      await settled();
+      assert.deepEqual(
+        await setupCommands(3),
+        [
+          'npm install -g @cardstack/boxel-cli',
+          '/plugin marketplace add cardstack/boxel',
+          '/plugin install boxel-cli@cardstack-boxel',
+        ],
+        'Claude Code installs from the marketplace in chat',
+      );
+
+      await click('[data-test-agent-pick="codex"]');
+      assert.deepEqual(
+        await setupCommands(3),
+        [
+          'npm install -g @cardstack/boxel-cli',
+          'codex plugin marketplace add cardstack/boxel',
+          '/plugins',
+        ],
+        'Codex adds the marketplace from the shell and installs in Plugins',
+      );
+
+      await click('[data-test-agent-pick="grok"]');
+      assert.dom('[data-test-agent-step]').exists({ count: 4 });
+      assert
+        .dom('[data-test-agent-step="1"] [data-test-agent-command]')
+        .includesText(
+          'github.com/cardstack/boxel-skills',
+          'Grok Bot is set up in chat',
+        );
     });
 
     test('picking an agent in the rail picks it in the Agents section', async function (assert) {

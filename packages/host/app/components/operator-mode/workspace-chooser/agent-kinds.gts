@@ -16,12 +16,13 @@ export interface AgentKind {
   hint: string;
 }
 
-// The agents the dashboard offers, in the order it lists them: the coding
-// agents that build through the Boxel plugin, then Boxel's own assistant.
+// The agents the dashboard offers, in the order it lists them: the agents a
+// user brings (set up with the Boxel plugin, or in Grok Bot's chat), then
+// Boxel's own assistant.
 export const AGENT_KINDS: AgentKind[] = [
   { id: 'claude', label: 'Claude Code', hint: 'Boxel plugin' },
   { id: 'codex', label: 'Codex', hint: 'Boxel plugin' },
-  { id: 'grok', label: 'Grok Bot', hint: 'Boxel plugin' },
+  { id: 'grok', label: 'Grok Bot', hint: 'Set up in chat' },
   { id: 'boxel', label: 'Boxel AI Assistant', hint: 'Built into Boxel' },
 ];
 

@@ -32,7 +32,57 @@ const log = logger('component:workspace-chooser/agents');
 
 const PICKABLE_WORKSPACE_COUNT = 4;
 const COPIED_FEEDBACK_MS = 2000;
-const STEP_COUNT = 5;
+
+// The boxel CLI the plugin's skills shell out to (the plugin requires it on
+// PATH), installed the same way whichever agent runs it.
+const CLI_STEP: StepText = {
+  title: 'Install the Boxel CLI',
+  note: 'In a terminal, or ask your agent to run it',
+  command: 'npm install -g @cardstack/boxel-cli',
+};
+
+// What putting Boxel in each agent takes, per its own docs. Claude Code adds
+// a marketplace and installs from it in chat, and installs boxel-skills with
+// boxel-cli as a dependency. Codex adds a marketplace from the shell,
+// installs from its Plugins directory, and has no dependencies, so both
+// plugins go in by hand. Grok Bot works on its own cloud computer, and Boxel
+// isn't in its plugin marketplace, so it is set up by asking in chat.
+const PLUGIN_STEPS: Record<Exclude<DashboardAgent, 'boxel'>, StepText[]> = {
+  claude: [
+    CLI_STEP,
+    {
+      title: 'Add the Boxel marketplace',
+      note: 'Type it in Claude Code’s chat',
+      command: '/plugin marketplace add cardstack/boxel',
+    },
+    {
+      title: 'Install the Boxel plugin',
+      note: 'Its card-building skills come with it',
+      command: '/plugin install boxel-cli@cardstack-boxel',
+    },
+  ],
+  codex: [
+    CLI_STEP,
+    {
+      title: 'Add the Boxel marketplace',
+      note: 'In a terminal, or ask Codex to run it',
+      command: 'codex plugin marketplace add cardstack/boxel',
+    },
+    {
+      title: 'Install both Boxel plugins',
+      note: 'Open Plugins, add boxel-cli and boxel-skills, then start a new chat',
+      command: '/plugins',
+    },
+  ],
+  grok: [
+    {
+      title: 'Set Boxel up',
+      note: 'Ask in chat: Grok Bot works on its own cloud computer',
+      command:
+        'Install @cardstack/boxel-cli with npm, and use the Boxel skills from github.com/cardstack/boxel-skills',
+    },
+  ],
+};
 
 // Boxel AI Assistant needs no setup, so its card says how it works instead.
 const BUILT_IN_STEPS = [
@@ -46,6 +96,12 @@ const BUILT_IN_STEPS = [
   },
   { title: 'Refine it in the chat', note: 'Ask for changes as you look' },
 ];
+
+interface StepText {
+  title: string;
+  note: string;
+  command: string;
+}
 
 interface SetupStep {
   index: number;
@@ -64,9 +120,9 @@ interface PickableWorkspace {
 }
 
 // The dashboard's Agents section: how to build in Boxel with the agent a user
-// picks. For a coding agent (Claude Code, Codex, Grok Bot), five steps, each
-// typed into the agent's own chat, take them from adding the Boxel plugin to
-// seeing its first change in Boxel; for Boxel AI Assistant, which is built
+// picks. For a coding agent (Claude Code, Codex, Grok Bot), its own setup
+// steps, then requests typed into its chat, take them from adding Boxel to
+// seeing its first change there; for Boxel AI Assistant, which is built
 // in, a short how-to and a way to start. The pick is remembered with the
 // dashboard's account data, and the rail's Agents flyout sets it too.
 export default class Agents extends Component {
@@ -81,7 +137,6 @@ export default class Agents extends Component {
   @tracked private copiedStep: number | null = null;
 
   private agentKinds = AGENT_KINDS;
-  private stepCount = STEP_COUNT;
 
   private get agent(): DashboardAgent {
     return this.matrixService.dashboardState.agent ?? DEFAULT_AGENT;
@@ -124,66 +179,57 @@ export default class Agents extends Component {
     return this.pickedWorkspaceURL ?? this.workspaces[0]?.url;
   }
 
+  // One count for every agent, so it is held to this agent's list.
   private get doneCount() {
     let done = this.matrixService.dashboardState.agentSetupDone ?? 0;
-    return Math.min(Math.max(done, 0), STEP_COUNT);
+    return Math.min(Math.max(done, 0), this.stepCount);
   }
 
   private get openIndex() {
-    return this.openedStep ?? Math.min(this.doneCount, STEP_COUNT - 1);
+    return this.openedStep ?? Math.min(this.doneCount, this.stepCount - 1);
   }
 
-  // Each step is something to type into the agent app's own chat: the
-  // plugin commands first, then requests in plain words. The plugin's
-  // skills do the Boxel work (signing in, syncing the workspace), so no
-  // step asks for a terminal.
+  private get stepCount() {
+    return this.steps.length;
+  }
+
+  // Setting the agent up first, the way its own docs say; then requests in
+  // plain words, typed into its chat. The plugin's skills do the Boxel work
+  // from there (signing in, syncing the workspace).
   private get steps(): SetupStep[] {
     let realmURL = this.workspaceURL ?? '<workspace URL>';
-    // Claude Code resolves the plugin's marketplace itself; the others name it.
-    let installCommand =
-      this.agent === 'claude'
-        ? '/plugin install boxel-cli'
-        : '/plugin install boxel-cli@cardstack-boxel';
-    let steps: [string, string, string][] = [
-      [
-        'Add the Boxel marketplace',
-        'Type it in your agent’s chat',
-        '/plugin marketplace add cardstack/boxel',
-      ],
-      [
-        'Install the Boxel plugin',
-        'Brings Boxel’s skills to your agent',
-        installCommand,
-      ],
-      [
-        'Open a workspace',
-        'Your agent signs you in and syncs it',
-        `Work on my Boxel workspace ${realmURL}`,
-      ],
-      [
-        'Ask for a change',
-        'In your own words, like any request',
-        'Make me a card for tracking tasks in this workspace',
-      ],
-      [
-        'See it in Boxel',
-        'Boxel opens beside the chat, with the change live',
-        'Show it to me in Boxel',
-      ],
+    let setup = this.agent === 'boxel' ? [] : PLUGIN_STEPS[this.agent];
+    let steps: (StepText & { isWorkspacePick?: boolean })[] = [
+      ...setup,
+      {
+        title: 'Open a workspace',
+        note: 'Your agent signs you in and syncs it',
+        command: `Work on my Boxel workspace ${realmURL}`,
+        isWorkspacePick: true,
+      },
+      {
+        title: 'Ask for a change',
+        note: 'In your own words, like any request',
+        command: 'Make me a card for tracking tasks in this workspace',
+      },
+      {
+        title: 'See it in Boxel',
+        note: 'Boxel opens beside the chat, with the change live',
+        command: 'Show it to me in Boxel',
+      },
     ];
-    return steps.map(([title, note, command], index) => ({
+    let done = Math.min(
+      Math.max(this.matrixService.dashboardState.agentSetupDone ?? 0, 0),
+      steps.length,
+    );
+    return steps.map((step, index) => ({
       index,
       number: index + 1,
-      title,
-      note,
-      command,
-      state:
-        index < this.doneCount
-          ? 'done'
-          : index === this.doneCount
-            ? 'now'
-            : 'later',
-      isWorkspacePick: index === 2,
+      title: step.title,
+      note: step.note,
+      command: step.command,
+      state: index < done ? 'done' : index === done ? 'now' : 'later',
+      isWorkspacePick: Boolean(step.isWorkspacePick),
     }));
   }
 
@@ -246,9 +292,9 @@ export default class Agents extends Component {
         <span class='eyebrow'>Bring your own agent</span>
         <h3 class='pitch-title'>Build with the agent you already pay for</h3>
         <p class='pitch-body'>
-          Add the Boxel plugin to Claude Code, Codex or Grok and your agent
-          builds right in your workspaces, or ask Boxel AI Assistant right here.
-          Pick yours to see how.
+          Add Boxel to Claude Code, Codex or Grok Bot and your agent builds
+          right in your workspaces, or ask Boxel AI Assistant right here. Pick
+          yours to see how.
         </p>
       </div>
 
@@ -344,6 +390,7 @@ export default class Agents extends Component {
                       'false'
                     }}
                     {{on 'click' (fn this.openStep step.index)}}
+                    data-test-agent-step-head
                   >
                     <span class='step-number'>
                       {{#if (eq step.state 'done')}}
