@@ -7,6 +7,9 @@ scope:
   - packages/realm-server/lib/google-sign-in.ts
   - packages/realm-server/lib/google-account.ts
   - packages/realm-server/lib/sign-in-limiter.ts
+  - packages/realm-server/lib/key-shares.ts
+  - packages/postgres/migrations/1792187770930_add-key-shares.js
+  - packages/realm-server/handlers/realm-destruction-utils.ts
   - packages/realm-server/handlers/handle-secure-session.ts
   - packages/realm-server/handlers/handle-user-keys.ts
   - packages/realm-server/utils/jwt.ts
@@ -225,5 +228,20 @@ session.
 3. #6861, its description and review thread, and
    `.claude/skills/secure-origin/SKILL.md`.
 4. Synapse v1.126.0: `SetPasswordHandler.set_password` calls no module
-   callback, and the admin API's user details (`GET
-/_synapse/admin/v2/users/<user>`) carry no password hash or change time.
+   callback, and the admin API's user details
+   (`/_synapse/admin/v2/users/<user>`) carry no password hash or change time.
+
+## 5. Remediation
+
+- `packages/realm-server/lib/key-shares.ts` (`unshareKey`, `suspendShare`)
+  breaks §1.1. Each changes what a key may be used for without a key write
+  ticket.
+- `packages/postgres/migrations/1792187770930_add-key-shares.js`
+  (`key_shares_follow_permissions`) breaks §1.1. Restoring a user's write
+  access to a realm resumes their suspended shares there, through a
+  permissions change the app's session can make.
+- `packages/realm-server/handlers/realm-destruction-utils.ts` breaks §1.1.
+  Deleting a realm deletes its key shares without a secure session.
+- `packages/realm-server/handlers/handle-secure-session.ts`
+  (`handleGoogleSignInStart`) breaks §1.3. The Google sign-in start route
+  answers a request from any `Origin`.

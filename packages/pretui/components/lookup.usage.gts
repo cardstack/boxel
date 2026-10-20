@@ -116,7 +116,7 @@ class LookupUsage extends Component {
   <template>
     <FreestyleUsage
       @name='Lookup'
-      @description='The record-reference control — a Salesforce lookup field. Type to search, review a results listbox with per-record chrome (icon, primary label, secondary meta line, matched-term highlight), and commit the pick as a removable pill. Reach for it whenever a value points at another record rather than being typed: Account on an Opportunity, Reports To on a Contact, Supplier on a purchase order. The dropdown ENGINE is ember-power-select, reached through boxel-ui BoxelMultiSelectBasic and rendered in place so Pretui tokens reach it — so outside-click dismissal, Escape, focus return, arrow/Enter keyboard, the aria-activedescendant wiring and the result-count live region are all the engine’s, not ours. It owns NO fetching: you supply @records and @loading and debounce inside @onSearch (realm law forbids timers in components). Honest limits: the search text belongs to the engine, so there is no @query arg to control it; filtering is LOCAL over the records you supply, matched against record.search (label + meta + id by default) — put anything a fuzzy server match found into record.search or it will be filtered back out; the listbox reports aria-multiselectable even in single-select; and issue rendering belongs to the surrounding form field, not here.'
+      @description='The record-reference control — a Salesforce lookup field. Type to search, review a results listbox with per-record chrome (icon, primary label, secondary meta line, matched-term highlight), and commit the pick as a removable pill. Reach for it whenever a value points at another record rather than being typed: Account on an Opportunity, Reports To on a Contact, Supplier on a purchase order. The dropdown ENGINE is ember-power-select, reached through boxel-ui BoxelMultiSelect and rendered in place so Pretui tokens reach it — so outside-click dismissal, Escape, focus return, arrow/Enter keyboard, the aria-activedescendant wiring and the result-count live region are all the engine’s, not ours. It owns NO fetching: you supply @records and @loading and debounce inside @onSearch (realm law forbids timers in components). Honest limits: the search text belongs to the engine, so there is no @query arg to control it; filtering is LOCAL over the records you supply, matched against record.search (label + meta + id by default) — put anything a fuzzy server match found into record.search or it will be filtered back out; the listbox reports aria-multiselectable even in single-select; and issue rendering belongs to the surrounding form field, not here.'
       @source={{this.usage}}
     >
       <:example>
@@ -201,7 +201,7 @@ class LookupUsage extends Component {
           @name='label'
           @type='String'
           @defaultValue='Search {recordNoun}s'
-          @description='Accessible name for the combobox input — passed to the engine as @ariaLabel. This is the only naming channel: BoxelMultiSelectBasic does not forward aria-labelledby or aria-describedby, so @labelledBy / @describedBy were removed in the engine swap.'
+          @description='Accessible name for the combobox input — passed to the engine as @ariaLabel. This is the only naming channel: BoxelMultiSelect does not forward aria-labelledby or aria-describedby, so @labelledBy / @describedBy were removed in the engine swap.'
         />
         <Args.Base
           @name='recordNoun'
