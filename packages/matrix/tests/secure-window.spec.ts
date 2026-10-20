@@ -159,8 +159,8 @@ test.describe('the secure window signs in on its own', () => {
       .locator('[data-test-secure-password]')
       .fill('not-the-password');
     await secure.locator('[data-test-secure-password-submit]').click();
-    await expect(secure.locator('[data-test-secure-error]')).toContainText(
-      'don’t match',
+    await expect(secure.locator('[data-test-secure-error]')).toHaveText(
+      'Sign-in failed. Please check your credentials and try again.',
     );
     await snapshot(testInfo, secure, 'secure-window-2-wrong-password');
 
@@ -609,9 +609,9 @@ test.describe('the secure window signs in on its own', () => {
       page,
       'mode=cli-sign-in&port=not-a-port&state=x',
     );
-    await expect(secure.locator('[data-test-secure-sign-in] h1')).toHaveText(
-      'This sign-in link is not complete',
-    );
+    await expect(
+      secure.locator('[data-test-secure-sign-in] .title'),
+    ).toHaveText('This sign-in link is not complete');
     await expect(secure.locator('[data-test-secure-username]')).toHaveCount(0);
   });
 });

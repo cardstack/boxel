@@ -89,15 +89,21 @@ Only the user's own credential, presented on the secure origin, signs in (ADR
 005 §1.3).
 
 **Password** — `POST /_secure-session` (`attributes.{username, password,
-client}`), one request. The server resolves the account (Matrix id, email via
+client, registrationToken?}`), one request. The server resolves the account (Matrix id, email via
 the admin threepid lookup, or a bare username), mints a token for it through
 Synapse's admin "log in as user" API, posts `account/3pid/add` with a made-up
 validation session, and completes the UIA password stage with the password.
 Synapse runs the request only once the password is right, and it then fails
 with `M_THREEPID_AUTH_FAILED` having changed nothing — that failure is the
-proof. Both admin-minted tokens are logged out at once. A missing account, one that has never signed in to Boxel (no session room), one
+proof. Both admin-minted tokens are logged out at once. A missing account, one
 with no password and a wrong password all answer the same `401
-invalid-credentials`.
+invalid-credentials`. An account that has never signed in to Boxel (no session
+room) gets the app's first-sign-in setup (step 5 below) once its password checks
+out, with `registrationToken`, the invite code it registered with, recorded on
+its realm-server user. That is how an account created on the secure origin's
+`register` page signs in for the first time: the page registers with the Matrix
+server itself, signs that registration's Matrix session out, and signs in here
+with the new password.
 
 Failed password sign-ins are limited per account (`lib/sign-in-limiter.ts`)
 with the Matrix server's default limit on failed logins to the app
@@ -159,7 +165,7 @@ Matrix server's Google client (`lib/google-sign-in.ts`):
    run. Change both together.
 
 5. An account with no session room gets the app's first-sign-in setup before
-   the session is minted: the realm-server user and its first credit grant, a
+   the session is minted, as a password sign-in's does: the realm-server user and its first credit grant, a
    personal realm when its account data doesn't list the user's own
    (`<username>/personal/`; a realm shared with them doesn't count) (one already in
    `realm_registry` is recorded, not made again), and last the session
@@ -179,21 +185,21 @@ target and `connect-src` to the realm server (ADR 005 §1.4).
 
 ## Refusals
 
-| Status, code              | Means                                                                          |
-| ------------------------- | ------------------------------------------------------------------------------ |
-| 403 `forbidden`           | A sign-in not from the secure origin                                           |
-| 401 `invalid-credentials` | Any failed password sign-in (no account, no Boxel account, no password, wrong) |
-| 401 `signed-out`          | `GET /_secure-session` with a session that isn't, or is no longer, secure      |
-| 429 `rate-limited`        | Too many failed password sign-ins for the account; see `meta.retryAfterMs`     |
-| 401 `not-confirmed`       | Google's code didn't redeem, or its ID token didn't fit the sign-in            |
-| 403 `unverified-email`    | An unlinked Google account whose email Google hasn't verified                  |
-| 403 `ambiguous-email`     | More than one account holds the unlinked Google account's email                |
-| 403 `deactivated`         | The Google account's account is deactivated                                    |
-| 403 `locked`              | The Google account's account is locked                                         |
-| 403 `no-boxel-account`    | A password sign-in's account has never signed in to Boxel (no session room)    |
-| 409 `used`                | The proof already signed in                                                    |
-| 503 `unavailable`         | No Synapse admin credentials, or Synapse didn't answer with a challenge        |
-| 503 `google-unavailable`  | This server has no Google client                                               |
+| Status, code              | Means                                                                                |
+| ------------------------- | ------------------------------------------------------------------------------------ |
+| 403 `forbidden`           | A sign-in not from the secure origin                                                 |
+| 401 `invalid-credentials` | Any failed password sign-in (no account, no Boxel account, no password, wrong)       |
+| 401 `signed-out`          | `GET /_secure-session` with a session that isn't, or is no longer, secure            |
+| 429 `rate-limited`        | Too many failed password sign-ins for the account; see `meta.retryAfterMs`           |
+| 401 `not-confirmed`       | Google's code didn't redeem, or its ID token didn't fit the sign-in                  |
+| 403 `unverified-email`    | An unlinked Google account whose email Google hasn't verified                        |
+| 403 `ambiguous-email`     | More than one account holds the unlinked Google account's email                      |
+| 403 `deactivated`         | The Google account's account is deactivated                                          |
+| 403 `locked`              | The Google account's account is locked                                               |
+| 403 `no-boxel-account`    | A session was asked for an account with no session room, which sign-in sets up first |
+| 409 `used`                | The proof already signed in                                                          |
+| 503 `unavailable`         | No Synapse admin credentials, or Synapse didn't answer with a challenge              |
+| 503 `google-unavailable`  | This server has no Google client                                                     |
 
 A Google refusal's message is the app's own copy: the mapping provider's
 words for an unverified or shared email, and the app's sign-in error for a

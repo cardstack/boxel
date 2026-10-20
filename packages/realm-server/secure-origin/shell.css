@@ -1,7 +1,20 @@
 /*
-  The secure window. It is styled after the app's sign-in screens so the two
-  read as one product, but loads nothing from the app: every rule is here.
+  The secure origin's pages: sign-in, account creation and password reset.
+  They have to look exactly like the app's own sign-in screens, so a user
+  meets one page whichever they land on, but they load nothing from the app.
+  boxel-ui's `variables.css` and `theme.css` are served here as they are (see
+  `lib/secure-origin.ts`), so every token below resolves to what the app's
+  does, and these rules mirror the components the app draws the screens with:
+  the host's AuthContainer, Login, RegisterUser, ForgotPassword, AuthButton
+  and AuthFormField, and boxel-ui's Button, FieldContainer, Label, BoxelInput,
+  InputGroup and LoadingIndicator. A change to one of those components'
+  styles needs the same change here; the matrix suite's visual comparison of
+  the two sign-in pages fails until it is made.
 */
+
+/* As in the app: boxel-ui's reset, then its components, then the host's own
+   (unlayered) rules. */
+@layer reset, boxel;
 
 @font-face {
   font-family: 'IBM Plex Sans';
@@ -11,186 +24,773 @@
   src:
     local('IBM Plex Sans Var'),
     local('IBMPlexSansVar'),
+    local('IBM Plex Sans Var Regular'),
+    local('IBMPlexSansVar-Regular'),
     url('./IBMPlexSansVar-Roman.woff2') format('woff2');
 }
 
-:root {
-  color-scheme: dark;
-  --secure-background: #191624;
-  --secure-card: #272330;
-  --secure-border: #4a4553;
-  --secure-text: #ffffff;
-  --secure-muted: #afafb7;
-  --secure-highlight: #00ffba;
-  --secure-highlight-hover: #00ebac;
-  --secure-danger: #ff5050;
-  font-family:
-    'IBM Plex Sans',
-    system-ui,
-    -apple-system,
-    sans-serif;
-  font-size: 16px;
-  line-height: 1.4;
+/* boxel-ui global.css */
+@layer reset {
+  * {
+    box-sizing: border-box;
+  }
+
+  [hidden] {
+    display: none !important;
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    margin: 0;
+    color: var(--boxel-dark, #000);
+    font-family: var(--boxel-font-family);
+    font-size: var(--boxel-body-font-size, 0.875rem);
+    letter-spacing: var(--boxel-lsp-xs, 0.01em);
+    line-height: var(--boxel-line-height-sm, calc(18 / 13));
+    background-color: var(--boxel-light, #fff);
+    overscroll-behavior: none;
+  }
+
+  a {
+    display: inline-block;
+    color: inherit;
+    text-decoration: none;
+  }
+
+  button {
+    display: inline-block;
+    font: inherit;
+  }
+
+  img,
+  svg {
+    display: inline-block;
+    max-width: 100%;
+  }
+
+  a:hover {
+    color: var(--boxel-highlight);
+    cursor: pointer;
+  }
+
+  a:focus {
+    outline: var(--boxel-outline);
+  }
+
+  a:focus:not(:focus-visible) {
+    outline-color: transparent;
+  }
+
+  button:hover:not(:disabled) {
+    cursor: pointer;
+  }
+
+  button:focus:not(:disabled) {
+    outline: var(--boxel-outline);
+  }
+
+  button:focus:not(:focus-visible) {
+    outline-color: transparent;
+  }
+
+  button,
+  input {
+    font: inherit;
+    letter-spacing: inherit;
+  }
+
+  input:focus:not(:focus-visible) {
+    outline-color: transparent;
+  }
+
+  input:focus-visible {
+    outline-color: var(--boxel-highlight);
+  }
+
+  /* The app's operator-mode container, while it shows the sign-in screens. */
+  button:focus:not(:disabled) {
+    outline-color: var(
+      --boxel-header-text-color,
+      var(--ring, var(--boxel-highlight))
+    );
+    outline-offset: var(--host-outline-offset, 2px);
+  }
 }
 
-* {
-  box-sizing: border-box;
+@layer boxel {
+  /* boxel-ui Button */
+  .boxel-button {
+    --boxel-loading-indicator-size: var(
+      --boxel-button-loading-icon-size,
+      var(--boxel-icon-xs)
+    );
+
+    display: inline-flex;
+    justify-content: center;
+    height: min-content;
+    align-items: center;
+    border-radius: var(--boxel-button-border-radius, 100px);
+    transition: var(
+      --boxel-button-transition,
+      var(--boxel-transition-properties)
+    );
+    border: var(--boxel-button-border, none);
+    color: var(--boxel-button-text-color);
+    background-color: var(--boxel-button-color);
+    font: var(--boxel-button-font, 700 var(--boxel-font-sm));
+    font-family: inherit;
+    min-height: var(--boxel-button-min-height);
+    min-width: var(--boxel-button-min-width);
+    padding: var(--boxel-button-padding);
+    letter-spacing: var(--boxel-button-letter-spacing, var(--boxel-lsp));
+    box-shadow: var(--boxel-button-box-shadow);
+  }
+
+  .boxel-button:not(:disabled):hover {
+    background-color: color-mix(
+      in oklab,
+      var(--boxel-button-color) 90%,
+      transparent
+    );
+  }
+
+  .boxel-button:focus-visible {
+    outline-color: var(--ring, var(--boxel-highlight));
+    outline-offset: 2px;
+  }
+
+  .boxel-button .loading-indicator {
+    margin-right: var(
+      --boxel-button-loading-indicator-gap,
+      var(--boxel-sp-xxs)
+    );
+  }
+
+  .boxel-button:disabled:not(.loading) {
+    --boxel-button-box-shadow: none;
+    background-color: var(
+      --boxel-button-disabled-background,
+      var(--boxel-button-color)
+    );
+    border: var(--boxel-button-disabled-border, var(--boxel-button-border));
+    color: var(
+      --boxel-button-disabled-foreground,
+      var(--boxel-button-text-color)
+    );
+    opacity: var(--boxel-button-disabled-opacity, 0.5);
+    cursor: default;
+  }
+
+  .boxel-button.loading {
+    pointer-events: none;
+  }
+
+  a.boxel-button:hover {
+    color: var(--boxel-button-text-color);
+  }
+
+  .kind-default {
+    --boxel-button-color: var(
+      --boxel-button-default-background,
+      var(--background)
+    );
+    --boxel-button-text-color: var(
+      --boxel-button-default-foreground,
+      var(--foreground)
+    );
+    --boxel-button-border: 1px solid
+      var(--boxel-button-default-border, var(--border));
+  }
+
+  .kind-default:not(:disabled):hover,
+  .kind-default:not(:disabled):active {
+    --boxel-button-color: var(
+      --boxel-button-default-active-background,
+      var(--accent)
+    );
+    --boxel-button-text-color: var(
+      --boxel-button-default-active-foreground,
+      var(--accent-foreground)
+    );
+    --boxel-button-border: 1px solid
+      var(--boxel-button-default-active-border, var(--border));
+  }
+
+  .kind-primary {
+    --boxel-button-color: var(
+      --boxel-button-primary-background,
+      var(--primary)
+    );
+    --boxel-button-text-color: var(
+      --boxel-button-primary-foreground,
+      var(--primary-foreground)
+    );
+  }
+
+  .kind-primary:not(:disabled):hover,
+  .kind-primary:not(:disabled):active {
+    --boxel-button-color: var(
+      --boxel-button-primary-active-background,
+      var(--primary)
+    );
+  }
+
+  .kind-secondary {
+    --boxel-button-color: var(
+      --boxel-button-secondary-background,
+      var(--secondary)
+    );
+    --boxel-button-text-color: var(
+      --boxel-button-secondary-foreground,
+      var(--secondary-foreground)
+    );
+    --boxel-button-border: 1px solid
+      var(--boxel-button-secondary-border, var(--secondary));
+  }
+
+  .kind-secondary:not(:disabled):hover,
+  .kind-secondary:not(:disabled):active {
+    --boxel-button-border: 1px solid
+      var(--boxel-button-secondary-active-border, var(--secondary));
+  }
+
+  .size-extra-small {
+    --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
+    --boxel-button-min-height: var(--boxel-button-xs);
+    --boxel-button-min-width: 5rem;
+    --boxel-button-loading-icon-size: var(--boxel-icon-2xs);
+    --boxel-button-font: 500 var(--boxel-font-xs);
+    --boxel-button-letter-spacing: var(--boxel-lsp-lg);
+  }
+
+  .size-touch {
+    --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
+    --boxel-button-min-height: var(--boxel-button-touch);
+    --boxel-button-min-width: 5rem;
+    --boxel-button-loading-icon-size: var(--boxel-icon-sm);
+    --boxel-button-font: 600 var(--boxel-font);
+    --boxel-button-letter-spacing: var(--boxel-lsp-xs);
+  }
+
+  .boxel-button:is(.kind-link-primary, .kind-link-muted) {
+    min-height: initial;
+    min-width: initial;
+    padding: 0;
+    background: none;
+    border: none;
+    border-radius: var(--boxel-border-radius-xs);
+    font-weight: inherit;
+    line-height: inherit;
+    letter-spacing: inherit;
+    box-shadow: none;
+  }
+
+  .boxel-button:is(.kind-link-primary, .kind-link-muted):not(:disabled):hover {
+    background: none;
+  }
+
+  .kind-link-primary {
+    --boxel-button-text-color: var(
+      --boxel-button-link-primary-foreground,
+      var(--primary)
+    );
+  }
+
+  .kind-link-primary:not(:disabled):hover {
+    --boxel-button-text-color: color-mix(in oklab, var(--primary) 80%, black);
+  }
+
+  .kind-link-muted {
+    --boxel-button-text-color: var(--muted-foreground);
+  }
+
+  .kind-link-muted:not(:disabled):hover {
+    --boxel-button-text-color: var(--foreground);
+  }
+
+  /* boxel-ui LoadingIndicator */
+  .loading-indicator {
+    display: inline-flex;
+    width: var(--boxel-loading-indicator-size, var(--boxel-icon-sm));
+    height: var(--boxel-loading-indicator-size, var(--boxel-icon-sm));
+    flex-shrink: 0;
+    color: var(--loading-indicator-color, currentColor);
+  }
+
+  .loading-indicator svg {
+    width: 100%;
+    height: 100%;
+    animation: boxel-spin 6000ms linear infinite;
+  }
+
+  @keyframes boxel-spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* boxel-ui FieldContainer and Label */
+  .boxel-field {
+    display: grid;
+    width: 100%;
+    max-width: 100%;
+    overflow-wrap: break-word;
+  }
+
+  .boxel-field.vertical {
+    grid-template-rows: auto 1fr;
+    gap: var(--boxel-sp-4xs);
+  }
+
+  .label-container {
+    align-items: start;
+  }
+
+  .boxel-label {
+    display: flex;
+    align-items: normal;
+    padding-top: 0;
+    color: var(--boxel-label-color);
+    font-size: var(--boxel-label-font-size, var(--boxel-body-font-size));
+    font-weight: var(--boxel-label-font-weight, 500);
+    line-height: var(--boxel-label-line-height, 1.1);
+    font-family: inherit;
+    letter-spacing: var(--boxel-lsp-xs);
+  }
+
+  .boxel-field .content {
+    max-width: 100%;
+    padding: var(--boxel-field-content-padding, var(--boxel-outline-width));
+    word-break: break-word;
+  }
+
+  /* boxel-ui BoxelInput */
+  .input-container {
+    --icon-size: var(--boxel-icon-sm);
+    --icon-space: var(--boxel-sp-xs);
+    --_icon-full-length: var(
+      --boxel-input-icon-size,
+      calc(var(--icon-size) + var(--icon-space) * 2)
+    );
+
+    display: grid;
+    grid-template-columns:
+      var(--_icon-full-length)
+      1fr
+      var(--_icon-full-length);
+    grid-template-areas:
+      'optional optional optional'
+      'pre-icon input post-icon'
+      'error error error'
+      'helper helper helper';
+    width: 100%;
+  }
+
+  .boxel-input {
+    grid-column: 1 / span 3;
+    grid-row: 2;
+    box-sizing: border-box;
+    width: var(--boxel-input-width, 100%);
+    min-width: 0;
+    max-width: 100%;
+    min-height: var(--boxel-input-height, var(--boxel-form-control-height));
+    margin: 0;
+    padding: var(--boxel-sp-xs) 0 var(--boxel-sp-xs) var(--boxel-sp-sm);
+    background-color: var(--background, var(--boxel-light));
+    color: var(--foreground, var(--boxel-dark));
+    border: 1px solid var(--border, var(--boxel-form-control-border-color));
+    border-radius: var(--boxel-form-control-border-radius);
+    box-shadow: var(--boxel-form-control-box-shadow);
+    outline: var(--boxel-input-outline, 1px solid transparent);
+    transition:
+      var(--boxel-transition-properties),
+      outline-color var(--boxel-transition);
+  }
+
+  .boxel-input:focus-visible {
+    outline-color: var(--ring, var(--boxel-highlight));
+    border-color: var(--ring, var(--boxel-highlight));
+  }
+
+  .boxel-input::placeholder {
+    color: var(--muted-foreground, var(--boxel-450));
+  }
+
+  .boxel-input:hover:not(:focus-visible):not(:disabled):not(.invalid) {
+    border-color: currentColor;
+  }
+
+  .boxel-input.invalid:not(:disabled) {
+    border-color: var(--destructive, var(--boxel-error-100));
+    box-shadow: 0 0 0 1px var(--destructive, var(--boxel-error-100));
+  }
+
+  .boxel-input.invalid:focus-visible {
+    outline: 1px solid transparent;
+    box-shadow: 0 0 0 1.5px var(--destructive, var(--boxel-error-100));
+  }
+
+  .boxel-input.invalid:hover:not(:disabled) {
+    border-color: var(--destructive, var(--boxel-error-100));
+  }
+
+  .error-message {
+    grid-area: error;
+    margin-top: var(--boxel-sp-xxxs);
+    margin-left: calc(var(--boxel-sp-sm) + 1px);
+    color: var(--destructive-ink);
+    font-size: var(--boxel-font-size-sm);
+    font-weight: 500;
+    letter-spacing: var(--boxel-lsp);
+  }
+
+  /* boxel-ui InputGroup, for the username's "@" and server name. */
+  .input-group {
+    display: flex;
+    align-items: stretch;
+    width: 100%;
+    min-height: var(--boxel-form-control-height);
+    padding: 0;
+    background-color: var(--background, var(--boxel-light));
+    color: var(--foreground, var(--boxel-dark));
+    border: 1px solid var(--border, var(--boxel-form-control-border-color));
+    border-radius: var(--boxel-form-control-border-radius);
+    outline: 1px solid transparent;
+    transition:
+      var(--boxel-transition-properties),
+      outline-color var(--boxel-transition);
+  }
+
+  .input-group:hover:not(:focus-within):not(.invalid) {
+    border-color: currentColor;
+  }
+
+  .input-group:focus-within {
+    outline-color: var(--ring, var(--boxel-highlight));
+    border-color: var(--ring, var(--boxel-highlight));
+  }
+
+  .input-group.invalid {
+    border-color: var(--destructive, var(--boxel-error-100));
+    box-shadow: 0 0 0 1px var(--destructive, var(--boxel-error-100));
+  }
+
+  .input-group .group-input {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: var(--boxel-sp-xxs) var(--boxel-sp-sm);
+    background: transparent;
+    color: inherit;
+    border: none;
+    outline: none;
+  }
+
+  .input-group .group-input::placeholder {
+    color: var(--muted-foreground, var(--boxel-450));
+  }
+
+  .input-group .accessory {
+    display: flex;
+    align-items: center;
+    padding: 0 var(--boxel-sp-sm);
+    color: color-mix(in oklch, var(--muted-foreground) 55%, var(--foreground));
+    font-size: var(--boxel-font-size-sm);
+  }
+
+  .input-group .accessory.prefix {
+    padding-right: 0;
+  }
+
+  .input-group .accessory.prefix + .group-input {
+    padding-left: var(--boxel-sp-5xs);
+  }
 }
 
-[hidden] {
-  display: none !important;
-}
-
+/* AuthContainer */
 body {
-  margin: 0;
-  min-height: 100dvh;
-  background-color: var(--secure-background);
-  color: var(--secure-text);
+  background-color: #191624;
 }
 
-#secure-shell {
+.auth {
+  --background: #272432;
+  --foreground: var(--boxel-light);
+  --muted-foreground: #7f7c8c;
+  --auth-background: #191624;
+  --auth-foreground: var(--boxel-light);
+
+  position: relative;
+  min-height: 100dvh;
+  background-color: var(--auth-background);
+  color: var(--auth-foreground);
+  overflow: auto;
+}
+
+.auth > .logo {
+  position: absolute;
+  top: var(--boxel-sp-lg);
+  left: var(--boxel-sp-lg);
+  --icon-color: var(--boxel-highlight);
+  width: 2rem;
+  height: 2rem;
+}
+
+.auth > .logo svg {
+  width: 100%;
+  height: 100%;
+}
+
+.auth > .logo .boxel-icon-shape {
+  fill: var(--icon-color, #00ffba);
+}
+
+.auth > .container {
   display: flex;
   flex-direction: column;
   justify-content: center;
+  align-items: center;
   min-height: 100dvh;
-  max-width: 28rem;
-  margin: 0 auto;
-  padding: 1.5rem 1rem;
+  padding: var(--boxel-sp-lg);
 }
 
-.secure-card {
+.auth > .container > .content {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
-  padding: 2rem;
-  border: 1px solid var(--secure-border);
-  border-radius: 15px;
-  background-color: var(--secure-card);
-  font-size: 0.875rem;
+  width: 100%;
+  max-width: 25rem;
+  padding: var(--boxel-sp) 0 calc(var(--boxel-sp) * 2) 0;
 }
 
-.secure-card h1 {
-  margin: 0;
+/* A page's steps, and a page that only says something, wrap what the app
+     puts straight into the page's column; they lay it out as if they
+     weren't there. */
+.step,
+.message {
+  display: contents;
+}
+
+/* AuthButton */
+.auth-btn {
+  width: 100%;
+}
+
+.auth-btn .loading-indicator {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* AuthFormField */
+.auth-form-field {
+  margin-top: var(--boxel-sp);
+}
+
+.auth-form-field input:autofill {
+  transition:
+    background-color 0s 600000s,
+    color 0s 600000s;
+}
+
+.auth-form-field .error-message {
+  margin-left: 0;
+  font: 500 var(--boxel-font-xs);
+}
+
+/* Login */
+.auth form {
+  display: flex;
+  flex-direction: column;
+}
+
+/* A heading here, where the app's is a span; drawn the same. */
+.title {
+  font: 600 var(--boxel-font-md);
+  color: var(--foreground);
+  margin: 0 0 var(--boxel-sp-sm);
+  padding: 0;
+}
+
+.subtitle {
+  margin: 0 0 var(--boxel-sp-lg);
+  color: var(--foreground);
+  font: var(--boxel-font-sm);
+  line-height: 1.4;
+}
+
+.forgot-password {
+  --host-outline-offset: 2px;
+  margin-top: var(--boxel-sp-4xs);
+  margin-bottom: var(--boxel-sp-lg);
+  margin-left: auto;
+}
+
+.google-button {
+  margin-top: var(--boxel-sp-sm);
+  gap: var(--boxel-sp-xs);
+}
+
+.google-g {
+  width: 1.125rem;
+  height: 1.125rem;
+  flex-shrink: 0;
+}
+
+.divider {
+  display: flex;
+  align-items: center;
+  gap: var(--boxel-sp-sm);
+  margin: var(--boxel-sp-lg) 0 var(--boxel-sp-xs);
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background-color: rgba(255, 255, 255, 0.18);
+}
+
+.divider-label {
+  color: var(--muted-foreground);
+  font: 600 var(--boxel-font-xs);
+  letter-spacing: var(--boxel-lsp-lg);
+  text-transform: uppercase;
+}
+
+.register-prompt {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--boxel-sp-3xs);
+  margin: var(--boxel-sp) 0 0;
+  font: 500 var(--boxel-font-sm);
+}
+
+.register-prompt-text {
+  color: var(--muted-foreground);
+}
+
+.register-link {
+  --host-outline-offset: 2px;
+}
+
+.centered-loading {
+  align-self: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--boxel-sp);
   text-align: center;
-  font-size: 1.25rem;
-  font-weight: 600;
 }
 
-.secure-card p {
-  margin: 0;
+.loading-title {
+  font: 600 var(--boxel-font-md);
+  color: var(--foreground);
 }
 
-.secure-card strong {
-  font-weight: 600;
-  overflow-wrap: anywhere;
+.loading-spinner {
+  --boxel-loading-indicator-size: var(--boxel-icon-md);
+  --loading-indicator-color: var(--boxel-highlight);
 }
 
-.secure-card form {
+.error {
+  color: var(--boxel-error-100);
+  padding: 0;
+  font: 500 var(--boxel-font-xs);
+  margin: var(--boxel-sp-2xs) auto 0 auto;
+}
+
+/* RegisterUser and ForgotPassword */
+.button-wrapper {
+  width: 100%;
+  margin-top: var(--boxel-sp-xl);
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  justify-content: center;
+  align-items: center;
+  gap: var(--boxel-sp-sm);
+  color: var(--muted-foreground);
 }
 
-/* A line that reads on from the title, as Google's "to continue to …" does. */
-.secure-card .secure-subtitle {
-  margin-top: -0.75rem;
-  color: var(--secure-muted);
+.title.forgot-title {
+  margin-bottom: var(--boxel-sp);
+}
+
+.button-wrapper.forgot-buttons {
+  margin-top: var(--boxel-sp-lg);
+}
+
+.info {
+  margin-top: 0;
+  margin-bottom: var(--boxel-sp-sm);
+  letter-spacing: var(--boxel-lsp);
+  line-height: 20px;
+  color: var(--foreground);
+}
+
+.validation-hint {
+  display: flex;
+  align-items: center;
+  gap: var(--boxel-sp-3xs);
+  margin: var(--boxel-sp-2xs) 0 0;
+  color: var(--muted-foreground);
+  font: 500 var(--boxel-font-xs);
+}
+
+.validation-hint-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex-shrink: 0;
+}
+
+.validation-hint-icon path {
+  stroke: var(--boxel-highlight);
+}
+
+.email-validation-instruction {
+  padding: 0;
+  list-style-position: inside;
+  margin-top: 0;
+  margin-bottom: var(--boxel-sp);
+  color: var(--foreground);
+}
+
+.email-validation-instruction li {
+  margin-bottom: var(--boxel-sp-sm);
+}
+
+.resend-email {
+  margin-top: var(--boxel-sp);
+}
+
+.form-error {
+  color: var(--boxel-error-100);
+  margin-top: var(--boxel-sp-lg);
+}
+
+.error.forgot-error {
   text-align: center;
 }
 
-.secure-field {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-  font-weight: 600;
-}
-
-.secure-field input {
-  height: 2.5rem;
-  padding: 0 0.75rem;
-  border: 1px solid var(--secure-border);
-  border-radius: 6px;
-  background-color: var(--secure-background);
-  color: var(--secure-text);
-  font: inherit;
-  font-weight: 400;
-}
-
-.secure-field input:focus {
-  outline: 2px solid var(--secure-highlight);
-  outline-offset: -1px;
-}
-
-.secure-button {
-  height: 2.5rem;
-  padding: 0 1.25rem;
-  border: 1px solid var(--secure-highlight);
-  border-radius: 100px;
-  background-color: var(--secure-highlight);
-  color: #000;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.secure-button:hover:not(:disabled) {
-  background-color: var(--secure-highlight-hover);
-}
-
-.secure-button:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-
-.secure-button.secondary,
-.secure-button.google {
-  border-color: var(--secure-border);
-  background-color: transparent;
-  color: var(--secure-text);
-}
-
-.secure-button.secondary:hover:not(:disabled),
-.secure-button.google:hover:not(:disabled) {
-  background-color: var(--secure-border);
-}
-
-.secure-link {
-  align-self: flex-start;
+.error a,
+.error .link {
   padding: 0;
   border: none;
   background: none;
-  color: var(--secure-muted);
+  color: var(--boxel-highlight);
   font: inherit;
   text-decoration: underline;
   cursor: pointer;
 }
 
-.secure-google {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  margin-top: 2.5rem;
-}
-
-.secure-google .secure-button {
-  width: 100%;
-}
-
-/* "or", between two rules, across the card's width. */
-.secure-divider {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  color: var(--secure-muted);
-}
-
-.secure-divider::before,
-.secure-divider::after {
-  content: '';
-  flex: 1;
-  border-top: 1px solid var(--secure-border);
-}
-
-.secure-error {
-  color: var(--secure-danger);
+.loading-message {
+  margin: 0;
+  font: 500 var(--boxel-font-sm);
 }

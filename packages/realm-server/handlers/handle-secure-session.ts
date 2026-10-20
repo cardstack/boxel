@@ -13,6 +13,7 @@ import {
   endWindowSessions,
   googleSignInStart,
   isSecureSession,
+  matrixServerName,
   SecureSessionError,
   signInWithGoogle,
   signInWithPassword,
@@ -192,10 +193,30 @@ async function sendSession(ctxt: Koa.Context, session: unknown) {
   });
 }
 
+// An optional text attribute: undefined when absent or empty.
+function optionalTextOf(
+  attributes: Record<string, unknown>,
+  name: string,
+): string | undefined {
+  let value = attributes[name];
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+  if (typeof value !== 'string') {
+    throw new SecureSessionError(400, 'bad-request', `${name} is text`);
+  }
+  return value;
+}
+
 // POST /_secure-session: signs in with a username, email address or Matrix id
 // and the account's password. Failed sign-ins are limited per account, with the
-// Matrix server's default limit on failed logins to the app.
-export function handlePasswordSignIn(args: CreateRoutesArgs): Handler {
+// Matrix server's default limit on failed logins to the app. An account's
+// first sign-in to Boxel makes its personal realm, hence the realm deps, and
+// records the invite code it registered with (`registrationToken`).
+export function handlePasswordSignIn(
+  args: CreateRoutesArgs,
+  createRealm: CreateRealmDeps,
+): Handler {
   let limiter = new SignInLimiter();
   return secureSessionHandler(async (ctxt) => {
     requireSecureOrigin(ctxt, args.secureOriginURL);
@@ -203,10 +224,11 @@ export function handlePasswordSignIn(args: CreateRoutesArgs): Handler {
     let { username, password } = attributes;
     await sendSession(
       ctxt,
-      await signInWithPassword(deps(args), limiter, {
+      await signInWithPassword(deps(args, createRealm), limiter, {
         username: typeof username === 'string' ? username : '',
         password: typeof password === 'string' ? password : '',
         client: clientOf(attributes),
+        registrationToken: optionalTextOf(attributes, 'registrationToken'),
       }),
     );
   });
@@ -314,9 +336,11 @@ export function handleEndWindowSessions({
 
 // GET /_secure-origin: where this realm server's secure origin is, for a
 // client outside the browser that has to send the user there, as the CLI does
-// to sign in.
+// to sign in, and the name of the Matrix server its accounts are on, which the
+// secure origin's account creation shows usernames with.
 export function handleSecureOriginInfo({
   secureOriginURL,
+  matrixClient,
 }: CreateRoutesArgs): Handler {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     if (!secureOriginURL) {
@@ -331,7 +355,10 @@ export function handleSecureOriginInfo({
     await sendJSON(ctxt, 200, {
       data: {
         type: 'secure-origin',
-        attributes: { url: secureOriginURL.href },
+        attributes: {
+          url: secureOriginURL.href,
+          matrixServerName: await matrixServerName({ matrixClient }),
+        },
       },
     });
   };

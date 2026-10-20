@@ -896,7 +896,7 @@ export class RealmServer {
               ]),
             ],
           },
-          { realmServerURL: serverURL },
+          { realmServerURL: serverURL, matrixURL: matrixClient.matrixURL },
         )
       : undefined;
   }
