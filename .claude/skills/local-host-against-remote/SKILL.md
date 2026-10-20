@@ -11,12 +11,12 @@ A host app served from your own machine can talk to a deployed environment's rea
 
 ## Pointing the host at the environment
 
-From `packages/host`, in a shell where `BOXEL_ENVIRONMENT` is **not** set. That variable puts the host in env mode, where the URLs are derived from a local Traefik stack's hostnames and the variables below are ignored.
+From `packages/host`, in a shell where `BOXEL_ENVIRONMENT` is **not** set. That variable puts the host in env mode, which ignores `MATRIX_URL`, `ICONS_URL` and `SECURE_ORIGIN_URL` in favor of a local Traefik stack's hostnames, and points every variable left unset at that stack.
 
 Staging:
 
 ```sh
-unset BOXEL_ENVIRONMENT
+unset BOXEL_ENVIRONMENT ENV_MODE
 export REALM_SERVER_DOMAIN=https://realms-staging.stack.cards/
 export RESOLVED_BASE_REALM_URL=https://realms-staging.stack.cards/base/
 export RESOLVED_CATALOG_REALM_URL=https://realms-staging.stack.cards/catalog/
@@ -35,7 +35,7 @@ pnpm start
 Production:
 
 ```sh
-unset BOXEL_ENVIRONMENT
+unset BOXEL_ENVIRONMENT ENV_MODE
 export REALM_SERVER_DOMAIN=https://app.boxel.ai/
 export RESOLVED_BASE_REALM_URL=https://app.boxel.ai/base/
 export RESOLVED_CATALOG_REALM_URL=https://app.boxel.ai/catalog/
@@ -53,7 +53,7 @@ pnpm start
 
 - The values are those in `packages/host/config/staging.env` and `production.env`, which the host PR previews build with, plus the pretui realm the env files leave to its default. When the two disagree, the env file is right. `packages/host/config/environment.js` is where each variable is read and what it defaults to; any variable left unset there points at the local dev stack (`https://localhost:4201/...`).
 - `set -a; . config/staging.env; set +a` exports the env file as it stands, in place of the block above. Export `RESOLVED_PRETUI_REALM_URL` alongside it.
-- The mise environment script (`mise-tasks/lib/env-vars.sh`) keeps a value already exported in standard mode, so these survive `pnpm` running through mise. Run them in the same shell as `pnpm start`.
+- Run the block in the same shell as `pnpm start`. The mise environment script (`mise-tasks/lib/env-vars.sh`) runs again whenever `pnpm` runs through mise. In standard mode it keeps a value already exported, but in a shell that is leaving env mode (`ENV_MODE=true`) it resets `SECURE_ORIGIN_URL`, `ICONS_URL` and the other service URLs to the local stack's. Unsetting `ENV_MODE`, as the blocks do, or starting from a fresh shell, keeps the values above.
 - `pnpm start` serves on port 4200, over https when the local dev certificate exists (the usual case) and http otherwise. Nothing else may already be listening on 4200. In a shared checkout, that is often another session's dev server, so ask before taking it (see the `agent-peer-collaboration` skill).
 - No local realm server, Matrix or test stack is needed: everything the page talks to is the environment's.
 
@@ -62,14 +62,13 @@ pnpm start
 - **Email and password** work from `https://localhost:<port>`, `http://localhost:<port>`, and the same on `127.0.0.1`. The fields are a frame from the environment's secure origin, which accepts those origins on any port (see below).
 - **Google** goes through Synapse's SSO, not the frame, and works from a local host too. In production, Synapse shows a confirmation page before it redirects back to `localhost`, because production's SSO client whitelist doesn't list it. Confirm it.
 - **Registering** on staging needs an invite code: its Synapse requires a registration token. Production's doesn't.
-- When the sign-in itself moves to the secure origin (CS-14078), the secure page asks "Continue to http://localhost…?" before it hands the session back to the local host.
 
 ## Why it works, and what not to do
 
 Two checks stand between a local page and the password frame, and both are deliberately satisfied:
 
-1. **The frame's parameters ride in the URL fragment.** The host frames `credentials#form=<form>&origin=<page origin>` (`components/matrix/credential-fields.gts`), and the frame reads them from `location.hash` (`packages/realm-server/secure-origin/credentials.js`). The WAF in front of staging and production (AWS's managed rule `EC2MetaDataSSRF_QUERYARGUMENTS`) refuses any query string containing `localhost` or `127.0.0.1` with a 403. A fragment is never sent to the server, so no rule sees it.
-2. **Loopback origins may frame the fields.** `scripts/start-staging.sh` and `scripts/start-production.sh` pass `--secureOriginAppOrigin` for `https://localhost:*`, `https://127.0.0.1:*`, `http://localhost:*` and `http://127.0.0.1:*`. A `:*` port stands for every port of the host, both in the credential page's `frame-ancestors` and in the frame's own check (`isListedOrigin` in `secure-origin/app-origins.js`). No remote website can have a loopback origin, so these admit only a page served from the user's own machine.
+1. **The frame's parameters ride in the URL fragment.** The host frames `credentials#form=<form>&origin=<page origin>` (`credentialFieldsURL` in `app/lib/credential-fields.ts`), and the frame reads them from `location.hash` (`packages/realm-server/secure-origin/credentials.js`). A page that isn't on the user's machine passes them in the query as well, and the frame falls back to the query when the fragment names no form, so a host bundle and a secure origin from either side of that change still work together. The WAF in front of staging and production (AWS's managed rule `EC2MetaDataSSRF_QUERYARGUMENTS`) refuses any query string containing `localhost` or `127.0.0.1` with a 403. A fragment is never sent to the server, so no rule sees it.
+2. **Loopback origins may frame the fields.** `scripts/start-staging.sh` and `scripts/start-production.sh` pass `--secureOriginAppOrigin` for `https://localhost:*`, `https://127.0.0.1:*`, `http://localhost:*` and `http://127.0.0.1:*`. A `:*` port stands for every port of the host, both in the credential page's `frame-ancestors` and in the frame's own check (`isListedOrigin` in `secure-origin/app-origins.js`). No remote website can have a loopback origin, so these admit only a page served from the user's own machine. That is any page served there, on any port, not only the host app: the boundary is the machine, not the Boxel dev server.
 
 So:
 
@@ -81,7 +80,7 @@ So:
 
 **The password area of the sign-in form is blank.** The frame loaded nothing, or loaded and refused to start. Check, in this order:
 
-1. **The WAF.** In the network panel, the request for `credentials` on the secure origin comes back 403. Something put a loopback origin in the query string; the frame URL must have no `?`.
+1. **The WAF.** In the network panel, the request for `credentials` on the secure origin comes back 403. Something put a loopback origin in the query string; from a local host the frame URL must have no `?`.
 2. **`frame-ancestors`.** The console reports that framing the secure origin violates its `frame-ancestors` directive. The page's origin isn't listed: a host on a hostname other than `localhost` / `127.0.0.1`, or a realm server deployed from a commit before these origins were added. Read the `Content-Security-Policy` response header on that same `credentials` request to see what is listed.
 3. **The `origin` the frame was given.** The frame loads but stays empty, with no console error. It starts only when the `origin` in its fragment is a listed origin, the page is actually its parent, and `form` names a known form. Compare the fragment of the frame's `src` with `location.origin`.
 

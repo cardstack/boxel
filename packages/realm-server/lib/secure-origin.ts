@@ -340,17 +340,20 @@ function addCredentialFieldRoutes(
 // scheme alone, or a path, is refused rather than widened.
 export function appOrigin(origin: string): string {
   let anyPort = origin.endsWith(':*');
+  let rest = anyPort ? origin.slice(0, -2) : origin;
   let url: URL;
   try {
-    url = new URL(anyPort ? origin.slice(0, -2) : origin);
+    url = new URL(rest);
   } catch {
     throw new Error(`secure origin: ${origin} is not an app origin`);
   }
-  if (anyPort && (url.port !== '' || url.href !== `${url.origin}/`)) {
+  // Compared as written, so a port or a slash before the `*` is refused even
+  // where the URL parser would drop it as the scheme's default.
+  if (url.origin === 'null' || (anyPort && rest.toLowerCase() !== url.origin)) {
     throw new Error(`secure origin: ${origin} is not an app origin`);
   }
   let normalized = anyPort ? `${url.origin}:*` : url.origin;
-  if (url.origin === 'null' || !parseListedOrigin(normalized)) {
+  if (normalized.includes('*') && !parseListedOrigin(normalized)) {
     throw new Error(`secure origin: ${origin} is not an app origin`);
   }
   return normalized;

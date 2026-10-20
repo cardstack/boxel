@@ -217,9 +217,14 @@ module(basename(import.meta.filename), function () {
         'http://127.0.0.1.evil.test:4200',
         'http://localhost:4200/',
         'http://localhost:*',
+        'http://[::1]:4200',
       ]) {
         assert.false(isListedOrigin(origin, loopback), origin);
       }
+      assert.true(
+        isListedOrigin('http://[::1]:4200', ['http://[::1]:*']),
+        'an IPv6 host with a port wildcard',
+      );
     });
 
     test('an app origin is configured as a single origin, its port optionally any', function (assert) {
@@ -242,13 +247,27 @@ module(basename(import.meta.filename), function () {
         appOrigin('https://*.preview.example.test'),
         'https://*.preview.example.test',
       );
+      assert.strictEqual(
+        appOrigin('http://[::1]:4201'),
+        'http://[::1]:4201',
+        'an IPv6 origin is kept',
+      );
+      assert.strictEqual(
+        appOrigin('http://[::1]:*'),
+        'http://[::1]:*',
+        'with a port wildcard too',
+      );
       for (let origin of [
         '*',
         'http://*',
         'http://*:*',
         'http:',
         'http://localhost:4200:*',
+        'http://localhost:80:*',
+        'https://localhost:443:*',
+        'http://localhost/:*',
         'http://localhost/path:*',
+        'http://*.[::1]:*',
         'file:///tmp',
         'not a url',
       ]) {

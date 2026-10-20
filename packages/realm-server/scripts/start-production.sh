@@ -33,10 +33,11 @@ BOXEL_HOMEPAGE_REALM_URL="${RESOLVED_BOXEL_HOMEPAGE_REALM_URL:-$DEFAULT_BOXEL_HO
 # The app origins that may frame the secure origin's credential fields,
 # besides --serverURL's: a host app served from the developer's own machine,
 # over https or http and on any port. No remote page can have a loopback
-# origin, so these admit only pages the user started themselves. Nothing else
-# is listed here: a password manager fills a saved production password into
-# the fields wherever they are framed, so a preview or any other remote origin
-# belongs on staging's list, never this one.
+# origin, so these admit only pages served from the user's own machine: any
+# such page, on any port, not only the host app. Nothing else is listed here:
+# a password manager fills a saved production password into the fields
+# wherever they are framed, so a preview or any other remote origin belongs on
+# staging's list, never this one.
 echo "[start-production] pid=$$ ppid=$PPID about to exec node at $(date -Iseconds)" >&2
 
 NODE_NO_WARNINGS=1 \

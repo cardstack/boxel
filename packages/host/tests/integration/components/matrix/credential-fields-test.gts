@@ -182,9 +182,10 @@ module('Integration | credential fields', function (hooks) {
     assertNothingToRead(assert, 'login', snooped());
   });
 
-  // A filter in front of the secure origin refuses a query string naming a
-  // loopback origin, so a host app on this machine gets the frame only when
-  // what the frame is told rides in the fragment, which is never sent.
+  // A filter in front of a deployed secure origin refuses a query string
+  // naming a loopback origin, so a host app on this machine gets the frame
+  // only when what the frame is told rides in the fragment, which is never
+  // sent. The test page is on this machine.
   test('the frame is told its form and the page origin in the fragment, not the query', async function (assert) {
     await render(<template><Login @setMode={{noop}} /></template>);
 

@@ -18,10 +18,13 @@
 //   the window that is this frame's parent.
 //
 // The form shown, and the requests it may make, are named by the `form`
-// parameter; the app page's origin by `origin`. Both are in the URL's
-// fragment, not its query. The fragment is never sent to the server, so no
-// filter in front of it sees an app origin such as `http://localhost:4200`,
-// which a WAF rule refuses in a query string.
+// parameter; the app page's origin by `origin`. The app passes both in the
+// URL's fragment, which is never sent to the server, so no filter in front of
+// it sees an app origin such as `http://localhost:4200`, which a WAF rule
+// refuses in a query string. A page that is not on the user's own machine
+// passes them in the query as well, and a page built before the fragment was
+// read passes them in the query alone, so the query is read when the fragment
+// has no form.
 
 import { isListedOrigin } from './app-origins.js';
 import { redactResponse } from './redact.js';
@@ -206,7 +209,10 @@ function readConfig() {
 }
 
 let config = readConfig();
-let params = new URLSearchParams(window.location.hash.slice(1));
+let fragmentParams = new URLSearchParams(window.location.hash.slice(1));
+let params = fragmentParams.has('form')
+  ? fragmentParams
+  : new URL(window.location.href).searchParams;
 let formName = params.get('form');
 let form = Object.hasOwn(FORMS, formName) ? FORMS[formName] : undefined;
 let appOrigin = params.get('origin');

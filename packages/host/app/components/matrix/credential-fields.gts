@@ -4,9 +4,10 @@ import Component from '@glimmer/component';
 import { modifier } from 'ember-modifier';
 
 import ENV from '@cardstack/host/config/environment';
-import type {
-  CredentialFields,
-  CredentialForm,
+import {
+  credentialFieldsURL,
+  type CredentialFields,
+  type CredentialForm,
 } from '@cardstack/host/lib/credential-fields';
 import { isTrustedMessageOrigin } from '@cardstack/host/utils/trusted-message-origin';
 
@@ -187,18 +188,11 @@ export default class CredentialFieldsFrame extends Component<Signature> {
   </template>
 
   private get src() {
-    let base = ENV.secureOriginURL.endsWith('/')
-      ? ENV.secureOriginURL
-      : `${ENV.secureOriginURL}/`;
-    let url = new URL('credentials', base);
-    // In the fragment, which is never sent to the server: a filter in front
-    // of the secure origin refuses a query string naming a loopback origin,
-    // so a host app on this machine would otherwise get no frame at all.
-    url.hash = new URLSearchParams({
-      form: this.args.form,
-      origin: window.location.origin,
-    }).toString();
-    return url.href;
+    return credentialFieldsURL(
+      ENV.secureOriginURL,
+      this.args.form,
+      window.location.origin,
+    );
   }
 
   private connectFrame = modifier((element: HTMLDivElement) => {

@@ -32,13 +32,15 @@ export function isListedOrigin(origin, listed) {
 
 // The parts of a listed origin: its scheme, its host without a leading `*.`,
 // whether it stands for every subdomain of that host, and its port, `*`
-// standing for any. Undefined for anything that isn't an origin of that shape.
+// standing for any. The host is a domain name, an IPv4 address, or a
+// bracketed IPv6 address, which has no subdomains. Undefined for anything
+// that isn't an origin of that shape.
 export function parseListedOrigin(entry) {
   let match =
-    /^([a-z][a-z0-9+.-]*:)\/\/(\*\.)?([a-z0-9-]+(?:\.[a-z0-9-]+)*)(?::(\d+|\*))?$/.exec(
+    /^([a-z][a-z0-9+.-]*:)\/\/(\*\.)?([a-z0-9-]+(?:\.[a-z0-9-]+)*|\[[0-9a-f:.]+\])(?::(\d+|\*))?$/.exec(
       entry,
     );
-  if (!match) {
+  if (!match || (match[2] && match[3].startsWith('['))) {
     return undefined;
   }
   return {
