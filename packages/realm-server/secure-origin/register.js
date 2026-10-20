@@ -161,7 +161,7 @@ export function registerMode(root) {
   });
   let serverNameElement = usernameField.element.querySelector('.suffix');
   matrixServerName(config).then(
-    (name) => (serverNameElement.textContent = `:${name}`),
+    (name) => (serverNameElement.textContent = name),
     () => undefined,
   );
   let passwords = newPasswordFields({
