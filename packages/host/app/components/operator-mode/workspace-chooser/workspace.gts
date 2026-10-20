@@ -1076,6 +1076,7 @@ export default class Workspace extends Component<Signature> {
         gap: var(--boxel-sp-4xs);
         min-width: 0;
         color: var(--foreground);
+        white-space: nowrap;
       }
       .desk-host-dot {
         flex: none;

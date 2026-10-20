@@ -524,7 +524,8 @@ export default class Agents extends Component {
       /* The agents, as logos to pick from: the pick sets the steps below. */
       .agent-picker {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+        /* Two across even on a phone; four across on a wide page. */
+        grid-template-columns: repeat(auto-fit, minmax(min(13rem, 45%), 1fr));
         gap: var(--boxel-sp-xs);
       }
       .agent-choice {

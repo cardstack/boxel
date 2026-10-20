@@ -2901,7 +2901,9 @@ export default class AgentScreencast extends Component<Signature> {
         .window.is-codex,
         .window.is-boxel {
           grid-template-columns: minmax(0, 1fr);
-          grid-template-rows: 13rem auto;
+          /* The pane's card is drawn absolutely, so its row needs a
+             height of its own. */
+          grid-template-rows: 13rem 16rem;
           height: auto;
         }
         .sidebar {

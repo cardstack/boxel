@@ -1476,6 +1476,23 @@ export default class WorkspaceChooser extends Component<Signature> {
           );
         }
       }
+      /* The gutter narrows with the page, so a tablet or phone spends its
+         width on the tiles. */
+      @media (max-width: 64rem) {
+        .workspace-chooser {
+          --workspace-chooser-gutter: var(--boxel-sp-xl);
+        }
+      }
+      @media (max-width: 48rem) {
+        .workspace-chooser {
+          --workspace-chooser-gutter: var(--boxel-sp-lg);
+        }
+      }
+      @media (max-width: 40rem) {
+        .workspace-chooser {
+          --workspace-chooser-gutter: var(--boxel-sp);
+        }
+      }
       /* One tile per row, filling the chooser's own width, which is less
          than the viewport's when the AI assistant panel is open. */
       @media (max-width: 30rem) {
