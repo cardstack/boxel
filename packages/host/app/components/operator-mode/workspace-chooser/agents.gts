@@ -98,10 +98,10 @@ export default class Agents extends Component {
     return this.agent === 'boxel';
   }
 
-  // The screencast dresses as the picked agent's app; Boxel AI Assistant
-  // has no app of its own, so it shows Claude Code's.
+  // The screencast dresses as the picked agent's app; for Boxel AI
+  // Assistant, that's Boxel itself with the assistant docked beside a card.
   private get screencastAgent(): AgentFlavor {
-    return this.agent === 'boxel' ? 'claude' : this.agent;
+    return this.agent;
   }
 
   // Favorites first, since they're what the user works on, then the rest of

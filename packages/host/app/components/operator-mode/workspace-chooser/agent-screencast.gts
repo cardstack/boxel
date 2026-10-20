@@ -9,6 +9,8 @@ import { modifier } from 'ember-modifier';
 
 import { cn, eq } from '@cardstack/boxel-ui/helpers';
 
+import assistantIcon from '../../ai-assistant/ai-assist-icon@2x.webp';
+
 type ChapterId = 'compose' | 'files' | 'form' | 'link' | 'brand' | 'query';
 type BeatKind = 'user' | 'agent' | 'tool' | 'cli' | 'form';
 
@@ -386,7 +388,7 @@ const BOARD = [
 // Code and Codex are desktop apps with Boxel in their side panel; Grok Bot
 // is a messaging app with no browser of its own, so Boxel opens in a
 // window beside it.
-export type AgentFlavor = 'claude' | 'codex' | 'grok';
+export type AgentFlavor = 'claude' | 'codex' | 'grok' | 'boxel';
 
 const AGENT_CHROME = {
   claude: {
@@ -412,6 +414,21 @@ const AGENT_CHROME = {
     chips: [],
     model: '',
     steps: { cli: 'Ran', Search: 'Searched', Write: 'Created', Edit: 'Edited' },
+  },
+  // Boxel's own AI Assistant: no CLI, so its steps are the commands it
+  // applies to cards.
+  boxel: {
+    newChat: '',
+    listLabel: '',
+    hint: 'Enter a prompt',
+    chips: ['＋', 'Skills · 3'],
+    model: 'Claude Sonnet',
+    steps: {
+      cli: 'Run',
+      Search: 'Search cards',
+      Write: 'Create card',
+      Edit: 'Patch card',
+    },
   },
 } as const;
 
@@ -455,13 +472,16 @@ const LABELED_TIMELINES = Object.fromEntries(
     let steps: Record<string, string> = AGENT_CHROME[agent].steps;
     return [
       agent,
-      TIMELINE.map((beat) => ({
-        ...beat,
-        label:
-          beat.kind === 'cli'
-            ? steps.cli
-            : (steps[beat.tool ?? ''] ?? beat.tool),
-      })),
+      // The assistant works on cards directly, so it has no CLI calls.
+      TIMELINE.filter((beat) => agent !== 'boxel' || beat.kind !== 'cli').map(
+        (beat) => ({
+          ...beat,
+          label:
+            beat.kind === 'cli'
+              ? steps.cli
+              : (steps[beat.tool ?? ''] ?? beat.tool),
+        }),
+      ),
     ];
   }),
 ) as Record<AgentFlavor, (TimedBeat & { label?: string })[]>;
@@ -552,6 +572,10 @@ export default class AgentScreencast extends Component<Signature> {
 
   private get isClaude() {
     return (this.args.agent ?? 'claude') === 'claude';
+  }
+
+  private get isBoxel() {
+    return this.args.agent === 'boxel';
   }
 
   private get isCodex() {
@@ -721,6 +745,7 @@ export default class AgentScreencast extends Component<Signature> {
           is-claude=this.isClaude
           is-codex=this.isCodex
           is-grok=this.isGrok
+          is-boxel=this.isBoxel
         }}
         aria-hidden='true'
       >
@@ -737,6 +762,8 @@ export default class AgentScreencast extends Component<Signature> {
               {{/each}}
               <span class='bot-add'>＋</span>
             </div>
+          {{else if this.isBoxel}}
+            {{! The assistant is a panel in Boxel itself: no sidebar. }}
           {{else if this.isCodex}}
             {{! Codex's rail of icons, with no session list. }}
             <div class='sidebar is-rail'>
@@ -788,6 +815,10 @@ export default class AgentScreencast extends Component<Signature> {
                     class='bot'
                     style={{botTone '#ff7a1a'}}
                   ></i>Grok Bot</span>
+              {{else if this.isBoxel}}
+                <img class='ai-mark' src={{assistantIcon}} alt='' />
+                <span class='chat-title'>Plan the Lisbon offsite</span>
+                <span class='ai-head-tools'>＋ ⋯</span>
               {{else}}
                 <span class='chat-title'>Plan the Lisbon offsite</span>
                 <span class='chat-folder'>~/offsite</span>
@@ -833,6 +864,9 @@ export default class AgentScreencast extends Component<Signature> {
                       <i class='step-dot'></i>
                       <b class='step-tool'>{{beat.label}}</b>
                       <span class='step-arg'>{{beat.text}}</span>
+                      {{#if this.isBoxel}}
+                        <span class='step-applied'>Applied</span>
+                      {{/if}}
                     </span>
                     {{#if beat.detail}}
                       <span class='step-result'>⎿ {{beat.detail}}</span>
@@ -924,219 +958,234 @@ export default class AgentScreencast extends Component<Signature> {
               <span class='traffic'><i></i><i></i><i></i></span>
               <span class='url'><span class='boxel-mark'></span>app.boxel.ai /
                 {{this.panelPath}}</span>
+            {{else if this.isBoxel}}
+              {{! Boxel in interact mode: the workspace, then the mode. }}
+              <span class='workspace-pill'><span
+                  class='boxel-mark'
+                ></span>offsite</span>
+              <span class='mode-toggle'><b>Interact</b><span>Code</span></span>
             {{else}}
               <span class='boxel-mark'></span>
               <span class='panel-title'>Boxel</span>
               <span class='panel-path'>{{this.panelPath}}</span>
             {{/if}}
           </div>
-          <div class='panel-body' {{fitToTablet}}>
-            {{#if this.signedOut}}
-              <span class='placeholder'>Not signed in</span>
-            {{else if this.emptyWorkspace}}
-              <span class='placeholder'>offsite · no cards yet</span>
-            {{else if this.showOffsite}}
-              {{! The Offsite open isolated: the finished app, not a tile. }}
-              <div
-                class={{cn 'app' is-branded=this.isBranded}}
-                data-test-agent-screencast-offsite
-              >
-                {{! A map header: the city's street grid, a pin on the hotel. }}
-                <span class='cover'>
-                  <i class='cover-river'></i>
-                  <i class='cover-pin'></i>
-                  <span class='cover-top'>
-                    {{#if this.isBranded}}
-                      <span class='wordmark'>Fernway</span>
-                    {{/if}}
-                    <span class='crumb'>Offsites /
-                      <b>Lisbon offsite</b></span>
+          {{! In interact mode the open card sits on a stack, the cards it
+            was opened from peeking out behind it. }}
+          <div class='stack'>
+            {{#if this.isBoxel}}
+              <i class='stack-behind is-back'></i>
+              <i class='stack-behind'></i>
+            {{/if}}
+            <div class='panel-body' {{fitToTablet}}>
+              {{#if this.signedOut}}
+                <span class='placeholder'>Not signed in</span>
+              {{else if this.emptyWorkspace}}
+                <span class='placeholder'>offsite · no cards yet</span>
+              {{else if this.showOffsite}}
+                {{! The Offsite open isolated: the finished app, not a tile. }}
+                <div
+                  class={{cn 'app' is-branded=this.isBranded}}
+                  data-test-agent-screencast-offsite
+                >
+                  {{! A map header: the city's street grid, a pin on the hotel. }}
+                  <span class='cover'>
+                    <i class='cover-river'></i>
+                    <i class='cover-pin'></i>
+                    <span class='cover-top'>
+                      {{#if this.isBranded}}
+                        <span class='wordmark'>Fernway</span>
+                      {{/if}}
+                      <span class='crumb'>Offsites /
+                        <b>Lisbon offsite</b></span>
+                      {{#if this.updated}}
+                        <span class='synced'>Updated</span>
+                      {{/if}}
+                    </span>
+                  </span>
+                  <div class='app-head'>
+                    <span class='title-row'>
+                      <span class='code is-cover'>LIS</span>
+                      <span class='title-text'>
+                        <span class='title-line'>
+                          <b class='app-title'>Lisbon offsite</b>
+                          <span class='status tone-amber'>Planning</span>
+                        </span>
+                        <span class='muted'>Platform team · Owned by Maya Kim</span>
+                      </span>
+                    </span>
+                    <span class='facts' data-test-agent-screencast-budget>
+                      <span class='fact'>
+                        <span class='muted'>Dates</span>
+                        <b>{{if this.showBudget 'May 12–14' '3 days'}}</b>
+                      </span>
+                      <span class='fact'>
+                        <span class='muted'>City</span>
+                        <b>Lisbon</b>
+                      </span>
+                      <span class='fact'>
+                        <span class='muted'>People</span>
+                        <b>{{if this.showAttendees '24' '—'}}</b>
+                      </span>
+                      <span class='fact'>
+                        <span class='muted'>Budget</span>
+                        <b>{{if this.showBudget '€18.4k' '—'}}</b>
+                      </span>
+                    </span>
+                    <span class='tabs'>
+                      <span class='tab is-active'>Itinerary</span>
+                      <span class='tab'>Budget</span>
+                      <span class='tab'>People{{#if this.showAttendees}}
+                          <span class='count'>24</span>{{/if}}</span>
+                      <span class='tab'>Files{{#if this.showFiles}}
+                          <span class='count'>2</span>{{/if}}</span>
+                    </span>
+                  </div>
+                  <div class='app-body'>
+                    {{! Days: a list of fields inside the card, each linking a
+                      Venue card. }}
+                    <section class='itinerary'>
+                      {{#each DAYS as |day index|}}
+                        <span class='day'>
+                          <span class='day-date {{day.tone}}'>
+                            <span class='mono'>{{day.dow}}</span>
+                            <b>{{day.date}}</b>
+                          </span>
+                          <span class='day-main'>
+                            <span class='day-line'>
+                              <b>{{day.plan}}</b>
+                              <span class='muted'>{{day.time}}</span>
+                            </span>
+                            <span class='venue'>
+                              <span class='venue-icon {{day.tone}}'><svg
+                                  width='11'
+                                  height='11'
+                                  viewBox='0 0 24 24'
+                                  fill='none'
+                                  stroke='currentColor'
+                                  stroke-width='1.8'
+                                  stroke-linecap='round'
+                                  stroke-linejoin='round'
+                                ><path
+                                    d='M4 21V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v16'
+                                  /><path d='M15 10h4a1 1 0 0 1 1 1v10' /><path
+                                    d='M8 8h3M8 12h3M8 16h3M3 21h18'
+                                  /></svg></span>
+                              <b>{{day.venue}}</b>
+                              <span class='muted'>{{day.kind}}</span>
+                            </span>
+                            {{#if (eq index 0)}}
+                              {{#if this.showFiles}}
+                                <span
+                                  class='files'
+                                  data-test-agent-screencast-files
+                                >
+                                  <span class='file'>
+                                    <span class='file-type is-pdf'>PDF</span>
+                                    <b>contract.pdf</b>
+                                  </span>
+                                  <span class='file'>
+                                    <span class='file-type is-png'>PNG</span>
+                                    <b>floor-plan.png</b>
+                                  </span>
+                                </span>
+                              {{/if}}
+                            {{/if}}
+                          </span>
+                        </span>
+                      {{/each}}
+                    </section>
+                    <section class='summary'>
+                      <span class='box'>
+                        <span class='box-head'>
+                          <b>Budget</b>
+                          {{#if this.showBudget}}
+                            <span class='muted'>€767 pp</span>
+                          {{/if}}
+                        </span>
+                        {{#if this.showBudget}}
+                          <b class='total'>€18,400</b>
+                          <span class='bar'>
+                            {{#each BUDGET as |line|}}
+                              <i class={{line.shade}} style={{line.width}}></i>
+                            {{/each}}
+                          </span>
+                        {{else}}
+                          <span class='muted'>Needs headcount and dates</span>
+                        {{/if}}
+                      </span>
+                      <span class='box'>
+                        <span class='box-head'>
+                          <b>Attendees</b>
+                          {{#if this.showAttendees}}
+                            <span class='muted'>Linked</span>
+                          {{/if}}
+                        </span>
+                        {{#if this.showAttendees}}
+                          <span
+                            class='avatars'
+                            data-test-agent-screencast-attendees
+                          >
+                            {{#each ATTENDEES as |person|}}
+                              <i class={{person.tone}}>{{person.initials}}</i>
+                            {{/each}}
+                            <i class='more'>+20</i>
+                          </span>
+                        {{else}}
+                          <span class='muted'>No one invited yet</span>
+                        {{/if}}
+                      </span>
+                    </section>
+                  </div>
+                </div>
+              {{else if this.showBoard}}
+                {{! The board app: a live query over every Offsite, grouped by
+                  status, as a list that fits any width. }}
+                <div
+                  class={{cn 'app is-board' is-branded=this.isBranded}}
+                  data-test-agent-screencast-board
+                >
+                  <span class='board-head'>
+                    <span class='board-title'>
+                      <b class='app-title'>Offsites</b>
+                      <span class='muted'><i class='dot is-live'></i>Live query
+                        ·
+                        <span class='mono'>type = Offsite</span></span>
+                    </span>
                     {{#if this.updated}}
                       <span class='synced'>Updated</span>
                     {{/if}}
                   </span>
-                </span>
-                <div class='app-head'>
-                  <span class='title-row'>
-                    <span class='code is-cover'>LIS</span>
-                    <span class='title-text'>
-                      <span class='title-line'>
-                        <b class='app-title'>Lisbon offsite</b>
-                        <span class='status tone-amber'>Planning</span>
+                  {{#each BOARD as |column|}}
+                    <span class='group'>
+                      <span class='group-head'>
+                        <i class='dot {{column.dot}}'></i>
+                        {{column.status}}
+                        <span class='muted'>{{column.offsites.length}}</span>
                       </span>
-                      <span class='muted'>Platform team · Owned by Maya Kim</span>
-                    </span>
-                  </span>
-                  <span class='facts' data-test-agent-screencast-budget>
-                    <span class='fact'>
-                      <span class='muted'>Dates</span>
-                      <b>{{if this.showBudget 'May 12–14' '3 days'}}</b>
-                    </span>
-                    <span class='fact'>
-                      <span class='muted'>City</span>
-                      <b>Lisbon</b>
-                    </span>
-                    <span class='fact'>
-                      <span class='muted'>People</span>
-                      <b>{{if this.showAttendees '24' '—'}}</b>
-                    </span>
-                    <span class='fact'>
-                      <span class='muted'>Budget</span>
-                      <b>{{if this.showBudget '€18.4k' '—'}}</b>
-                    </span>
-                  </span>
-                  <span class='tabs'>
-                    <span class='tab is-active'>Itinerary</span>
-                    <span class='tab'>Budget</span>
-                    <span class='tab'>People{{#if this.showAttendees}}
-                        <span class='count'>24</span>{{/if}}</span>
-                    <span class='tab'>Files{{#if this.showFiles}}
-                        <span class='count'>2</span>{{/if}}</span>
-                  </span>
-                </div>
-                <div class='app-body'>
-                  {{! Days: a list of fields inside the card, each linking a
-                      Venue card. }}
-                  <section class='itinerary'>
-                    {{#each DAYS as |day index|}}
-                      <span class='day'>
-                        <span class='day-date {{day.tone}}'>
-                          <span class='mono'>{{day.dow}}</span>
-                          <b>{{day.date}}</b>
-                        </span>
-                        <span class='day-main'>
-                          <span class='day-line'>
-                            <b>{{day.plan}}</b>
-                            <span class='muted'>{{day.time}}</span>
+                      {{#each column.offsites as |offsite|}}
+                        <span class={{cn 'row' is-new=offsite.isNew}}>
+                          <span
+                            class='code {{offsite.tone}}'
+                          >{{offsite.code}}</span>
+                          <span class='row-name'>
+                            <b>{{offsite.name}}</b>
+                            <span class='muted'>{{offsite.meta}}</span>
                           </span>
-                          <span class='venue'>
-                            <span class='venue-icon {{day.tone}}'><svg
-                                width='11'
-                                height='11'
-                                viewBox='0 0 24 24'
-                                fill='none'
-                                stroke='currentColor'
-                                stroke-width='1.8'
-                                stroke-linecap='round'
-                                stroke-linejoin='round'
-                              ><path
-                                  d='M4 21V5a1 1 0 0 1 1-1h9a1 1 0 0 1 1 1v16'
-                                /><path d='M15 10h4a1 1 0 0 1 1 1v10' /><path
-                                  d='M8 8h3M8 12h3M8 16h3M3 21h18'
-                                /></svg></span>
-                            <b>{{day.venue}}</b>
-                            <span class='muted'>{{day.kind}}</span>
+                          <span class='row-figures'>
+                            <b>{{offsite.budget}}</b>
+                            <span class='muted'>{{offsite.people}} people</span>
                           </span>
-                          {{#if (eq index 0)}}
-                            {{#if this.showFiles}}
-                              <span
-                                class='files'
-                                data-test-agent-screencast-files
-                              >
-                                <span class='file'>
-                                  <span class='file-type is-pdf'>PDF</span>
-                                  <b>contract.pdf</b>
-                                </span>
-                                <span class='file'>
-                                  <span class='file-type is-png'>PNG</span>
-                                  <b>floor-plan.png</b>
-                                </span>
-                              </span>
-                            {{/if}}
-                          {{/if}}
+                          <span class='track'><i
+                              style={{offsite.done}}
+                            ></i></span>
                         </span>
-                      </span>
-                    {{/each}}
-                  </section>
-                  <section class='summary'>
-                    <span class='box'>
-                      <span class='box-head'>
-                        <b>Budget</b>
-                        {{#if this.showBudget}}
-                          <span class='muted'>€767 pp</span>
-                        {{/if}}
-                      </span>
-                      {{#if this.showBudget}}
-                        <b class='total'>€18,400</b>
-                        <span class='bar'>
-                          {{#each BUDGET as |line|}}
-                            <i class={{line.shade}} style={{line.width}}></i>
-                          {{/each}}
-                        </span>
-                      {{else}}
-                        <span class='muted'>Needs headcount and dates</span>
-                      {{/if}}
+                      {{/each}}
                     </span>
-                    <span class='box'>
-                      <span class='box-head'>
-                        <b>Attendees</b>
-                        {{#if this.showAttendees}}
-                          <span class='muted'>Linked</span>
-                        {{/if}}
-                      </span>
-                      {{#if this.showAttendees}}
-                        <span
-                          class='avatars'
-                          data-test-agent-screencast-attendees
-                        >
-                          {{#each ATTENDEES as |person|}}
-                            <i class={{person.tone}}>{{person.initials}}</i>
-                          {{/each}}
-                          <i class='more'>+20</i>
-                        </span>
-                      {{else}}
-                        <span class='muted'>No one invited yet</span>
-                      {{/if}}
-                    </span>
-                  </section>
+                  {{/each}}
                 </div>
-              </div>
-            {{else if this.showBoard}}
-              {{! The board app: a live query over every Offsite, grouped by
-                  status, as a list that fits any width. }}
-              <div
-                class={{cn 'app is-board' is-branded=this.isBranded}}
-                data-test-agent-screencast-board
-              >
-                <span class='board-head'>
-                  <span class='board-title'>
-                    <b class='app-title'>Offsites</b>
-                    <span class='muted'><i class='dot is-live'></i>Live query ·
-                      <span class='mono'>type = Offsite</span></span>
-                  </span>
-                  {{#if this.updated}}
-                    <span class='synced'>Updated</span>
-                  {{/if}}
-                </span>
-                {{#each BOARD as |column|}}
-                  <span class='group'>
-                    <span class='group-head'>
-                      <i class='dot {{column.dot}}'></i>
-                      {{column.status}}
-                      <span class='muted'>{{column.offsites.length}}</span>
-                    </span>
-                    {{#each column.offsites as |offsite|}}
-                      <span class={{cn 'row' is-new=offsite.isNew}}>
-                        <span
-                          class='code {{offsite.tone}}'
-                        >{{offsite.code}}</span>
-                        <span class='row-name'>
-                          <b>{{offsite.name}}</b>
-                          <span class='muted'>{{offsite.meta}}</span>
-                        </span>
-                        <span class='row-figures'>
-                          <b>{{offsite.budget}}</b>
-                          <span class='muted'>{{offsite.people}} people</span>
-                        </span>
-                        <span class='track'><i
-                            style={{offsite.done}}
-                          ></i></span>
-                      </span>
-                    {{/each}}
-                  </span>
-                {{/each}}
-              </div>
-            {{/if}}
+              {{/if}}
+            </div>
           </div>
         </div>
       </div>
@@ -1477,6 +1526,13 @@ export default class AgentScreencast extends Component<Signature> {
         overflow: hidden;
         color: var(--app-muted);
         text-overflow: ellipsis;
+      }
+      .stack {
+        position: relative;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
       }
       .panel-body {
         /* Replaced at runtime with the pane's width over the tablet's. */
@@ -2550,6 +2606,155 @@ export default class AgentScreencast extends Component<Signature> {
         font-weight: 500;
       }
 
+      /* Boxel AI Assistant: Boxel itself, in interact mode, with the open
+         card on its stack at the left and the assistant docked at the
+         right. */
+      .window.is-boxel {
+        --app-ink: var(--boxel-light);
+        --app-line: color-mix(in oklch, var(--boxel-light) 12%, transparent);
+        --app-muted: color-mix(in oklch, var(--boxel-light) 58%, transparent);
+        grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr);
+        gap: 0.375rem;
+        padding: 0.375rem;
+        border-radius: 0.75rem;
+        background-color: var(--boxel-700);
+      }
+      .window.is-boxel .panel {
+        order: -1;
+        border-left: 0;
+        background: none;
+      }
+      .window.is-boxel .panel-head {
+        gap: 0.5rem;
+        padding: 0.125rem 0.125rem 0.375rem;
+        border-bottom: 0;
+      }
+      .workspace-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        padding: 0.15rem 0.5rem 0.15rem 0.25rem;
+        border-radius: 0.5rem;
+        background-color: color-mix(
+          in oklch,
+          var(--boxel-light) 9%,
+          transparent
+        );
+        font-weight: 600;
+      }
+      .mode-toggle {
+        display: inline-flex;
+        margin-left: auto;
+        padding: 0.125rem;
+        border-radius: 1rem;
+        background-color: color-mix(in oklch, black 30%, transparent);
+        font-size: 0.5625rem;
+      }
+      .mode-toggle > * {
+        padding: 0.1rem 0.5rem;
+        border-radius: 1rem;
+        color: var(--app-muted);
+      }
+      .mode-toggle b {
+        background-color: var(--boxel-highlight);
+        color: var(--boxel-dark);
+      }
+      /* The stack: the cards the open one came from peek out above it. */
+      .window.is-boxel .stack {
+        padding-top: 0.75rem;
+      }
+      .stack-behind {
+        position: absolute;
+        top: 0.375rem;
+        left: 0.625rem;
+        right: 0.625rem;
+        height: 1rem;
+        border-radius: 0.5rem 0.5rem 0 0;
+        background-color: color-mix(in oklch, white 78%, var(--boxel-700));
+      }
+      .stack-behind.is-back {
+        top: 0;
+        left: 1.25rem;
+        right: 1.25rem;
+        background-color: color-mix(in oklch, white 50%, var(--boxel-700));
+      }
+      .window.is-boxel .panel-body {
+        overflow: hidden;
+        border-radius: 0.5rem;
+        background-color: white;
+        box-shadow: 0 0.25rem 1rem color-mix(in oklch, black 35%, transparent);
+      }
+      .window.is-boxel .placeholder {
+        color: color-mix(in oklch, var(--boxel-dark) 50%, transparent);
+      }
+      /* The assistant panel, docked. */
+      .window.is-boxel .chat {
+        overflow: hidden;
+        border-radius: 0.625rem;
+        background-color: var(--boxel-ai-purple);
+      }
+      .window.is-boxel .chat-head {
+        align-items: center;
+      }
+      .ai-mark {
+        flex: none;
+        width: 1rem;
+        height: 1rem;
+      }
+      .ai-head-tools {
+        margin-left: auto;
+        color: var(--app-muted);
+      }
+      .window.is-boxel .bubble {
+        border-radius: 0.5rem;
+        background-color: color-mix(
+          in oklch,
+          var(--boxel-light) 14%,
+          transparent
+        );
+      }
+      .window.is-boxel .reply {
+        align-self: flex-start;
+        padding: 0.375rem 0.625rem;
+        border-radius: 0.5rem;
+        background-color: var(--boxel-650);
+      }
+      /* Each command the assistant applies, as a card with its status. */
+      .window.is-boxel .step {
+        padding: 0.3rem 0.5rem;
+        border: 1px solid var(--app-line);
+        border-radius: 0.5rem;
+        background-color: color-mix(in oklch, black 22%, transparent);
+      }
+      .window.is-boxel .step-dot {
+        display: none;
+      }
+      .window.is-boxel .step-arg {
+        flex: 1;
+        min-width: 0;
+      }
+      .step-applied {
+        flex: none;
+        padding: 0 0.375rem;
+        border-radius: 1rem;
+        background-color: var(--boxel-green);
+        color: var(--boxel-dark);
+        font-size: 0.5625rem;
+        font-weight: 600;
+      }
+      .window.is-boxel .step-result {
+        padding-left: 0;
+      }
+      .window.is-boxel .composer {
+        border-radius: 0.5rem;
+        background-color: color-mix(in oklch, black 22%, transparent);
+      }
+      .window.is-boxel .send {
+        border-radius: 0.375rem;
+        background-color: var(--boxel-highlight);
+        color: var(--boxel-dark);
+      }
+
       /* The card form the agent puts in its chat. */
       .form-card {
         display: flex;
@@ -2683,7 +2888,8 @@ export default class AgentScreencast extends Component<Signature> {
       /* Narrow: the sidebar goes and the panel sits under the chat. */
       @media (max-width: 40rem) {
         .window,
-        .window.is-codex {
+        .window.is-codex,
+        .window.is-boxel {
           grid-template-columns: minmax(0, 1fr);
           grid-template-rows: 13rem auto;
           height: auto;
