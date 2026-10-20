@@ -1,6 +1,6 @@
 import GlimmerComponent from '@glimmer/component';
 import {
-  BoxelMultiSelectBasic,
+  BoxelMultiSelect,
   toMultiSelectTriggerComponent,
 } from '@cardstack/boxel-ui/components';
 import { FilterTrigger } from './filter-trigger';
@@ -23,7 +23,7 @@ interface FilterDropdownSignature {
 
 export class FilterDropdown extends GlimmerComponent<FilterDropdownSignature> {
   <template>
-    <BoxelMultiSelectBasic
+    <BoxelMultiSelect
       class='filter-multi-select'
       @options={{@options}}
       @selected={{@selected}}
@@ -41,7 +41,7 @@ export class FilterDropdown extends GlimmerComponent<FilterDropdownSignature> {
       as |item|
     >
       <div class='filter-option'>{{yield item}}</div>
-    </BoxelMultiSelectBasic>
+    </BoxelMultiSelect>
 
     <style scoped>
       .filter-multi-select {

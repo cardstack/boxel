@@ -70,9 +70,9 @@ import Label from './components/label/index.gts';
 import LoadingIndicator from './components/loading-indicator/index.gts';
 import MarkdownContentShell from './components/markdown-content-shell/index.gts';
 import Menu from './components/menu/index.gts';
-import BoxelMessage from './components/message/index.gts';
 import Modal from './components/modal/index.gts';
-import BoxelMultiSelect, {
+import {
+  BoxelMultiSelect,
   BoxelMultiSelectBasic,
 } from './components/multi-select/index.gts';
 import PhoneInput from './components/phone-input/index.gts';
@@ -144,7 +144,6 @@ export {
   BoxelInputGroup,
   BoxelInputValidationState,
   BoxelInputValidationStates,
-  BoxelMessage,
   BoxelMultiSelect,
   BoxelMultiSelectBasic,
   BoxelSelect,
@@ -184,7 +183,6 @@ export {
   LoadingIndicator,
   MarkdownContentShell,
   Menu,
-  BoxelMessage as Message,
   Modal,
   PhoneInput,
   Picker,
