@@ -413,6 +413,15 @@ export class Select extends Component<SelectSignature> {
 
           flex: none;
         }
+        /* 16px on touch screens, as on Input and Autocomplete; the
+           trigger's height is fixed, so it doesn't grow */
+        @media (pointer: coarse) {
+          .pretui-selectwrap :deep(.boxel-trigger),
+          .pretui-selectwrap :deep(.boxel-trigger-placeholder) {
+            font-size: var(--boxel-font-size);
+            line-height: var(--boxel-line-height);
+          }
+        }
       }
     </style>
     {{! template-lint-disable require-scoped-style }}
@@ -457,10 +466,13 @@ export class Select extends Component<SelectSignature> {
           outline-offset: 1px;
           box-shadow: 0 0 0 1.5px var(--ring);
         }
-        /* iOS zooms into inputs under 16px on focus */
+        /* iOS zooms into inputs under 16px on focus; the options follow
+           the trigger */
         @media (pointer: coarse) {
+          .pretui-select-dropdown.ember-power-select-dropdown .boxel-select-option-item,
           .pretui-select-dropdown.ember-power-select-dropdown .ember-power-select-search-input {
             font-size: var(--boxel-font-size);
+            line-height: var(--boxel-line-height);
           }
         }
       }

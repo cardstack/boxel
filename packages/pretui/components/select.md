@@ -52,6 +52,8 @@ Forwarded through BoxelSelect's knobs: `--boxel-form-control-border-radius`, `--
 
 Per-instance knob: `--pretui-select-h` (the trigger's height, 1.875rem by default), set on your class.
 
+On touch screens (`pointer: coarse`) the trigger, its placeholder, the options and the search box are `--boxel-font-size` (16px), matching **Input** and **Autocomplete**, so iOS doesn't zoom into the search box on focus; the trigger keeps its height.
+
 The dropdown's own geometry (padding, option height, search box) is BoxelSelect's. Select adds two rules there: the search box's icon inset, and the options and search box at the trigger's font size, through an unscoped rule on its dropdown class, since the wormhole is outside Select's subtree and BoxelSelect has no font-size knob. The trigger's height, hairline, placeholder color and caret color have no knob (BoxelSelect's `--boxel-select-placeholder-color` never reaches its placeholder), so `:deep()` rules set them. All of these sit in `@layer PretComponent`, which outranks BoxelSelect's layers.
 
 ## React ecosystem
