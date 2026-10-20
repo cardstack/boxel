@@ -8,7 +8,7 @@ The workspace chooser becomes a dashboard: one scrolling page in three sections 
 
 ## Goals
 
-- **First visit:** show a new user something worth opening (the catalog) and two ways to build (Boxel AI, or their own agent through the Boxel CLI).
+- **First visit:** show a new user something worth opening (the catalog) and two ways to build (Boxel AI, or their own agent app through the Boxel plugin).
 - **Every day:** the workspaces a user works in, with the cards they care about, one click away.
 - **Additive:** every existing chooser behavior stays — favorites, the `···` menus, archive, the unreachable-servers notice, keyboard navigation and the phone layout.
 
@@ -67,8 +67,9 @@ Every section is the same dark panel family (`--boxel-700` with a hairline edge,
 
 `agents.gts`, extracted from the Home preview's Make region.
 
-- **Five steps:** install the CLI, sign in, pull a workspace (the user picks which of their own), open Claude Code or Codex in the folder, push a change. Only the open step shows its command, with Copy.
-- **Progress counts copies,** stored as `agentSetupDone`, and says so ("2 of 5 copied"): the dashboard can't see a terminal. Ticking the last step for real needs the realm to report a push from the CLI.
+- **A screencast** leads the section (`agent-screencast.gts`): a generic desktop agent app, the kind Claude and Codex are, takes a request in its chat, edits a card and pushes it, while Boxel in the app's side panel picks the change up. Drawn in the page, not a video; chapters (Ask, edits, lands in Boxel) and play/pause; it runs only on screen and holds the finished frame for reduced motion.
+- **Five steps, typed into the agent's chat, not a terminal:** add the Boxel marketplace, install the plugin (Claude or Codex form), open a workspace (the user picks which of their own), ask for a change, see it in Boxel. The plugin's skills do the signing in and syncing. Only the open step shows its text, with Copy.
+- **Progress counts copies,** stored as `agentSetupDone`, and says so ("2 of 5 copied"): the dashboard can't see the agent's chat. Ticking the last step for real needs the realm to report a push from the agent.
 - **Boxel AI** sits beside the steps for anyone without an agent: Describe it (a new session) and recent sessions.
 
 ## State

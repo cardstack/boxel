@@ -21,6 +21,7 @@ import type MatrixService from '@cardstack/host/services/matrix-service';
 import type RealmService from '@cardstack/host/services/realm';
 import type RealmServerService from '@cardstack/host/services/realm-server';
 
+import AgentScreencast from './agent-screencast';
 import { formatRelativeTime } from './nav-rail';
 
 const log = logger('component:workspace-chooser/agents');
@@ -33,7 +34,7 @@ const STEP_COUNT = 5;
 type AgentId = 'claude' | 'codex';
 
 const AGENTS: { id: AgentId; label: string }[] = [
-  { id: 'claude', label: 'Claude Code' },
+  { id: 'claude', label: 'Claude' },
   { id: 'codex', label: 'Codex' },
 ];
 
@@ -53,10 +54,11 @@ interface PickableWorkspace {
   info: ReturnType<RealmService['info']>;
 }
 
-// The dashboard's Agents section: how to build in Boxel with the agent a
-// user already has. Five steps take them from installing the Boxel CLI to
-// pushing their agent's first change, for Claude Code or Codex; beside them,
-// Boxel AI for anyone without an agent of their own.
+// The dashboard's Agents section: how to build in Boxel with the agent app a
+// user already has. Five steps, each typed into the agent's own chat, take
+// them from adding the Boxel plugin to seeing their agent's first change in
+// Boxel, for Claude or Codex; beside them, Boxel AI for anyone without an
+// agent of their own.
 export default class Agents extends Component {
   @service declare private aiAssistantPanelService: AiAssistantPanelService;
   @service declare private matrixService: MatrixService;
@@ -108,35 +110,41 @@ export default class Agents extends Component {
     return this.openedStep ?? Math.min(this.doneCount, STEP_COUNT - 1);
   }
 
+  // Each step is something to type into the agent app's own chat: the
+  // plugin commands first, then requests in plain words. The plugin's
+  // skills do the Boxel work (signing in, syncing the workspace), so no
+  // step asks for a terminal.
   private get steps(): SetupStep[] {
     let realmURL = this.workspaceURL ?? '<workspace URL>';
-    let folder = localDirFor(realmURL);
-    let agentName = this.agent === 'codex' ? 'Codex' : 'Claude Code';
+    let installCommand =
+      this.agent === 'codex'
+        ? '/plugin install boxel-cli@cardstack-boxel'
+        : '/plugin install boxel-cli';
     let steps: [string, string, string][] = [
       [
-        'Install the Boxel CLI',
-        'One command, once per computer',
-        'npm install -g @cardstack/boxel-cli',
+        'Add the Boxel marketplace',
+        'Type it in your agent’s chat',
+        '/plugin marketplace add cardstack/boxel',
       ],
       [
-        'Sign in from the terminal',
-        'Opens a browser to confirm it’s you',
-        'boxel profile add',
+        'Install the Boxel plugin',
+        'Brings Boxel’s skills to your agent',
+        installCommand,
       ],
       [
-        'Pull a workspace to work on',
-        'Any workspace you can edit',
-        `boxel realm pull ${realmURL} ./${folder}`,
+        'Open a workspace',
+        'Your agent signs you in and syncs it',
+        `Work on my Boxel workspace ${realmURL}`,
       ],
       [
-        `Open ${agentName} in that folder`,
-        'The workspace’s skills come along as your agent’s',
-        `cd ${folder} && ${this.agent}`,
+        'Ask for a change',
+        'In your own words, like any request',
+        'Make me a card for tracking tasks in this workspace',
       ],
       [
-        'Make a change and push it',
-        'Your agent’s edits land in Boxel as cards',
-        `boxel realm push ./${folder} ${realmURL}`,
+        'See it in Boxel',
+        'Boxel opens beside the chat, with the change live',
+        'Show it to me in Boxel',
       ],
     ];
     return steps.map(([title, note, command], index) => ({
@@ -213,14 +221,17 @@ export default class Agents extends Component {
 
   <template>
     <div class='make' data-theme='dark' data-test-agents>
-      <div class='pitch'>
-        <span class='eyebrow'>Bring your own agent</span>
-        <h3 class='pitch-title'>Build with the agent you already pay for</h3>
-        <p class='pitch-body'>
-          The Boxel CLI puts a workspace on your computer as files. Claude Code
-          or Codex edits its cards like any other code, and a push puts them
-          back in Boxel, live.
-        </p>
+      <div class='intro'>
+        <div class='pitch'>
+          <span class='eyebrow'>Bring your own agent</span>
+          <h3 class='pitch-title'>Build with the agent you already pay for</h3>
+          <p class='pitch-body'>
+            Add the Boxel plugin to Claude or Codex and your agent builds right
+            in your workspaces. Ask in its chat; Boxel shows the result beside
+            it, live.
+          </p>
+        </div>
+        <AgentScreencast />
       </div>
 
       <div class='bench'>
@@ -409,12 +420,23 @@ export default class Agents extends Component {
         color: var(--boxel-highlight);
       }
 
-      /* The pitch: why, before how. */
+      /* The pitch beside the screencast that shows it: why, before how. */
+      .intro {
+        display: grid;
+        grid-template-columns: minmax(16rem, 1fr) minmax(0, 2fr);
+        align-items: center;
+        gap: var(--boxel-sp-xl);
+      }
       .pitch {
         display: flex;
         flex-direction: column;
         gap: var(--boxel-sp-xs);
         max-width: 38rem;
+      }
+      @media (max-width: 60rem) {
+        .intro {
+          grid-template-columns: minmax(0, 1fr);
+        }
       }
       /* Below the section heading in rank: the pitch never outshouts it. */
       .pitch-title {
@@ -656,10 +678,6 @@ export default class Agents extends Component {
         color: color-mix(in oklch, var(--boxel-light) 88%, transparent);
         scrollbar-width: none;
       }
-      .command-text::before {
-        content: '$ ';
-        color: var(--boxel-highlight);
-      }
       .copy {
         flex: none;
         display: inline-flex;
@@ -770,13 +788,3 @@ const stateClass = (state: SetupStep['state']) => `is-${state}`;
 
 const stateLabel = (state: SetupStep['state']) =>
   state === 'done' ? 'Copied' : state === 'now' ? 'Next' : '';
-
-// "…/ctse/studio/" → "studio": the folder the pull lands in.
-function localDirFor(url: string) {
-  try {
-    let segments = new URL(url).pathname.split('/').filter(Boolean);
-    return segments[segments.length - 1] ?? 'workspace';
-  } catch {
-    return 'workspace';
-  }
-}

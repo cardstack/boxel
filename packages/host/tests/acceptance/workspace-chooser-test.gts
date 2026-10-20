@@ -1476,11 +1476,11 @@ module('Acceptance | workspace-chooser', function (hooks) {
         assert.dom('[data-test-agent-setup-progress]').hasText('0 of 5 copied');
         assert
           .dom('[data-test-agent-step="1"] [data-test-agent-command]')
-          .hasText('npm install -g @cardstack/boxel-cli');
+          .hasText('/plugin marketplace add cardstack/boxel');
 
         await click('[data-test-agent-copy="1"]');
 
-        assert.deepEqual(copied, ['npm install -g @cardstack/boxel-cli']);
+        assert.deepEqual(copied, ['/plugin marketplace add cardstack/boxel']);
         assert.dom('[data-test-agent-setup-progress]').hasText('1 of 5 copied');
         let matrixService = getService('matrix-service') as MatrixService;
         assert.strictEqual(matrixService.dashboardState.agentSetupDone, 1);
@@ -1490,7 +1490,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
       }
     });
 
-    test('the pull step offers the user’s own workspaces and follows the pick', async function (assert) {
+    test('the workspace step offers the user’s own workspaces and follows the pick', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
 
       let matrixService = getService('matrix-service') as MatrixService;
@@ -1503,7 +1503,7 @@ module('Acceptance | workspace-chooser', function (hooks) {
 
       assert
         .dom('[data-test-agent-step="3"] [data-test-agent-command]')
-        .hasText(`boxel realm pull ${realmBURL} ./workspace-b`);
+        .hasText(`Work on my Boxel workspace ${realmBURL}`);
     });
 
     test('Describe it opens Boxel AI', async function (assert) {

@@ -1041,7 +1041,7 @@ export default class WorkspaceChooser extends Component<Signature> {
                   aria-hidden='true'
                 />Agents</h2>
               <p class='dashboard-section-hint'>Boxel AI works here; your own
-                agent works through the Boxel CLI.</p>
+                agent works through the Boxel plugin.</p>
             </div>
             <Agents />
           </section>
