@@ -91,9 +91,8 @@ MUST stay inside the card's own DOM and MUST NOT read host motion state.
 
 The engine SHOULD hand playback to the browser's native mechanisms: the Web
 Animations API, CSS transitions and animations, and View Transitions. Running
-animations SHOULD be visible in the browser's developer tools, which can
-already inspect them and slow them down. So host SHOULD NOT build its own
-animation inspector or slow-motion control.
+animations SHOULD be visible in the browser's developer tools. Host SHOULD NOT
+build its own animation inspector or slow-motion control.
 
 Host MAY use glimmer-motion and Choreo inside the engine and in low-level
 declarations.
@@ -158,19 +157,18 @@ environment they render in. That can only work if the physicality lives low in
 the platform, in the components that render card-api boundaries. Card authors
 cannot be asked to coordinate with a host motion service.
 
-A central motion service that callers ask to start crossings and scenes
-spreads motion concerns into those callers. Existing components have to check
-the motion service, or inspect the DOM, to see whether an animation is
-running. Stack state gains fields that hold back a card's content until its
-flight ends. State changes run inside a crossing's update, and they can be
-lost when a second open or close starts. These failures are what §1.1 and
-§1.2 rule out. When animation cannot reach state, a broken animation can only
-look wrong. It cannot leave the app in the wrong state.
+When callers start animations themselves, motion concerns spread into every
+caller. Components check a motion service or inspect the DOM to learn whether
+an animation is running, and state gains fields that exist only for an
+animation. A state change that runs inside an animation's update can be lost
+when a second change starts mid-flight. §1.1 and §1.2 rule this out. When
+animation cannot reach state, a broken animation can only look wrong. It
+cannot leave the app in the wrong state.
 
-A team that needs its own tools to inspect and slow down animations is not
-consistently using the browser's animation APIs. Chrome's developer tools can
-already inspect and slow native animations. The browser also runs them off the
-main thread where it can, which keeps motion smooth while cards render.
+Browser developer tools can inspect and slow native animations, so host
+needs no animation tooling of its own. The browser also runs native animations
+off the main thread where it can, which keeps motion smooth while cards
+render.
 
 The quality rules in §1.5 follow widely used guidance. WCAG 2.2 covers reduced
 motion (2.3.3) and pausing automatic motion (2.2.2). Material Design 3 and
@@ -183,8 +181,8 @@ actions many times a day.
 - **A reactive engine with declarative components (chosen).** State stays
   simple and testable. Card authors get motion for free. Motion failures stay
   cosmetic.
-- **A central imperative motion service.** Callers ask a service to cross, begin or defer. It gives one place for
-  policy. But every caller has to know about motion, state ends up waiting on
+- **A central imperative motion service.** Callers ask a service to cross,
+  begin or defer. It gives one place for policy. But every caller has to know about motion, state ends up waiting on
   animation, and user-authored cards cannot take part.
 - **Each component animates itself, with no coordination.** This works for
   local effects. It cannot give continuity across regions, such as a card
@@ -203,16 +201,10 @@ A View Transition needs the old frame captured before the DOM changes. So an
 engine that uses one has to hook the render pass, not the state change. Where
 it cannot, it uses live-DOM motion.
 
-Code that mutates a `StackItem` is where motion coupling has built up. Untangling
-that state management makes the engine easier to land, and agents write
-correct code more easily against clean state.
-
 ## 5. Sources
 
 - Edward Faulkner, 2026-10-02: the reactive-layer architecture, the
   two-level declarations, and native animation APIs.
-- burieberry, 2026-09-28: a lost open or close, and motion left off after a
-  cancelled portal.
 - `.claude/skills/motion-pattern/SKILL.md`: View Transitions freeze live
   content.
 - WCAG 2.2, Success Criteria 2.3.3 (Animation from Interactions) and 2.2.2
