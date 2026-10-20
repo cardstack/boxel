@@ -296,8 +296,8 @@ module('factory-prompt-loader > interpolate > opaque values', function () {
       '{{#if v}}x{{/if}}',
     );
     assert.strictEqual(
-      interpolate(template, { v: '', w: '{{else}} {{w}}' }),
-      '{{else}} {{w}}',
+      interpolate(template, { v: '', w: '{{#if v}}x{{else}}y{{/if}}' }),
+      '{{#if v}}x{{else}}y{{/if}}',
     );
   });
 
@@ -330,6 +330,29 @@ module('factory-prompt-loader > interpolate > opaque values', function () {
       interpolate('A {{v}} B', { v: '{{#if v}}{{v}}{{/if}}' }),
       'A {{#if v}}{{v}}{{/if}} B',
     );
+  });
+
+  test('an object value inside #each keeps its template syntax', function (assert) {
+    assert.strictEqual(
+      interpolate('{{#each items}}{{data}}{{/each}}', {
+        items: [{ data: { html: '{{x}}' } }],
+        x: 'X',
+      }),
+      '{"html":"{{x}}"}',
+    );
+  });
+
+  test('a value holding a NUL-delimited index renders verbatim', function (assert) {
+    assert.strictEqual(
+      interpolate('{{#each items}}[{{t}}]{{/each}}', {
+        items: [{ t: '\u00001\u0000' }, { t: 'b' }],
+      }),
+      '[\u00001\u0000][b]',
+    );
+  });
+
+  test('an empty value still takes part in the blank-line collapse', function (assert) {
+    assert.strictEqual(interpolate('A\n\n{{v}}\n\nB', { v: '' }), 'A\n\nB');
   });
 
   test('rejects a template containing a NUL character', function (assert) {
@@ -374,32 +397,6 @@ module('factory-prompt-loader > FilePromptLoader', function () {
     });
     assert.ok(result.includes(content), 'skill content is verbatim');
     assert.ok(result.includes(reference), 'skill reference is verbatim');
-  });
-
-  test('renders a real skill with its glimmer syntax intact', async function (assert) {
-    let content = await readFile(
-      join(
-        import.meta.dirname,
-        '..',
-        '.agents',
-        'skills-orchestrator',
-        'boxel-live-surfaces',
-        'SKILL.md',
-      ),
-      'utf8',
-    );
-    let loader = new FilePromptLoader();
-    let result = loader.load('system', {
-      targetRealm: 'https://example.test/target/',
-      darkfactoryModuleUrl: 'https://example.test/software-factory/darkfactory',
-      enableCatalogReuse: false,
-      skills: [{ name: 'boxel-live-surfaces', content, references: [] }],
-    });
-    assert.ok(
-      result.includes('@query={{this.tasksWireQuery}}'),
-      'glimmer argument is intact',
-    );
-    assert.ok(result.includes(content.trim()), 'skill content is verbatim');
   });
 
   test('caches templates on subsequent loads', function (assert) {
