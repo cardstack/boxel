@@ -190,6 +190,12 @@ function commitLocal(dir: string, message: string): string {
     ).trim();
   if (!fs.existsSync(path.join(dir, '.git'))) {
     git('init', '-q');
+    // The push writes these into the directory; a real checkout doesn't
+    // track them.
+    fs.writeFileSync(
+      path.join(dir, '.gitignore'),
+      '.boxel-sync.json\n.boxel-history/\n',
+    );
   }
   git('add', '-A');
   git('commit', '-q', '--allow-empty', '-m', message);
@@ -797,7 +803,7 @@ describe('realm push (integration)', () => {
     try {
       await pushCommand(localDir, realmUrl, {
         profileManager,
-        changedSince: deployed,
+        changedSince: [deployed],
         delete: true,
       });
     } finally {
@@ -816,6 +822,43 @@ describe('realm push (integration)', () => {
       'added.md',
       'b.gts',
     ]);
+  });
+
+  it('--changed-since with a failed later revision re-sends the files that revision wrote', async () => {
+    // The realm was synced to `deployed`, then a sync to `failed` wrote
+    // part of its files before stopping. The next sync goes to `target`,
+    // which branches from `deployed` and never had `failed`'s change.
+    let realmUrl = await createTestRealm();
+    let localDir = makeLocalDir();
+    let git = (...args: string[]) =>
+      execFileSync('git', args, { cwd: localDir, encoding: 'utf8' }).trim();
+    writeLocalFile(localDir, 'a.gts', 'export const a = 1;\n');
+    writeLocalFile(localDir, 'b.gts', 'export const b = 1;\n');
+    let deployed = commitLocal(localDir, 'deployed');
+    let res1 = await runPush(localDir, realmUrl);
+    expect(res1.ok, res1.stderr).toBe(true);
+
+    git('checkout', '-q', '-b', 'later');
+    writeLocalFile(localDir, 'a.gts', 'export const a = 2;\n');
+    let failed = commitLocal(localDir, 'failed');
+    let res2 = await runPush(localDir, realmUrl);
+    expect(res2.ok, res2.stderr).toBe(true);
+
+    git('checkout', '-q', deployed);
+    git('checkout', '-q', '-b', 'target');
+    writeLocalFile(localDir, 'b.gts', 'export const b = 2;\n');
+    commitLocal(localDir, 'target');
+
+    let res3 = await runPush(localDir, realmUrl, [
+      '--changed-since',
+      deployed,
+      '--changed-since',
+      failed,
+    ]);
+    expect(res3.ok, res3.stderr).toBe(true);
+
+    expect(await fetchRemoteFile(realmUrl, 'a.gts')).toContain('a = 1');
+    expect(await fetchRemoteFile(realmUrl, 'b.gts')).toContain('b = 2');
   });
 
   it('--changed-since uploads an unchanged file the realm is missing', async () => {

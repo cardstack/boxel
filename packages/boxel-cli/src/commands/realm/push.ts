@@ -25,7 +25,7 @@ import { listUnchangedSince } from '../../lib/git-changes.ts';
 interface PushOptions extends SyncOptions {
   deleteRemote?: boolean;
   force?: boolean;
-  changedSince?: string;
+  changedSince?: string[];
 }
 
 // Fresh realms always include these server-managed cards even when the local
@@ -80,17 +80,25 @@ class RealmPusher extends RealmSyncBase {
       manifest.realmUrl === this.normalizedRealmUrl;
 
     if (changedSince !== undefined) {
-      // The baseline is a git revision the realm is known to hold, not a
-      // manifest, so a fresh checkout (a CI runner) uploads only what git
-      // says changed. A file is skipped only when git tracks it, reports it
-      // unchanged since the revision, and the realm has it. Everything else
-      // goes up, including files git doesn't track or ignores by rules the
-      // push doesn't read. Skipped files are recorded in the new manifest as
-      // matching the realm.
-      const unchanged = await listUnchangedSince(
-        this.options.localDir,
-        changedSince,
+      // The baseline is git, not a manifest, so a fresh checkout (a CI
+      // runner) uploads only what git says changed. Each revision is one the
+      // realm's files may hold: the one it was last fully synced to, plus any
+      // a later sync wrote part of before it failed. A file is skipped only
+      // when git tracks it, reports it unchanged against every one of them,
+      // and the realm has it. Everything else goes up, including files git
+      // doesn't track or ignores by rules the push doesn't read. Skipped
+      // files are recorded in the new manifest as matching the realm.
+      const unchangedSets = await Promise.all(
+        changedSince.map((revision) =>
+          listUnchangedSince(this.options.localDir, revision),
+        ),
       );
+      const unchanged = new Set(
+        [...unchangedSets[0]].filter((p) =>
+          unchangedSets.every((set) => set.has(p)),
+        ),
+      );
+      const baseline = changedSince.join(', ');
       let skipped = 0;
       let missingRemote = 0;
       for (const [relativePath, localPath] of localFiles) {
@@ -106,7 +114,7 @@ class RealmPusher extends RealmSyncBase {
         }
       }
       console.log(
-        `${filesToUpload.size - missingRemote} file(s) changed since ${changedSince}`,
+        `${filesToUpload.size - missingRemote} file(s) changed since ${baseline}`,
       );
       if (missingRemote > 0) {
         console.log(
@@ -114,9 +122,7 @@ class RealmPusher extends RealmSyncBase {
         );
       }
       if (skipped > 0) {
-        console.log(
-          `Skipping ${skipped} files unchanged since ${changedSince}`,
-        );
+        console.log(`Skipping ${skipped} files unchanged since ${baseline}`);
       }
     } else if (!canGoIncremental) {
       if (this.pushOptions.force) {
@@ -383,10 +389,11 @@ export interface PushCommandOptions {
   dryRun?: boolean;
   force?: boolean;
   /**
-   * A git revision the realm already holds. Only files that differ from it in
-   * the local git checkout, and files the realm is missing, are uploaded.
+   * Git revisions the realm's files may hold. Only files that differ from any
+   * of them in the local git checkout, files git doesn't track, and files the
+   * realm is missing are uploaded.
    */
-  changedSince?: string;
+  changedSince?: string[];
   profileManager?: ProfileManager;
   /**
    * Pre-resolved realm secret seed for administrative access. When set, the
@@ -416,7 +423,8 @@ export function registerPushCommand(realm: Command): void {
     .option('--force', 'Upload all files, even if unchanged')
     .option(
       '--changed-since <revision>',
-      'Upload only files that differ from this git revision (one the realm already holds), plus files git does not track and files missing from the realm, instead of comparing against the sync manifest. A file edited directly on the realm stays as it is until it changes in git. The local directory must be a git checkout whose history reaches the revision',
+      'Upload only files that differ from this git revision (one the realm already holds), plus files git does not track and files missing from the realm, instead of comparing against the sync manifest. Repeat it to name every revision the realm may hold part of, such as one a failed sync stopped partway through; a file is skipped only when it matches all of them. A file edited directly on the realm stays as it is until it changes in git. The local directory must be a git checkout whose history reaches each revision',
+      (revision: string, previous: string[] = []) => [...previous, revision],
     )
     .option(
       '--realm-secret-seed',
@@ -430,7 +438,7 @@ export function registerPushCommand(realm: Command): void {
           delete?: boolean;
           dryRun?: boolean;
           force?: boolean;
-          changedSince?: string;
+          changedSince?: string[];
           realmSecretSeed?: boolean;
         },
       ) => {
@@ -478,7 +486,10 @@ export async function pushCommand(
     process.exit(1);
   }
 
-  if (options.force && options.changedSince !== undefined) {
+  const changedSince = options.changedSince?.length
+    ? options.changedSince
+    : undefined;
+  if (options.force && changedSince !== undefined) {
     console.error(
       'Error: --force uploads every file and --changed-since uploads only changed ones; pass one of them.',
     );
@@ -493,7 +504,7 @@ export async function pushCommand(
         deleteRemote: options.delete,
         dryRun: options.dryRun,
         force: options.force,
-        changedSince: options.changedSince,
+        changedSince,
       },
       authenticator,
     );
