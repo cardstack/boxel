@@ -1,5 +1,6 @@
 // Pretui — ResultCard: the settled outcome of an agent run.
 import Component from '@glimmer/component';
+import DotsIcon from '@cardstack/boxel-icons/dots';
 import { on } from '@ember/modifier';
 
 export interface ResultCardSignature {
@@ -16,7 +17,7 @@ export class ResultCard extends Component<ResultCardSignature> {
         {{#if @eyebrow}}<span class='pretui-eyebrow'>{{@eyebrow}}</span>{{/if}}
         <span class='pretui-resultcard-title'>{{@title}}</span>
         {{#if @onMenu}}
-          <button type='button' class='pretui-resultcard-menu' aria-label='More' {{on 'click' this.menu}}>⋯</button>
+          <button type='button' class='pretui-resultcard-menu' aria-label='More' {{on 'click' this.menu}}><DotsIcon width='14' height='14' aria-hidden='true' /></button>
         {{/if}}
       </div>
       {{#each @lines as |line|}}<div class='pretui-resultcard-line'>{{line}}</div>{{/each}}
@@ -24,43 +25,45 @@ export class ResultCard extends Component<ResultCardSignature> {
     <style scoped>
       @layer PretComponent {
         .pretui-resultcard {
-          background: var(--field, var(--boxel-light));
-          border-radius: 8px;
+          background: var(--card, var(--background));
+          color: var(--card-foreground, var(--foreground));
+          border-radius: var(--round-row, 8px);
           box-shadow: var(--pretui-shadow-hairline, 0 0 0 1px var(--border));
-          padding: 9px 11px;
+          padding: var(--step-8, 8px) var(--step-12, 12px);
           display: flex;
           flex-direction: column;
-          gap: 3px;
+          gap: var(--step-4, 4px);
         }
         .pretui-resultcard-head {
           display: flex;
           align-items: baseline;
-          gap: 8px;
+          gap: var(--step-8, 8px);
         }
         .pretui-resultcard-title {
           font-weight: 600;
-          font-size: var(--text-ui-md, 12.5px);
+          font-size: var(--type-ui, 12.5px);
+          line-height: var(--leading-ui, 18px);
+          color: var(--foreground);
         }
+        /* a label, not a kicker: sans caption, no tracking, no caps */
         .pretui-eyebrow {
-          font-family: var(--font-mono);
-          font-size: var(--text-ui-xs, 11px);
-          font-weight: 500;
-          letter-spacing: var(--track-eyebrow, 0.08em);
-          text-transform: uppercase;
-          color: var(--muted-foreground);
+          font-size: var(--type-caption, 11px);
+          line-height: var(--leading-caption, 16px);
+          font-weight: 400;
+          color: var(--ink-3, var(--muted-foreground));
         }
         .pretui-resultcard-menu {
           margin-left: auto;
           color: var(--ink-3, var(--boxel-400));
           cursor: pointer;
-          letter-spacing: 0.1em;
           border: 0;
           background: none;
           font: inherit;
         }
         .pretui-resultcard-line {
-          font-size: var(--text-ui-sm, 11.5px);
-          color: var(--muted-foreground);
+          font-size: var(--type-ui, 12.5px);
+          line-height: var(--leading-ui, 18px);
+          color: var(--ink-2, var(--muted-foreground));
         }
       }
     </style>

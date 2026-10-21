@@ -1,0 +1,70 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "date": "2026-10-13",
+      "kind": "Tempo",
+      "startTime": "7:00 pm",
+      "weather": "Windy, 13 °C",
+      "note": "Headwind on the way north. Everyone negative split anyway."
+    },
+    "relationships": {
+      "route": {
+        "links": {
+          "self": "../Route/boathouse-5k"
+        }
+      },
+      "attendees.0": {
+        "links": {
+          "self": "../Runner/lena-ruiz"
+        }
+      },
+      "attendees.1": {
+        "links": {
+          "self": "../Runner/priya-shah"
+        }
+      },
+      "attendees.2": {
+        "links": {
+          "self": "../Runner/iris-tanaka"
+        }
+      },
+      "attendees.3": {
+        "links": {
+          "self": "../Runner/ben-carter"
+        }
+      },
+      "attendees.4": {
+        "links": {
+          "self": "../Runner/grace-liu"
+        }
+      },
+      "attendees.5": {
+        "links": {
+          "self": "../Runner/kara-oneill"
+        }
+      },
+      "attendees.6": {
+        "links": {
+          "self": "../Runner/jonah-weiss"
+        }
+      },
+      "attendees.7": {
+        "links": {
+          "self": "../Runner/sean-doyle"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../session",
+        "name": "Session"
+      }
+    }
+  }
+}

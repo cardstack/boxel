@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Fort Washington Frost 10K",
+      "date": "2026-12-13",
+      "distance": "10K",
+      "borough": "Manhattan",
+      "startLine": "Fort Washington Park",
+      "organiser": "Washington Heights RC",
+      "feeUsd": 40,
+      "kidsRace": true,
+      "kidsFeeUsd": 10,
+      "website": "fort-washington-frost.example.org"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../race",
+        "name": "Race"
+      }
+    }
+  }
+}

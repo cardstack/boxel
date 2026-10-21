@@ -140,10 +140,10 @@ module('Integration | ai-assistant-panel | compaction', function (hooks) {
       .dom('[data-test-message-idx="0"] [data-test-compaction-status]')
       .containsText('Summarizing earlier conversation');
     assert
-      .dom('[data-test-compaction-status] [data-test-apply-state="applying"]')
+      .dom('[data-test-compaction-status] [data-test-pretui-spinner]')
       .exists('a spinner shows while ai-bot summarizes');
     assert
-      .dom('[data-test-compaction-status] [data-test-view-code-button]')
+      .dom('[data-test-compaction-status] [data-test-pretui-compaction-toggle]')
       .doesNotExist('there is no summary to show yet');
     assert
       .dom('[data-test-message-idx="0"] .reasoning-content')
@@ -166,14 +166,15 @@ module('Integration | ai-assistant-panel | compaction', function (hooks) {
       .dom('[data-test-compaction-status]')
       .containsText('Summarized earlier conversation');
     assert
-      .dom('[data-test-compaction-status] [data-test-apply-state="applied"]')
-      .exists();
-    assert.dom('[data-test-compaction-summary]').doesNotExist();
+      .dom('[data-test-compaction-status] [data-test-pretui-compaction-toggle]')
+      .hasAttribute('aria-expanded', 'false', 'the summary starts closed');
     assert
       .dom('[data-test-message-idx="0"] .reasoning-content')
       .containsText('Thinking...', 'the placeholder returns once it is done');
 
-    await click('[data-test-compaction-status] [data-test-view-code-button]');
+    await click(
+      '[data-test-compaction-status] [data-test-pretui-compaction-toggle]',
+    );
     assert
       .dom('[data-test-compaction-summary]')
       .hasText('Objective: build a wedding planner.');
@@ -205,8 +206,11 @@ module('Integration | ai-assistant-panel | compaction', function (hooks) {
       .dom('[data-test-compaction-status]')
       .containsText('Could not summarize earlier conversation');
     assert
-      .dom('[data-test-compaction-status] [data-test-apply-state="failed"]')
-      .exists();
+      .dom('[data-test-compaction-status]')
+      .hasAttribute('data-state', 'failed');
+    assert
+      .dom('[data-test-compaction-status] [data-test-pretui-compaction-toggle]')
+      .doesNotExist('a failed compaction has nothing to open');
   });
 
   test('it ignores a compaction event that ai-bot did not send', async function (assert) {

@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Boathouse 5K",
+      "distanceKm": 5.0,
+      "climbM": 4,
+      "surface": "Paved",
+      "lighting": "Lit after dark",
+      "meetingPoint": "the 79th Street Boathouse",
+      "path": "M20 40 C 20 22, 46 16, 62 22 S 100 26, 100 38 S 74 52, 56 48 S 20 56, 20 40 Z",
+      "accent": "#c6f432",
+      "notes": "Measured to the metre in 2023. The tempo loop, and the relaunch run if we go with a 5K."
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../route",
+        "name": "Route"
+      }
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Harlem Hills Relay",
+      "date": "2026-11-21",
+      "distance": "Relay",
+      "borough": "Manhattan",
+      "startLine": "Marcus Garvey Park",
+      "organiser": "Uptown Relay League",
+      "feeUsd": 120,
+      "kidsRace": false,
+      "kidsFeeUsd": null,
+      "website": "harlem-hills-relay.example.org"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../race",
+        "name": "Race"
+      }
+    }
+  }
+}

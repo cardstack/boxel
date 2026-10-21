@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Autumn relaunch",
+      "accent": null,
+      "accentName": null,
+      "sendDay": null,
+      "distance": null,
+      "status": "Draft",
+      "regularsCount": 0
+    },
+    "relationships": {
+      "club": {
+        "links": {
+          "self": "../Club/riverside"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../plan",
+        "name": "RelaunchPlan"
+      }
+    }
+  }
+}

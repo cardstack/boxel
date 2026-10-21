@@ -1,0 +1,65 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "date": "2026-10-18",
+      "kind": "Easy social",
+      "startTime": "9:00 am",
+      "weather": "Sunny, 15 °C",
+      "note": "Conversation pace. The last run before the relaunch plan."
+    },
+    "relationships": {
+      "route": {
+        "links": {
+          "self": "../Route/river-loop"
+        }
+      },
+      "attendees.0": {
+        "links": {
+          "self": "../Runner/lena-ruiz"
+        }
+      },
+      "attendees.1": {
+        "links": {
+          "self": "../Runner/tom-okafor"
+        }
+      },
+      "attendees.2": {
+        "links": {
+          "self": "../Runner/iris-tanaka"
+        }
+      },
+      "attendees.3": {
+        "links": {
+          "self": "../Runner/grace-liu"
+        }
+      },
+      "attendees.4": {
+        "links": {
+          "self": "../Runner/noah-fischer"
+        }
+      },
+      "attendees.5": {
+        "links": {
+          "self": "../Runner/kara-oneill"
+        }
+      },
+      "attendees.6": {
+        "links": {
+          "self": "../Runner/maya-patel"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../session",
+        "name": "Session"
+      }
+    }
+  }
+}

@@ -296,8 +296,15 @@ module(
         'no badge for a config whose model is not in the catalog',
       );
       assert
-        .dom('[data-test-llm-cost-selected]')
-        .hasText('$$$', 'the selected model shows its badge in the header');
+        .dom('[data-test-llm-select-selected]')
+        .doesNotIncludeText('$', 'the header names the model, not its cost');
+      assert
+        .dom('[data-test-llm-select-selected]')
+        .hasAttribute(
+          'title',
+          /\$\$\$/,
+          'the cost tier is in the header title, on hover',
+        );
     });
   },
 );

@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Bridge to Bridge",
+      "distanceKm": 8.2,
+      "climbM": 18,
+      "surface": "Paved",
+      "lighting": "Lit after dark",
+      "meetingPoint": "the Pier I steps",
+      "path": "M6 50 C 24 48, 30 30, 46 30 S 66 40, 78 28 S 100 10, 114 10",
+      "accent": "#5b8cff",
+      "notes": "Point to point under the West Side Highway to the George Washington Bridge. The Night Shift poster draws this one."
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../route",
+        "name": "Route"
+      }
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Van Cortlandt Cross Country",
+      "date": "2026-11-01",
+      "distance": "5K",
+      "borough": "Bronx",
+      "startLine": "the Parade Ground",
+      "organiser": "Bronx Harriers",
+      "feeUsd": 25,
+      "kidsRace": true,
+      "kidsFeeUsd": 5,
+      "website": "van-cortlandt-xc.example.org"
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../race",
+        "name": "Race"
+      }
+    }
+  }
+}

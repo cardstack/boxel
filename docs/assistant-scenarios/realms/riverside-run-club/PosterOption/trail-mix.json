@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Trail Mix",
+      "tagline": "Steps, dirt and a view worth the climb.",
+      "accent": "#9bd46a",
+      "ground": "#17261b",
+      "ink": "#eef3e6",
+      "mood": "Rugged",
+      "when": "Sun 9 am · 112th St steps"
+    },
+    "relationships": {
+      "route": {
+        "links": {
+          "self": "../Route/cathedral-steps"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../poster",
+        "name": "PosterOption"
+      }
+    }
+  }
+}

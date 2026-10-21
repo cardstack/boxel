@@ -1,0 +1,81 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Every Riverside card, every format"
+    },
+    "relationships": {
+      "cards.0": {
+        "links": {
+          "self": "../Club/riverside"
+        }
+      },
+      "cards.1": {
+        "links": {
+          "self": "../Runner/lena-ruiz"
+        }
+      },
+      "cards.2": {
+        "links": {
+          "self": "../Runner/priya-shah"
+        }
+      },
+      "cards.3": {
+        "links": {
+          "self": "../Route/river-loop"
+        }
+      },
+      "cards.4": {
+        "links": {
+          "self": "../Route/cathedral-steps"
+        }
+      },
+      "cards.5": {
+        "links": {
+          "self": "../Session/2026-10-13"
+        }
+      },
+      "cards.6": {
+        "links": {
+          "self": "../Race/hudson-harvest-10k"
+        }
+      },
+      "cards.7": {
+        "links": {
+          "self": "../PosterOption/dawn-patrol"
+        }
+      },
+      "cards.8": {
+        "links": {
+          "self": "../PosterOption/night-shift"
+        }
+      },
+      "cards.9": {
+        "links": {
+          "self": "../PosterOption/trail-mix"
+        }
+      },
+      "cards.10": {
+        "links": {
+          "self": "../RelaunchPlan/autumn"
+        }
+      },
+      "cards.11": {
+        "links": {
+          "self": "../TourScript/assistant-tour"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../format-board",
+        "name": "FormatBoard"
+      }
+    }
+  }
+}

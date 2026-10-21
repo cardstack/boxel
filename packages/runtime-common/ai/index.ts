@@ -6,3 +6,4 @@ export * from './prompt.ts';
 export * from './matrix-utils.ts';
 export * from './debug.ts';
 export * from './compaction.ts';
+export * from './approval-reaction.ts';

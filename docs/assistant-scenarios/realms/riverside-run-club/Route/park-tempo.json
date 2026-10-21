@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Park Tempo Loop",
+      "distanceKm": 7.0,
+      "climbM": 30,
+      "surface": "Paved",
+      "lighting": "Lit after dark",
+      "meetingPoint": "the Soldiers' and Sailors' Monument",
+      "path": "M18 14 H 100 Q 108 14 108 22 V 40 Q 108 48 100 48 H 18 Q 10 48 10 40 V 22 Q 10 14 18 14 Z",
+      "accent": "#9bd46a",
+      "notes": "Two laps of the upper park, 3.5 km each. Even ground for tempo work."
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../route",
+        "name": "Route"
+      }
+    }
+  }
+}

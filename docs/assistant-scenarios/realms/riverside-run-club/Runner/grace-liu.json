@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Grace Liu",
+      "status": "Member",
+      "paceSeconds": 305,
+      "neighbourhood": "Morningside Heights",
+      "since": "Oct 2023",
+      "runs": 47,
+      "longestKm": 32.0,
+      "bio": "Never misses a Sunday. Keeps the club's route notes up to date."
+    },
+    "relationships": {
+      "favouriteRoute": {
+        "links": {
+          "self": "../Route/lighthouse-long"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../runner",
+        "name": "Runner"
+      }
+    }
+  }
+}

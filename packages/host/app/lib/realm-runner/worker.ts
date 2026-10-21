@@ -2,10 +2,10 @@ import {
   newQuickJSWASMModuleFromVariant,
   newVariant,
   RELEASE_SYNC,
-  shouldInterruptAfterDeadline,
 } from 'quickjs-emscripten';
 
 import type {
+  RealmScriptErrorInfo,
   RealmRunnerCallMethod,
   RealmRunnerRequest,
   RealmRunnerResponse,
@@ -96,6 +96,15 @@ const BOOTSTRAP = `
         fullReindex: () => call('index.fullReindex', []),
         cancelJob: () => call('index.cancelJob', []),
       }),
+      web: Object.freeze({
+        search: (query, options) =>
+          call('web.search', [query, options ?? {}]),
+        read: (url, options) => call('web.read', [url, options ?? {}]),
+      }),
+      resolve: (request) => call('resolve', [request ?? {}]),
+      activity: (details) => call('activity', [details ?? {}]),
+      plan: (steps) => call('plan', [steps]),
+      ask: (request) => call('ask', [request ?? {}]),
     });
     globalThis.room = Object.freeze({
       enableSkills: (ids) => call('room.enableSkills', [ids]),
@@ -155,6 +164,44 @@ function describeScriptError(dumped: unknown, code: string): string {
   return parts.join('\n');
 }
 
+// What a script error throws out of the run, so the host learns which error
+// it was, where, and whether the script got to run at all.
+class ScriptFailure extends Error {
+  constructor(
+    message: string,
+    readonly info: RealmScriptErrorInfo,
+  ) {
+    super(message);
+  }
+}
+
+function scriptFailure(
+  dumped: unknown,
+  code: string,
+  phase: RealmScriptErrorInfo['phase'],
+): Error {
+  let error = (dumped ?? {}) as {
+    name?: string;
+    message?: string;
+    lineNumber?: number;
+  };
+  let message = describeScriptError(dumped, code);
+  let name = error.name ?? 'Error';
+  if (
+    !['SyntaxError', 'TypeError', 'ReferenceError', 'RangeError'].includes(name)
+  ) {
+    return new Error(message);
+  }
+  return new ScriptFailure(message, {
+    name,
+    message: error.message ?? String(dumped),
+    ...(typeof error.lineNumber === 'number'
+      ? { line: error.lineNumber - WRAPPER_LINES }
+      : {}),
+    phase,
+  });
+}
+
 const METHODS = new Set<RealmRunnerCallMethod>([
   'fs.readText',
   'fs.exists',
@@ -184,6 +231,12 @@ const METHODS = new Set<RealmRunnerCallMethod>([
   'index.reindex',
   'index.fullReindex',
   'index.cancelJob',
+  'web.search',
+  'web.read',
+  'resolve',
+  'activity',
+  'plan',
+  'ask',
 ]);
 
 // A worker runs one script. These hold that run's open host calls so a
@@ -191,6 +244,9 @@ const METHODS = new Set<RealmRunnerCallMethod>([
 let vm: QuickJSContext | undefined;
 let drain: (() => void) | undefined;
 let pending = new Map<number, QuickJSDeferredPromise>();
+// When the script must stop. Time a call spent waiting on a person
+// (realm.ask) does not count: its answer moves this out.
+let deadlineAt = 0;
 let nextCallId = 1;
 
 function settleCall(
@@ -201,6 +257,9 @@ function settleCall(
     return;
   }
   pending.delete(request.id);
+  if (request.extendMs) {
+    deadlineAt += request.extendMs;
+  }
   if (request.error !== undefined) {
     let error = vm.newError(request.error);
     deferred.reject(error);
@@ -236,9 +295,8 @@ worker.onmessage = async (event: MessageEvent<RealmRunnerRequest>) => {
     let runtime = QuickJS.newRuntime();
     runtime.setMemoryLimit(8 * 1024 * 1024);
     runtime.setMaxStackSize(512 * 1024);
-    runtime.setInterruptHandler(
-      shouldInterruptAfterDeadline(Date.now() + request.timeoutMs),
-    );
+    deadlineAt = Date.now() + request.timeoutMs;
+    runtime.setInterruptHandler(() => Date.now() > deadlineAt);
     let context = runtime.newContext();
     vm = context;
     // `resolvePromise` bridges a guest promise to a native one, but QuickJS
@@ -279,7 +337,7 @@ worker.onmessage = async (event: MessageEvent<RealmRunnerRequest>) => {
     if (evaluated.error) {
       let dumped = context.dump(evaluated.error);
       evaluated.error.dispose();
-      throw new Error(describeScriptError(dumped, request.code));
+      throw scriptFailure(dumped, request.code, 'compile');
     }
     let promise = evaluated.value;
     let resolvedPromise = context.resolvePromise(promise);
@@ -289,7 +347,7 @@ worker.onmessage = async (event: MessageEvent<RealmRunnerRequest>) => {
     if (resolved.error) {
       let dumped = context.dump(resolved.error);
       resolved.error.dispose();
-      throw new Error(describeScriptError(dumped, request.code));
+      throw scriptFailure(dumped, request.code, 'run');
     }
     let value = resolved.value;
     let scriptResult = JSON.stringify(context.dump(value)) ?? '';
@@ -307,6 +365,7 @@ worker.onmessage = async (event: MessageEvent<RealmRunnerRequest>) => {
     worker.postMessage({
       type: 'error',
       error: error instanceof Error ? error.message : String(error),
+      ...(error instanceof ScriptFailure ? { scriptError: error.info } : {}),
     });
   }
   // The caller terminates the worker once it has an answer, which frees the

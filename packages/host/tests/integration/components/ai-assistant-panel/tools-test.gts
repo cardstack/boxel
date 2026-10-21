@@ -469,7 +469,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       }
       assert.strictEqual(json.data.attributes?.firstName, 'Dave');
     });
-    await click('[data-test-tool-call-apply]');
+    await click('[data-test-pretui-tool-gate-action="apply"]');
     await waitFor('[data-test-tool-call-card-idle]');
     assert.dom('[data-test-person]').hasText('Dave');
   });
@@ -514,10 +514,13 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-test-room-name="test room 1"]');
     assert.dom('[data-test-message-idx]').exists({ count: 1 });
-    await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    // a call still arriving reads as a streaming row
+    await waitFor(
+      '[data-test-message-idx="0"] [data-test-pretui-tool-row][data-state="streaming"]',
+    );
     assert
       .dom(
-        '[data-test-message-idx="0"] [data-test-tool-call-apply="preparing"]',
+        '[data-test-message-idx="0"] [data-test-pretui-tool-row][data-state="streaming"]',
       )
       .exists();
   });
@@ -595,12 +598,15 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-test-room-name="test room 1"]');
     assert.dom('[data-test-message-idx]').exists({ count: 1 });
-    await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    // a call still arriving reads as a streaming row
+    await waitFor(
+      '[data-test-message-idx="0"] [data-test-pretui-tool-row][data-state="streaming"]',
+    );
     assert
       .dom(
-        '[data-test-message-idx="0"] [data-test-tool-call-apply="preparing"]',
+        '[data-test-message-idx="0"] [data-test-pretui-tool-row][data-state="streaming"]',
       )
-      .exists({ count: 1 });
+      .exists();
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -639,12 +645,14 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     await settled();
 
     assert.dom('[data-test-message-idx]').exists({ count: 1 });
-    await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await waitFor(
+      '[data-test-message-idx="0"] [data-test-pretui-tool-row][data-state="streaming"]',
+    );
     assert
       .dom(
-        '[data-test-message-idx="0"] [data-test-tool-call-apply="preparing"]',
+        '[data-test-message-idx="0"] [data-test-pretui-tool-row][data-state="streaming"]',
       )
-      .exists({ count: 2 });
+      .exists({ count: 2 }, 'each call still arriving is a streaming row');
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -686,9 +694,9 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
     assert
       .dom(
-        '[data-test-message-idx="0"] [data-test-tool-call-apply="preparing"]',
+        '[data-test-message-idx="0"] [data-test-pretui-tool-row][data-state="streaming"]',
       )
-      .exists({ count: 0 });
+      .doesNotExist('every call has arrived');
     assert
       .dom('[data-test-message-idx="0"] [data-test-tool-call-apply="ready"]')
       .exists({ count: 2 });
@@ -744,11 +752,13 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-test-room-name="test room 1"]');
     await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
-    await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await click(
+      '[data-test-message-idx="0"] [data-test-pretui-tool-gate-action="apply"]',
+    );
     await waitFor('[data-test-tool-call-card-idle]');
 
     assert
-      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply="applied"]')
       .exists();
 
     commandResultEvents = getRoomEvents(roomId).filter(
@@ -825,11 +835,13 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-test-room-name="test room 1"]');
     await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
-    await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await click(
+      '[data-test-message-idx="0"] [data-test-pretui-tool-gate-action="apply"]',
+    );
     await waitFor('[data-test-tool-call-card-idle]');
 
     assert
-      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply="applied"]')
       .exists();
 
     commandResultEvents = getRoomEvents(roomId).filter(
@@ -894,11 +906,14 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       .dom('[data-test-ai-message-content]')
       .containsText('Search for the following card');
     assert
-      .dom('[data-test-ai-message-content] [data-test-view-code-button]')
+      .dom('[data-test-ai-message-content] [data-test-pretui-tool-row-toggle]')
       .exists({ count: 1 });
     assert
-      .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
-      .containsText('Search Results');
+      .dom('[data-test-message-idx="0"] [data-test-tool-result-header]')
+      .containsText(
+        'SearchCardsByTypeAndTitle',
+        "the result's meta line names the call",
+      );
 
     assert.dom('.result-list li').exists({ count: 2 });
 
@@ -940,11 +955,11 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       .dom('[data-test-ai-message-content]')
       .containsText('Search for the following card');
     assert
-      .dom('[data-test-ai-message-content] [data-test-view-code-button]')
+      .dom('[data-test-ai-message-content] [data-test-pretui-tool-row-toggle]')
       .exists({ count: 1 });
     assert
-      .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
-      .containsText('Search Results');
+      .dom('[data-test-message-idx="0"] [data-test-boxel-tool-call-result]')
+      .exists('the search results card shows in the row');
 
     assert.dom('.result-list li:nth-child(1)').containsText('Mango');
     assert.dom('[data-test-toggle-show-button]').doesNotExist();
@@ -982,26 +997,12 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     });
     await waitForToolResult();
 
-    // The result header and body share one light surface and foreground, so the
-    // dark panel shows through neither the seam nor an unthemed result's text.
-    let header = find(
-      '[data-test-tool-result-container] [data-test-tool-result-header]',
-    )!;
+    // The result card shows in the row; whatever surface it sits on, its
+    // text reads against it.
     let resultCard = find(
-      '[data-test-tool-result-container] [data-test-boxel-tool-call-result]',
+      '[data-test-message-idx="0"] [data-test-boxel-tool-call-result]',
     )!;
-    let headerStyle = window.getComputedStyle(header);
     let cardStyle = window.getComputedStyle(resultCard);
-    assert.strictEqual(
-      cardStyle.backgroundColor,
-      headerStyle.backgroundColor,
-      'result body container shares the header background (no dark seam)',
-    );
-    assert.strictEqual(
-      cardStyle.color,
-      headerStyle.color,
-      'result body inherits the dark foreground, so embedded content stays readable',
-    );
     assert.notStrictEqual(
       cardStyle.color,
       cardStyle.backgroundColor,
@@ -1068,8 +1069,8 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     await waitForToolResult();
     assert.dom(`[data-test-stack-card="${id}"]`).exists();
     assert
-      .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
-      .containsText('Search Results');
+      .dom('[data-test-message-idx="0"] [data-test-boxel-tool-call-result]')
+      .exists('the search results card shows in the row');
 
     let resultListItem = '[data-test-result-list] > li';
     assert.dom(`${resultListItem}:nth-child(1)`).containsText('Buck');
@@ -1227,11 +1228,11 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     assert.dom(`[data-test-stack-card="${testRealmURL}index"]`).exists();
     await click('[data-test-close-button]'); // close index card
     assert
-      .dom('[data-test-message-idx="0"] [data-test-boxel-card-header-title]')
-      .containsText('Search Results');
+      .dom('[data-test-message-idx="0"] [data-test-boxel-tool-call-result]')
+      .exists('the search results card shows in the row');
 
     assert
-      .dom('[data-test-tool-result-container] [data-test-toggle-show-button]')
+      .dom('[data-test-message-idx="0"] [data-test-toggle-show-button]')
       .containsText('Show 3 more results');
     let resultListItem = '[data-test-result-list] > li';
     assert.dom(`${resultListItem}:nth-child(1)`).containsText('Buck');
@@ -1307,11 +1308,11 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-test-room-name="test room 1"]');
     assert
-      .dom('[data-test-ai-message-content] [data-test-editor]')
+      .dom('[data-test-ai-message-content] [data-test-pretui-code]')
       .doesNotExist('View Code panel should not yet be open');
-    await click('[data-test-view-code-button]');
+    await click('[data-test-pretui-tool-row-toggle]');
     assert
-      .dom('[data-test-ai-message-content] [data-test-editor]')
+      .dom('[data-test-ai-message-content] [data-test-pretui-code]')
       .exists('View Code panel should be open');
 
     await fillIn(
@@ -1322,7 +1323,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
 
     // previously, a new event would cause re-rendering and the open-ness of the View Code panel to be lost
     assert
-      .dom('[data-test-ai-message-content] [data-test-editor]')
+      .dom('[data-test-ai-message-content] [data-test-pretui-code]')
       .exists('View Code panel should remain open');
     await percySnapshot(assert); // can preview code in ViewCode panel
   });
@@ -1367,8 +1368,8 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     await waitFor('[data-test-room-name="test room 1"]');
 
     // Expand the code area.
-    await click('[data-test-view-code-button]');
-    await waitFor('[data-test-editor]');
+    await click('[data-test-pretui-tool-row-toggle]');
+    await waitFor('[data-test-pretui-code]');
 
     // Re-mount the tool-call message while its code area is open: close and
     // reopen the AI assistant panel. The expanded/collapsed flag lives in the
@@ -1378,13 +1379,13 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     // expanded-height block.
     await click('[data-test-close-ai-assistant]');
     await click('[data-test-open-ai-assistant]');
-    await waitFor('[data-test-editor]');
+    await waitFor('[data-test-pretui-code]');
     await settled();
 
     // Collapse via "Hide Info".
-    await click('[data-test-view-code-button]');
+    await click('[data-test-pretui-tool-row-toggle]');
     assert
-      .dom('[data-test-editor]')
+      .dom('[data-test-pretui-code]')
       .doesNotExist('code editor is removed after Hide Info');
 
     let codeBlockSelector =
@@ -1441,12 +1442,13 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-test-room-name="test room 1"]');
 
-    await click('[data-test-view-code-button]');
-    await waitFor('[data-test-editor]');
+    await click('[data-test-pretui-tool-row-toggle]');
+    await waitFor('[data-test-pretui-code]');
     await settled();
 
+    // the code view itself: the row around it has its own padding and gaps
     let codeBlockSelector =
-      '[data-test-tool-call-id="tall-tool-call"] [data-test-tool-code-block]';
+      '[data-test-tool-call-id="tall-tool-call"] [data-test-pretui-code]';
     assert.dom(codeBlockSelector).exists('tool code block element exists');
     let codeBlock = find(codeBlockSelector) as HTMLElement;
 
@@ -1521,12 +1523,15 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-test-room-name="test room 1"]');
     assert.dom('[data-test-message-idx]').exists({ count: 1 });
-    await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    // a call still arriving reads as a streaming row
+    await waitFor(
+      '[data-test-message-idx="0"] [data-test-pretui-tool-row][data-state="streaming"]',
+    );
     assert
       .dom(
-        '[data-test-message-idx="0"] [data-test-tool-call-apply="preparing"]',
+        '[data-test-message-idx="0"] [data-test-pretui-tool-row][data-state="streaming"]',
       )
-      .exists({ count: 1 });
+      .exists();
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -1566,12 +1571,14 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     await settled();
 
     assert.dom('[data-test-message-idx]').exists({ count: 1 });
-    await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await waitFor(
+      '[data-test-message-idx="0"] [data-test-pretui-tool-row][data-state="streaming"]',
+    );
     assert
       .dom(
-        '[data-test-message-idx="0"] [data-test-tool-call-apply="preparing"]',
+        '[data-test-message-idx="0"] [data-test-pretui-tool-row][data-state="streaming"]',
       )
-      .exists({ count: 2 });
+      .exists({ count: 2 }, 'each call still arriving is a streaming row');
 
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -1614,9 +1621,9 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
     assert
       .dom(
-        '[data-test-message-idx="0"] [data-test-tool-call-apply="preparing"]',
+        '[data-test-message-idx="0"] [data-test-pretui-tool-row][data-state="streaming"]',
       )
-      .exists({ count: 0 });
+      .doesNotExist('every call has arrived');
     assert
       .dom('[data-test-message-idx="0"] [data-test-tool-call-apply="ready"]')
       .exists({ count: 2 });
@@ -1676,11 +1683,13 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     await settled();
 
     await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
-    await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await click(
+      '[data-test-message-idx="0"] [data-test-pretui-tool-gate-action="apply"]',
+    );
     await waitFor('[data-test-tool-call-card-idle]');
 
     assert
-      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply="applied"]')
       .exists();
 
     commandResultEvents = getRoomEvents(roomId).filter(
@@ -1767,11 +1776,13 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     await settled();
 
     await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
-    await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await click(
+      '[data-test-message-idx="0"] [data-test-pretui-tool-gate-action="apply"]',
+    );
     await waitFor('[data-test-tool-call-card-idle]');
 
     assert
-      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply="applied"]')
       .exists();
 
     commandResultEvents = getRoomEvents(roomId).filter(
@@ -1870,7 +1881,9 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     await click('[data-test-open-ai-assistant]');
     await waitFor('[data-test-room-name="test room 1"]');
     await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
-    await click('[data-test-message-idx="0"] [data-test-tool-call-apply]');
+    await click(
+      '[data-test-message-idx="0"] [data-test-pretui-tool-gate-action="apply"]',
+    );
     await waitFor('[data-test-tool-call-card-idle]');
 
     // The host's MessageTool must reach 'applied' state once the
@@ -1882,7 +1895,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     // m.replace id Y still resolves back to the parent X — otherwise the
     // status flip is silently lost and the UI stays re-applicable.
     assert
-      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply="applied"]')
       .exists(
         'MessageTool status should flip to applied even though commandResult.m.relates_to.event_id is the m.replace id, not the streaming id the cache is keyed by',
       );
@@ -1981,7 +1994,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     await waitFor('[data-test-message-idx="0"]');
 
     assert
-      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply="applied"]')
       .exists(
         'a command applied before reload still renders applied even though its commandResult links to a stripped m.replace edit id; correlation is by commandRequestId, not the dangling event_id',
       );
@@ -2072,12 +2085,12 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     await waitFor('[data-test-message-idx="1"]');
 
     assert
-      .dom('[data-test-message-idx="1"] [data-test-apply-state="applied"]')
+      .dom('[data-test-message-idx="1"] [data-test-tool-call-apply="applied"]')
       .exists(
         'the bot message whose commandRequestId owns the applied result renders applied',
       );
     assert
-      .dom('[data-test-message-idx="0"] [data-test-apply-state="ready"]')
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply="ready"]')
       .exists(
         'the sibling bot message, which has no result of its own, stays ready — the applied status did not bleed across messages',
       );
@@ -3159,8 +3172,16 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     });
     await waitFor('[data-test-stop-generating]');
     await stop();
+    // the stop has taken once Stop is gone (the cap glides closed over a
+    // beat) or disabled (a tool already running finishes first)
     await waitUntil(
-      () => !document.querySelector('[data-test-stop-generating]'),
+      () => {
+        let stopButton = document.querySelector<HTMLButtonElement>(
+          '[data-test-stop-generating]',
+        );
+        return !stopButton || stopButton.disabled;
+      },
+      { timeout: 5000 },
     );
     simulateRemoteMessage(roomId, '@aibot:localhost', {
       msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
@@ -3469,13 +3490,15 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       ],
       data: { context: { agentId: 'another-client-agent' } },
     });
-    await waitFor('[data-test-accept-all]');
+    // the call is asked in its row while the row is in view, and in the
+    // cap only while it is not
+    let offered =
+      '[data-test-accept-all], [data-test-tool-call-id="other-client-tool"] [data-test-pretui-tool-gate-action="apply"]';
+    await waitFor(offered);
     assert
       .dom('[data-test-stop-generating]')
       .doesNotExist('only the client that runs the tool offers Stop for it');
-    assert
-      .dom('[data-test-accept-all]')
-      .exists('this client offers the call like any other');
+    assert.dom(offered).exists('this client offers the call like any other');
   });
 
   test('a message from the user after a stop lets the next tools run', async function (assert) {
@@ -3529,7 +3552,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
         getService('matrix-service').roomResources.get(roomId)!;
       assert.ok(roomResource.stopState.inForce, 'the stop is in force');
 
-      await click('[data-test-tool-call-apply]');
+      await click('[data-test-pretui-tool-gate-action="apply"]');
       await waitUntil(() => stub.results.length > 0, { timeout: 10000 });
       await settled();
       assert.strictEqual(
@@ -3563,11 +3586,18 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     }
   });
 
-  test('approving a held call asks the assistant to go on; declining one does not', async function (assert) {
+  test('every answer sends a result; the last call waiting on a message also gets a reaction', async function (assert) {
     let roomId = await renderAiAssistantPanel();
     let stub = stubToolValidation();
+    let matrixService = getService('matrix-service');
+    let originalReact = matrixService.sendReactionEvent;
+    let reactions: Array<{ eventId: string; key: string }> = [];
+    matrixService.sendReactionEvent = async (_roomId, eventId, key) => {
+      reactions.push({ eventId, key });
+      return { event_id: '$reaction' } as any;
+    };
     try {
-      simulateRemoteMessage(roomId, '@aibot:localhost', {
+      let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
         body: 'may I read these?',
         msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
         format: 'org.matrix.custom.html',
@@ -3608,6 +3638,66 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
           },
           { toolCallId: 'declined-read', status: 'invalid' },
         ]),
+        'each answer is a result ai-bot acts on',
+      );
+      assert.deepEqual(
+        reactions,
+        [{ eventId: eventId as string, key: '👎' }],
+        'only the last call waiting on the message adds a 👎, since a reaction answers the whole message',
+      );
+    } finally {
+      matrixService.sendReactionEvent = originalReact;
+      stub.restore();
+    }
+  });
+
+  test('a 👍 from a room member approves the held call and says who', async function (assert) {
+    let roomId = await renderAiAssistantPanel();
+    let stub = stubToolValidation();
+    try {
+      let eventId = simulateRemoteMessage(roomId, '@aibot:localhost', {
+        body: 'may I read this?',
+        msgtype: APP_BOXEL_MESSAGE_MSGTYPE,
+        format: 'org.matrix.custom.html',
+        isStreamingFinished: true,
+        [APP_BOXEL_TOOL_REQUESTS_KEY]: [
+          {
+            id: 'held-read',
+            name: 'readUrl',
+            arguments: JSON.stringify({ url: 'https://example.com/a' }),
+            executedBy: AI_BOT_EXECUTOR,
+            approvalRequired: true,
+          },
+        ],
+      });
+      await waitFor(
+        '[data-test-tool-call-id="held-read"] [data-test-tool-call-approval]',
+      );
+      simulateRemoteMessage(
+        roomId,
+        '@rupert:localhost',
+        {
+          'm.relates_to': {
+            rel_type: 'm.annotation',
+            event_id: eventId,
+            key: '👍',
+          },
+        },
+        { type: 'm.reaction' },
+      );
+      await waitFor('[data-test-tool-call-approval-answer="approve"]');
+      assert
+        .dom('[data-test-tool-call-approval-answer="approve"]')
+        .includesText('👍');
+      assert
+        .dom(
+          '[data-test-tool-call-id="held-read"] [data-test-tool-call-approval]',
+        )
+        .doesNotExist('the call no longer asks');
+      assert.strictEqual(
+        stub.results.length,
+        0,
+        'the host sends no result of its own',
       );
     } finally {
       stub.restore();
@@ -4134,11 +4224,11 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       }),
     });
 
-    await waitFor('[data-test-message-idx="0"] [data-test-apply-state]');
+    await waitFor('[data-test-message-idx="0"] [data-test-tool-call-apply]');
     await settled();
 
     assert
-      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply="applied"]')
       .exists('the tool row shows the call as applied');
     assert
       .dom('[data-test-tool-result-container]')
@@ -4160,8 +4250,8 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
 
     await waitFor('[data-test-tool-result-container]');
     assert
-      .dom('[data-test-tool-result-header] [data-test-boxel-card-header-title]')
-      .containsText('Patch Fields Result');
+      .dom('[data-test-tool-result-header]')
+      .containsText('patchFields', "the result's meta line names the call");
     assert
       .dom('[data-test-boxel-tool-call-result]')
       .containsText('Updated 1 field: firstName.');
@@ -4181,7 +4271,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     });
 
     await waitFor(
-      '[data-test-message-idx="0"] [data-test-apply-state="applied-with-error"]',
+      '[data-test-message-idx="0"] [data-test-tool-call-apply="applied-with-error"]',
     );
     assert
       .dom('[data-test-message-idx="0"] .room-message-tool.is-failed')
@@ -4300,7 +4390,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     await waitFor('[data-test-realm-code-capture][src^="blob:"]');
     assert
       .dom(`[data-test-realm-code-file="${savedFile}"]`)
-      .containsText('saved', 'the saved file is listed with its status');
+      .exists('the saved file is listed; its check says it was saved');
     assert
       .dom('[data-test-boxel-tool-call-result]')
       .doesNotContainText(
@@ -4329,7 +4419,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
       .containsText('The card was not shown', 'the reason is shown');
   });
 
-  test('a run-realm-code result lists its failed UI actions only', async function (assert) {
+  test('a run-realm-code result lists its UI moves, a failed one with why', async function (assert) {
     let roomId = await renderAiAssistantPanel();
 
     simulateToolResult(roomId, {
@@ -4358,7 +4448,7 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     await waitFor('[data-test-realm-code-ui-action="previewFormat"]');
     assert
       .dom('[data-test-realm-code-ui-action="openFile"]')
-      .doesNotExist('a done action is not listed');
+      .exists('a done UI move is said too, so the reader sees what moved');
     assert
       .dom('[data-test-realm-code-ui-action="previewFormat"]')
       .containsText('Card not found', 'a failed action says why');
@@ -4438,10 +4528,10 @@ module('Integration | ai-assistant-panel | tools', function (hooks) {
     await settled();
 
     assert
-      .dom('[data-test-message-idx="0"] [data-test-apply-state="applied"]')
+      .dom('[data-test-message-idx="0"] [data-test-tool-call-apply="applied"]')
       .exists('the tool row shows the call as applied');
     assert
-      .dom('[data-test-tool-result-container]')
+      .dom('[data-test-message-idx="0"] [data-test-pretui-card-embed]')
       .doesNotExist(
         'a run that only read, captured, and opened things has no result card',
       );

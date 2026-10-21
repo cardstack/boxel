@@ -33,7 +33,8 @@ interface CardPillSignature {
     borderType?: 'dashed' | 'solid';
     displayTitle?: string;
     showErrorIcon?: boolean;
-    onClick?: () => void;
+    /** the click, so a caller can tell which pill was pressed */
+    onClick?: (event: Event) => void;
     onRemove?: () => void;
     isEnabled?: boolean;
     fileActionsEnabled?: boolean;
@@ -71,9 +72,17 @@ export default class CardPill extends Component<CardPillSignature> {
   }
 
   @action
-  private handleCardClick() {
+  private handleCardClick(event: Event) {
+    // a control inside the pill (its file menu) keeps its own click
+    let inner = (event.target as Element | null)?.closest(
+      'button, a, [role="button"]',
+    );
+    let pill = event.currentTarget as Element | null;
+    if (inner && inner !== pill && pill?.contains(inner)) {
+      return;
+    }
     if (this.args.onClick) {
-      this.args.onClick();
+      this.args.onClick(event);
     }
   }
 

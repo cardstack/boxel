@@ -1,4 +1,4 @@
-import { setOwner } from '@ember/owner';
+import { getOwner, setOwner } from '@ember/owner';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 
@@ -10,6 +10,7 @@ import {
   type LooseSingleCardDocument,
   type ResolvedCodeRef,
 } from '@cardstack/runtime-common';
+import type { ApprovalVerdict } from '@cardstack/runtime-common/ai/approval-reaction';
 import {
   AI_BOT_EXECUTOR,
   type ToolRequest,
@@ -91,10 +92,36 @@ export type ToolResolver = (
 export default class MessageTool {
   @tracked toolRequest: Partial<ToolRequest>;
   @tracked toolCallStatus?: ToolCallStatus;
+  // A held call's answer given as a reaction on its message (see
+  // runtime-common/ai/approval-reaction.ts): who gave it, and which way.
+  // The first one wins; ai-bot then posts the call's real result.
+  @tracked approvalAnswer?: { verdict: ApprovalVerdict; name: string };
   @tracked toolResultFileDef?: SerializedFile;
   // origin_server_ts of the event whose chunk last wrote toolRequest, so
   // builder passes finishing out of order can't regress it to stale data.
   toolRequestEventTs = 0;
+  // origin_server_ts of the call's result event, once there is one: with
+  // toolRequestEventTs it says how long the call took
+  @tracked toolResultEventTs: number | undefined;
+  // The reader's click ran the call (the result says it resumes the
+  // assistant): its time is mostly the wait for that click.
+  @tracked ranOnReadersClick = false;
+
+  // Seconds from the request's last chunk to its result. A call that waited
+  // on the reader (an approval, a pick) measures the wait, so it has none.
+  get durationSeconds(): number | undefined {
+    if (
+      !this.toolResultEventTs ||
+      !this.toolRequestEventTs ||
+      this.ranOnReadersClick ||
+      this.awaitsApproval ||
+      this.clickReasons.length > 0
+    ) {
+      return undefined;
+    }
+    let seconds = (this.toolResultEventTs - this.toolRequestEventTs) / 1000;
+    return seconds >= 0 && seconds < 3600 ? seconds : undefined;
+  }
 
   constructor(
     public message: Message,
@@ -263,7 +290,20 @@ export default class MessageTool {
     if (resolution?.neverAutoExecutes) {
       return true;
     }
-    return resolution?.neverAutoExecutesFor?.(this.#callAttributes) === true;
+    if (resolution?.neverAutoExecutesFor?.(this.#callAttributes) !== true) {
+      return false;
+    }
+    // the reader allowed every one of these calls for this session
+    let reasons = this.clickReasons;
+    let tools = getOwner(this)?.lookup('service:tool-service') as
+      | { isAlwaysAllowed?: (roomId: string, call: string) => boolean }
+      | undefined;
+    return !(
+      reasons.length > 0 &&
+      reasons.every((reason) =>
+        tools?.isAlwaysAllowed?.(this.message.roomId, reason.call),
+      )
+    );
   }
 
   // Why this call waits for the user's click, read from the current
@@ -348,6 +388,7 @@ export default class MessageTool {
       this.isBotExecuted &&
       this.toolRequest.approvalRequired === true &&
       this.toolCallStatus === 'applying' &&
+      !this.approvalAnswer &&
       !this.toolService.answeredApprovalIds.has(this.id!)
     );
   }

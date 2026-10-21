@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Jonah Weiss",
+      "status": "Member",
+      "paceSeconds": 349,
+      "neighbourhood": "Upper West Side",
+      "since": "July 2025",
+      "runs": 12,
+      "longestKm": 12.0,
+      "bio": "Came for the Thursday social, now asking about a first 10K."
+    },
+    "relationships": {
+      "favouriteRoute": {
+        "links": {
+          "self": "../Route/park-tempo"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../runner",
+        "name": "Runner"
+      }
+    }
+  }
+}

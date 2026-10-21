@@ -5,6 +5,7 @@ import { module, test } from 'qunit';
 
 import { X_BOXEL_LOGGING_CORRELATION_ID_HEADER } from '@cardstack/runtime-common/prerender-headers';
 
+import ENV from '@cardstack/host/config/environment';
 import { createServerRequestTimingMiddleware } from '@cardstack/host/services/client-telemetry';
 
 import type ClientTelemetryService from '@cardstack/host/services/client-telemetry';
@@ -585,9 +586,23 @@ module('Integration | Service | client-telemetry', function (hooks) {
 
     test('is put on a realm-server request', async function (assert) {
       assert.notStrictEqual(
-        await stampedHeader('https://realm.example/my-realm/_search'),
+        await stampedHeader(
+          new URL('my-realm/_search', ENV.realmServerURL).href,
+        ),
         null,
         'the realm server gets an id to join its logs on',
+      );
+    });
+
+    // A card or a script fetching from another host (an image on Wikimedia,
+    // a raw GitHub file) would fail its CORS preflight with the header on.
+    test('is kept off a third-party request', async function (assert) {
+      assert.strictEqual(
+        await stampedHeader(
+          'https://upload.wikimedia.org/wikipedia/commons/a/a1/logo.svg',
+        ),
+        null,
+        'no custom header for a host that never reads it',
       );
     });
 

@@ -1,0 +1,70 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "date": "2026-10-06",
+      "kind": "Long run",
+      "startTime": "8:00 am",
+      "weather": "Overcast, 14 °C",
+      "note": "To the lighthouse and back. Ben turned at the bridge as planned."
+    },
+    "relationships": {
+      "route": {
+        "links": {
+          "self": "../Route/lighthouse-long"
+        }
+      },
+      "attendees.0": {
+        "links": {
+          "self": "../Runner/lena-ruiz"
+        }
+      },
+      "attendees.1": {
+        "links": {
+          "self": "../Runner/priya-shah"
+        }
+      },
+      "attendees.2": {
+        "links": {
+          "self": "../Runner/tom-okafor"
+        }
+      },
+      "attendees.3": {
+        "links": {
+          "self": "../Runner/ben-carter"
+        }
+      },
+      "attendees.4": {
+        "links": {
+          "self": "../Runner/grace-liu"
+        }
+      },
+      "attendees.5": {
+        "links": {
+          "self": "../Runner/maya-patel"
+        }
+      },
+      "attendees.6": {
+        "links": {
+          "self": "../Runner/kara-oneill"
+        }
+      },
+      "attendees.7": {
+        "links": {
+          "self": "../Runner/jonah-weiss"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../session",
+        "name": "Session"
+      }
+    }
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "date": "2026-09-15",
+      "kind": "Easy social",
+      "startTime": "7:00 pm",
+      "weather": "Clear, 19 °C",
+      "note": "Welcome run for the autumn. Coffee after at the Boathouse."
+    },
+    "relationships": {
+      "route": {
+        "links": {
+          "self": "../Route/river-loop"
+        }
+      },
+      "attendees.0": {
+        "links": {
+          "self": "../Runner/omar-haddad"
+        }
+      },
+      "attendees.1": {
+        "links": {
+          "self": "../Runner/lena-ruiz"
+        }
+      },
+      "attendees.2": {
+        "links": {
+          "self": "../Runner/sean-doyle"
+        }
+      },
+      "attendees.3": {
+        "links": {
+          "self": "../Runner/maya-patel"
+        }
+      },
+      "attendees.4": {
+        "links": {
+          "self": "../Runner/noah-fischer"
+        }
+      },
+      "attendees.5": {
+        "links": {
+          "self": "../Runner/priya-shah"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../session",
+        "name": "Session"
+      }
+    }
+  }
+}

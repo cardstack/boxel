@@ -1,0 +1,33 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Priya Shah",
+      "status": "Member",
+      "paceSeconds": 301,
+      "neighbourhood": "Upper West Side",
+      "since": "Sept 2024",
+      "runs": 38,
+      "longestKm": 30.0,
+      "bio": "Training for her first marathon. Usually first to the monument."
+    },
+    "relationships": {
+      "favouriteRoute": {
+        "links": {
+          "self": "../Route/park-tempo"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../runner",
+        "name": "Runner"
+      }
+    }
+  }
+}

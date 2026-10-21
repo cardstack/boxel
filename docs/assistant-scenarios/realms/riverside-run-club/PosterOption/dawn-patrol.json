@@ -1,0 +1,32 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "title": "Dawn Patrol",
+      "tagline": "First light on the Hudson. Back before the city wakes up.",
+      "accent": "#ff6b2c",
+      "ground": "#ffe3c8",
+      "ink": "#2a1608",
+      "mood": "Early",
+      "when": "Sat 7 am · the Boathouse"
+    },
+    "relationships": {
+      "route": {
+        "links": {
+          "self": "../Route/river-loop"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../poster",
+        "name": "PosterOption"
+      }
+    }
+  }
+}

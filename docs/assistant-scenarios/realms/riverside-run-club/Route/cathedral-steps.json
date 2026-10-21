@@ -1,0 +1,29 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Cathedral Steps",
+      "distanceKm": 4.1,
+      "climbM": 96,
+      "surface": "Mixed",
+      "lighting": "Daylight only",
+      "meetingPoint": "the West 112th Street steps",
+      "path": "M8 52 L22 12 L36 52 L50 12 L64 52 L78 12 L92 52 L106 12",
+      "accent": "#ff6b4a",
+      "notes": "Six climbs of the Morningside steps with a jog between. Short, steep, and the only route nobody asks for twice."
+    },
+    "relationships": {
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../route",
+        "name": "Route"
+      }
+    }
+  }
+}

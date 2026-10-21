@@ -1,0 +1,17 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "cardInfo": {
+        "name": "Riverside relaunch",
+        "summary": "Every Pret UI part the Boxel assistant panel uses, in one running-club conversation."
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../assistant-showcase",
+        "name": "AssistantShowcase"
+      }
+    }
+  }
+}

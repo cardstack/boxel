@@ -1,0 +1,149 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "name": "Riverside Run Club",
+      "tagline": "Twice a week along the Hudson since 2019. Every pace welcome, one route line.",
+      "founded": "2019",
+      "meetingPoint": "the 79th Street Boathouse"
+    },
+    "relationships": {
+      "homeRoute": {
+        "links": {
+          "self": "../Route/river-loop"
+        }
+      },
+      "members.0": {
+        "links": {
+          "self": "../Runner/lena-ruiz"
+        }
+      },
+      "members.1": {
+        "links": {
+          "self": "../Runner/omar-haddad"
+        }
+      },
+      "members.2": {
+        "links": {
+          "self": "../Runner/priya-shah"
+        }
+      },
+      "members.3": {
+        "links": {
+          "self": "../Runner/tom-okafor"
+        }
+      },
+      "members.4": {
+        "links": {
+          "self": "../Runner/iris-tanaka"
+        }
+      },
+      "members.5": {
+        "links": {
+          "self": "../Runner/ben-carter"
+        }
+      },
+      "members.6": {
+        "links": {
+          "self": "../Runner/grace-liu"
+        }
+      },
+      "members.7": {
+        "links": {
+          "self": "../Runner/noah-fischer"
+        }
+      },
+      "members.8": {
+        "links": {
+          "self": "../Runner/maya-patel"
+        }
+      },
+      "members.9": {
+        "links": {
+          "self": "../Runner/sean-doyle"
+        }
+      },
+      "members.10": {
+        "links": {
+          "self": "../Runner/kara-oneill"
+        }
+      },
+      "members.11": {
+        "links": {
+          "self": "../Runner/jonah-weiss"
+        }
+      },
+      "sessions.0": {
+        "links": {
+          "self": "../Session/2026-10-18"
+        }
+      },
+      "sessions.1": {
+        "links": {
+          "self": "../Session/2026-10-13"
+        }
+      },
+      "sessions.2": {
+        "links": {
+          "self": "../Session/2026-10-06"
+        }
+      },
+      "sessions.3": {
+        "links": {
+          "self": "../Session/2026-09-29"
+        }
+      },
+      "sessions.4": {
+        "links": {
+          "self": "../Session/2026-09-22"
+        }
+      },
+      "sessions.5": {
+        "links": {
+          "self": "../Session/2026-09-15"
+        }
+      },
+      "routes.0": {
+        "links": {
+          "self": "../Route/river-loop"
+        }
+      },
+      "routes.1": {
+        "links": {
+          "self": "../Route/boathouse-5k"
+        }
+      },
+      "routes.2": {
+        "links": {
+          "self": "../Route/bridge-to-bridge"
+        }
+      },
+      "routes.3": {
+        "links": {
+          "self": "../Route/cathedral-steps"
+        }
+      },
+      "routes.4": {
+        "links": {
+          "self": "../Route/lighthouse-long"
+        }
+      },
+      "routes.5": {
+        "links": {
+          "self": "../Route/park-tempo"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../club",
+        "name": "Club"
+      }
+    }
+  }
+}

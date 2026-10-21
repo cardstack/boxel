@@ -1,0 +1,70 @@
+{
+  "data": {
+    "type": "card",
+    "attributes": {
+      "date": "2026-09-29",
+      "kind": "Tempo",
+      "startTime": "7:00 pm",
+      "weather": "Clear, 17 °C",
+      "note": "Two laps at threshold, Iris leading the fast group."
+    },
+    "relationships": {
+      "route": {
+        "links": {
+          "self": "../Route/park-tempo"
+        }
+      },
+      "attendees.0": {
+        "links": {
+          "self": "../Runner/lena-ruiz"
+        }
+      },
+      "attendees.1": {
+        "links": {
+          "self": "../Runner/priya-shah"
+        }
+      },
+      "attendees.2": {
+        "links": {
+          "self": "../Runner/tom-okafor"
+        }
+      },
+      "attendees.3": {
+        "links": {
+          "self": "../Runner/iris-tanaka"
+        }
+      },
+      "attendees.4": {
+        "links": {
+          "self": "../Runner/ben-carter"
+        }
+      },
+      "attendees.5": {
+        "links": {
+          "self": "../Runner/grace-liu"
+        }
+      },
+      "attendees.6": {
+        "links": {
+          "self": "../Runner/noah-fischer"
+        }
+      },
+      "attendees.7": {
+        "links": {
+          "self": "../Runner/kara-oneill"
+        }
+      },
+      "cardInfo.theme": {
+        "links": {
+          "self": "../Theme/riverside"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../session",
+        "name": "Session"
+      }
+    }
+  }
+}
