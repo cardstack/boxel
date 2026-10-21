@@ -102,8 +102,8 @@ module(basename(import.meta.filename), function () {
     }
 
     // Both halves of an incremental index pass. The initiation event is
-    // broadcast per written file *before* indexing runs, so it is the earliest
-    // signal that something was staged — a test asserting a write was refused
+    // broadcast once per commit, as its first file changes and *before*
+    // indexing runs, so it is the earliest signal that something was staged — a test asserting a write was refused
     // has to count it, or it only checks that the refusal failed to finish.
     function indexEvents(messages: MatrixEvent[], indexType: string) {
       return messages.filter(
@@ -408,9 +408,9 @@ module(basename(import.meta.filename), function () {
         await waitForIncrementalIndexEvent(getMessagesSince, since);
 
         let messages = await getMessagesSince(since);
-        // Both halves are checked: the initiation event is broadcast per
-        // written file *before* indexing runs, so a refusal that staged
-        // anything shows up there first.
+        // Both halves are checked: the initiation event is broadcast once per
+        // commit, as its first file changes and *before* indexing runs, so a
+        // refusal that staged anything shows up there first.
         //
         // The assertion is about which card the window's events name, not how
         // many there are: the control's presence proves the window is one an
