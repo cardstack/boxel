@@ -77,6 +77,12 @@ The pages MAY use boxel-ui's `variables.css`, `theme.css` and typeface,
 served as files, so their tokens are the app's. They MUST NOT load any other
 boxel-ui file.
 
+The package's components SHOULD follow the host's CSS conventions, so the
+pages look and change like the app's screens. Each component SHOULD style
+itself with scoped CSS (`<style scoped>`, compiled by `glimmer-scoped-css`), as
+the host's components do. Styles SHOULD use boxel-ui's CSS variables for
+color, spacing and type, and scalable units such as `rem`.
+
 ### 1.5. The policy stays as it is
 
 The build output MUST run under the secure origin's Content Security Policy

@@ -4378,6 +4378,9 @@ importers:
       eslint:
         specifier: 'catalog:'
         version: 8.57.1(supports-color@8.1.1)
+      glimmer-scoped-css:
+        specifier: 'catalog:'
+        version: 0.9.0(supports-color@8.1.1)
       prettier:
         specifier: 'catalog:'
         version: 3.8.4

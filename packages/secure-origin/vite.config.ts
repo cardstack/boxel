@@ -1,6 +1,7 @@
 import { ember, extensions } from '@embroider/vite';
 import { buildMacros } from '@embroider/macros/babel';
 import { babel } from '@rollup/plugin-babel';
+import { scopedCSS } from 'glimmer-scoped-css/rollup';
 import { defineConfig } from 'vite';
 
 import { buildRecord } from './build/build-record.ts';
@@ -20,6 +21,10 @@ const macros = buildMacros();
 export default defineConfig({
   base: '/__SECURE_ORIGIN_BASE__/',
   plugins: [
+    // A component's `<style scoped>` is compiled into a stylesheet of its own,
+    // which the build emits as a file, never as inline style the policy would
+    // refuse.
+    scopedCSS(),
     ember(),
     babel({
       babelHelpers: 'runtime',
@@ -40,7 +45,12 @@ export default defineConfig({
         ],
         [
           'babel-plugin-ember-template-compilation',
-          { transforms: [...macros.templateMacros] },
+          {
+            transforms: [
+              ...macros.templateMacros,
+              'glimmer-scoped-css/ast-transform',
+            ],
+          },
         ],
         [
           'module:decorator-transforms',

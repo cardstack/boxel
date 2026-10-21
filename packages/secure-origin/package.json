@@ -44,6 +44,7 @@
     "concurrently": "catalog:",
     "ember-template-lint": "catalog:",
     "eslint": "catalog:",
+    "glimmer-scoped-css": "catalog:",
     "prettier": "catalog:",
     "typescript": "catalog:",
     "vite": "^8.0.10"
