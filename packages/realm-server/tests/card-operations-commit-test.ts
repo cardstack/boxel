@@ -335,6 +335,8 @@ function makeFileSystem(): Record<string, string | LooseSingleCardDocument> {
         'shared-pass-both',
         'shared-pass-mixed-card',
         'shared-pass-mixed-peer',
+        'shared-pass-silent',
+        'shared-pass-announcing',
         'version-target',
         'patch-over-http',
         'patch-over-batch',
