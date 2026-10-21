@@ -30,13 +30,14 @@ If you find a prior PR, read its description, diff, and review thread before des
 
 ### 2. Create a Linear issue for the flaky test
 
-Unless the reporter already names a ticket, recommend a Linear issue that tracks the flake, and create it once they agree. Search Linear for the test name first: an existing issue for the same flake is updated, not duplicated. Create the issue with these settings:
+Unless the reporter already names a ticket, recommend a Linear issue that tracks the flake, and create it once they agree. Search Linear for the test name first: an existing issue for the same flake is updated, not duplicated. Give a new issue these settings, and set the state of an existing issue too:
 
 - **Team:** Cardstack Engineering (`CS`)
 - **Project:** Bugs to Fix for Launch
 - **Priority:** none
 - **Cycle:** the team's current cycle
 - **Assignee:** the current user (`me`)
+- **State:** In Progress
 
 Put the CI failure URL, the failure signature, and any prior attempts from step 1 in the description. Name the branch with the issue's `cs-<id>-` prefix, so that Linear links the PR to the issue.
 
