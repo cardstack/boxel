@@ -2337,10 +2337,10 @@ export interface WriteOptions {
   onDurable?: () => void;
 }
 
-// Who a realm event is delivered to. By default it goes to the session room
-// of every user who can read the realm. `recipients` narrows that to the named
-// matrix users' session rooms, for an event that concerns only them; a
-// recipient with no session room for the realm receives nothing.
+// Who a realm event is delivered to. By default it goes to every session room
+// subscribed to the realm (see `fetchRealmSessionRooms`). `recipients` narrows
+// that to the named matrix users' session rooms, for an event that concerns
+// only them; a recipient with no subscribed session room receives nothing.
 export interface RealmEventDelivery {
   recipients?: string[];
 }
@@ -5785,9 +5785,10 @@ export class Realm {
       // request. The one party that can still be waiting on it is the writer,
       // whose client may key a wait on the event carrying its request id. So
       // a request that named an id hears it back in its writer's own session
-      // room, and one that named none hears nothing. A writer the realm cannot
-      // identify gets the event as every subscriber does, as the only way to
-      // reach it.
+      // room, and one that named none hears nothing. A request admitted
+      // without a user — an anonymous write to a world-writable realm — names
+      // no room to narrow to, so its event goes to every subscriber as the
+      // only way to reach a writer that may be waiting on it.
       //
       // The versions are still reported, and they are still the file's own: a
       // write that found the bytes it staged already there left the file
