@@ -425,6 +425,61 @@ export async function getMonacoContent(page: Page): Promise<string> {
   );
 }
 
+// The mail client shows the email in an iframe. The email's text is in the DOM
+// as soon as the iframe is filled, but the email loads web fonts through
+// stylesheets in its <head>, and the browser paints nothing in the frame until
+// those load. Wait for the stylesheets, images and fonts so a screenshot shows
+// the email and not a blank pane.
+async function waitForEmailToRender(emailPage: Page) {
+  let startedAt = Date.now();
+  let firstPending: string[] | undefined;
+  await expect
+    .poll(
+      async () => {
+        let frame = await (
+          await emailPage.locator('.messageview iframe').elementHandle()
+        )?.contentFrame();
+        if (!frame) {
+          return ['the email iframe'];
+        }
+        let pending = await frame.evaluate(() => {
+          let pending: string[] = [];
+          for (let link of document.querySelectorAll<HTMLLinkElement>(
+            'link[rel="stylesheet"]',
+          )) {
+            if (!link.sheet) {
+              pending.push(link.href);
+            }
+          }
+          for (let image of document.images) {
+            if (!image.complete) {
+              pending.push(image.src);
+            }
+          }
+          if (document.fonts.status !== 'loaded') {
+            pending.push('fonts');
+          }
+          return pending;
+        });
+        firstPending ??= pending;
+        return pending;
+      },
+      {
+        message: 'the email has loaded its stylesheets, images and fonts',
+        timeout: 30_000,
+      },
+    )
+    .toEqual([]);
+  let waitedMs = Date.now() - startedAt;
+  if (waitedMs > 1000) {
+    console.log(
+      `waited ${waitedMs}ms for the email to render; pending at first: ${JSON.stringify(
+        firstPending,
+      )}`,
+    );
+  }
+}
+
 export async function validateEmail(
   appPage: Page,
   email: string,
@@ -467,6 +522,7 @@ export async function validateEmail(
   await expect(
     emailPage.locator('.messageview .messageviewheader'),
   ).toContainText(`To:${email}`);
+  await waitForEmailToRender(emailPage);
 
   if (opts?.onEmailPage) {
     await opts.onEmailPage(emailPage);
@@ -525,6 +581,7 @@ export async function validateEmailForResetPassword(
   await expect(
     emailPage.locator('.messageview .messageviewheader'),
   ).toContainText(`To:${email}`);
+  await waitForEmailToRender(emailPage);
 
   if (opts?.onEmailPage) {
     await opts.onEmailPage(emailPage);
