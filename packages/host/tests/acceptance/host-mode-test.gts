@@ -1156,7 +1156,7 @@ module('Acceptance | host mode tests', function (hooks) {
 
     try {
       await visit('/test/Pet/mango.json');
-      await waitFor('[data-test-host-mode-content].is-narrow');
+      await waitFor('[data-test-host-mode-narrow]');
       await waitFor('[data-test-host-mode-card]');
 
       let content = document.querySelector<HTMLElement>(
@@ -1165,9 +1165,14 @@ module('Acceptance | host mode tests', function (hooks) {
       let card = document.querySelector<HTMLElement>(
         '[data-test-host-mode-card]',
       )!;
+      let style = getComputedStyle(content);
+      let innerWidth =
+        content.clientWidth -
+        parseFloat(style.paddingLeft) -
+        parseFloat(style.paddingRight);
       assert.ok(
-        card.offsetWidth <= content.clientWidth,
-        `the card is no wider than host mode (${card.offsetWidth} of ${content.clientWidth})`,
+        card.offsetWidth <= innerWidth,
+        `the card stays inside host mode's gutter (${card.offsetWidth} of ${innerWidth})`,
       );
     } finally {
       testRoot.style.width = originalWidth;

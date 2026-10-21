@@ -143,6 +143,7 @@ export default class HostModeContent extends Component<Signature> {
       style={{this.backgroundImageStyle}}
       {{this.observeWidth}}
       data-test-host-mode-content
+      data-test-host-mode-narrow={{this.isNarrow}}
       ...attributes
     >
       {{#if this.displayBreadcrumbs}}
@@ -229,9 +230,11 @@ export default class HostModeContent extends Component<Signature> {
       }
 
       /* When narrow, the primary card fits the screen instead of keeping its
-         desktop width and being clipped. */
-      .host-mode-content.is-narrow {
+         desktop width and being clipped, with the same gutter as the top
+         stack card. Wide cards keep their own zero padding. */
+      .host-mode-content.is-narrow:not(.is-wide) {
         --host-mode-card-width: 100%;
+        padding: var(--boxel-sp-xs);
       }
 
       /* When narrow, only the top stack card shows, so there is no trail to
