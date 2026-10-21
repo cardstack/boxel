@@ -432,7 +432,6 @@ class TreeLevel extends Component<TreeLevelSignature> {
         {{#if (eq entry.kind 'file')}}
           <button
             data-test-file={{entry.path}}
-            data-test-file-selected={{this.isSelectedFile entry.path}}
             data-path={{entry.path}}
             data-kind='file'
             title={{entry.name}}

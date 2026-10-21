@@ -896,6 +896,10 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     await waitFor('[data-test-realm-name="Test Workspace A"]', {
       timeout: 2000,
     });
+    // The realm name changes before the tree does. Wait for the other realm's
+    // tree to render so the scroll position under test is the one that realm
+    // left behind, not the end-directory position this realm's tree still had.
+    await waitFor('[data-test-file="mango.png"]');
 
     await fillIn(
       '[data-test-card-url-bar-input]',
@@ -908,6 +912,8 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     );
     await waitFor('[data-test-realm-name="Test Workspace B"]');
     await waitFor('[data-test-file-tree-mask]', { count: 0 });
+    // Nested directory listings load after the root one.
+    await waitFor('[data-test-file="Person/1.json"]');
     // waitFor polls without settling, so settle for the selected file's
     // scroll-into-view and the scroll-position debounce before checking.
     await settled();
