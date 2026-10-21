@@ -102,13 +102,6 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
         this.scrollPositionService.containerHasScrollPosition(container);
 
       if (shouldReplaceStoredPosition) {
-        // The newly selected item scrolls itself into view from an
-        // IntersectionObserver callback. Until that callback runs, scrollTop
-        // is still the old key's position, so the capture waits for it.
-        if (this.scrollPositionService.hasPendingScrollIntoView(container)) {
-          this.debouncedRestoreOrPersistScrollTop();
-          return;
-        }
         this.scrollPositionService.setScrollPosition(
           container,
           key,

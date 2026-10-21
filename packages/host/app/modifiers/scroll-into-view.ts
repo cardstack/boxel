@@ -2,19 +2,11 @@ import { registerDestructor } from '@ember/destroyable';
 import type Owner from '@ember/owner';
 import { service } from '@ember/service';
 
-import { buildWaiter } from '@ember/test-waiters';
-
 import Modifier from 'ember-modifier';
 
 import type ScrollPositionService from '@cardstack/host/services/scroll-position-service';
 
 import type { ArgsFor, NamedArgs, PositionalArgs } from 'ember-modifier';
-
-// The scroll happens in an IntersectionObserver callback, which the runloop
-// does not track. The waiter keeps `settled()` pending until that callback has
-// run (or the observer is torn down), so a test that clicks an item sees it
-// already scrolled into view.
-const waiter = buildWaiter('scroll-into-view:intersection-waiter');
 
 interface ScrollIntoViewModifierArgs {
   Positional: [boolean];
@@ -31,14 +23,13 @@ export default class ScrollIntoViewModifier extends Modifier<ScrollIntoViewModif
 
   element!: Element;
   #intersectionObserver?: IntersectionObserver;
-  #waiterToken?: unknown;
-  #pendingContainer?: string;
   #lastRunScrolled = false;
 
   constructor(owner: Owner, args: ArgsFor<ScrollIntoViewModifierSignature>) {
     super(owner, args);
     registerDestructor(this, () => {
-      this.disconnectObserver();
+      this.#intersectionObserver?.disconnect();
+      this.#intersectionObserver = undefined;
       this.element = undefined as never;
     });
   }
@@ -57,49 +48,33 @@ export default class ScrollIntoViewModifier extends Modifier<ScrollIntoViewModif
       !this.scrollPositionService.keyHasScrollPosition(container, key) &&
       !this.#lastRunScrolled
     ) {
-      await this.scrollIfNotVisible(container);
+      await this.scrollIfNotVisible();
       this.#lastRunScrolled = true;
     } else {
       this.#lastRunScrolled = false;
-      this.disconnectObserver();
+      this.#intersectionObserver?.disconnect();
+      this.#intersectionObserver = undefined;
     }
   }
 
-  private disconnectObserver() {
-    this.#intersectionObserver?.disconnect();
-    this.#intersectionObserver = undefined;
-    if (this.#waiterToken) {
-      waiter.endAsync(this.#waiterToken);
-      this.#waiterToken = undefined;
-    }
-    if (this.#pendingContainer) {
-      this.scrollPositionService.endScrollIntoView(this.#pendingContainer);
-      this.#pendingContainer = undefined;
-    }
-  }
-
-  private async scrollIfNotVisible(container: string) {
+  private async scrollIfNotVisible() {
     let element = this.element;
 
     return new Promise((resolve) => {
-      this.disconnectObserver();
+      this.#intersectionObserver?.disconnect();
       let intersectionObserver = new IntersectionObserver((entries) => {
         intersectionObserver.disconnect();
+        if (this.#intersectionObserver === intersectionObserver) {
+          this.#intersectionObserver = undefined;
+        }
 
         if (!entries[0].isIntersecting) {
           element.scrollIntoView({ block: 'center' });
         }
 
-        if (this.#intersectionObserver === intersectionObserver) {
-          this.disconnectObserver();
-        }
-
         resolve(void 0);
       });
       this.#intersectionObserver = intersectionObserver;
-      this.#waiterToken = waiter.beginAsync();
-      this.#pendingContainer = container;
-      this.scrollPositionService.beginScrollIntoView(container);
 
       intersectionObserver.observe(element);
     });

@@ -905,8 +905,8 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     await click('[data-test-file-browser-toggle]');
     await waitFor(endDirectorySelector);
     await waitFor('[data-test-file-tree-mask]', { count: 0 });
-    // waitFor polls without settling, so settle for the selected file's
-    // scroll-into-view and the scroll-position debounce before checking.
+    // waitFor polls without settling, so settle for the scroll-position
+    // debounce before checking.
     await settled();
 
     endDirectoryElement = find(endDirectorySelector);
@@ -962,8 +962,8 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     await waitFor('[data-test-file-tree-mask]', { count: 0 });
     // Nested directory listings load after the root one.
     await waitFor('[data-test-file="Person/1.json"]');
-    // waitFor polls without settling, so settle for the selected file's
-    // scroll-into-view and the scroll-position debounce before checking.
+    // waitFor polls without settling, so settle for the scroll-position
+    // debounce before checking.
     await settled();
 
     endDirectoryElement = find(endDirectorySelector);

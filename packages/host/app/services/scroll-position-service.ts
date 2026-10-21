@@ -58,30 +58,6 @@ export default class ScrollPositionService extends Service {
     this.persist();
   }
 
-  // Containers with a scroll-into-view still waiting on its
-  // IntersectionObserver callback, counted per container.
-  private pendingScrollIntoView = new Map<string, number>();
-
-  beginScrollIntoView(container: string) {
-    this.pendingScrollIntoView.set(
-      container,
-      (this.pendingScrollIntoView.get(container) ?? 0) + 1,
-    );
-  }
-
-  endScrollIntoView(container: string) {
-    let count = (this.pendingScrollIntoView.get(container) ?? 0) - 1;
-    if (count > 0) {
-      this.pendingScrollIntoView.set(container, count);
-    } else {
-      this.pendingScrollIntoView.delete(container);
-    }
-  }
-
-  hasPendingScrollIntoView(container: string) {
-    return this.pendingScrollIntoView.has(container);
-  }
-
   private persist() {
     window.localStorage.setItem(
       ScrollPositions,
