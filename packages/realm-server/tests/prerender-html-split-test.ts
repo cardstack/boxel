@@ -361,10 +361,10 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a merged job announces when either publish does', function (assert) {
-      for (let [existingAnnounces, incomingAnnounces] of [
-        [true, false],
-        [false, true],
-        [false, false],
+      for (let [existingAnnounces, incomingAnnounces, merged] of [
+        [true, false, true],
+        [false, true, true],
+        [false, false, false],
       ]) {
         let decision = coalesce(
           context({
@@ -379,7 +379,7 @@ module(basename(import.meta.filename), function () {
         }
         assert.strictEqual(
           (decision.update?.args as PrerenderHtmlArgs).announce,
-          existingAnnounces || incomingAnnounces,
+          merged,
           `existing ${existingAnnounces}, incoming ${incomingAnnounces}`,
         );
       }
