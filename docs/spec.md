@@ -114,31 +114,27 @@ Spec JSON with:
 
 ##### Developer workflow
 
-The generated specs are **not committed anywhere** — neither to the
-boxel repo nor to `cardstack/boxel-catalog`. They're treated as build
-artifacts of `boxel-ui` and regenerated fresh at realm-server deployment
-time. The inputs (`usage.gts`) in boxel are the source of truth; the
-deployed catalog content is whatever the generator produces against
-the deployed commit.
+The generated specs are **not committed anywhere**, neither to the
+boxel repo nor to `cardstack/boxel-catalog`. They're build artifacts of
+`boxel-ui`, generated locally. The inputs (`usage.gts`) in boxel are the
+source of truth.
 
 1. Edit the component's `usage.gts`. Make sure the primary
    `<FreestyleUsage>` block has a `@description='…'` attribute and
    complete `<Args.X>` documentation.
-2. (Optional, but recommended) Run
-   `pnpm --dir packages/boxel-ui generate:component-specs` locally
-   to inspect the resulting spec content and have your local
-   realm-server reindex it. Requires
-   `pnpm --dir packages/catalog catalog:setup` to have run at least
-   once (clones `cardstack/boxel-catalog` into
+2. Run `pnpm --dir packages/boxel-ui generate:component-specs` to
+   inspect the resulting spec content and have your local realm-server
+   reindex it. Requires `pnpm --dir packages/catalog catalog:setup` to
+   have run at least once (clones `cardstack/boxel-catalog` into
    `packages/catalog/contents/`, which is gitignored from boxel).
    Output: `packages/catalog/contents/Spec/boxel-ui-<slug>.json`.
-3. Commit only your `usage.gts` change to your boxel PR — no spec JSON
+3. Commit only your `usage.gts` change to your boxel PR. No spec JSON
    needs to land in any repo.
-4. On deploy, the realm-server's `setup:catalog-in-deployment` script
-   pulls latest `boxel-catalog`, then runs the generator against the
-   deployed `usage.gts` files, then rsyncs the merged tree into
-   `/persistent/catalog/`. The deployed catalog is full-indexed at
-   startup.
+
+A deployed catalog realm serves exactly what boxel-catalog's deploy
+pushes (the `catalog-deploy` skill), and the realm-server's boot only
+creates the realm's directory. The generated specs aren't in
+boxel-catalog, so a deployed catalog doesn't serve them.
 
 ##### Gotchas
 
@@ -147,12 +143,6 @@ the deployed commit.
   drops `boxel-ui-*.json` files into that working tree locally. Treat
   those as transient — running `pnpm --dir packages/catalog catalog:update`
   will stash them automatically if a `git pull` would conflict.
-- Because the generator regenerates fresh on every deploy, there is
-  no in-boxel-repo drift-detection step. If you change `usage.gts`
-  but don't run the generator locally to eyeball the result, the
-  deployed catalog still ends up correct — but you only see what the
-  agent will read at runtime after the next deploy. Running the
-  generator locally before pushing is the recommended habit.
 
 ### 4. App Specs (`specType: 'app'`)
 

@@ -5,9 +5,9 @@
 // Writes to packages/catalog/contents/Spec/ — the working tree of the
 // cardstack/boxel-catalog repo (cloned via `pnpm --dir packages/catalog
 // catalog:setup`). The realm-server's file watcher picks the files up and
-// reindexes the catalog locally. On merge to boxel main, the CI mirror
-// workflow regenerates from a fresh checkout and pushes to
-// cardstack/boxel-catalog.
+// reindexes the catalog locally. This is a local tool only: a deployed
+// catalog realm serves exactly what boxel-catalog's deploy pushes, and the
+// generated specs aren't part of it.
 //
 // Flags:
 //   --only X    Generate only component X (kebab-case directory name).
@@ -18,7 +18,7 @@ import path from 'path';
 
 const SCRIPT_DIR = path.dirname(new URL(import.meta.url).pathname);
 const ADDON_DIR = path.resolve(SCRIPT_DIR, '..');
-const REPO_ROOT = path.resolve(ADDON_DIR, '..', '..', '..');
+const REPO_ROOT = path.resolve(ADDON_DIR, '..', '..');
 
 const COMPONENTS_DIR = path.join(ADDON_DIR, 'src', 'components');
 const CATALOG_DIR = path.join(
@@ -28,7 +28,7 @@ const CATALOG_DIR = path.join(
   'contents',
   'Spec',
 );
-const BARREL_FILE = path.join(ADDON_DIR, 'src', 'components.ts');
+const BARREL_FILE = path.join(ADDON_DIR, 'src', 'components.gts');
 
 const SPEC_MODULE = '@cardstack/boxel-ui/components';
 const SPEC_FILE_PREFIX = 'boxel-ui-';
