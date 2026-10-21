@@ -808,11 +808,15 @@ export default class MatrixService extends Service {
       // `client` above, so the network logout below is unaffected.
       this.resetState();
       didResetState = true;
-      await client?.logout(true);
       if (!opts?.skipIndexTransition) {
         // when user logs out we transition them back to an empty stack with
         // the workspace chooser open. this way we don't inadvertently leak
         // private card id's in the URL
+        //
+        // This happens before the network logout is awaited. The transition
+        // changes route, which renders the login form again from scratch; done
+        // after the await, it would clear anything typed into the form that
+        // clearAuth() above already put on screen.
         this.router.transitionTo('index-root', {
           queryParams: {
             operatorModeState: stringify({
@@ -825,6 +829,7 @@ export default class MatrixService extends Service {
           },
         });
       }
+      await client?.logout(true);
     } catch (e) {
       console.log('Error logging out of Matrix', e);
     } finally {
