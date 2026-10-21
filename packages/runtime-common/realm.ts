@@ -16351,6 +16351,12 @@ export class Realm {
           requestContext,
         });
       }
+      if (permissions?.includes('write') && !permissions.includes('read')) {
+        return badRequest({
+          message: `write permission requires read permission for ${user}`,
+          requestContext,
+        });
+      }
     }
 
     await insertPermissions(this.#dbAdapter, new URL(this.url), patch);

@@ -10,6 +10,7 @@ import { boxelUIChecker } from '../../lib/boxel-ui-change-checker.ts';
 import {
   ensureTrailingSlash,
   fetchRealmPermissions,
+  insertPermissions,
 } from '@cardstack/runtime-common';
 import {
   ensureMatrixAdminUser,
@@ -1436,6 +1437,32 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
           .set('Authorization', `Bearer ${grafanaSecret}`)
           .set('Content-Type', 'application/json');
         assert.strictEqual(response.status, 400, 'HTTP 400 status');
+      });
+
+      test("rejects a change to the realm owner's permissions", async function (assert) {
+        let user = '@op-test-owner:localhost';
+        await insertPermissions(context.dbAdapter, testRealmURL, {
+          [user]: ['read', 'write', 'realm-owner'],
+        });
+        let response = await context.request
+          .post(
+            `/_grafana-upsert-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent(user)}` +
+              `&read=true&write=true`,
+          )
+          .set('Authorization', `Bearer ${grafanaSecret}`)
+          .set('Content-Type', 'application/json');
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let perms = await fetchRealmPermissions(
+          context.dbAdapter,
+          testRealmURL,
+        );
+        assert.deepEqual(
+          perms[user].sort(),
+          ['read', 'realm-owner', 'write'],
+          'owner keeps realm-owner',
+        );
       });
 
       test('rejects read=false write=false (use the delete flow to revoke)', async function (assert) {
