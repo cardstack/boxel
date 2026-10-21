@@ -36,6 +36,8 @@ export interface Config {
   workspaceFavorites?: string[];
   // Public realms the user added to their dashboard's Catalogs section.
   catalogRealms?: string[];
+  // The user's `app.boxel.dashboard` account data, as stored on the server.
+  dashboardState?: unknown;
   loginFlowsResponse?: { flows: import('matrix-js-sdk').LoginFlow[] };
   ssoLoginUrl?: string;
   loginWithTokenInterceptor?: (

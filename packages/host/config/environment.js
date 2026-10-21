@@ -214,7 +214,11 @@ module.exports = function (environment) {
         ? `${normalized}/`
         : `${normalized}/test/`;
     })(),
-    featureFlags: {},
+    featureFlags: {
+      // Dashboard v2 replaces the workspace chooser. Off until the dashboard
+      // has its page shell: until then it shows an empty page.
+      DASHBOARD_V2: process.env.DASHBOARD_V2 === 'true',
+    },
   };
 
   // Where each `@cardstack/…` prefix realm is served. This answers a different

@@ -33,6 +33,7 @@ import AiAssistantToast from '@cardstack/host/components/ai-assistant/toast';
 import ProfileSettingsModal from '@cardstack/host/components/operator-mode/profile/profile-settings-modal';
 import ProfileInfoPopover from '@cardstack/host/components/operator-mode/profile-info-popover';
 
+import ENV from '@cardstack/host/config/environment';
 import type IndexController from '@cardstack/host/controllers';
 
 import { assertNever } from '@cardstack/host/utils/assert-never';
@@ -44,6 +45,7 @@ import SearchSheet, { SearchSheetModes } from '../search-sheet';
 import SubmodeSwitcher, { Submodes } from '../submode-switcher';
 
 import ChooseSubscriptionPlanModal from './choose-subscription-plan-modal';
+import Dashboard from './dashboard';
 
 import NewFileButton, { type NewFileOptions } from './new-file-button';
 import WorkspaceChooser from './workspace-chooser';
@@ -383,6 +385,12 @@ export default class SubmodeLayout extends Component<Signature> {
     return this.operatorModeStateService.workspaceChooserOpened;
   }
 
+  // Read at render time rather than once at module load, so a test can turn
+  // the flag on for its module.
+  private get isDashboardV2Enabled() {
+    return Boolean(ENV.featureFlags?.DASHBOARD_V2);
+  }
+
   private set workspaceChooserOpened(workspaceChooserOpened: boolean) {
     this.operatorModeStateService.workspaceChooserOpened =
       workspaceChooserOpened;
@@ -530,9 +538,13 @@ export default class SubmodeLayout extends Component<Signature> {
             </button>
           </div>
           {{#if this.workspaceChooserOpened}}
-            <WorkspaceChooser
-              @topBarCenterElement={{this.topBarCenterElement}}
-            />
+            {{#if this.isDashboardV2Enabled}}
+              <Dashboard />
+            {{else}}
+              <WorkspaceChooser
+                @topBarCenterElement={{this.topBarCenterElement}}
+              />
+            {{/if}}
           {{/if}}
 
           {{yield

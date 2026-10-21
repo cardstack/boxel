@@ -3,6 +3,7 @@ import { waitUntil } from '@ember/test-helpers';
 
 import type { RealmAction } from '@cardstack/runtime-common';
 import {
+  APP_BOXEL_DASHBOARD_EVENT_TYPE,
   APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_TOOL_RESULT_EVENT_TYPE,
   APP_BOXEL_TOOL_RESULT_REL_TYPE,
@@ -109,6 +110,21 @@ export class MockUtils {
 
   getSystemCardAccountData = () => {
     return this.testState.opts?.systemCardAccountData;
+  };
+
+  getDashboardState = () => {
+    return this.testState.opts?.dashboardState;
+  };
+
+  // Writes the dashboard key as another tab or device would, and syncs it to
+  // this tab.
+  setDashboardStateFromAnotherDevice = async (
+    content: Record<string, unknown>,
+  ) => {
+    await this.testState.sdk!.client!.setAccountData(
+      APP_BOXEL_DASHBOARD_EVENT_TYPE as any,
+      content as any,
+    );
   };
 
   getActiveRealms = () => {

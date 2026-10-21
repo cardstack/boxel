@@ -16,7 +16,7 @@ import {
   timeout,
 } from 'ember-concurrency';
 import window from 'ember-window-mock';
-import { cloneDeep } from 'lodash-es';
+import { cloneDeep, isPlainObject } from 'lodash-es';
 
 import { Filter } from 'matrix-js-sdk';
 import {
@@ -63,6 +63,10 @@ import {
   REALMS_LIST_UPDATED_EVENT_TYPE,
   APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
   APP_BOXEL_CATALOG_REALMS_EVENT_TYPE,
+  APP_BOXEL_DASHBOARD_EVENT_TYPE,
+  APP_BOXEL_DASHBOARD_VERSION,
+  type AppBoxelDashboardContent,
+  parseDashboardContent,
   APP_BOXEL_ACTIVE_LLM,
   APP_BOXEL_LLM_MODE,
   DEFAULT_FALLBACK_MODELS,
@@ -258,6 +262,7 @@ export default class MatrixService extends Service {
 
   @tracked private storage: Storage | undefined;
   @tracked workspaceFavorites: string[] = [];
+  @tracked dashboardState: AppBoxelDashboardContent = {};
 
   profile = getMatrixProfile(this, () => this.userId);
 
@@ -545,6 +550,10 @@ export default class MatrixService extends Service {
               this.realmServer.setUserCatalogRealmIdentifiers(
                 (e.event.content.realms as string[] | undefined) ?? [],
               );
+              break;
+            // Onboarding and agent setup progress follow the user across tabs.
+            case APP_BOXEL_DASHBOARD_EVENT_TYPE:
+              this.dashboardState = parseDashboardContent(e.event.content);
               break;
           }
         },
@@ -1200,6 +1209,80 @@ export default class MatrixService extends Service {
     this.workspaceFavorites = newFavorites;
   }
 
+  // Dashboard writes run one at a time, each applying its change to the latest
+  // synced copy (once the first sync is done, the SDK reads account data from
+  // its sync store, not the server). setAccountData resolves only after its
+  // write has synced back, so a queued write always sees the one before it. A
+  // write from another tab that hasn't synced here yet can still be
+  // overwritten: account data has no compare-and-set.
+  private dashboardWrites: Promise<unknown> = Promise.resolve();
+  // Bumped by resetState() so a write queued before logout never lands in
+  // the next session.
+  private dashboardSession = 0;
+
+  // Applies `change` to the stored dashboard state: an object of fields to
+  // set, or a function from the stored state to those fields.
+  public async updateDashboardState(
+    change:
+      | Partial<AppBoxelDashboardContent>
+      | ((
+          stored: AppBoxelDashboardContent,
+        ) => Partial<AppBoxelDashboardContent>),
+  ): Promise<void> {
+    let client = this.client;
+    let session = this.dashboardSession;
+    let write = this.dashboardWrites.then(async () => {
+      let raw = await client.getAccountDataFromServer(
+        APP_BOXEL_DASHBOARD_EVENT_TYPE,
+      );
+      // Logged out meanwhile: drop the write. It resolves rather than rejects,
+      // since its caller belonged to the session that ended.
+      if (session !== this.dashboardSession) {
+        return;
+      }
+      // Fields this version doesn't know are written back untouched, so an
+      // older tab doesn't erase what a newer one stored.
+      let stored: Record<string, unknown> = isPlainObject(raw)
+        ? (raw as Record<string, unknown>)
+        : {};
+      if (
+        typeof stored.version === 'number' &&
+        stored.version > APP_BOXEL_DASHBOARD_VERSION
+      ) {
+        throw new Error(
+          `Dashboard state was stored by a newer version of the app (version ${stored.version})`,
+        );
+      }
+      let changes =
+        typeof change === 'function'
+          ? change(parseDashboardContent(stored))
+          : change;
+      let next: Record<string, unknown> = {
+        ...stored,
+        ...changes,
+        version: APP_BOXEL_DASHBOARD_VERSION,
+      };
+      // Merged per agent, so setting one agent's progress keeps the others',
+      // including agents this version doesn't know.
+      if (changes.agentSetup) {
+        next.agentSetup = {
+          ...(isPlainObject(stored.agentSetup)
+            ? (stored.agentSetup as Record<string, unknown>)
+            : {}),
+          ...changes.agentSetup,
+        };
+      }
+      await client.setAccountData(APP_BOXEL_DASHBOARD_EVENT_TYPE, next);
+      if (session === this.dashboardSession) {
+        this.dashboardState = parseDashboardContent(next);
+      }
+    });
+    // A failed write must not stall the ones queued behind it; its caller
+    // still sees the failure.
+    this.dashboardWrites = write.catch(() => undefined);
+    return write;
+  }
+
   // Replaces the public realms the user added to the Catalogs section of their
   // dashboard.
   public async setUserCatalogRealms(realmURLs: string[]): Promise<void> {
@@ -1305,20 +1388,28 @@ export default class MatrixService extends Service {
           this.startedAtTs = 0;
         }
         if (isTesting())
-          console.warn('[start-phase] getAccountData(realm-servers,favorites)');
-        let [realmServersData, favoritesData, catalogRealmsData] =
-          await Promise.all([
-            this.client.getAccountDataFromServer(
-              APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
-            ) as Promise<{ realmServers: string[] } | null>,
-            this.client.getAccountDataFromServer(
-              APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
-            ) as Promise<{ favorites: string[] } | null>,
-            this.client.getAccountDataFromServer(
-              APP_BOXEL_CATALOG_REALMS_EVENT_TYPE,
-            ) as Promise<{ realms: string[] } | null>,
-          ]);
+          console.warn(
+            '[start-phase] getAccountData(realm-servers,favorites,catalog-realms,dashboard)',
+          );
+        let [
+          realmServersData,
+          favoritesData,
+          catalogRealmsData,
+          dashboardData,
+        ] = await Promise.all([
+          this.client.getAccountDataFromServer(
+            APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
+          ) as Promise<{ realmServers: string[] } | null>,
+          this.client.getAccountDataFromServer(
+            APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
+          ) as Promise<{ favorites: string[] } | null>,
+          this.client.getAccountDataFromServer(
+            APP_BOXEL_CATALOG_REALMS_EVENT_TYPE,
+          ) as Promise<{ realms: string[] } | null>,
+          this.client.getAccountDataFromServer(APP_BOXEL_DASHBOARD_EVENT_TYPE),
+        ]);
         this.workspaceFavorites = favoritesData?.favorites ?? [];
+        this.dashboardState = parseDashboardContent(dashboardData);
 
         // Boot assembles the realm list from trusted servers via
         // `_realm-auth`. The transition fallback below reads the legacy
@@ -2560,6 +2651,9 @@ export default class MatrixService extends Service {
     this.flushRoomState = undefined;
     this.timelineLoadingState.clear();
     this._client = this.#matrixSDK?.createClient({ baseUrl: matrixURL });
+    this.dashboardState = {};
+    this.dashboardSession++;
+    this.dashboardWrites = Promise.resolve();
     this._currentRoomId = undefined;
     this._isInitializingNewUser = false;
     if (isTesting() && this.session.isAuthenticated) {
