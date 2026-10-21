@@ -445,8 +445,9 @@ async function lastSuccessfulSync(jobNames: string[]) {
 }
 
 // Production is meant to get a catalog revision staging has already served. A
-// staging sync pushes the whole tree, so a successful one at the target or a
-// later commit means staging has served it. Not finding one only warns.
+// successful staging sync leaves the realm holding the whole tree at its
+// commit, so one at the target or a later commit means staging has served it.
+// Not finding one only warns.
 async function stagingWarning(to: string) {
   let staged = await lastSuccessfulSync(STAGING_SYNC_JOBS);
   if (!staged) {
