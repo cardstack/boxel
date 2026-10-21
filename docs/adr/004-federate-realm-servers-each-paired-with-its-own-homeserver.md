@@ -220,9 +220,6 @@ Beyond the gaps under Remediation, federation needs this work:
 - `packages/runtime-common/matrix-client.ts` (`userIdFromUsername`,
   `ensureFullMatrixUserId`) breaks §1.2. They derive the server name from the
   homeserver hostname.
-- `packages/realm-server/scripts/claude-prerender-token.ts`
-  (`deriveMatrixDomain`) breaks §1.2. It derives the server name from the
-  realm hostname.
 - `packages/boxel-cli/src/lib/seed-auth.ts` (`deriveHostFromRealmUrl`) breaks
   §1.2. It derives the server name from the realm hostname.
 - `packages/boxel-cli/src/lib/profile-manager.ts` (`migrateFromEnv`) breaks
