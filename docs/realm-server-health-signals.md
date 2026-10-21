@@ -116,8 +116,9 @@ that synapse or the proxy in front of it answered with 429, 502, 503 or 504:
   `REALM_EVENT_MAX_SENDS_IN_FLIGHT` (default 8).
 
 `realmEventsDropped` counts events discarded because the queue passed
-`REALM_EVENT_MAX_QUEUED_BYTES` (default 64 MiB). The queue drops the oldest
-event of the realm with the longest backlog.
+`REALM_EVENT_MAX_QUEUED_BYTES` (default 64 MiB). The realm with the longest
+backlog loses its oldest queued event, preferring one that isn't the completion
+of an indexing pass (`incremental` or `full`).
 
 The counters (`realmEventSends`, `realmEventFailedSends`,
 `realmEventBackPressure`, `realmEventsCoalesced`, `realmEventsDropped`) cover

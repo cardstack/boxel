@@ -37,11 +37,16 @@ const log = logger('realm:events');
 // - A send that synapse answers with 429, 502, 503 or 504, or that cannot
 //   reach synapse at all, is back-pressure: the whole line pauses, and the
 //   send is retried with the same transaction id, so a retry of a send that
-//   synapse did complete is not stored twice. The pause doubles on each
-//   consecutive back-pressure answer and resets on the next success.
-// - The bytes queued are bounded. Past the bound, the oldest event of the
-//   realm with the longest backlog is dropped, so the realm causing the
-//   backlog is the one that loses events.
+//   synapse did complete is not stored twice. The pause is at least as long
+//   as synapse asked for in a rate-limit answer. It doubles for each pause in
+//   a row that ends in back-pressure again, and resets on a success. Only a
+//   send started after the latest pause counts toward either, so the sends
+//   that were already in flight when synapse became overloaded add up to one
+//   pause rather than doubling it once each.
+// - The bytes queued are bounded. Past the bound, the realm with the longest
+//   backlog loses its oldest queued event, so the realm causing the backlog
+//   is the one that loses events. Events whose loss a subscriber recovers
+//   from go first (see `isCompletion`).
 //
 // The queue is in memory, so a process that exits with events queued does not
 // deliver them.
@@ -135,6 +140,7 @@ export function isBackPressure(error: unknown): boolean {
 export class RealmEventDispatcher {
   readonly #maxInFlight: number;
   readonly #sendsPerSecond: number;
+  readonly #bucketSize: number;
   readonly #maxQueuedBytes: number;
   readonly #maxAttempts: number;
   readonly #initialBackoffMs: number;
@@ -151,6 +157,10 @@ export class RealmEventDispatcher {
   #tokens: number;
   #tokensAt: number;
   #pausedUntil = 0;
+  // When the latest pause was set. A send started at or before it is part of
+  // the episode that set it; no send starts during a pause, so any later one
+  // started after the pause ended.
+  #pausedAt = 0;
   #backoffMs = 0;
   #timer: ReturnType<typeof setTimeout> | undefined;
   #timerAt = 0;
@@ -175,8 +185,10 @@ export class RealmEventDispatcher {
     this.#maxBackoffMs = opts.maxBackoffMs ?? 30_000;
     this.#now = opts.now ?? (() => Date.now());
     // The bucket holds one second's worth of sends, so an idle line can start
-    // a short burst at once and a long burst settles to the steady rate.
-    this.#tokens = this.#sendsPerSecond;
+    // a short burst at once and a long burst settles to the steady rate. It
+    // holds at least one, or a rate under one a second would never fill it.
+    this.#bucketSize = Math.max(1, this.#sendsPerSecond);
+    this.#tokens = this.#bucketSize;
     this.#tokensAt = this.#now();
   }
 
@@ -278,7 +290,10 @@ export class RealmEventDispatcher {
       if (!longest) {
         return;
       }
-      let dropped = longest.pending.shift()!;
+      let index = longest.pending.findIndex(
+        (entry) => !isCompletion(entry.event),
+      );
+      let [dropped] = longest.pending.splice(Math.max(0, index), 1);
       this.#queuedEvents--;
       this.#queuedBytes -= dropped.bytes;
       this.#dropped++;
@@ -311,17 +326,16 @@ export class RealmEventDispatcher {
         return;
       }
       this.#refill(now);
-      let next = this.#nextSend();
-      if (!next) {
-        return;
-      }
+      // Checked before a send is chosen: choosing one moves the rotation on,
+      // so choosing a send that then has to wait would cost its realm a turn.
       if (this.#tokens < 1) {
-        // Put it back at the front of its realm's sends; the rotation has
-        // already moved on, so this realm is not favored when the line wakes.
-        next.active.ready!.unshift(next.pending);
         this.#wakeAt(
           now + Math.ceil(((1 - this.#tokens) * 1000) / this.#sendsPerSecond),
         );
+        return;
+      }
+      let next = this.#nextSend();
+      if (!next) {
         return;
       }
       this.#tokens--;
@@ -333,7 +347,7 @@ export class RealmEventDispatcher {
     let elapsed = now - this.#tokensAt;
     if (elapsed > 0) {
       this.#tokens = Math.min(
-        this.#sendsPerSecond,
+        this.#bucketSize,
         this.#tokens + (elapsed * this.#sendsPerSecond) / 1000,
       );
       this.#tokensAt = now;
@@ -425,19 +439,14 @@ export class RealmEventDispatcher {
           this.#sends++;
           this.#sendMsTotal += ms;
           this.#sendMsMax = Math.max(this.#sendMsMax, ms);
-          this.#backoffMs = 0;
+          if (startedAt > this.#pausedAt) {
+            this.#backoffMs = 0;
+          }
         },
         async (error: unknown) => {
           if (isBackPressure(error)) {
             this.#backPressure++;
-            this.#backoffMs = Math.min(
-              this.#maxBackoffMs,
-              this.#backoffMs ? this.#backoffMs * 2 : this.#initialBackoffMs,
-            );
-            this.#pausedUntil = Math.max(
-              this.#pausedUntil,
-              this.#now() + this.#backoffMs,
-            );
+            this.#pauseFor(error, startedAt);
             if (pending.attempts < this.#maxAttempts) {
               active.ready!.push(pending);
               return;
@@ -463,6 +472,25 @@ export class RealmEventDispatcher {
         }
         this.#pump();
       });
+  }
+
+  #pauseFor(error: unknown, startedAt: number) {
+    let now = this.#now();
+    if (startedAt > this.#pausedAt) {
+      this.#backoffMs = Math.min(
+        this.#maxBackoffMs,
+        this.#backoffMs ? this.#backoffMs * 2 : this.#initialBackoffMs,
+      );
+      this.#pausedAt = now;
+    }
+    let retryAfterMs = (error as { retryAfterMs?: unknown }).retryAfterMs;
+    let pauseMs = Math.max(
+      this.#backoffMs,
+      typeof retryAfterMs === 'number' && Number.isFinite(retryAfterMs)
+        ? retryAfterMs
+        : 0,
+    );
+    this.#pausedUntil = Math.max(this.#pausedUntil, now + pauseMs);
   }
 
   #finishIfDone(line: Line) {
@@ -542,6 +570,19 @@ export function coalesce(
     return merged;
   }
   return undefined;
+}
+
+// A completion is the event that ends an indexing pass. A subscriber that
+// misses one keeps showing the realm as indexing and keeps the cards the pass
+// changed as they were, until a later completion arrives. Losing any other
+// event costs less: an initiation is followed by its completion, an `update`'s
+// paths are re-read on the next directory listing, and `prerender_html` is
+// followed by the next pass's completion.
+function isCompletion(event: RealmEventContent): boolean {
+  return (
+    event.eventName === 'index' &&
+    (event.indexType === 'incremental' || event.indexType === 'full')
+  );
 }
 
 function union(

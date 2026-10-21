@@ -482,7 +482,7 @@
           "title": "Realm Server Realm Event Backlog",
           "condition": "B",
           "annotations": {
-            "summary": "A realm-server process's realm event queue held an event for more than 60s before it started sending, at every 1-minute sample for 5 minutes. Sourced from realmEventQueueAgeMs on the periodic health line: the wait of the oldest queued event, which a queue that drains keeps near zero however deep a burst is. A held backlog means realm events (index, update) reach browsers late, so cards and searches look stale. Read realmEventBackPressure on the same line: nonzero means synapse is overloaded and the queue is pacing itself to it, so look at synapse CPU and what is writing in bulk; zero means the queue is at its configured send rate (REALM_EVENT_SENDS_PER_SECOND, REALM_EVENT_MAX_SENDS_IN_FLIGHT). realmEventsDropped counts events discarded once the queue reached REALM_EVENT_MAX_QUEUED_BYTES."
+            "summary": "A realm-server process's realm event queue held an event for more than 60s before it started sending in every 1-minute bin of the last 5 minutes (the rule reduces the window with min, so one bin under the threshold keeps it quiet). Sourced from realmEventQueueAgeMs on the periodic health line: the wait of the oldest queued event, which a queue that drains keeps near zero however deep a burst is. A held backlog means realm events (index, update) reach browsers late, so cards and searches look stale. Read realmEventBackPressure on the same line: nonzero means synapse is overloaded and the queue is pacing itself to it, so look at synapse CPU and what is writing in bulk; zero means the queue is at its configured send rate (REALM_EVENT_SENDS_PER_SECOND, REALM_EVENT_MAX_SENDS_IN_FLIGHT). realmEventsDropped counts events discarded once the queue reached REALM_EVENT_MAX_QUEUED_BYTES."
           },
           "data": [
             {
@@ -541,7 +541,7 @@
                 "expression": "A",
                 "intervalMs": 1000,
                 "maxDataPoints": 43200,
-                "reducer": "max",
+                "reducer": "min",
                 "refId": "C",
                 "type": "reduce"
               }
@@ -589,7 +589,7 @@
           ],
           "noDataState": "OK",
           "execErrState": "Alerting",
-          "for": "5m",
+          "for": "0s",
           "isPaused": false,
           "notification_settings": null
         },

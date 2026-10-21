@@ -94,6 +94,10 @@ export class NodeAdapter implements RealmAdapter {
   private realmDir: string;
   private enableFileWatcher?: boolean;
   private dispatcher: RealmEventDispatcher;
+  // Set when the realm's last room lookup found no session rooms. The lookup
+  // waits and retries only when this is clear, so a realm nobody has open
+  // pays the wait once rather than on every queued event.
+  private lastLookupFoundNoRooms = false;
 
   constructor(
     realmDir: string,
@@ -486,13 +490,23 @@ export class NodeAdapter implements RealmAdapter {
       return [];
     }
 
-    let dmRooms = await this.waitForSessionRooms(dbAdapter, realmUrl);
+    let dmRooms = await this.waitForSessionRooms(
+      dbAdapter,
+      realmUrl,
+      this.lastLookupFoundNoRooms ? 0 : undefined,
+    );
+    this.lastLookupFoundNoRooms = Object.keys(dmRooms).length === 0;
 
     realmEventsLog.debug('Sending to dm rooms', Object.values(dmRooms));
 
     return Object.entries(dmRooms).map(([userId, roomId]) => ({
       roomId,
       send: async (txnId: string) => {
+        // A send can start while a revoked session is being replaced, when
+        // the client holds no token; wait for the new one rather than fail.
+        if (!matrixClient.isLoggedIn()) {
+          await matrixClient.login();
+        }
         await matrixClient.sendEvent(
           roomId,
           APP_BOXEL_REALM_EVENT_TYPE,

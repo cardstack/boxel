@@ -58,6 +58,7 @@ module(basename(import.meta.filename), function (hooks) {
     let matrixClient = {
       login: async () => undefined,
       getUserId: () => '@realm_server:localhost',
+      isLoggedIn: () => true,
       nextTxnId: () => 'txn-1',
       sendEvent: async () => {
         sendEventCalls++;
@@ -93,6 +94,7 @@ module(basename(import.meta.filename), function (hooks) {
     let matrixClient = {
       login: async () => undefined,
       getUserId: () => '@realm_server:localhost',
+      isLoggedIn: () => true,
       nextTxnId: () => 'txn-1',
       sendEvent: async () => {
         throw new Error(
@@ -132,6 +134,7 @@ module(basename(import.meta.filename), function (hooks) {
     let matrixClient = {
       login: async () => undefined,
       getUserId: () => '@realm_server:localhost',
+      isLoggedIn: () => true,
       nextTxnId: () => 'txn-1',
       sendEvent: async () => {
         failCleanup = true;
@@ -160,6 +163,7 @@ module(basename(import.meta.filename), function (hooks) {
     let matrixClient = {
       login: async () => undefined,
       getUserId: () => '@realm_server:localhost',
+      isLoggedIn: () => true,
       nextTxnId: () => `txn-${txnIds.length}`,
       sendEvent: async (
         _roomId: string,

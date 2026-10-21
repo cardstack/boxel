@@ -383,6 +383,130 @@ module(basename(import.meta.filename), function () {
     assert.strictEqual(h.dispatcher.takeStats().queuedEvents, 0);
   });
 
+  test('keeps realms taking turns while the rate limit holds sends back', async function (assert) {
+    let h = harness({ sendsPerSecond: 100, maxInFlight: 2 });
+    h.releaseAll();
+    let rooms = (realm: string) =>
+      Array.from({ length: 80 }, (_, i) => `!${realm}${i}`);
+    let realms = [REALM_A, REALM_B, 'http://127.0.0.1:4444/c/'];
+    await Promise.all(
+      realms.map((realm, i) =>
+        h.broadcast(realm, incremental(realm, 'card'), rooms(`${i}-`)),
+      ),
+    );
+    // The first second's worth of sends goes out as a burst; the ones after
+    // it are paced, which is where a realm could lose its turn.
+    let paced = h.started.slice(100, 160);
+    for (let realm of realms) {
+      let count = paced.filter((s) => s.realmURL === realm).length;
+      let fair = count >= 18 && count <= 22;
+      assert.true(fair, `${realm} got ${count} of 60 paced sends`);
+    }
+  });
+
+  test('sends that were in flight when synapse became overloaded add up to one pause, not one doubling each', async function (assert) {
+    let gate = deferred();
+    let attempts = new Map<string, number>();
+    let h = harness({ maxInFlight: 4, initialBackoffMs: 50 });
+    let startedAt = Date.now();
+    let delivered = h.broadcast(
+      REALM_A,
+      incremental(REALM_A, 'card'),
+      ['!r1', '!r2', '!r3', '!r4'],
+      async ({ roomId }) => {
+        let n = (attempts.get(roomId) ?? 0) + 1;
+        attempts.set(roomId, n);
+        if (n === 1) {
+          await gate.promise;
+          throw new MatrixRequestError('status 503 - non-JSON body', 503);
+        }
+      },
+    );
+    await h.settle();
+    gate.resolve();
+    await delivered;
+    let elapsed = Date.now() - startedAt;
+    let pausedOnce = elapsed >= 45 && elapsed < 300;
+    assert.true(
+      pausedOnce,
+      `paused once for the initial backoff (${elapsed}ms), not 50+100+200+400`,
+    );
+    assert.strictEqual(h.dispatcher.takeStats().backPressure, 4);
+  });
+
+  test('waits at least as long as a rate-limit answer asks', async function (assert) {
+    let attempts = 0;
+    let h = harness({ initialBackoffMs: 1 });
+    let startedAt = Date.now();
+    await h.broadcast(
+      REALM_A,
+      incremental(REALM_A, 'card'),
+      ['!r1'],
+      async () => {
+        attempts++;
+        if (attempts === 1) {
+          throw new MatrixRequestError(
+            'status 429 - {"errcode":"M_LIMIT_EXCEEDED"}',
+            429,
+            200,
+          );
+        }
+      },
+    );
+    assert.strictEqual(attempts, 2);
+    assert.true(
+      Date.now() - startedAt >= 195,
+      'the retry waits out retry_after_ms rather than the shorter backoff',
+    );
+  });
+
+  test('a rate under one send a second still sends', async function (assert) {
+    let h = harness({ sendsPerSecond: 0.5 });
+    h.releaseAll();
+    await h.broadcast(REALM_A, incremental(REALM_A, 'card'));
+    assert.strictEqual(h.started.length, 1);
+  });
+
+  test('past the byte bound, drops an event a subscriber can lose before a completion', async function (assert) {
+    let completion = incremental(REALM_A, 'card-0');
+    let update: RealmEventContent = {
+      eventName: 'update',
+      added: ['x'.repeat(200)],
+      realmURL: REALM_A,
+    };
+    let other = incremental(REALM_B, 'card-0');
+    let bytes = (e: RealmEventContent) => Buffer.byteLength(JSON.stringify(e));
+    let h = harness({
+      maxInFlight: 1,
+      maxQueuedBytes: bytes(completion) + bytes(update) + bytes(other),
+    });
+    void h.broadcast(REALM_A, incremental(REALM_A, 'sending'));
+    await h.settle();
+
+    void h.broadcast(REALM_A, completion);
+    void h.broadcast(REALM_A, update);
+    void h.broadcast(REALM_B, other);
+    void h.broadcast(REALM_B, incremental(REALM_B, 'card-1'));
+    assert.strictEqual(h.dispatcher.takeStats().dropped, 1);
+
+    h.releaseAll();
+    await h.dispatcher.idle();
+    let sent = h.started.map((s) => s.event);
+    assert.false(
+      sent.some((e) => e.eventName === 'update'),
+      'the update is dropped',
+    );
+    assert.true(
+      sent.some(
+        (e) =>
+          e.eventName === 'index' &&
+          e.indexType === 'incremental' &&
+          e.invalidations[0] === `${REALM_A}card-0`,
+      ),
+      'the completion queued before it is delivered',
+    );
+  });
+
   module('isBackPressure', function () {
     test('treats overload and unreachable answers as back-pressure, and nothing else', function (assert) {
       for (let status of [429, 502, 503, 504]) {

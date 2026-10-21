@@ -34,12 +34,17 @@ export const SERVER_MATRIX_DEVICE_ID = 'boxel-server';
 // A homeserver request that came back with a non-2xx status. The status is
 // carried as a field so a caller can tell an overloaded or unreachable
 // homeserver (429, 502, 503, 504) from a request the homeserver refused.
+// `retryAfterMs` is how long the homeserver asked the caller to wait before
+// trying again, from a rate-limit answer's `retry_after_ms` or its
+// `Retry-After` header.
 export class MatrixRequestError extends Error {
   readonly status: number;
-  constructor(message: string, status: number) {
+  readonly retryAfterMs: number | undefined;
+  constructor(message: string, status: number, retryAfterMs?: number) {
     super(message);
     this.name = 'MatrixRequestError';
     this.status = status;
+    this.retryAfterMs = retryAfterMs;
   }
 }
 
@@ -371,14 +376,26 @@ export class MatrixClient {
       // text and kept out of the message unless it is JSON.
       let body = await response.text().catch(() => '');
       let detail: string;
+      let retryAfterMs: number | undefined;
       try {
-        detail = JSON.stringify(JSON.parse(body));
+        let json = JSON.parse(body);
+        detail = JSON.stringify(json);
+        if (typeof json?.retry_after_ms === 'number') {
+          retryAfterMs = json.retry_after_ms;
+        }
       } catch {
         detail = `non-JSON body (${body.length} bytes)`;
+      }
+      if (retryAfterMs === undefined) {
+        let seconds = Number(response.headers.get('Retry-After') ?? NaN);
+        if (Number.isFinite(seconds) && seconds >= 0) {
+          retryAfterMs = seconds * 1000;
+        }
       }
       throw new MatrixRequestError(
         `Unable to send room event '${type}' to room ${roomId}: status ${response.status} - ${detail}`,
         response.status,
+        retryAfterMs,
       );
     }
     let json = (await response.json()) as { event_id: string };
