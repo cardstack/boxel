@@ -5236,6 +5236,13 @@ export class Realm {
             existingFile.content,
             url,
             serializedCard,
+          )) &&
+          // As for an upload below: a re-sent card is how a caller recovers a
+          // write whose index pass never landed or errored, so the stored card
+          // is kept only when the index already describes its bytes.
+          (await this.#indexDescribesFile(
+            url,
+            computeContentHash(existingFile.content),
           ))
         ) {
           // A re-serialized card doesn't byte-match a file written in another
@@ -5298,6 +5305,12 @@ export class Realm {
           contentHash: unchangedHash,
           contentSize: computeContentSize(content),
         });
+        // The module flush above has already run for this file if it was
+        // owed. Recording the file's kind keeps the next instance from
+        // running it again over no URLs, which would replace the flush's
+        // parked prerender set with an empty one and leave the changed
+        // module's dependents unrendered.
+        lastWriteType = currentWriteType ?? lastWriteType;
         continue;
       }
       // From the open above rather than from a read, which a file whose
@@ -17405,7 +17418,9 @@ export class Realm {
   // Whether a stored card file serializes to `serialized`, the document a
   // write to the same URL is about to store. A stored file that isn't a card
   // document, or that no longer serializes (its definition is gone or
-  // broken), is never the same document.
+  // broken), is never the same document. Nor is one that names a well-known
+  // realm by URL: serialization writes the realm's prefix (ADR 002 §1.4), so
+  // the write is what makes such a card portable, and it goes ahead.
   async #storedCardSerializesTo(
     stored: string,
     url: URL,
@@ -17417,7 +17432,7 @@ export class Realm {
     } catch {
       return false;
     }
-    if (!isCardResource(doc?.data)) {
+    if (!isCardResource(doc?.data) || this.#namesPrefixRealmByURL(doc)) {
       return false;
     }
     try {
@@ -17429,6 +17444,27 @@ export class Realm {
     } catch {
       return false;
     }
+  }
+
+  // Whether any string in `value` is a URL inside a realm this network names
+  // by prefix, such as the base realm's URL or its `https://cardstack.com/base/`
+  // alias.
+  #namesPrefixRealmByURL(value: unknown): boolean {
+    if (typeof value === 'string') {
+      return (
+        /^https?:\/\//.test(value) &&
+        this.#virtualNetwork.unresolveURL(value) !== value
+      );
+    }
+    if (Array.isArray(value)) {
+      return value.some((item) => this.#namesPrefixRealmByURL(item));
+    }
+    if (value && typeof value === 'object') {
+      return Object.values(value).some((item) =>
+        this.#namesPrefixRealmByURL(item),
+      );
+    }
+    return false;
   }
 
   private async fileSerialization(

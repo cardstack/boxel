@@ -995,6 +995,98 @@ module(basename(import.meta.filename), function () {
           }
         });
 
+        test('an instance update rewrites a stored card that names base by URL', async function (assert) {
+          // Both cards are stored as written, in source spelling, and mean the
+          // same document as the update. Only the one that names base by its
+          // URL alias rather than its prefix is rewritten.
+          let sourceFor = (module: string) =>
+            JSON.stringify(
+              {
+                data: {
+                  type: 'card',
+                  attributes: {},
+                  meta: { adoptsFrom: { module, name: 'CardDef' } },
+                },
+              },
+              null,
+              2,
+            ) + '\n';
+          await testRealm.write(
+            'base-by-alias.json',
+            sourceFor('https://cardstack.com/base/card-api'),
+          );
+          await testRealm.write(
+            'base-by-prefix.json',
+            sourceFor('@cardstack/base/card-api'),
+          );
+          let prefixedBefore = await readDiskSnapshot(
+            testRealmAdapter,
+            'base-by-prefix.json',
+          );
+
+          let writtenPaths: string[] = [];
+          let originalWrite = testRealmAdapter.write.bind(testRealmAdapter);
+          testRealmAdapter.write = (async (path, contents) => {
+            writtenPaths.push(path);
+            return originalWrite(path, contents);
+          }) as RealmAdapter['write'];
+
+          try {
+            let response = await request
+              .post('/_atomic')
+              .set('Accept', SupportedMimeType.JSONAPI)
+              .set(
+                'Authorization',
+                `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+              )
+              .send(
+                JSON.stringify({
+                  'atomic:operations': [
+                    'base-by-alias.json',
+                    'base-by-prefix.json',
+                  ].map((href) => ({
+                    op: 'update',
+                    href,
+                    data: {
+                      type: 'card',
+                      attributes: {},
+                      meta: {
+                        adoptsFrom: {
+                          module: '@cardstack/base/card-api',
+                          name: 'CardDef',
+                        },
+                      },
+                    },
+                  })),
+                }),
+              );
+            assert.strictEqual(response.status, 201);
+            assert.deepEqual(
+              writtenPaths,
+              ['base-by-alias.json'],
+              'only the card naming base by URL is rewritten',
+            );
+            let aliasAfter = await readDiskSnapshot(
+              testRealmAdapter,
+              'base-by-alias.json',
+            );
+            assert.strictEqual(
+              aliasAfter.kind === 'present'
+                ? JSON.parse(aliasAfter.content).data.meta.adoptsFrom.module
+                : undefined,
+              '@cardstack/base/card-api',
+              'the rewritten card names base by its prefix',
+            );
+            assert.deepEqual(
+              await readDiskSnapshot(testRealmAdapter, 'base-by-prefix.json'),
+              prefixedBefore,
+              'the prefixed card keeps its bytes and lastModified',
+            );
+          } finally {
+            testRealmAdapter.write = originalWrite;
+          }
+        });
+
         test('waitForIndex write preserves compound field values backed by an unexported FieldDef', async function (assert) {
           let logSource = `
               import {
