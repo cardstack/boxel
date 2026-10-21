@@ -198,7 +198,7 @@ const friendCardSource = `
 // assertion messages so a failure shows what was stored and what was rendered.
 function fileTreeScrollDiagnostics() {
   let panel = document.querySelector('[data-test-togglable-left-panel]');
-  let selected = document.querySelector('[data-test-file].selected');
+  let selected = document.querySelector('[data-test-file-selected]');
   return JSON.stringify({
     storedScrollPositions: window.localStorage.getItem(ScrollPositions),
     panelScrollTop: panel?.scrollTop,
@@ -860,15 +860,19 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     await click('[data-test-file-browser-toggle]');
     await waitFor(endDirectorySelector);
     await waitFor('[data-test-file-tree-mask]', { count: 0 });
+    // waitFor polls without settling, so settle for the selected file's
+    // scroll-into-view and the scroll-position debounce before checking.
+    await settled();
 
     endDirectoryElement = find(endDirectorySelector);
 
     if (!endDirectoryElement) {
       assert.ok(endDirectoryElement, 'end directory should exist');
     } else {
+      let diagnostics = fileTreeScrollDiagnostics();
       assert.notOk(
         await elementIsVisible(endDirectoryElement),
-        `expected previously-stored scroll position to have been forgotten after choosing another file; ${fileTreeScrollDiagnostics()}`,
+        `expected previously-stored scroll position to have been forgotten after choosing another file; ${diagnostics}`,
       );
 
       endDirectoryElement.scrollIntoView({ block: 'center' });
@@ -904,15 +908,19 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     );
     await waitFor('[data-test-realm-name="Test Workspace B"]');
     await waitFor('[data-test-file-tree-mask]', { count: 0 });
+    // waitFor polls without settling, so settle for the selected file's
+    // scroll-into-view and the scroll-position debounce before checking.
+    await settled();
 
     endDirectoryElement = find(endDirectorySelector);
 
     if (!endDirectoryElement) {
       assert.ok(endDirectoryElement, 'end directory should exist');
     } else {
+      let diagnostics = fileTreeScrollDiagnostics();
       assert.notOk(
         await elementIsVisible(endDirectoryElement),
-        `expected previously-stored scroll position to have been forgotten after visiting another realm; ${fileTreeScrollDiagnostics()}`,
+        `expected previously-stored scroll position to have been forgotten after visiting another realm; ${diagnostics}`,
       );
     }
   });

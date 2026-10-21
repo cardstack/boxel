@@ -97,14 +97,23 @@ export default class RestoreScrollPosition extends Modifier<RestoreScrollPositio
         return;
       }
 
-      // The stored position belongs to another key, so it is forgotten rather
-      // than overwritten with the current scrollTop. The current scrollTop can
-      // still be the old key's position: the newly selected item scrolls
-      // itself into view from an IntersectionObserver callback that may land
-      // after this debounce. The new key's position is recorded by the
-      // scrollend listener once something actually scrolls.
-      if (this.scrollPositionService.containerHasScrollPosition(container)) {
-        this.scrollPositionService.forgetScrollPosition(container);
+      // Key differs, old position can be forgotten
+      let shouldReplaceStoredPosition =
+        this.scrollPositionService.containerHasScrollPosition(container);
+
+      if (shouldReplaceStoredPosition) {
+        // The newly selected item scrolls itself into view from an
+        // IntersectionObserver callback. Until that callback runs, scrollTop
+        // is still the old key's position, so the capture waits for it.
+        if (this.scrollPositionService.hasPendingScrollIntoView(container)) {
+          this.debouncedRestoreOrPersistScrollTop();
+          return;
+        }
+        this.scrollPositionService.setScrollPosition(
+          container,
+          key,
+          this.#element.scrollTop,
+        );
       }
     }
   }

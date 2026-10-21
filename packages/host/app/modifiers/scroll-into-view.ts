@@ -32,6 +32,7 @@ export default class ScrollIntoViewModifier extends Modifier<ScrollIntoViewModif
   element!: Element;
   #intersectionObserver?: IntersectionObserver;
   #waiterToken?: unknown;
+  #pendingContainer?: string;
   #lastRunScrolled = false;
 
   constructor(owner: Owner, args: ArgsFor<ScrollIntoViewModifierSignature>) {
@@ -56,7 +57,7 @@ export default class ScrollIntoViewModifier extends Modifier<ScrollIntoViewModif
       !this.scrollPositionService.keyHasScrollPosition(container, key) &&
       !this.#lastRunScrolled
     ) {
-      await this.scrollIfNotVisible();
+      await this.scrollIfNotVisible(container);
       this.#lastRunScrolled = true;
     } else {
       this.#lastRunScrolled = false;
@@ -71,9 +72,13 @@ export default class ScrollIntoViewModifier extends Modifier<ScrollIntoViewModif
       waiter.endAsync(this.#waiterToken);
       this.#waiterToken = undefined;
     }
+    if (this.#pendingContainer) {
+      this.scrollPositionService.endScrollIntoView(this.#pendingContainer);
+      this.#pendingContainer = undefined;
+    }
   }
 
-  private async scrollIfNotVisible() {
+  private async scrollIfNotVisible(container: string) {
     let element = this.element;
 
     return new Promise((resolve) => {
@@ -93,6 +98,8 @@ export default class ScrollIntoViewModifier extends Modifier<ScrollIntoViewModif
       });
       this.#intersectionObserver = intersectionObserver;
       this.#waiterToken = waiter.beginAsync();
+      this.#pendingContainer = container;
+      this.scrollPositionService.beginScrollIntoView(container);
 
       intersectionObserver.observe(element);
     });
