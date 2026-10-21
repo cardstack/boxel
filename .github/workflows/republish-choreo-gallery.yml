@@ -11,6 +11,9 @@ name: Republish the Choreo gallery
 #
 # It signs in as choreo_gallery_writer, which can write the realm but doesn't
 # own it, and publishes through packages/choreo-gallery/scripts/republish.sh.
+# The writer's password is read through the boxel-choreo-republish role
+# (configs/boxel-choreo-republish in cardstack/infra), which trusts only this
+# repository's main branch, so a run on any other ref fails to assume it.
 # See "Where it's served" in packages/choreo-gallery/README.md.
 
 on:
@@ -47,7 +50,7 @@ jobs:
           case "${{ inputs.environment }}" in
             production)
               {
-                echo "AWS_ROLE_ARN=arn:aws:iam::120317779495:role/github"
+                echo "AWS_ROLE_ARN=arn:aws:iam::120317779495:role/boxel-choreo-republish"
                 echo "SSM_PREFIX=/production/boxel"
                 echo "WRITER=@choreo_gallery_writer:boxel.ai"
                 echo "SOURCE_REALM_URL=https://app.boxel.ai/choreo-gallery/"
@@ -56,7 +59,7 @@ jobs:
               ;;
             staging)
               {
-                echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/github"
+                echo "AWS_ROLE_ARN=arn:aws:iam::680542703984:role/boxel-choreo-republish"
                 echo "SSM_PREFIX=/staging/boxel"
                 echo "WRITER=@choreo_gallery_writer:stack.cards"
                 echo "SOURCE_REALM_URL=https://realms-staging.stack.cards/choreo-gallery/"
@@ -94,7 +97,7 @@ jobs:
           if ! BOXEL_PASSWORD=$(aws ssm get-parameter \
             --name "$SSM_PREFIX/choreo_gallery_writer_pw" --with-decryption \
             --query Parameter.Value --output text); then
-            echo "::error title=Choreo gallery not republished::Couldn't read $SSM_PREFIX/choreo_gallery_writer_pw. It holds choreo_gallery_writer's password, and the $AWS_ROLE_ARN role needs ssm:GetParameter on it."
+            echo "::error title=Choreo gallery not republished::Couldn't read $SSM_PREFIX/choreo_gallery_writer_pw. It holds choreo_gallery_writer's password, and the $AWS_ROLE_ARN role (configs/boxel-choreo-republish in cardstack/infra) needs ssm:GetParameter on it."
             exit 1
           fi
           echo "::add-mask::$BOXEL_PASSWORD"
