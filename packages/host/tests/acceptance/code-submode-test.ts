@@ -2403,6 +2403,52 @@ module('Acceptance | code submode tests', function (_hooks) {
       );
     });
 
+    test('monaco editor shows a change made just after the file opens', async function (assert) {
+      // we only want to change this for this particular test so we emulate what the non-test env sees
+      monacoService.serverEchoDebounceMs = 5000;
+
+      try {
+        await visitOperatorMode({
+          submode: 'code',
+          codePath: `${testRealmURL}Person/fadhlan.json`,
+        });
+        await waitUntil(() => getMonacoContent().includes('Fadhlan'), {
+          timeout: 5_000,
+        });
+
+        await realm.write(
+          'Person/fadhlan.json',
+          JSON.stringify({
+            data: {
+              type: 'card',
+              attributes: {
+                firstName: 'FadhlanYYY',
+              },
+              meta: {
+                adoptsFrom: {
+                  module: rri('../person'),
+                  name: 'Person',
+                },
+              },
+            },
+          } as LooseSingleCardDocument),
+        );
+
+        // No one has edited in monaco, so this is not an echo of a local save
+        // and must be shown inside the echo window.
+        await waitUntil(() => getMonacoContent().includes('FadhlanYYY'), {
+          timeout: 4_000,
+        });
+        assert.true(
+          getMonacoContent().includes('FadhlanYYY'),
+          'monaco shows the external change',
+        );
+      } finally {
+        // set this back correctly regardless of test outcome
+        monacoService.serverEchoDebounceMs = 0;
+      }
+    });
+
     test('monaco editor live updates when index changes', async function (assert) {
       await visitOperatorMode({
         stacks: [
