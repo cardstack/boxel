@@ -228,6 +228,12 @@ export default class HostModeContent extends Component<Signature> {
         max-width: calc(100% - 2 * var(--boxel-sp-lg));
       }
 
+      /* When narrow, the primary card fits the screen instead of keeping its
+         desktop width and being clipped. */
+      .host-mode-content.is-narrow {
+        --host-mode-card-width: 100%;
+      }
+
       /* When narrow, only the top stack card shows, so there is no trail to
          navigate; its close button steps back. */
       .host-mode-content.is-narrow .breadcrumb-container {
