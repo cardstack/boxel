@@ -5,11 +5,16 @@ scope:
   - packages/secure-origin/**
   - packages/realm-server/lib/secure-origin.ts
   - packages/realm-server/realm-server.Dockerfile
+  - packages/realm-server/scripts/start-staging.sh
+  - packages/realm-server/scripts/start-production.sh
   - packages/realm-server/tests/helpers/index.ts
+  - packages/realm-server/tests/scripts/run-qunit-with-test-pg.sh
+  - packages/realm-server/tests/secure-origin-policy-test.ts
+  - packages/boxel-cli/tests/scripts/run-integration-with-test-pg.sh
   - packages/matrix/support/isolated-realm-server.ts
+  - packages/matrix/tests/global.setup.ts
   - mise-tasks/services/realm-server
   - mise-tasks/test-services/**
-  - .github/workflows/*secure-origin*
   - packages/host/app/components/matrix/auth-*.gts
   - packages/host/app/components/matrix/login.gts
   - packages/host/app/components/matrix/register-user.gts
@@ -118,6 +123,14 @@ The host SHOULD render its own sign-in, registration and password-reset
 screens from the package's presentational components, so that one
 implementation serves both origins. The host MAY import from the package. The
 package MUST NOT import from the host (§1.3).
+
+### 1.10. TypeScript
+
+The package's code SHOULD be TypeScript: components in `.gts` files, and
+other modules, scripts, tests and build configuration in `.ts` files. Its
+TypeScript MUST use only erasable syntax, so that Node runs the package's
+scripts and tests without a compile step. The package's build compiles its
+`.ts` and `.gts` files. The package's lint MUST type-check them.
 
 ## 2. Rationale
 
