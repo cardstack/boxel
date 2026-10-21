@@ -2007,6 +2007,39 @@ module(basename(import.meta.filename), function () {
           );
         });
 
+        test('stores a URL-form module in a prefix-registered realm by its prefix', async function (assert) {
+          let response = await request
+            .post('/')
+            .send({
+              data: {
+                type: 'card',
+                attributes: {},
+                meta: {
+                  adoptsFrom: {
+                    module: 'https://cardstack.com/base/card-api',
+                    name: 'CardDef',
+                  },
+                },
+              },
+            })
+            .set('Accept', 'application/vnd.card+json');
+
+          assert.strictEqual(
+            response.status,
+            201,
+            `HTTP 201: ${response.text}`,
+          );
+          let id = new URL(response.body.data.id).pathname.split('/').pop()!;
+          let card = readJSONSync(
+            join(dir.name, 'realm_server_1', 'test', 'CardDef', `${id}.json`),
+          );
+          assert.deepEqual(
+            card.data.meta.adoptsFrom,
+            { module: '@cardstack/base/card-api', name: 'CardDef' },
+            'the module is stored by the base realm prefix',
+          );
+        });
+
         test("the incremental index event echoes the write's X-Boxel-Client-Request-Id", async function (assert) {
           // The writing client recognizes its own event by this id and skips
           // reloading over its own fresher local edits, so the echo is part of

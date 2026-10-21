@@ -305,8 +305,6 @@ export function createServeIndex(deps: ServeIndexDeps): ServeIndexHandlers {
                 rewriteRealmURL(servedAt),
               ]),
             ),
-            defaultSystemCardId: rewriteRealmURL(config.defaultSystemCardId),
-            defaultFieldSpecId: rewriteRealmURL(config.defaultFieldSpecId),
             cardSizeLimitBytes,
             fileSizeLimitBytes,
             audioSizeLimitBytes,

@@ -1486,12 +1486,12 @@ export class TestCard extends CardDef {
         assert.strictEqual(
           content,
           `
-import { Animal } from '${testRealmURL2}animal';
+import { Animal } from '${testPrefixRealmURL2}animal';
 import { Component } from '@cardstack/base/card-api';
 export class TestCard extends Animal {
   static displayName = "Test Card";
 }`.trim(),
-          'The source uses the resolved absolute module URL',
+          "The source imports the parent by its realm's registered prefix",
         );
         assert.strictEqual(
           url.href,

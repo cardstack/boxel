@@ -6,21 +6,26 @@ import type { LooseSingleCardDocument } from '@cardstack/runtime-common';
 import type { Listing } from '@cardstack/runtime-common';
 
 import HostBaseTool from '../lib/host-base-tool';
+import { canonicalRealmIdentifier } from '../lib/realm-utils';
 
 import UseAiAssistantTool from './ai-assistant';
 import SendBotTriggerEventTool from './bot-requests/send-bot-trigger-event';
 import OpenInInteractModeTool from './open-in-interact-mode';
 
 import type MatrixService from '../services/matrix-service';
+import type NetworkService from '../services/network';
 import type RealmService from '../services/realm';
 import type RealmServerService from '../services/realm-server';
 import type StoreService from '../services/store';
 import type * as BaseToolModule from '@cardstack/base/command';
 
+const CATALOG_REALM = '@cardstack/catalog/';
+
 export default class CreateSubmissionWorkflowTool extends HostBaseTool<
   typeof BaseToolModule.CreateListingPRRequestInput
 > {
   @service declare private matrixService: MatrixService;
+  @service declare private network: NetworkService;
   @service declare private store: StoreService;
   @service declare private realm: RealmService;
   @service declare private realmServer: RealmServerService;
@@ -110,7 +115,7 @@ export default class CreateSubmissionWorkflowTool extends HostBaseTool<
           meta: {
             adoptsFrom: {
               module: rri(
-                `${catalogRealm}submission-workflow-card/submission-workflow-card`,
+                `${CATALOG_REALM}submission-workflow-card/submission-workflow-card`,
               ),
               name: 'SubmissionWorkflowCard',
             },
@@ -165,8 +170,10 @@ export default class CreateSubmissionWorkflowTool extends HostBaseTool<
   }
 
   private get catalogRealm(): string | undefined {
-    return this.realmServer.catalogRealmIdentifiers.find((realm) =>
-      realm.endsWith('/catalog/'),
+    return this.realmServer.catalogRealmIdentifiers.find(
+      (realm) =>
+        canonicalRealmIdentifier(this.network.virtualNetwork, realm) ===
+        CATALOG_REALM,
     );
   }
 }
