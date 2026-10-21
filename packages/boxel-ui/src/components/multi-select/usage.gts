@@ -3,146 +3,12 @@ import { action } from '@ember/object';
 import Component from '@glimmer/component';
 import { tracked } from '@glimmer/tracking';
 import FreestyleUsage from 'ember-freestyle/components/freestyle/usage';
-import {
-  type CSSVariableInfo,
-  cssVariable,
-} from 'ember-freestyle/decorators/css-variable';
-import type { Select } from 'ember-power-select/types';
-import { includes } from 'lodash-es';
-import pluralize from 'pluralize';
 
-import cn from '../../helpers/cn.ts';
-import cssVar from '../../helpers/css-var.ts';
-import CheckMark from '../../icons/check-mark.gts';
 import BoxelField from '../field-container/index.gts';
-import BoxelMultiSelect, { BoxelMultiSelectBasic } from './index.gts';
-import BoxelSelectedItem from './selected-item.gts';
-
-export function getPlural(s: string, count?: number) {
-  return pluralize(s, count);
-}
+import { BoxelMultiSelect } from './index.gts';
 
 interface Country {
   name: string;
-}
-
-interface AssigneeOption {
-  avatar: string;
-  issues: number;
-  name: string;
-}
-
-interface CheckBoxArgs {
-  Args: {
-    isSelected: boolean;
-    option: AssigneeOption;
-  };
-  Element: Element;
-}
-
-// eslint-disable-next-line ember/no-empty-glimmer-component-classes
-class CheckboxIndicator extends Component<CheckBoxArgs> {
-  <template>
-    <div class='checkbox-indicator'>
-      <span class={{cn 'check-icon' check-icon--selected=@isSelected}}>
-        <CheckMark width='12' height='12' />
-      </span>
-    </div>
-    <style scoped>
-      .checkbox-indicator {
-        width: 16px;
-        height: 16px;
-        border: 1px solid var(--boxel-500);
-        border-radius: 3px;
-        margin-right: var(--boxel-sp-xs);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-      }
-      .checkbox-indicator:hover,
-      .checkbox-indicator:focus {
-        box-shadow: 0 0 0 2px var(--boxel-dark-teal);
-      }
-      .check-icon {
-        --icon-color: var(--boxel-dark-teal);
-        visibility: collapse;
-        display: contents;
-      }
-      .check-icon--selected {
-        visibility: visible;
-      }
-    </style>
-  </template>
-}
-
-interface AssigneePillArgs {
-  Args: {
-    isSelected: boolean;
-    option: AssigneeOption;
-  };
-  Element: Element;
-}
-
-//Custom component for rendering dropdown items with enhanced design and functionality
-// eslint-disable-next-line ember/no-empty-glimmer-component-classes
-class AssigneePill extends Component<AssigneePillArgs> {
-  <template>
-    <span class='assignee-pill'>
-      <div class='assignee-pill-content'>
-        <CheckboxIndicator @isSelected={{@isSelected}} @option={{@option}} />
-        <div class='assignee-avatar'>{{@option.avatar}}</div>
-        <div class='assignee-name'>{{@option.name}}</div>
-      </div>
-      <div class='assignee-issues'>{{@option.issues}}
-        {{getPlural 'issue' @option.issues}}</div>
-    </span>
-
-    <style scoped>
-      .assignee-pill {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        font-size: var(--boxel-font-size-sm);
-        cursor: pointer;
-        width: 100%;
-      }
-      .assignee-pill.selected {
-        background-color: var(--boxel-highlight);
-      }
-      .assignee-pill-content {
-        display: flex;
-        align-items: center;
-        gap: var(--boxel-sp-4xs);
-      }
-      .assignee-avatar {
-        width: var(--boxel-sp-sm);
-        height: var(--boxel-sp-sm);
-        border-radius: 50%;
-        background-color: var(--avatar-bg-color, var(--boxel-light));
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        margin-right: var(--boxel-sp-xs);
-        font-size: var(--boxel-font-size-xs);
-      }
-      .assignee-name {
-        flex-grow: 1;
-      }
-      .assignee-issues {
-        color: var(--boxel-dark-teal);
-        font-size: var(--boxel-font-size-xs);
-      }
-    </style>
-  </template>
-}
-
-export class SelectedCountry extends BoxelSelectedItem<Country> {
-  <template>
-    <div class='selected-country'>
-      <CheckMark width='12' height='12' />
-      {{@selected.name}}
-    </div>
-  </template>
 }
 
 export default class BoxelMultiSelectUsage extends Component {
@@ -157,267 +23,200 @@ export default class BoxelMultiSelectUsage extends Component {
   ] as Array<Country>;
 
   @tracked selectedItems: Country[] = [];
-  @tracked placeholder = 'Select Items';
-  @tracked verticalPosition = 'auto' as const;
-
-  @tracked renderInPlace = false;
+  @tracked placeholder = 'Select countries';
   @tracked disabled = false;
+  @tracked renderInPlace = false;
   @tracked matchTriggerWidth = true;
+  @tracked searchEnabled = true;
+  @tracked closeOnSelect = false;
 
-  @tracked selectedAssignees: AssigneeOption[] = [];
-  @tracked hasCheckbox = false;
-  @tracked useCustomTriggerComponent = false;
-
-  @tracked selectedFilter: string | undefined = undefined;
-  @tracked publicAPI: Select | undefined = undefined;
-
-  @cssVariable({ cssClassName: 'boxel-multi-select-usage-container' })
-  declare boxelSelectedPillBackgroundColor: CSSVariableInfo;
-
-  @cssVariable({ cssClassName: 'boxel-multi-select-usage-container' })
-  declare boxelMultiSelectPillColor: CSSVariableInfo;
-
-  @tracked assignees = [
-    { name: 'No assignee', issues: 28, avatar: '🚫' },
-    { name: 'Current user', issues: 1, avatar: '👤' },
-    { name: 'tintinthong', issues: 1, avatar: '🧑' },
-    { name: 'lucas.law', issues: 1, avatar: '🧑' },
-    { name: 'lukemelia', issues: 2, avatar: '🧑' },
-    { name: 'matic', issues: 2, avatar: '👨' },
-  ] as Array<AssigneeOption>;
+  get displayItems() {
+    return this.items.map((item) => item.name);
+  }
 
   @action onSelectItems(items: Country[]): void {
     this.selectedItems = items;
   }
 
-  @action onSelectAssignees(assignees: AssigneeOption[]) {
-    this.selectedAssignees = assignees;
-  }
-
-  @action updateFilter(o: string | undefined): void {
-    this.selectedFilter = o;
-    this.openDropdown();
-  }
-
-  //We need this to open the dropdown from outside the component
-  @action registerAPI(select: Select): void {
-    this.publicAPI = select; //note: we must link select by reference
-  }
-
-  @action openDropdown(): void {
-    this.publicAPI?.actions.open();
-  }
-
-  @action onClose(): boolean | undefined {
-    this.selectedFilter = undefined;
-    return true;
-  }
-
   <template>
-    <div
-      class='boxel-multi-select-usage-container'
-      style={{cssVar
-        boxel-selected-pill-background-color=this.boxelSelectedPillBackgroundColor.value
-        boxel-multi-select-pill-color=this.boxelMultiSelectPillColor.value
-      }}
-    >
-      <FreestyleUsage
-        @name='Multi Select'
-        @description='Dropdown control that lets the user pick multiple values from a list — shows the selected items as inline chips and emits a change event with the full selection.'
-      >
-        <:description>
-          <p>
-            Boxel Multi Select is a component that enables the selection of
-            multiple items from a customizable dropdown list. It is a wrapper
-            around the PowerSelect component from the ember-power-select
-            library, offering off-the-shelf functionality and design.
-          </p>
-          <p>Key features include:</p>
-          <ol>
-            <li>Customizable search functionality</li>
-            <li>Styled trigger with a summary of selected items</li>
-            <li>Custom rendering of selected items</li>
-            <li>Option to keep the dropdown open after selection</li>
-            <li>"X more items" pill for compact display of numerous selections</li>
-            <li>Function to Clear All selected items</li>
-          </ol>
-          <p>This component works out-of-the-box with BoxelDropdown and Select
-            components within this design library</p>
-        </:description>
-        <:example>
+    <FreestyleUsage @name='Multi Select'>
+      <:description>
+        <p>
+          Multi Select lets users pick several options from a list. It wraps
+          ember-power-select with
+          <code>@multiple</code>, renders each option through its block, and
+          accepts power-select's own
+          <code>selectedItemComponent</code>,
+          <code>triggerComponent</code>,
+          <code>beforeOptionsComponent</code>
+          and
+          <code>afterOptionsComponent</code>
+          to replace the default chrome.
+        </p>
+      </:description>
+      <:example>
+        <BoxelMultiSelect
+          @options={{this.items}}
+          @selected={{this.selectedItems}}
+          @onChange={{this.onSelectItems}}
+          @placeholder={{this.placeholder}}
+          @disabled={{this.disabled}}
+          @renderInPlace={{this.renderInPlace}}
+          @matchTriggerWidth={{this.matchTriggerWidth}}
+          @searchEnabled={{this.searchEnabled}}
+          @searchField='name'
+          @closeOnSelect={{this.closeOnSelect}}
+          @ariaLabel={{this.placeholder}}
+          as |option|
+        >
+          {{option.name}}
+        </BoxelMultiSelect>
+      </:example>
+      <:api as |Args|>
+        <Args.Array
+          @name='options'
+          @description='Items listed in the dropdown'
+          @required={{true}}
+          @items={{this.displayItems}}
+        />
+        <Args.Array
+          @name='selected'
+          @description='Currently selected items'
+          @required={{true}}
+        />
+        <Args.Action
+          @name='onChange'
+          @description='Called with the new array of selected items'
+          @required={{true}}
+        />
+        <Args.Yield
+          @name='option'
+          @description='Option to render in the dropdown'
+        />
+        <Args.String
+          @name='placeholder'
+          @description='Shown in the trigger when nothing is selected'
+          @value={{this.placeholder}}
+          @onInput={{fn (mut this.placeholder)}}
+        />
+        <Args.Bool
+          @name='disabled'
+          @description='Prevents interaction'
+          @defaultValue={{false}}
+          @value={{this.disabled}}
+          @onInput={{fn (mut this.disabled)}}
+        />
+        <Args.Bool
+          @name='renderInPlace'
+          @description='Renders the dropdown next to the trigger instead of in the body'
+          @defaultValue={{false}}
+          @value={{this.renderInPlace}}
+          @onInput={{fn (mut this.renderInPlace)}}
+        />
+        <Args.Bool
+          @name='matchTriggerWidth'
+          @description='Makes the dropdown as wide as the trigger'
+          @defaultValue={{true}}
+          @value={{this.matchTriggerWidth}}
+          @onInput={{fn (mut this.matchTriggerWidth)}}
+        />
+        <Args.Bool
+          @name='searchEnabled'
+          @description='Shows a search box above the options'
+          @defaultValue={{false}}
+          @value={{this.searchEnabled}}
+          @onInput={{fn (mut this.searchEnabled)}}
+        />
+        <Args.String
+          @name='searchField'
+          @description='Option property the search matches against'
+        />
+        <Args.Bool
+          @name='closeOnSelect'
+          @description='Closes the dropdown after each selection'
+          @defaultValue={{true}}
+          @value={{this.closeOnSelect}}
+          @onInput={{fn (mut this.closeOnSelect)}}
+        />
+        <Args.String
+          @name='ariaLabel'
+          @description='Accessible name for the trigger'
+          @value={{this.placeholder}}
+        />
+        <Args.String
+          @name='eventType'
+          @description="Trigger event that opens the dropdown: 'mousedown' or 'click'"
+        />
+        <Args.String
+          @name='dropdownClass'
+          @description='Extra class for the dropdown'
+        />
+        <Args.String
+          @name='destination'
+          @description='Id of the element the dropdown renders into'
+        />
+        <Args.Bool
+          @name='initiallyOpened'
+          @description='Opens the dropdown on first render'
+          @defaultValue={{false}}
+        />
+        <Args.Action
+          @name='onOpen'
+          @description='Called when the dropdown opens'
+        />
+        <Args.Action
+          @name='onClose'
+          @description='Called when the dropdown closes'
+        />
+        <Args.Action
+          @name='onBlur'
+          @description='Called when the trigger loses focus'
+        />
+        <Args.Action
+          @name='registerAPI'
+          @description="Called with power-select's public API"
+        />
+        <Args.Object
+          @name='extra'
+          @description='Data passed through to the custom components'
+        />
+        <Args.Component
+          @name='triggerComponent'
+          @description='Replaces the trigger'
+        />
+        <Args.Component
+          @name='selectedItemComponent'
+          @description='Renders each selected item in the trigger'
+        />
+        <Args.Component
+          @name='beforeOptionsComponent'
+          @description="Rendered above the options; defaults to power-select's search box"
+        />
+        <Args.Component
+          @name='afterOptionsComponent'
+          @description='Rendered below the options'
+        />
+      </:api>
+    </FreestyleUsage>
+
+    <FreestyleUsage @name='Usage with FieldContainer'>
+      <:example>
+        <BoxelField @label='Country'>
           <BoxelMultiSelect
             @options={{this.items}}
             @selected={{this.selectedItems}}
             @onChange={{this.onSelectItems}}
-            @placeholder={{this.placeholder}}
-            @disabled={{this.disabled}}
-            @renderInPlace={{this.renderInPlace}}
-            @matchTriggerWidth={{this.matchTriggerWidth}}
-            @searchField='name'
+            @placeholder='Select countries'
             @searchEnabled={{true}}
+            @searchField='name'
             @closeOnSelect={{false}}
             @ariaLabel='Select countries'
             as |option|
           >
             {{option.name}}
           </BoxelMultiSelect>
-
-        </:example>
-        <:api as |Args|>
-          {{! TODO: This is a bug. Args.Array does not display the objects in the UI in ember-freestyle }}
-          <Args.Object
-            @name='options'
-            @description='An array of objects, to be listed on dropdown'
-            @value={{this.items}}
-            @onInput={{fn (mut this.items)}}
-          />
-          <Args.Array
-            @name='selected'
-            @description='Array of selected items'
-            @required={{true}}
-          />
-          <Args.String
-            @name='placeholder'
-            @description='Placeholder for trigger component'
-            @value={{this.placeholder}}
-            @onInput={{fn (mut this.placeholder)}}
-          />
-          <Args.Bool
-            @name='disabled'
-            @defaultValue={{false}}
-            @value={{this.disabled}}
-            @onInput={{fn (mut this.disabled)}}
-            @description='When truthy the component cannot be interacted'
-          />
-          <Args.Bool
-            @name='renderInPlace'
-            @defaultValue={{false}}
-            @value={{this.renderInPlace}}
-            @onInput={{fn (mut this.renderInPlace)}}
-            @description='When passed true, the content will render next to the trigger instead of being placed in the root of the body'
-          />
-          <Args.Bool
-            @name='matchTriggerWidth'
-            @defaultValue={{true}}
-            @value={{this.matchTriggerWidth}}
-            @onInput={{fn (mut this.matchTriggerWidth)}}
-            @description='Allow dropdown width to match trigger width'
-          />
-
-        </:api>
-        <:cssVars as |Css|>
-          <Css.Basic
-            @name='boxel-selected-pill-background-color'
-            @type='background-color'
-            @defaultValue={{this.boxelSelectedPillBackgroundColor.defaults}}
-            @value={{this.boxelSelectedPillBackgroundColor.value}}
-            @onInput={{this.boxelSelectedPillBackgroundColor.update}}
-          />
-          <Css.Basic
-            @name='boxel-multi-select-pill-color'
-            @type='color'
-            @defaultValue={{this.boxelMultiSelectPillColor.defaults}}
-            @value={{this.boxelMultiSelectPillColor.value}}
-            @onInput={{this.boxelMultiSelectPillColor.update}}
-          />
-        </:cssVars>
-      </FreestyleUsage>
-
-      <FreestyleUsage @name='Custom Dropdown Component'>
-        <:example>
-          <BoxelMultiSelect
-            @options={{this.assignees}}
-            @selected={{this.selectedAssignees}}
-            @onChange={{this.onSelectAssignees}}
-            @placeholder='Select assignees'
-            @renderInPlace={{this.renderInPlace}}
-            @matchTriggerWidth={{true}}
-            @searchField='name'
-            @searchEnabled={{true}}
-            @closeOnSelect={{false}}
-            @ariaLabel='Select assignees'
-            as |option|
-          >
-            <AssigneePill
-              @option={{option}}
-              @isSelected={{includes this.selectedAssignees option}}
-            />
-          </BoxelMultiSelect>
-        </:example>
-      </FreestyleUsage>
-
-      <FreestyleUsage
-        @name='Custom Selected Item Component (Uses our TriggerComponent)'
-      >
-        <:example>
-          <BoxelMultiSelect
-            @options={{this.assignees}}
-            @selected={{this.selectedAssignees}}
-            @onChange={{this.onSelectAssignees}}
-            @placeholder='Select assignees'
-            @renderInPlace={{this.renderInPlace}}
-            @matchTriggerWidth={{true}}
-            @searchField='name'
-            @searchEnabled={{true}}
-            @closeOnSelect={{false}}
-            @ariaLabel='Select countries'
-            @selectedItemComponent={{component SelectedCountry}}
-            as |option|
-          >
-            {{option.name}}
-          </BoxelMultiSelect>
-        </:example>
-      </FreestyleUsage>
-
-      <FreestyleUsage @name='Boxel Multi Select Basic'>
-        <:example>
-          <BoxelMultiSelectBasic
-            @options={{this.assignees}}
-            @selected={{this.selectedAssignees}}
-            @placeholder='Select assignees'
-            @renderInPlace={{this.renderInPlace}}
-            @matchTriggerWidth={{true}}
-            @closeOnSelect={{false}}
-            @onChange={{this.onSelectAssignees}}
-            @ariaLabel='Select assignees'
-            as |option|
-          >
-            {{option.name}}
-          </BoxelMultiSelectBasic>
-        </:example>
-        <:description>
-          <p>
-            Boxel Multi Select Basic is a basic implementation of our Multi
-            Select component. It is a simpler version of Boxel Multi Select that
-            does not include custom components for the selected items, trigger,
-            beforeOptions, and afterOptions. If you would like to maintain, the
-            default style of ember-power-select but build your own components,
-            you should use this.
-          </p>
-        </:description>
-      </FreestyleUsage>
-      <FreestyleUsage @name='Usage with FieldContainer'>
-        <:example>
-          <BoxelField @label='Country'>
-            <BoxelMultiSelect
-              @options={{this.items}}
-              @selected={{this.selectedItems}}
-              @onChange={{this.onSelectItems}}
-              @placeholder={{this.placeholder}}
-              @disabled={{this.disabled}}
-              @renderInPlace={{this.renderInPlace}}
-              @matchTriggerWidth={{this.matchTriggerWidth}}
-              @searchField='name'
-              @searchEnabled={{true}}
-              @closeOnSelect={{false}}
-              @ariaLabel='Select countries'
-              as |option|
-            >
-              {{option.name}}
-            </BoxelMultiSelect>
-          </BoxelField>
-        </:example>
-      </FreestyleUsage>
-    </div>
+        </BoxelField>
+      </:example>
+    </FreestyleUsage>
   </template>
 }

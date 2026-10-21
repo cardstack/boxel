@@ -296,14 +296,6 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
         --boxel-loading-indicator-size: var(--boxel-icon-xs);
       }
 
-      :deep(
-        .boxel-select__dropdown .ember-power-select-option[aria-current='true']
-      ),
-      :deep(.instances-dropdown-content .ember-power-select-option) {
-        background-color: var(--boxel-light);
-        flex-wrap: nowrap;
-      }
-
       .instance-chooser
         + :deep(
           .ember-basic-dropdown-content-wormhole-origin
@@ -313,15 +305,6 @@ export const OptionsDropdown: TemplateOnlyComponent<OptionsDropdownSignature> =
         --boxel-select-options-list-max-height: 12.25rem;
         border: 1px solid var(--boxel-450);
         border-radius: var(--boxel-border-radius);
-      }
-
-      :deep(.ember-basic-dropdown) {
-        width: 100%;
-      }
-
-      :deep(.ember-power-select-option:hover .card),
-      :deep(.ember-power-select-option:hover .file-item) {
-        background-color: var(--boxel-100);
       }
       .card,
       .field {

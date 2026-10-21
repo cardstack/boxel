@@ -14,7 +14,7 @@ The kit's single-line text control. Every typed value that is not a picker goes 
 
 `@controlId` exists so **Field** and **FormField** can mint an id, put it on their `<label for>`, and hand it down. Input does not generate its own id — labelling is the wrapper's job, and this keeps a single owner for the association.
 
-The non-obvious decision: **Input is a retrofit on boxel-ui's `BoxelInput`, not a raw `<input>`.** BoxelInput carries the machinery — validation-state plumbing, `aria-invalid` / `aria-errormessage` / `aria-describedby` wiring, the error and helper message rows, the "Optional" indicator. Pretui keeps its own unchanged signature on the outside and re-dresses the inside through a **token channel**: the wrapper `<div>` redefines `--background`, `--border`, `--ring`, `--muted-foreground` and a set of `--boxel-*` dimension knobs, and BoxelInput restyles itself. No Pretui CSS reaches into boxel-ui markup, so a boxel-ui upgrade cannot break the dress.
+The non-obvious decision: **Input is a retrofit on boxel-ui's `BoxelInput`, not a raw `<input>`.** BoxelInput carries the machinery — validation-state plumbing, `aria-invalid` / `aria-errormessage` / `aria-describedby` wiring, the error and helper message rows, the "Optional" indicator. Pretui keeps its own unchanged signature on the outside and re-dresses the inside through a **token channel**: the wrapper `<div>` redefines `--background`, `--border` and a set of `--boxel-*` dimension knobs, and BoxelInput restyles itself. No Pretui CSS reaches into boxel-ui markup, so a boxel-ui upgrade cannot break the dress.
 
 Two places the channel cannot reach, handled by a single inline `style`: the UA font on native controls, and variables boxel defines on the element itself. Splatted `...attributes` land on the **inner** `<input>`, so `aria-label`, `autocomplete`, `min`, `max` and friends still work.
 
@@ -36,15 +36,16 @@ Honest gaps:
 - **No accessible name of its own.** An `<Input>` used outside `Field`/`FormField`/`FormField`'s descendants and without an explicit `aria-label` is unlabelled. A placeholder is not a label.
 - `@required` sets the native attribute, which is correct, and suppresses the "Optional" indicator. `@optional` is a purely visual marker with no ARIA meaning — fine, but do not read it as the inverse of `@required`.
 - `@disabled` uses the native attribute, so the control leaves the tab order and its value is not submitted. If you need a read-only-but-focusable field, pass `readonly` through `...attributes` instead.
-- Focus ring is `--ring`, applied by BoxelInput. Verify it against WCAG 2.4.11 in dark mode — the default is `--primary`, which on a `--field` background can be low-contrast.
+- Focus ring is the theme's `--ring`, applied by BoxelInput.
+- Hover, invalid, disabled and focus come from BoxelInput, so they don't yet match Select and Autocomplete: hover takes the full `currentColor` edge, invalid takes `--destructive` rather than `--destructive-ink`, disabled is 0.5 opacity rather than 0.45, and focus is a 1px ring-colored border plus outline rather than a 1.5px ring.
 
 ## Theming
 
-Consumed: `--field` (control face), `--input` (hairline), `--primary` (focus ring, via `--ring`), `--ink-3` (placeholder ink, injected as a locally-narrowed `--muted-foreground`), `--control-h` (28px), `--radius`, `--text-ui-md`, `--text-ui-sm`, `--text-ui-xs`, `--track-ui`.
+Input, **Select** and **Autocomplete** share one field look at rest: a `--field` face with `--foreground` text, an `--input` edge, a `--muted-foreground` placeholder, Button's corner (`calc(var(--radius) - 2px)`), a `--boxel-form-control-height-sm` (1.75rem) height and `--boxel-font-size-xs` text, with the helper and error rows and the Optional label a step below at `--boxel-font-size-2xs`. On touch screens (`pointer: coarse`) the field's text and placeholder are at least 16px (`--boxel-form-control-touch-font-size`), so iOS doesn't zoom into the field on focus.
 
-Forwarded into boxel-ui: `--boxel-form-control-height`, `--boxel-input-height`, `--boxel-form-control-border-radius`, `--boxel-font-size-sm`, `--boxel-font-size-xs`, `--boxel-sp-xs`, `--boxel-sp-sm`.
+Forwarded into boxel-ui: `--boxel-form-control-height`, `--boxel-input-height`, `--boxel-form-control-border-radius`, `--boxel-font-size-sm` (the helper and error rows), `--boxel-sp-xs`, `--boxel-sp-sm`.
 
-A theme must keep `--field` and `--card` visually distinct or inputs vanish into panels; and must not set `--input` equal to `--border` if it wants controls to read as inset rather than as bordered boxes. Note that this component _narrows_ `--muted-foreground` to `--ink-3` inside its wrapper — a theme redefining `--ink-3` is changing placeholder color kit-wide.
+A theme must keep `--field` and `--card` visually distinct or inputs vanish into panels; and must not set `--input` equal to `--border` if it wants controls to read as inset rather than as bordered boxes.
 
 The styles sit in `@layer PretComponent`, so a caller's unlayered CSS overrides them without a more specific selector.
 

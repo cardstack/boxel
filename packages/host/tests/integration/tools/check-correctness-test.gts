@@ -385,6 +385,39 @@ module('Integration | tools | check-correctness', function (hooks) {
     assert.deepEqual(result.errors, [], 'no errors are reported');
   });
 
+  test('checks a module file named by a prefix-form identifier', async function (assert) {
+    let toolService = getService('tool-service') as {
+      toolContext: CommandContext;
+    };
+    let { virtualNetwork } = getService('network');
+    let testRealmPrefix = '@test/correctness-realm/';
+    virtualNetwork.addRealmMapping(testRealmPrefix, testRealmURL);
+    try {
+      await getService('card-service').saveSource(
+        new URL(`${testRealmURL}prefixed-empty.gts`),
+        '',
+        'create-file',
+      );
+
+      let result = await new CheckCorrectnessTool(
+        toolService.toolContext,
+      ).execute({
+        targetType: 'file',
+        targetRef: `${testRealmPrefix}prefixed-empty.gts`,
+        roomId: '!room:example.com',
+      });
+
+      assert.deepEqual(
+        result.errors,
+        [],
+        'the module and its realm are found from the prefix-form identifier',
+      );
+      assert.true(result.correct, 'the empty module reports as correct');
+    } finally {
+      virtualNetwork.removeRealmMapping(testRealmPrefix);
+    }
+  });
+
   test('does not treat ordinary JSON configuration as a malformed card', async function (assert) {
     let toolService = getService('tool-service') as {
       toolContext: CommandContext;

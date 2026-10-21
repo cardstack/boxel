@@ -75,6 +75,18 @@ interface RealmCreationJSON {
   };
 }
 
+// Where the realm an owner makes at an endpoint lives on this server.
+export function realmURLFor(
+  serverURL: URL,
+  ownerUserId: string,
+  endpoint: string,
+): string {
+  return new URL(
+    `${serverURL.pathname.replace(/\/$/, '')}/${getMatrixUsername(ownerUserId)}/${endpoint}/`,
+    serverURL,
+  ).href;
+}
+
 export async function createRealm(
   deps: CreateRealmDeps,
   { ownerUserId, endpoint, name, backgroundURL, iconURL }: CreateRealmInput,
@@ -125,10 +137,7 @@ export async function createRealm(
   }
 
   let ownerUsername = getMatrixUsername(ownerUserId);
-  let url = new URL(
-    `${serverURL.pathname.replace(/\/$/, '')}/${ownerUsername}/${endpoint}/`,
-    serverURL,
-  ).href;
+  let url = realmURLFor(serverURL, ownerUserId, endpoint);
 
   let existingRows = (await query(dbAdapter, [
     `SELECT url FROM realm_registry WHERE url =`,

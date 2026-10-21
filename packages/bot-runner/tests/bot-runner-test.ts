@@ -274,7 +274,7 @@ module('timeline handler', () => {
             allFileContents: [
               {
                 filename: 'experiments/MyListing/listing.json',
-                contents: '{\"data\":{\"type\":\"card\"}}',
+                contents: '{"data":{"type":"card"}}',
               },
               {
                 filename: 'experiments/MyListing/readme.md',

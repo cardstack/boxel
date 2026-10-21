@@ -1,19 +1,19 @@
 import type Koa from 'koa';
-import {
-  CLIENT_IP_HEADER,
-  logger,
-  SupportedMimeType,
-} from '@cardstack/runtime-common';
+import { logger, SupportedMimeType } from '@cardstack/runtime-common';
 import { SignInLimiter } from '../lib/sign-in-limiter.ts';
 import {
   sendResponseForError,
   setContextResponse,
 } from '../middleware/index.ts';
 import type { CreateRoutesArgs } from '../routes.ts';
+import type { CreateRealmDeps } from './create-realm.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import {
   endSecureSession,
+  endWindowSessions,
   googleSignInStart,
+  isSecureSession,
+  matrixServerName,
   SecureSessionError,
   signInWithGoogle,
   signInWithPassword,
@@ -38,7 +38,10 @@ type Handler = (ctxt: Koa.Context, next: Koa.Next) => Promise<void>;
 
 const CLIENTS = new Set<SecureSessionClient>(['window', 'cli']);
 
-function deps(args: CreateRoutesArgs): SecureSessionDeps {
+function deps(
+  args: CreateRoutesArgs,
+  createRealm?: CreateRealmDeps,
+): SecureSessionDeps {
   return {
     dbAdapter: args.dbAdapter,
     matrixClient: args.matrixClient,
@@ -47,15 +50,21 @@ function deps(args: CreateRoutesArgs): SecureSessionDeps {
     matrixAdminPassword: args.matrixAdminPassword,
     secureOriginURL: args.secureOriginURL,
     googleSignIn: args.googleSignIn,
+    createRealm,
   };
 }
 
-async function sendJSON(ctxt: Koa.Context, status: number, body: unknown) {
+async function sendJSON(
+  ctxt: Koa.Context,
+  status: number,
+  body: unknown,
+  headers: Record<string, string> = {},
+) {
   await setContextResponse(
     ctxt,
     new Response(JSON.stringify(body), {
       status,
-      headers: { 'content-type': SupportedMimeType.JSONAPI },
+      headers: { 'content-type': SupportedMimeType.JSONAPI, ...headers },
     }),
   );
 }
@@ -131,8 +140,10 @@ function textOf(attributes: Record<string, unknown>, name: string): string {
 }
 
 // Answers a `SecureSessionError` with its status, message and code, and
-// anything else with a bare 500. Only an error's name and message are logged,
-// never the request.
+// anything else with a bare 500. A 429 that knows when to try again says so in
+// `Retry-After`, and to the millisecond in the error's `meta.retryAfterMs`,
+// which the secure window shows as the app does. Only an error's name and
+// message are logged, never the request.
 function secureSessionHandler(
   fn: (ctxt: Koa.Context) => Promise<void>,
 ): Handler {
@@ -141,11 +152,26 @@ function secureSessionHandler(
       await fn(ctxt);
     } catch (e: any) {
       if (e instanceof SecureSessionError) {
-        await sendJSON(ctxt, e.status, {
-          errors: [
-            { status: String(e.status), code: e.code, detail: e.message },
-          ],
-        });
+        let { retryAfterMs } = e;
+        await sendJSON(
+          ctxt,
+          e.status,
+          {
+            errors: [
+              {
+                status: String(e.status),
+                code: e.code,
+                detail: e.message,
+                ...(retryAfterMs === undefined
+                  ? {}
+                  : { meta: { retryAfterMs } }),
+              },
+            ],
+          },
+          retryAfterMs === undefined
+            ? {}
+            : { 'Retry-After': String(Math.ceil(retryAfterMs / 1000)) },
+        );
         return;
       }
       log.error(
@@ -167,28 +193,42 @@ async function sendSession(ctxt: Koa.Context, session: unknown) {
   });
 }
 
+// An optional text attribute: undefined when absent or empty.
+function optionalTextOf(
+  attributes: Record<string, unknown>,
+  name: string,
+): string | undefined {
+  let value = attributes[name];
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+  if (typeof value !== 'string') {
+    throw new SecureSessionError(400, 'bad-request', `${name} is text`);
+  }
+  return value;
+}
+
 // POST /_secure-session: signs in with a username, email address or Matrix id
-// and the account's password.
-export function handlePasswordSignIn(args: CreateRoutesArgs): Handler {
+// and the account's password. Failed sign-ins are limited per account, with the
+// Matrix server's default limit on failed logins to the app. An account's
+// first sign-in to Boxel makes its personal realm, hence the realm deps, and
+// records the invite code it registered with (`registrationToken`).
+export function handlePasswordSignIn(
+  args: CreateRoutesArgs,
+  createRealm: CreateRealmDeps,
+): Handler {
   let limiter = new SignInLimiter();
   return secureSessionHandler(async (ctxt) => {
     requireSecureOrigin(ctxt, args.secureOriginURL);
     let attributes = await readAttributes(ctxt, 'secure-session');
     let { username, password } = attributes;
-    let account = typeof username === 'string' ? username : '';
-    if (!limiter.allow(account, ctxt.get(CLIENT_IP_HEADER) || undefined)) {
-      throw new SecureSessionError(
-        429,
-        'rate-limited',
-        'too many attempts; wait a moment and try again',
-      );
-    }
     await sendSession(
       ctxt,
-      await signInWithPassword(deps(args), {
-        username: account,
+      await signInWithPassword(deps(args, createRealm), limiter, {
+        username: typeof username === 'string' ? username : '',
         password: typeof password === 'string' ? password : '',
         client: clientOf(attributes),
+        registrationToken: optionalTextOf(attributes, 'registrationToken'),
       }),
     );
   });
@@ -210,14 +250,18 @@ export function handleGoogleSignInStart(args: CreateRoutesArgs): Handler {
 
 // POST /_secure-session/google: signs in with the authorization code Google
 // sent to the secure origin's callback, with the PKCE verifier and nonce the
-// window started the sign-in with.
-export function handleGoogleSignIn(args: CreateRoutesArgs): Handler {
+// window started the sign-in with. A user's first sign-in to Boxel makes their
+// personal realm, hence the realm deps.
+export function handleGoogleSignIn(
+  args: CreateRoutesArgs,
+  createRealm: CreateRealmDeps,
+): Handler {
   return secureSessionHandler(async (ctxt) => {
     requireSecureOrigin(ctxt, args.secureOriginURL);
     let attributes = await readAttributes(ctxt, 'google-sign-in');
     await sendSession(
       ctxt,
-      await signInWithGoogle(deps(args), {
+      await signInWithGoogle(deps(args, createRealm), {
         code: textOf(attributes, 'code'),
         codeVerifier: textOf(attributes, 'codeVerifier'),
         nonce: textOf(attributes, 'nonce'),
@@ -246,11 +290,57 @@ export function handleEndSecureSession({
   });
 }
 
+// GET /_secure-session: whether the presented secure session is still signed
+// in, so the secure window shows its sign-in rather than a session the server
+// has ended. 204 when it is, 401 `signed-out` when it isn't.
+export function handleCheckSecureSession({
+  dbAdapter,
+}: CreateRoutesArgs): Handler {
+  return secureSessionHandler(async (ctxt) => {
+    if (
+      !(await isSecureSession(
+        dbAdapter,
+        ctxt.state.token as RealmServerTokenClaim | undefined,
+      ))
+    ) {
+      throw new SecureSessionError(
+        401,
+        'signed-out',
+        'this session is signed out',
+      );
+    }
+    await setContextResponse(ctxt, new Response(null, { status: 204 }));
+  });
+}
+
+// DELETE /_secure-sessions?client=window: signs the token user's secure
+// windows out, for the app's own sign-out. Any of the user's sessions may call
+// it, card code included; all it can do is sign the user out of key
+// management, which signing in again undoes. It reads, lists and extends
+// nothing, and answers 204 whether or not there was a session to end.
+export function handleEndWindowSessions({
+  dbAdapter,
+}: CreateRoutesArgs): Handler {
+  return secureSessionHandler(async (ctxt) => {
+    let token = ctxt.state.token as RealmServerTokenClaim | undefined;
+    if (!token?.user) {
+      throw new SecureSessionError(401, 'unauthorized', 'sign in first');
+    }
+    if (ctxt.query.client !== 'window') {
+      throw new SecureSessionError(400, 'bad-request', `client is 'window'`);
+    }
+    await endWindowSessions(dbAdapter, token.user);
+    await setContextResponse(ctxt, new Response(null, { status: 204 }));
+  });
+}
+
 // GET /_secure-origin: where this realm server's secure origin is, for a
 // client outside the browser that has to send the user there, as the CLI does
-// to sign in.
+// to sign in, and the name of the Matrix server its accounts are on, which the
+// secure origin's account creation shows usernames with.
 export function handleSecureOriginInfo({
   secureOriginURL,
+  matrixClient,
 }: CreateRoutesArgs): Handler {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     if (!secureOriginURL) {
@@ -265,7 +355,10 @@ export function handleSecureOriginInfo({
     await sendJSON(ctxt, 200, {
       data: {
         type: 'secure-origin',
-        attributes: { url: secureOriginURL.href },
+        attributes: {
+          url: secureOriginURL.href,
+          matrixServerName: await matrixServerName({ matrixClient }),
+        },
       },
     });
   };

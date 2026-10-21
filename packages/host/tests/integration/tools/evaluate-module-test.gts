@@ -71,6 +71,43 @@ module('Integration | tools | evaluate-module', function (hooks) {
     assert.notOk(result.error, 'no error for valid module');
   });
 
+  test('evaluates a module named by prefix-form identifiers', async function (assert) {
+    let { virtualNetwork } = getService('network');
+    let testRealmPrefix = '@test/evaluate-realm/';
+    virtualNetwork.addRealmMapping(testRealmPrefix, testRealmURL);
+    try {
+      let toolService = getService('tool-service');
+      let command = new EvaluateModuleTool(toolService.toolContext);
+      let InputType = await command.getInputType();
+      let input = new InputType({
+        moduleIdentifier: `${testRealmPrefix}valid-card`,
+        realmIdentifier: testRealmPrefix,
+      });
+
+      let result = await command.execute(input);
+
+      assert.true(result.passed, 'the module evaluates');
+      assert.notOk(result.error, 'no error');
+    } finally {
+      virtualNetwork.removeRealmMapping(testRealmPrefix);
+    }
+  });
+
+  test('refuses an identifier that resolves to no URL', async function (assert) {
+    let toolService = getService('tool-service');
+    let command = new EvaluateModuleTool(toolService.toolContext);
+    let InputType = await command.getInputType();
+    let input = new InputType({
+      moduleIdentifier: '@test/unregistered-realm/valid-card',
+      realmIdentifier: testRealmURL,
+    });
+
+    await assert.rejects(
+      command.execute(input),
+      /moduleUrl is neither a valid URL nor a registered realm-prefix identifier/,
+    );
+  });
+
   test('module with broken import fails evaluation', async function (assert) {
     let toolService = getService('tool-service');
     let command = new EvaluateModuleTool(toolService.toolContext);

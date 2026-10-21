@@ -19,6 +19,8 @@ import {
   insertPlan,
   realmSecretSeed,
   createVirtualNetwork,
+  insertProxyEndpoints,
+  setupSecretsKeyring,
   waitUntil,
 } from './helpers/index.ts';
 import { createJWT as createRealmServerJWT } from '../utils/jwt.ts';
@@ -47,12 +49,6 @@ import {
 } from './helpers/sentry-capture.ts';
 import { logLinesDuring, withLogDefinition } from './helpers/log-capture.ts';
 import { leaksCredential } from './helpers/credential-leaks.ts';
-import {
-  installSecretsKeyring,
-  LocalKeyProvider,
-  resetSecretsAtRest,
-} from '../lib/secrets-at-rest/index.ts';
-import { sealProxyEndpointKeys } from '../lib/proxy-endpoint-keys.ts';
 
 module(basename(import.meta.filename), function () {
   module('Realm-specific Endpoints | _request-forward', function (hooks) {
@@ -132,6 +128,10 @@ module(basename(import.meta.filename), function () {
       },
     });
 
+    // Keys are sealed as the proxy endpoints are written, and opened as the
+    // proxy reads them.
+    setupSecretsKeyring(hooks);
+
     setupDB(hooks, {
       templateDatabase,
       beforeEach: async (_dbAdapter, _publisher, _runner) => {
@@ -140,20 +140,36 @@ module(basename(import.meta.filename), function () {
         runner = _runner;
 
         // Set up allowed proxy destinations in database BEFORE starting server
-        await dbAdapter.execute(
-          `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, auth_method, auth_parameter_name, created_at, updated_at) 
-           VALUES 
-             (gen_random_uuid(), 'https://openrouter.ai/api/v1/chat/completions', 'sk-or-v1-test-5c1d8e2f9a73b046', 'openrouter', true, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-             (gen_random_uuid(), 'https://api.example.com', 'example-api-key', 'no-credit', false, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-             (gen_random_uuid(), 'https://www.googleapis.com/customsearch/v1', 'google-api-key', 'no-credit', false, 'url-parameter', 'key', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-             (gen_random_uuid(), 'https://gateway.ai.cloudflare.com/v1/4a94a1eb2d21bbbe160234438a49f687/boxel/', 'cloudflare-api-key', 'no-credit', true, 'header', 'cf-aig-authorization', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-           ON CONFLICT (url) 
-           DO UPDATE SET 
-             api_key = EXCLUDED.api_key,
-             credit_strategy = EXCLUDED.credit_strategy,
-             supports_streaming = EXCLUDED.supports_streaming,
-             updated_at = CURRENT_TIMESTAMP`,
-        );
+        await insertProxyEndpoints(dbAdapter, [
+          {
+            url: 'https://openrouter.ai/api/v1/chat/completions',
+            apiKey: 'sk-or-v1-test-5c1d8e2f9a73b046',
+            creditStrategy: 'openrouter',
+            supportsStreaming: true,
+          },
+          {
+            url: 'https://api.example.com',
+            apiKey: 'example-api-key',
+            creditStrategy: 'no-credit',
+            supportsStreaming: false,
+          },
+          {
+            url: 'https://www.googleapis.com/customsearch/v1',
+            apiKey: 'google-api-key',
+            creditStrategy: 'no-credit',
+            supportsStreaming: false,
+            authMethod: 'url-parameter',
+            authParameterName: 'key',
+          },
+          {
+            url: 'https://gateway.ai.cloudflare.com/v1/4a94a1eb2d21bbbe160234438a49f687/boxel/',
+            apiKey: 'cloudflare-api-key',
+            creditStrategy: 'no-credit',
+            supportsStreaming: true,
+            authMethod: 'header',
+            authParameterName: 'cf-aig-authorization',
+          },
+        ]);
 
         await startRealmServer(dbAdapter, publisher, runner);
 
@@ -1842,12 +1858,20 @@ module(basename(import.meta.filename), function () {
       hooks.beforeEach(async function () {
         vendor.requests.length = 0;
         configureOutbound({ devAllowlist: ['127.0.0.1', 'localhost'] });
-        await dbAdapter.execute(
-          `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, auth_method, auth_parameter_name, created_at, updated_at)
-           VALUES
-             (gen_random_uuid(), '${vendor.url}/', 'stub-vendor-key', 'openrouter', true, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
-             (gen_random_uuid(), 'https://10.0.0.1/', 'private-key', 'no-credit', false, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-        );
+        await insertProxyEndpoints(dbAdapter, [
+          {
+            url: `${vendor.url}/`,
+            apiKey: 'stub-vendor-key',
+            creditStrategy: 'openrouter',
+            supportsStreaming: true,
+          },
+          {
+            url: 'https://10.0.0.1/',
+            apiKey: 'private-key',
+            creditStrategy: 'no-credit',
+            supportsStreaming: false,
+          },
+        ]);
         AllowedProxyDestinations.reset();
       });
       hooks.afterEach(function () {
@@ -2016,62 +2040,29 @@ module(basename(import.meta.filename), function () {
         );
       });
 
-      // The same forward with the endpoint's key sealed into its sealed
-      // columns, as the startup backfill leaves it.
-      module('with the key sealed', function (hooks) {
-        hooks.beforeEach(async function () {
-          installSecretsKeyring(await new LocalKeyProvider().loadDataKeys());
-          await sealProxyEndpointKeys(dbAdapter);
-          AllowedProxyDestinations.reset();
-        });
-        hooks.afterEach(function () {
-          resetSecretsAtRest();
-        });
+      test('the vendor receives the sealed key', async function (assert) {
+        let [row] = await dbAdapter.execute(
+          `SELECT api_key_ciphertext IS NOT NULL AS sealed FROM proxy_endpoints WHERE url = $1`,
+          { bind: [`${vendor.url}/`] },
+        );
+        assert.true(row.sealed, 'the endpoint key is sealed');
 
-        function forwardToEcho() {
-          return request
-            .post('/_request-forward')
-            .set('Accept', 'application/json')
-            .set('Content-Type', 'application/json')
-            .set('Authorization', `Bearer ${jwt()}`)
-            .send({
-              url: `${vendor.url}/echo`,
-              method: 'POST',
-              requestBody: JSON.stringify({ hello: 'vendor' }),
-            });
-        }
+        let response = await request
+          .post('/_request-forward')
+          .set('Accept', 'application/json')
+          .set('Content-Type', 'application/json')
+          .set('Authorization', `Bearer ${jwt()}`)
+          .send({
+            url: `${vendor.url}/echo`,
+            method: 'POST',
+            requestBody: JSON.stringify({ hello: 'vendor' }),
+          });
 
-        test('the vendor receives the sealed key', async function (assert) {
-          let [row] = await dbAdapter.execute(
-            `SELECT api_key_ciphertext IS NOT NULL AS sealed FROM proxy_endpoints WHERE url = $1`,
-            { bind: [`${vendor.url}/`] },
-          );
-          assert.true(row.sealed, 'the endpoint key is sealed');
-
-          let response = await forwardToEcho();
-
-          assert.strictEqual(response.status, 200);
-          assert.strictEqual(
-            vendor.requests[0].headers.authorization,
-            'Bearer stub-vendor-key',
-          );
-        });
-
-        test('a key edited by hand reaches the vendor', async function (assert) {
-          await dbAdapter.execute(
-            `UPDATE proxy_endpoints SET api_key = 'stub-vendor-key-edited' WHERE url = $1`,
-            { bind: [`${vendor.url}/`] },
-          );
-          AllowedProxyDestinations.reset();
-
-          let response = await forwardToEcho();
-
-          assert.strictEqual(response.status, 200);
-          assert.strictEqual(
-            vendor.requests[0].headers.authorization,
-            'Bearer stub-vendor-key-edited',
-          );
-        });
+        assert.strictEqual(response.status, 200);
+        assert.strictEqual(
+          vendor.requests[0].headers.authorization,
+          'Bearer stub-vendor-key',
+        );
       });
 
       test('an X-Boxel header in the forwarded headers is refused', async function (assert) {
@@ -2173,10 +2164,16 @@ module(basename(import.meta.filename), function () {
       });
 
       test('a vendor echoing the url-parameter system key returns nothing of it to the caller', async function (assert) {
-        await dbAdapter.execute(
-          `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, auth_method, auth_parameter_name, created_at, updated_at)
-           VALUES (gen_random_uuid(), '${vendor.alternateUrl}/echo', 'stub-param-key-7f3e9a', 'no-credit', false, 'url-parameter', 'key', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-        );
+        await insertProxyEndpoints(dbAdapter, [
+          {
+            url: `${vendor.alternateUrl}/echo`,
+            apiKey: 'stub-param-key-7f3e9a',
+            creditStrategy: 'no-credit',
+            supportsStreaming: false,
+            authMethod: 'url-parameter',
+            authParameterName: 'key',
+          },
+        ]);
         AllowedProxyDestinations.reset();
         let response = await request
           .post('/_request-forward')
@@ -2473,10 +2470,14 @@ module(basename(import.meta.filename), function () {
         // The same vendor under its other name, as a destination that is not
         // charged for.
         configureOutbound({ devAllowlist: ['127.0.0.1', 'localhost'] });
-        await dbAdapter.execute(
-          `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, auth_method, auth_parameter_name, created_at, updated_at)
-           VALUES (gen_random_uuid(), '${vendor.alternateUrl}/', 'stub-vendor-free-key', 'no-credit', false, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-        );
+        await insertProxyEndpoints(dbAdapter, [
+          {
+            url: `${vendor.alternateUrl}/`,
+            apiKey: 'stub-vendor-free-key',
+            creditStrategy: 'no-credit',
+            supportsStreaming: false,
+          },
+        ]);
         AllowedProxyDestinations.reset();
 
         // The vendor holds the rest of the body back and never sends it, so
@@ -2687,10 +2688,14 @@ module(basename(import.meta.filename), function () {
           // its error along with the rest.
           let quoted = 'sk-planted-0123456789/abc+def=';
           let destination = `${vendor.alternateUrl}/echo`;
-          await dbAdapter.execute(
-            `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, auth_method, auth_parameter_name, created_at, updated_at)
-             VALUES (gen_random_uuid(), '${destination}', '${quoted}' || chr(13) || chr(10) || 'Injected: 1', 'no-credit', false, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-          );
+          await insertProxyEndpoints(dbAdapter, [
+            {
+              url: `${destination}`,
+              apiKey: `${quoted}\r\nInjected: 1`,
+              creditStrategy: 'no-credit',
+              supportsStreaming: false,
+            },
+          ]);
           AllowedProxyDestinations.reset();
           sentry = startSentryCapture({ tracing: true });
 
@@ -2766,10 +2771,16 @@ module(basename(import.meta.filename), function () {
             'precondition: JSON.parse quotes the key it fails on',
           );
           let destination = `${vendor.alternateUrl}/reflect-credential`;
-          await dbAdapter.execute(
-            `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, auth_method, auth_parameter_name, created_at, updated_at)
-             VALUES (gen_random_uuid(), '${destination}', '${key}', 'no-credit', false, 'url-parameter', 'key', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-          );
+          await insertProxyEndpoints(dbAdapter, [
+            {
+              url: `${destination}`,
+              apiKey: key,
+              creditStrategy: 'no-credit',
+              supportsStreaming: false,
+              authMethod: 'url-parameter',
+              authParameterName: 'key',
+            },
+          ]);
           AllowedProxyDestinations.reset();
           sentry = startSentryCapture({ tracing: true });
 
@@ -2837,10 +2848,14 @@ module(basename(import.meta.filename), function () {
         test('no run of a full-length key a vendor quotes back reaches a log line, Sentry event or response', async function (assert) {
           let key = 'sk-or-v1-8d2f61c04b9e3a75f0c1d6e28b4a9f3c7e05d1b6';
           let destination = `${vendor.alternateUrl}/respond`;
-          await dbAdapter.execute(
-            `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, auth_method, auth_parameter_name, created_at, updated_at)
-             VALUES (gen_random_uuid(), '${destination}', '${key}', 'no-credit', false, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-          );
+          await insertProxyEndpoints(dbAdapter, [
+            {
+              url: `${destination}`,
+              apiKey: key,
+              creditStrategy: 'no-credit',
+              supportsStreaming: false,
+            },
+          ]);
           AllowedProxyDestinations.reset();
           sentry = startSentryCapture({ tracing: true });
 
@@ -2902,10 +2917,14 @@ module(basename(import.meta.filename), function () {
 
         hooks.beforeEach(async function () {
           configureOutbound({ devAllowlist: ['127.0.0.1', 'localhost'] });
-          await dbAdapter.execute(
-            `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, auth_method, auth_parameter_name, created_at, updated_at)
-             VALUES (gen_random_uuid(), '${vendor.alternateUrl}${destinationPath}', 'telemetry-vendor-key', 'no-credit', false, NULL, NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-          );
+          await insertProxyEndpoints(dbAdapter, [
+            {
+              url: `${vendor.alternateUrl}${destinationPath}`,
+              apiKey: 'telemetry-vendor-key',
+              creditStrategy: 'no-credit',
+              supportsStreaming: false,
+            },
+          ]);
           AllowedProxyDestinations.reset();
         });
         hooks.afterEach(async function () {

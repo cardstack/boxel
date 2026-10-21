@@ -1,6 +1,8 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
-import { basename } from 'path';
+import { basename, dirname, join } from 'path';
+import { readFileSync } from 'fs';
+import { createRequire } from 'module';
 import supertest from 'supertest';
 import type { Test, SuperTest } from 'supertest';
 import { rri, SupportedMimeType } from '@cardstack/runtime-common';
@@ -11,6 +13,7 @@ import {
   setupPermissionedRealmCached,
 } from './helpers/index.ts';
 import {
+  appOrigin,
   createSecureOrigin,
   secureOriginHeaders,
 } from '../lib/secure-origin.ts';
@@ -64,10 +67,11 @@ const NON_SHELL_PATHS: { path: string; accept: string }[] = [
   { path: '/secure/credentials.html', accept: 'text/html' },
 ];
 
-// The shell's own page talks to the realm server it was configured with, and
-// its sign-in may hand a session to the CLI's loopback listener.
+// The shell's own page talks to the realm server and the Matrix server it was
+// configured with, and its sign-in may hand a session to the CLI's loopback
+// listener.
 const SHELL_PAGE_HEADERS = {
-  connectSrc: [realmURL.origin],
+  connectSrc: [realmURL.origin, new URL(matrixURL).origin],
   formAction: ['http://127.0.0.1:*'],
 };
 
@@ -196,6 +200,123 @@ module(basename(import.meta.filename), function () {
       ]) {
         assert.false(isListedOrigin(origin, listed), origin || '(empty)');
       }
+    });
+
+    test('a port wildcard stands for any port of its host, and nothing else', function (assert) {
+      let loopback = ['http://localhost:*', 'http://127.0.0.1:*'];
+      for (let origin of [
+        'http://localhost:4200',
+        'http://localhost:7357',
+        'http://localhost',
+        'http://127.0.0.1:4200',
+      ]) {
+        assert.true(isListedOrigin(origin, loopback), origin);
+      }
+      for (let origin of [
+        'https://localhost:4200',
+        'http://localhost.evil.test:4200',
+        'http://evil.localhost:4200',
+        'http://127.0.0.2:4200',
+        'http://127.0.0.1.evil.test:4200',
+        'http://localhost:4200/',
+        'http://localhost:*',
+        'http://[::1]:4200',
+      ]) {
+        assert.false(isListedOrigin(origin, loopback), origin);
+      }
+      assert.true(
+        isListedOrigin('http://[::1]:4200', ['http://[::1]:*']),
+        'an IPv6 host with a port wildcard',
+      );
+    });
+
+    test('an app origin is configured as a single origin, its port optionally any', function (assert) {
+      assert.strictEqual(
+        appOrigin('http://localhost:*'),
+        'http://localhost:*',
+        'a port wildcard is kept',
+      );
+      assert.strictEqual(
+        appOrigin('HTTP://LocalHost:*'),
+        'http://localhost:*',
+        'and normalized as an origin is',
+      );
+      assert.strictEqual(
+        appOrigin('https://app.example.test/some/path'),
+        'https://app.example.test',
+        'an origin with a path is reduced to the origin',
+      );
+      assert.strictEqual(
+        appOrigin('https://*.preview.example.test'),
+        'https://*.preview.example.test',
+      );
+      assert.strictEqual(
+        appOrigin('http://[::1]:4201'),
+        'http://[::1]:4201',
+        'an IPv6 origin is kept',
+      );
+      assert.strictEqual(
+        appOrigin('http://[::1]:*'),
+        'http://[::1]:*',
+        'with a port wildcard too',
+      );
+      for (let origin of [
+        '*',
+        'http://*',
+        'http://*:*',
+        'http:',
+        'http://localhost:4200:*',
+        'http://localhost:80:*',
+        'https://localhost:443:*',
+        'http://localhost/:*',
+        'http://localhost/path:*',
+        'http://*.[::1]:*',
+        'file:///tmp',
+        'not a url',
+      ]) {
+        assert.throws(
+          () => appOrigin(origin),
+          /is not an app origin/,
+          `${origin} is refused`,
+        );
+      }
+    });
+
+    test('a port wildcard origin is named in frame-ancestors and in the page', async function (assert) {
+      let origin = createSecureOrigin(
+        new URL('https://secure-loopback.example.test/secure'),
+        {
+          matrixURL: new URL(matrixURL),
+          appOrigins: [
+            'https://app.example.test',
+            'http://localhost:*',
+            'http://127.0.0.1:*',
+          ],
+        },
+      );
+      let headers: Record<string, string> = {};
+      let ctx = {
+        path: '/secure/credentials',
+        method: 'GET',
+        host: 'secure-loopback.example.test',
+        set(values: Record<string, string>) {
+          Object.assign(headers, values);
+        },
+      } as any;
+      await origin.handle(ctx);
+      assert.strictEqual(ctx.status, 200, 'status');
+      assert.ok(
+        headers['Content-Security-Policy'].includes(
+          'frame-ancestors https://app.example.test http://localhost:* http://127.0.0.1:*',
+        ),
+        headers['Content-Security-Policy'],
+      );
+      assert.ok(
+        String(ctx.body).includes(
+          '<meta name="boxel-app-origins" content="https://app.example.test http://localhost:* http://127.0.0.1:*" />',
+        ),
+        'the page lists them',
+      );
     });
 
     test('a wildcard origin is named in frame-ancestors and in the page', async function (assert) {
@@ -375,6 +496,12 @@ module(basename(import.meta.filename), function () {
           ),
           `${path}: names the realm server its modes talk to`,
         );
+        assert.ok(
+          response.text.includes(
+            `<meta name="boxel-matrix-url" content="${new URL(matrixURL).href}" />`,
+          ),
+          `${path}: names the Matrix server its modes talk to`,
+        );
       }
     });
 
@@ -396,8 +523,17 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test("serves the sign-in mode's scripts with the locked-down headers", async function (assert) {
-      for (let name of ['session.js', 'sign-in.js']) {
+    test("serves the modes' scripts with the locked-down headers", async function (assert) {
+      for (let name of [
+        'session.js',
+        'sign-in.js',
+        'sign-in-copy.js',
+        'register.js',
+        'password-reset.js',
+        'password-fields.js',
+        'matrix.js',
+        'dom.js',
+      ]) {
         let response = await request
           .get(`/secure/${name}`)
           .set('Host', secureHost);
@@ -429,6 +565,73 @@ module(basename(import.meta.filename), function () {
         style.headers['content-type'].startsWith('text/css'),
         'stylesheet content type',
       );
+    });
+
+    test("serves boxel-ui's design tokens and typeface as boxel-ui has them", async function (assert) {
+      let stylesDir = dirname(
+        createRequire(import.meta.url).resolve(
+          '@cardstack/boxel-ui/styles/fonts.css',
+        ),
+      );
+      for (let [name, type] of [
+        ['variables.css', 'text/css'],
+        ['theme.css', 'text/css'],
+        ['IBMPlexSansVar-Roman.woff2', 'font/woff2'],
+      ]) {
+        let response = await request
+          .get(`/secure/${name}`)
+          .set('Host', secureHost)
+          .buffer(true)
+          .parse((res, done) => {
+            let chunks: Buffer[] = [];
+            res.on('data', (chunk: Buffer) => chunks.push(chunk));
+            res.on('end', () => done(null, Buffer.concat(chunks)));
+          });
+        assert.strictEqual(response.status, 200, `${name}: status`);
+        assert.ok(
+          response.headers['content-type'].startsWith(type),
+          `${name}: content type`,
+        );
+        assertSecureOriginHeaders(assert, response, name);
+        assert.true(
+          (response.body as Buffer).equals(readFileSync(join(stylesDir, name))),
+          `${name}: boxel-ui's own file`,
+        );
+      }
+    });
+
+    test("draws boxel-ui's own icons", async function (assert) {
+      // The pages build the app's logo, Google's "G", the check mark and the
+      // loading indicator from boxel-ui's icon components' paths, copied in,
+      // since the page's policy loads no markup from elsewhere. Every path
+      // boxel-ui draws them with is in the copy.
+      let icons = join(
+        dirname(
+          createRequire(import.meta.url).resolve(
+            '@cardstack/boxel-ui/styles/fonts.css',
+          ),
+        ),
+        '..',
+        'icons',
+      );
+      let dom = readFileSync(
+        join(import.meta.dirname, '..', 'secure-origin', 'dom.js'),
+        'utf8',
+      );
+      for (let icon of [
+        'boxel-icon.gts',
+        'google-color.gts',
+        'check-mark.gts',
+        'loading-indicator.gts',
+      ]) {
+        let paths = [
+          ...readFileSync(join(icons, icon), 'utf8').matchAll(/\sd='([^']+)'/g),
+        ].map(([, d]) => d);
+        assert.ok(paths.length > 0, `${icon} has paths`);
+        for (let d of paths) {
+          assert.ok(dom.includes(`'${d}'`), `${icon}: ${d.slice(0, 24)}…`);
+        }
+      }
     });
 
     test('answers HEAD for the shell without a body', async function (assert) {
@@ -579,7 +782,6 @@ module(basename(import.meta.filename), function () {
         ['/secure/app-origins.js', 'text/javascript'],
         ['/secure/redact.js', 'text/javascript'],
         ['/secure/credentials.css', 'text/css'],
-        ['/secure/IBMPlexSansVar-Roman.woff2', 'font/woff2'],
       ]) {
         let response = await request.get(path).set('Host', secureHost);
         assert.strictEqual(response.status, 200, `${path}: status`);

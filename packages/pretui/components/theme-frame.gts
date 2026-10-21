@@ -7,7 +7,7 @@ import { Switch } from '@cardstack/boxel-ui/components';
 import { themeScope, themeScopedCss } from '@cardstack/boxel-ui/helpers';
 import Moon from '@cardstack/boxel-icons/moon';
 import Sun from '@cardstack/boxel-icons/sun';
-import { realmURL } from 'https://cardstack.com/base/card-api';
+import { realmURL } from '@cardstack/base/card-api';
 import { Select } from './select';
 
 // Wraps a page in a theme island with a dark mode switch, built the
@@ -142,7 +142,7 @@ export class ThemeFrame extends Component<ThemeFrameSignature> {
         // search API does not resolve re-export aliases, so `base/theme`/`default`
         // (which re-exports this very class) matches zero cards rather than
         // erroring — the selector then silently falls back to one theme forever.
-        type: { module: 'https://cardstack.com/base/card-api', name: 'Theme' },
+        type: { module: '@cardstack/base/card-api', name: 'Theme' },
       },
     }),
     () => {

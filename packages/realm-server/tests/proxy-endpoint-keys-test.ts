@@ -20,7 +20,6 @@ import {
   PROXY_ENDPOINT_KEY_FIELD,
   proxyEndpointKeyBinding,
   saveProxyEndpoint,
-  sealProxyEndpointKeys,
   type ProxyEndpointKeyRow,
 } from '../lib/proxy-endpoint-keys.ts';
 import { AllowedProxyDestinations } from '../lib/allowed-proxy-destinations.ts';
@@ -35,7 +34,6 @@ const SEAL_MIGRATION = join(
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const OPENROUTER_KEY = 'sk-or-v1-proxy-endpoint-keys-test';
 const EXAMPLE_URL = 'https://api.example.com';
-const EXAMPLE_KEY = 'example-api-key';
 
 module(basename(import.meta.filename), function () {
   module('proxy endpoint keys', function (hooks) {
@@ -56,12 +54,21 @@ module(basename(import.meta.filename), function () {
       },
     });
 
-    // A row as an operator's hand-typed INSERT leaves it: plain text only.
-    async function insertPlainTextRow(url: string, apiKey: string | null) {
-      await dbAdapter.execute(
-        `INSERT INTO proxy_endpoints (id, url, api_key, credit_strategy, supports_streaming, created_at, updated_at)
-         VALUES (gen_random_uuid(), $1, $2, 'no-credit', false, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-        { bind: [url, apiKey] },
+    async function saveKey(
+      url: string,
+      apiKey: string | null,
+      ring: SecretsKeyring = keyring,
+      creditStrategy = 'no-credit',
+    ) {
+      return await saveProxyEndpoint(
+        dbAdapter,
+        {
+          url,
+          apiKey,
+          creditStrategy,
+          supportsStreaming: false,
+        },
+        ring,
       );
     }
 
@@ -82,44 +89,40 @@ module(basename(import.meta.filename), function () {
       };
     }
 
-    async function censusLines(): Promise<string[]> {
-      let lines = await logLinesDuring(['secrets-at-rest'], () =>
-        reportPlaintextCensus(dbAdapter),
-      );
-      return lines
-        .map(({ message }) => message)
-        .filter((message) =>
-          message.startsWith('plaintext census: proxy_endpoints.'),
-        );
+    async function destinationFor(url: string) {
+      AllowedProxyDestinations.reset();
+      return await AllowedProxyDestinations.getInstance(
+        dbAdapter,
+      ).getDestinationConfig(url);
     }
 
     async function apiKeyServedFor(url: string) {
-      AllowedProxyDestinations.reset();
-      let config =
-        await AllowedProxyDestinations.getInstance(
-          dbAdapter,
-        ).getDestinationConfig(url);
-      return config?.apiKey;
+      return (await destinationFor(url))?.apiKey;
     }
 
-    test('the backfill seals a plain-text row under its binding, and the census reaches zero', async function (assert) {
-      await insertPlainTextRow(OPENROUTER_URL, OPENROUTER_KEY);
-      await insertPlainTextRow(EXAMPLE_URL, EXAMPLE_KEY);
-      assert.deepEqual(await censusLines(), [
-        'plaintext census: proxy_endpoints.api_key plaintextRows=2',
-      ]);
+    test('the table holds no plain-text key, and the census reports no plain-text secret columns', async function (assert) {
+      let columns = await dbAdapter.execute(
+        `SELECT column_name FROM information_schema.columns
+         WHERE table_name = 'proxy_endpoints' AND column_name = 'api_key'`,
+      );
+      assert.deepEqual(columns, [], 'the plain-text column is dropped');
 
-      let result = await sealProxyEndpointKeys(dbAdapter);
+      let lines = await logLinesDuring(['secrets-at-rest'], () =>
+        reportPlaintextCensus(dbAdapter),
+      );
+      assert.deepEqual(
+        lines
+          .map(({ message }) => message)
+          .filter((message) => message.startsWith('plaintext census:')),
+        ['plaintext census: no plain-text secret columns'],
+      );
+    });
 
-      assert.deepEqual(result, {
-        sealed: 2,
-        cleared: 0,
-        unchanged: 0,
-        unloadedKey: 0,
-        tampered: 0,
-        skipped: 0,
-      });
+    test('saving an endpoint seals its key under its binding, and the proxy serves it', async function (assert) {
+      let id = await saveKey(OPENROUTER_URL, OPENROUTER_KEY);
+
       let row = await keyRow(OPENROUTER_URL);
+      assert.strictEqual(row.id, id);
       assert.strictEqual(row.api_key_key_id, keyring.currentKeyId);
       assert.strictEqual(
         keyring.open(sealedOf(row), {
@@ -131,303 +134,120 @@ module(basename(import.meta.filename), function () {
         OPENROUTER_KEY,
         'the sealed value opens to the key under its field, the platform owner, its id and its url',
       );
-      assert.strictEqual(
-        row.api_key,
-        OPENROUTER_KEY,
-        'the plain-text column is kept',
-      );
-      assert.deepEqual(await censusLines(), [
-        'plaintext census: proxy_endpoints.api_key plaintextRows=0',
-      ]);
       assert.strictEqual(await apiKeyServedFor(OPENROUTER_URL), OPENROUTER_KEY);
     });
 
-    test('a second backfill changes nothing', async function (assert) {
-      await insertPlainTextRow(OPENROUTER_URL, OPENROUTER_KEY);
-      await insertPlainTextRow(EXAMPLE_URL, null);
-      await sealProxyEndpointKeys(dbAdapter);
-      let before = await keyRow(OPENROUTER_URL);
+    test('replacing an endpoint keeps its row and seals the new key', async function (assert) {
+      let id = await saveKey(OPENROUTER_URL, OPENROUTER_KEY);
 
-      let result = await sealProxyEndpointKeys(dbAdapter);
+      let replacedId = await saveKey(OPENROUTER_URL, 'sk-or-v1-replacement');
 
-      assert.deepEqual(result, {
-        sealed: 0,
-        cleared: 0,
-        unchanged: 2,
-        unloadedKey: 0,
-        tampered: 0,
-        skipped: 0,
-      });
-      assert.deepEqual(
-        await keyRow(OPENROUTER_URL),
-        before,
-        'the sealed columns are untouched',
-      );
-    });
-
-    test('a row the backfill has not sealed is served from its plain-text key', async function (assert) {
-      await insertPlainTextRow(OPENROUTER_URL, OPENROUTER_KEY);
-
-      assert.strictEqual(await apiKeyServedFor(OPENROUTER_URL), OPENROUTER_KEY);
+      assert.strictEqual(replacedId, id, 'replacing keeps the row');
+      let replaced = await keyRow(OPENROUTER_URL);
       assert.strictEqual(
-        (await keyRow(OPENROUTER_URL)).api_key_ciphertext,
-        null,
-        'reading does not seal',
+        keyring.open(sealedOf(replaced), proxyEndpointKeyBinding(replaced)),
+        'sk-or-v1-replacement',
+      );
+      assert.strictEqual(
+        await apiKeyServedFor(OPENROUTER_URL),
+        'sk-or-v1-replacement',
       );
     });
 
-    test('a sealed key whose url was edited outside the application is served from its plain-text key, and the backfill reports it and leaves it for an operator', async function (assert) {
-      await insertPlainTextRow(OPENROUTER_URL, OPENROUTER_KEY);
-      await sealProxyEndpointKeys(dbAdapter);
+    test('an endpoint with no key is served with none', async function (assert) {
+      await saveKey(EXAMPLE_URL, null);
+
+      let row = await keyRow(EXAMPLE_URL);
+      assert.strictEqual(row.api_key_ciphertext, null);
+      assert.strictEqual(row.api_key_key_id, null);
+      assert.strictEqual(await apiKeyServedFor(EXAMPLE_URL), null);
+    });
+
+    test('a sealed key whose url was edited outside the application is refused, and reported once, while other destinations stay allowed', async function (assert) {
+      await saveKey(OPENROUTER_URL, OPENROUTER_KEY, keyring, 'openrouter');
+      await saveKey(EXAMPLE_URL, 'example-api-key');
       let movedUrl = 'https://openrouter.ai/api/v1/moved';
       await dbAdapter.execute(
         `UPDATE proxy_endpoints SET url = $1 WHERE url = $2`,
         { bind: [movedUrl, OPENROUTER_URL] },
       );
 
-      let served: (string | undefined)[] = [];
+      let refused: unknown[] = [];
       let lines = await logLinesDuring(['proxy-endpoint-keys'], async () => {
-        served.push(await apiKeyServedFor(movedUrl));
-        served.push(await apiKeyServedFor(movedUrl));
+        refused.push(await destinationFor(movedUrl));
+        refused.push(await destinationFor(movedUrl));
       });
 
-      assert.deepEqual(served, [OPENROUTER_KEY, OPENROUTER_KEY]);
-      let warnings = lines.filter(({ level }) => level === 'warn');
+      assert.deepEqual(
+        refused,
+        [undefined, undefined],
+        'the key bound to the old url is never sent to the new one, and the endpoint is not sent without it',
+      );
       assert.strictEqual(
-        warnings.length,
+        await apiKeyServedFor(EXAMPLE_URL),
+        'example-api-key',
+        'the other destinations stay allowed',
+      );
+      let errors = lines.filter(({ level }) => level === 'error');
+      assert.strictEqual(
+        errors.length,
         1,
         'the failure is reported once, not on every reload',
       );
-      assert.true(warnings[0].message.includes(movedUrl));
-      assert.false(
-        warnings[0].message.includes(OPENROUTER_KEY),
-        'the report never carries the key',
-      );
-
-      let edited = await keyRow(movedUrl);
-      let result: Awaited<ReturnType<typeof sealProxyEndpointKeys>>;
-      let backfillLines = await logLinesDuring(
-        ['proxy-endpoint-keys'],
-        async () => {
-          result = await sealProxyEndpointKeys(dbAdapter);
-        },
-      );
-      assert.strictEqual(result!.tampered, 1);
-      assert.strictEqual(result!.sealed, 0);
-      assert.deepEqual(
-        await keyRow(movedUrl),
-        edited,
-        'the backfill does not seal the key to its new url',
-      );
-      let errors = backfillLines.filter(({ level }) => level === 'error');
-      assert.strictEqual(errors.length, 1, 'the backfill reports the row');
       assert.true(errors[0].message.includes(movedUrl));
       assert.false(
         errors[0].message.includes(OPENROUTER_KEY),
         'the report never carries the key',
       );
 
-      result = await sealProxyEndpointKeys(dbAdapter, undefined, {
-        resealTampered: true,
-      });
-      assert.strictEqual(result.sealed, 1);
-      let row = await keyRow(movedUrl);
+      await saveKey(movedUrl, 'sk-or-v1-replacement', keyring, 'openrouter');
       assert.strictEqual(
-        keyring.open(sealedOf(row), proxyEndpointKeyBinding(row)),
-        OPENROUTER_KEY,
-        'an operator re-seals the key to its new url',
+        await apiKeyServedFor(movedUrl),
+        'sk-or-v1-replacement',
+        'replacing the key seals it to the new url',
       );
     });
 
-    test('the backfill leaves a key sealed under a data key this process has not loaded', async function (assert) {
+    test('a key sealed under a data key this process has not loaded is refused, and reported', async function (assert) {
       // Another task, further into a data-key rotation, sealed the row under
       // a key this one doesn't hold.
       let newer = new SecretsKeyring(
         [{ keyId: 'kms-newer', key: Buffer.alloc(32, 7) }],
         'kms-newer',
       );
-      await insertPlainTextRow(OPENROUTER_URL, OPENROUTER_KEY);
-      await saveProxyEndpoint(
-        dbAdapter,
-        {
-          url: OPENROUTER_URL,
-          apiKey: OPENROUTER_KEY,
-          creditStrategy: 'no-credit',
-          supportsStreaming: false,
-        },
-        newer,
-      );
-      let before = await keyRow(OPENROUTER_URL);
+      await saveKey(OPENROUTER_URL, OPENROUTER_KEY, newer);
 
-      let result = await sealProxyEndpointKeys(dbAdapter);
-
-      assert.strictEqual(result.unloadedKey, 1);
-      assert.strictEqual(result.sealed, 0);
-      assert.deepEqual(await keyRow(OPENROUTER_URL), before);
-      assert.strictEqual(
-        await apiKeyServedFor(OPENROUTER_URL),
-        OPENROUTER_KEY,
-        'this process serves the plain-text key meanwhile',
-      );
-    });
-
-    test('a key whose plain text was edited outside the application is served at once, and the backfill reports it and leaves it for an operator', async function (assert) {
-      await insertPlainTextRow(OPENROUTER_URL, OPENROUTER_KEY);
-      await sealProxyEndpointKeys(dbAdapter);
-      await dbAdapter.execute(
-        `UPDATE proxy_endpoints SET api_key = 'sk-or-v1-edited-by-hand' WHERE url = $1`,
-        { bind: [OPENROUTER_URL] },
-      );
-
-      let served: string | undefined;
+      let refused: unknown;
       let lines = await logLinesDuring(['proxy-endpoint-keys'], async () => {
-        served = await apiKeyServedFor(OPENROUTER_URL);
+        refused = await destinationFor(OPENROUTER_URL);
       });
-      assert.strictEqual(
-        served,
-        'sk-or-v1-edited-by-hand',
-        'the edit reaches the proxy without waiting for the backfill',
-      );
-      let warnings = lines.filter(({ level }) => level === 'warn');
-      assert.strictEqual(warnings.length, 1, 'the disagreement is reported');
-      assert.false(warnings[0].message.includes('sk-or-v1-edited-by-hand'));
-      assert.false(warnings[0].message.includes(OPENROUTER_KEY));
 
-      let edited = await keyRow(OPENROUTER_URL);
-      let result = await sealProxyEndpointKeys(dbAdapter);
-
-      assert.strictEqual(result.tampered, 1);
-      assert.strictEqual(result.sealed, 0);
-      assert.deepEqual(await keyRow(OPENROUTER_URL), edited);
-
-      result = await sealProxyEndpointKeys(dbAdapter, undefined, {
-        resealTampered: true,
-      });
-      assert.strictEqual(result.sealed, 1);
-      let row = await keyRow(OPENROUTER_URL);
-      assert.strictEqual(
-        keyring.open(sealedOf(row), proxyEndpointKeyBinding(row)),
-        'sk-or-v1-edited-by-hand',
-      );
+      assert.strictEqual(refused, undefined);
+      let errors = lines.filter(({ level }) => level === 'error');
+      assert.strictEqual(errors.length, 1);
+      assert.true(errors[0].message.includes(OPENROUTER_URL));
+      assert.false(errors[0].message.includes(OPENROUTER_KEY));
     });
 
-    test('a process sealing with another data key reports a key sealed under the public local development key and leaves it for an operator', async function (assert) {
-      await insertPlainTextRow(OPENROUTER_URL, OPENROUTER_KEY);
-      await sealProxyEndpointKeys(dbAdapter);
-      assert.strictEqual(
-        (await keyRow(OPENROUTER_URL)).api_key_key_id,
-        'local-development',
-      );
-      let deployed = new SecretsKeyring(
-        [{ keyId: 'kms-deployed', key: Buffer.alloc(32, 9) }],
-        'kms-deployed',
-      );
-      let before = await keyRow(OPENROUTER_URL);
+    test('an endpoint that cannot be built is refused, while other destinations stay allowed', async function (assert) {
+      // The OpenRouter credit strategy needs a key; this row has none.
+      await saveKey(OPENROUTER_URL, null, keyring, 'openrouter');
+      await saveKey(EXAMPLE_URL, 'example-api-key');
 
-      let result = await sealProxyEndpointKeys(dbAdapter, deployed);
-
-      assert.strictEqual(result.tampered, 1);
-      assert.strictEqual(result.sealed, 0);
-      assert.deepEqual(await keyRow(OPENROUTER_URL), before);
-
-      result = await sealProxyEndpointKeys(dbAdapter, deployed, {
-        resealTampered: true,
-      });
-      assert.strictEqual(result.sealed, 1);
-      assert.strictEqual(result.unloadedKey, 0);
-      let row = await keyRow(OPENROUTER_URL);
-      assert.strictEqual(row.api_key_key_id, 'kms-deployed');
-      assert.strictEqual(
-        deployed.open(sealedOf(row), proxyEndpointKeyBinding(row)),
-        OPENROUTER_KEY,
-      );
-    });
-
-    test('the backfill empties the sealed columns of a row with no plain-text key', async function (assert) {
-      await insertPlainTextRow(OPENROUTER_URL, OPENROUTER_KEY);
-      await sealProxyEndpointKeys(dbAdapter);
-      await dbAdapter.execute(
-        `UPDATE proxy_endpoints SET api_key = NULL WHERE url = $1`,
-        { bind: [OPENROUTER_URL] },
+      let lines = await logLinesDuring(
+        ['allowed-proxy-destinations'],
+        async () => {
+          assert.strictEqual(await destinationFor(OPENROUTER_URL), undefined);
+        },
       );
 
-      let result = await sealProxyEndpointKeys(dbAdapter);
-
-      assert.strictEqual(result.cleared, 1);
-      let row = await keyRow(OPENROUTER_URL);
-      assert.strictEqual(row.api_key_ciphertext, null);
-      assert.strictEqual(row.api_key_nonce, null);
-      assert.strictEqual(row.api_key_tag, null);
-      assert.strictEqual(row.api_key_key_id, null);
-    });
-
-    test('the backfill leaves a row that changed after it was read', async function (assert) {
-      await insertPlainTextRow(OPENROUTER_URL, OPENROUTER_KEY);
-      // Another writer saves a new key between the backfill's read and its
-      // update.
-      let execute = dbAdapter.execute.bind(dbAdapter);
-      let interleaved = false;
-      let racing = Object.create(dbAdapter);
-      racing.execute = async (sql: string, opts?: any) => {
-        if (!interleaved && sql.trimStart().startsWith('UPDATE')) {
-          interleaved = true;
-          await saveProxyEndpoint(dbAdapter, {
-            url: OPENROUTER_URL,
-            apiKey: 'sk-or-v1-saved-concurrently',
-            creditStrategy: 'no-credit',
-            supportsStreaming: false,
-          });
-        }
-        return execute(sql, opts);
-      };
-
-      let result = await sealProxyEndpointKeys(racing);
-
-      assert.strictEqual(result.skipped, 1);
-      assert.strictEqual(
-        await apiKeyServedFor(OPENROUTER_URL),
-        'sk-or-v1-saved-concurrently',
-        "the concurrent write's sealed key stands",
-      );
-    });
-
-    test('saving an endpoint writes its sealed key and its plain-text key together', async function (assert) {
-      let id = await saveProxyEndpoint(dbAdapter, {
-        url: OPENROUTER_URL,
-        apiKey: OPENROUTER_KEY,
-        creditStrategy: 'openrouter',
-        supportsStreaming: true,
-      });
-      let row = await keyRow(OPENROUTER_URL);
-      assert.strictEqual(row.id, id);
-      assert.strictEqual(row.api_key, OPENROUTER_KEY);
-      assert.strictEqual(
-        keyring.open(sealedOf(row), proxyEndpointKeyBinding(row)),
-        OPENROUTER_KEY,
-      );
-
-      let replacedId = await saveProxyEndpoint(dbAdapter, {
-        url: OPENROUTER_URL,
-        apiKey: 'sk-or-v1-replacement',
-        creditStrategy: 'openrouter',
-        supportsStreaming: true,
-      });
-
-      assert.strictEqual(replacedId, id, 'replacing keeps the row');
-      let replaced = await keyRow(OPENROUTER_URL);
-      assert.strictEqual(replaced.api_key, 'sk-or-v1-replacement');
-      assert.strictEqual(
-        keyring.open(sealedOf(replaced), proxyEndpointKeyBinding(replaced)),
-        'sk-or-v1-replacement',
-      );
-      assert.strictEqual(
-        (await sealProxyEndpointKeys(dbAdapter)).unchanged,
-        1,
-        'a saved row needs no backfill',
-      );
-      assert.strictEqual(
-        await apiKeyServedFor(OPENROUTER_URL),
-        'sk-or-v1-replacement',
+      assert.strictEqual(await apiKeyServedFor(EXAMPLE_URL), 'example-api-key');
+      assert.true(
+        lines.some(
+          ({ level, message }) =>
+            level === 'error' && message.includes(OPENROUTER_URL),
+        ),
+        'the refused endpoint is logged',
       );
     });
 
@@ -515,7 +335,7 @@ module(basename(import.meta.filename), function () {
       for (let statement of statements) {
         await dbAdapter.execute(statement);
       }
-      await insertPlainTextRow(OPENROUTER_URL, OPENROUTER_KEY);
+      await saveKey(OPENROUTER_URL, OPENROUTER_KEY);
 
       async function selectAsReadOnly(sql: string, role = 'readonly_role') {
         return await dbAdapter.withTransaction(async (query: any) => {
@@ -525,7 +345,7 @@ module(basename(import.meta.filename), function () {
       }
 
       await assert.rejects(
-        selectAsReadOnly('SELECT api_key FROM proxy_endpoints'),
+        selectAsReadOnly('SELECT api_key_ciphertext FROM proxy_endpoints'),
         /permission denied for table proxy_endpoints/,
       );
       await assert.rejects(
@@ -534,7 +354,7 @@ module(basename(import.meta.filename), function () {
       );
       await assert.rejects(
         selectAsReadOnly(
-          'SELECT api_key FROM proxy_endpoints',
+          'SELECT api_key_ciphertext FROM proxy_endpoints',
           'readonly_member_for_proxy_endpoints_test',
         ),
         /permission denied for table proxy_endpoints/,
@@ -777,7 +597,10 @@ module(basename(import.meta.filename), function () {
 
         await runMigration('up');
         await assert.rejects(
-          selectAs(DELEGATED_MEMBER, 'SELECT api_key FROM proxy_endpoints'),
+          selectAs(
+            DELEGATED_MEMBER,
+            'SELECT api_key_ciphertext FROM proxy_endpoints',
+          ),
           /permission denied for table proxy_endpoints/,
           'the member is denied',
         );
@@ -815,7 +638,10 @@ module(basename(import.meta.filename), function () {
 
         await runMigration('up');
         await assert.rejects(
-          selectAs(DIRECT_MEMBER, 'SELECT api_key FROM proxy_endpoints'),
+          selectAs(
+            DIRECT_MEMBER,
+            'SELECT api_key_ciphertext FROM proxy_endpoints',
+          ),
           /permission denied for table proxy_endpoints/,
           'the member is denied',
         );
@@ -997,7 +823,10 @@ module(basename(import.meta.filename), function () {
 
         await runMigration('up');
         await assert.rejects(
-          selectAs(GROUP_MEMBER, 'SELECT api_key FROM proxy_endpoints'),
+          selectAs(
+            GROUP_MEMBER,
+            'SELECT api_key_ciphertext FROM proxy_endpoints',
+          ),
           /permission denied for table proxy_endpoints/,
           'the role reading through the group is denied',
         );

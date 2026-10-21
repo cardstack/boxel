@@ -35,6 +35,19 @@ export function ri(s: string): RealmIdentifier {
 }
 
 /**
+ * Whether an identifier is in prefix form (`@scope/name/…`, such as
+ * `@cardstack/base/card-api`) rather than URL form. This is the one test of an
+ * identifier's form: a URL parser answers it wrongly, because a prefix-form
+ * identifier is absolute but does not parse as a URL.
+ *
+ * It reads the spelling only, so it answers for a prefix whether or not that
+ * prefix is registered.
+ */
+export function isPrefixForm(identifier: string): boolean {
+  return identifier.startsWith('@');
+}
+
+/**
  * Build a `{ module, name }` code ref by resolving `relativePath` against
  * `baseUrl` (typically `import.meta.url`) and branding the result as a
  * `RealmResourceIdentifier`.

@@ -75,7 +75,10 @@ export class SaveCardInput extends CardDef {
 // with a generated name. The descriptions below spell that out because models
 // otherwise pass the path they want the new file to have as `localDir`.
 export class CopyCardToRealmInput extends CardDef {
-  @field sourceCard = linksTo(CardDef);
+  @field sourceCard = linksTo(CardDef, {
+    description:
+      'The card to copy, as relationships.sourceCard.links.self: its id as a full URL or a realm identifier such as @cardstack/catalog/…; either works.',
+  });
   @field targetRealm = contains(StringField, {
     description:
       'URL of the realm to copy the card into, ending in a slash, e.g. "https://example.com/my-realm/". The copy is written to <targetRealm><localDir>/<CardTypeName>/<generated-id>.json — see localDir.',
@@ -87,7 +90,10 @@ export class CopyCardToRealmInput extends CardDef {
 }
 
 export class CopyCardToStackInput extends CardDef {
-  @field sourceCard = linksTo(CardDef);
+  @field sourceCard = linksTo(CardDef, {
+    description:
+      'The card to copy, as relationships.sourceCard.links.self: its id as a full URL or a realm identifier such as @cardstack/catalog/…; either works.',
+  });
   @field targetStackIndex = contains(NumberField);
   @field localDir = contains(StringField, {
     description:
@@ -542,17 +548,26 @@ export class RunRealmCodeResult extends CardDef {
   @field shownCard = contains(StringField);
   @field showError = contains(StringField);
 
-  // A run that saved no files, took no captures, changed nothing in the room,
-  // asked for no UI action and asked to show no card, such as one that only
-  // read, has nothing for the chat to show. Its script result goes to the
-  // model only.
+  // The UI actions that failed. A UI action that was done is already visible
+  // in the app, so the chat lists only these.
+  get failedUiActions(): RealmCodeUiActionResult[] {
+    return (this.uiActions ?? []).filter(
+      (uiAction) => uiAction?.status === 'failed',
+    );
+  }
+
+  // The chat shows the card only for what the run wrote or what failed: saved
+  // or deleted files, room changes, created or deleted workspaces, a failed UI
+  // action, or a card it could not show. A run that only read, looked, or
+  // opened something has nothing for the chat to show. Its script result and
+  // captures go to the model only.
   get [hasNothingToShow](): boolean {
     return (
       !this.files?.length &&
-      !this.captures?.length &&
       !this.roomChanges?.length &&
-      !this.uiActions?.length &&
-      !this.shownCard &&
+      !this.createdWorkspaces?.length &&
+      !this.deletedWorkspaces?.length &&
+      !this.failedUiActions.length &&
       !this.showError
     );
   }
@@ -573,12 +588,30 @@ export class RunRealmCodeResult extends CardDef {
               </li>
             {{/each}}
           </ul>
-        {{else}}
-          <p class='no-files'>No files were changed.</p>
         {{/if}}
-        {{#if @model.uiActions.length}}
+        {{#if @model.createdWorkspaces.length}}
+          <ul class='workspaces'>
+            {{#each @model.createdWorkspaces as |url|}}
+              <li class='workspace' data-test-realm-code-created-workspace>
+                <span class='status'>Created</span>
+                <a href={{url}}>{{url}}</a>
+              </li>
+            {{/each}}
+          </ul>
+        {{/if}}
+        {{#if @model.deletedWorkspaces.length}}
+          <ul class='workspaces'>
+            {{#each @model.deletedWorkspaces as |url|}}
+              <li class='workspace' data-test-realm-code-deleted-workspace>
+                <span class='status'>Deleted</span>
+                <span>{{url}}</span>
+              </li>
+            {{/each}}
+          </ul>
+        {{/if}}
+        {{#if @model.failedUiActions.length}}
           <ul class='ui-actions'>
-            {{#each @model.uiActions as |uiAction|}}
+            {{#each @model.failedUiActions as |uiAction|}}
               <li
                 class='ui-action'
                 data-test-realm-code-ui-action={{uiAction.action}}
@@ -598,12 +631,6 @@ export class RunRealmCodeResult extends CardDef {
               <li data-test-realm-code-room-change>{{change}}</li>
             {{/each}}
           </ul>
-        {{/if}}
-        {{#if @model.shownCard}}
-          <p class='shown-card' data-test-realm-code-shown-card>
-            Opened
-            <a href={{@model.shownCard}}>{{@model.shownCard}}</a>
-          </p>
         {{/if}}
         {{#if @model.showError}}
           <p class='show-error' data-test-realm-code-show-error>
@@ -633,6 +660,7 @@ export class RunRealmCodeResult extends CardDef {
           font: var(--boxel-font-sm);
         }
         .files,
+        .workspaces,
         .room-changes,
         .ui-actions {
           margin: 0;
@@ -643,6 +671,7 @@ export class RunRealmCodeResult extends CardDef {
           gap: var(--boxel-sp-xxxs);
         }
         .file,
+        .workspace,
         .ui-action {
           display: flex;
           gap: var(--boxel-sp-xs);
@@ -653,16 +682,9 @@ export class RunRealmCodeResult extends CardDef {
           color: var(--boxel-450);
           text-transform: capitalize;
         }
-        .no-files {
-          margin: 0;
-          color: var(--boxel-450);
-        }
-        .shown-card,
         .show-error {
           margin: 0;
           word-break: break-all;
-        }
-        .show-error {
           color: var(--boxel-error-200);
         }
         .captures {

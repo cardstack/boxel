@@ -186,7 +186,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       );
 
       let rows = await context.dbAdapter.execute(
-        `SELECT id, username, webhook_path, verification_type, verification_config, signing_secret, created_at, updated_at FROM incoming_webhooks`,
+        `SELECT id, username, webhook_path, verification_type, verification_config, created_at, updated_at FROM incoming_webhooks`,
       );
       assert.strictEqual(rows.length, 1, 'one incoming webhook is persisted');
       assert.ok(rows[0].id, 'id is persisted');
@@ -196,7 +196,6 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         'username is persisted',
       );
       assert.ok(rows[0].webhook_path, 'webhook_path is persisted');
-      assert.ok(rows[0].signing_secret, 'signing_secret is persisted');
 
       let [secretRow] = await context.dbAdapter.execute(
         `SELECT id, username, ${INCOMING_WEBHOOK_SECRET_COLUMNS} FROM incoming_webhooks`,
@@ -338,7 +337,7 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       );
 
       await query(context.dbAdapter, [
-        `INSERT INTO incoming_webhooks (id, username, webhook_path, verification_type, verification_config, signing_secret, created_at, updated_at) VALUES (`,
+        `INSERT INTO incoming_webhooks (id, username, webhook_path, verification_type, verification_config, created_at, updated_at) VALUES (`,
         param(uuidv4()),
         `,`,
         param(matrixUserId),
@@ -349,15 +348,13 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         `,`,
         `'{"header": "X-Hub-Signature-256", "encoding": "hex"}'::jsonb`,
         `,`,
-        param('secret1'),
-        `,`,
         `CURRENT_TIMESTAMP`,
         `,`,
         `CURRENT_TIMESTAMP`,
         `)`,
       ]);
       await query(context.dbAdapter, [
-        `INSERT INTO incoming_webhooks (id, username, webhook_path, verification_type, verification_config, signing_secret, created_at, updated_at) VALUES (`,
+        `INSERT INTO incoming_webhooks (id, username, webhook_path, verification_type, verification_config, created_at, updated_at) VALUES (`,
         param(uuidv4()),
         `,`,
         param(otherMatrixUserId),
@@ -367,8 +364,6 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         param('HMAC_SHA256_HEADER'),
         `,`,
         `'{"header": "X-Hub-Signature-256", "encoding": "hex"}'::jsonb`,
-        `,`,
-        param('secret2'),
         `,`,
         `CURRENT_TIMESTAMP`,
         `,`,
@@ -484,7 +479,6 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
       let [row] = await context.dbAdapter.execute(
         `SELECT id, username, ${INCOMING_WEBHOOK_SECRET_COLUMNS} FROM incoming_webhooks`,
       );
-      assert.strictEqual(row.signing_secret, newSecret, 'plain text in step');
       assert.strictEqual(
         secretsKeyring().open(
           sealedFromColumns(row, 'signing_secret')!,

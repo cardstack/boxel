@@ -67,7 +67,7 @@ export default class ShowCardTool extends HostBaseTool<
         throw new Error(`Card definition for ${input.cardId} not found.`);
       }
       if (
-        !operatorModeStateService.codePathString?.startsWith(
+        !operatorModeStateService.state.codePath?.startsWith(
           cardDefRef.module,
         ) ||
         operatorModeStateService.state.codeSelection !== cardDefRef.name

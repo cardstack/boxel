@@ -4,6 +4,7 @@ import { createRequire } from 'module';
 import { dirname, join } from 'path';
 import { logger } from '@cardstack/runtime-common';
 import { registerSecureOriginHost } from './request-telemetry.ts';
+import { parseListedOrigin } from '../secure-origin/app-origins.js';
 
 // The secure origin is where a user types a credential: a page on an origin
 // that card code can't reach, so the same-origin policy keeps what is typed
@@ -33,9 +34,10 @@ export const GOOGLE_CALLBACK_PATH = 'google-callback';
 // machine's loopback address, on whatever port the CLI chose.
 const CLI_LOOPBACK_FORM_ACTION = 'http://127.0.0.1:*';
 
-// The typeface the app's forms are set in, served by the secure origin itself
-// so the credential fields it frames match the page around them. It comes from
-// boxel-ui, where the app gets it, so the two can't drift apart.
+// The typeface the app's forms are set in, and boxel-ui's design tokens,
+// served by the secure origin itself so its pages, and the credential fields
+// it frames, match the app's. They come from boxel-ui, where the app gets
+// them, so the two can't drift apart.
 const BOXEL_UI_STYLES_DIR = dirname(
   createRequire(import.meta.url).resolve(
     '@cardstack/boxel-ui/styles/fonts.css',
@@ -44,18 +46,40 @@ const BOXEL_UI_STYLES_DIR = dirname(
 
 // The shell's static files, by the path they are served at beneath the shell.
 const SHELL_ASSETS: Record<string, { file: string; contentType: string }> = {
-  'shell.js': {
-    file: 'shell.js',
-    contentType: 'text/javascript; charset=utf-8',
+  ...Object.fromEntries(
+    [
+      'shell.js',
+      'session.js',
+      'sign-in.js',
+      'sign-in-copy.js',
+      'register.js',
+      'password-reset.js',
+      'password-fields.js',
+      'matrix.js',
+      'dom.js',
+    ].map((name) => [
+      name,
+      {
+        file: join(SHELL_DIR, name),
+        contentType: 'text/javascript; charset=utf-8',
+      },
+    ]),
+  ),
+  'shell.css': {
+    file: join(SHELL_DIR, 'shell.css'),
+    contentType: 'text/css; charset=utf-8',
   },
-  'shell.css': { file: 'shell.css', contentType: 'text/css; charset=utf-8' },
-  'session.js': {
-    file: 'session.js',
-    contentType: 'text/javascript; charset=utf-8',
+  'variables.css': {
+    file: join(BOXEL_UI_STYLES_DIR, 'variables.css'),
+    contentType: 'text/css; charset=utf-8',
   },
-  'sign-in.js': {
-    file: 'sign-in.js',
-    contentType: 'text/javascript; charset=utf-8',
+  'theme.css': {
+    file: join(BOXEL_UI_STYLES_DIR, 'theme.css'),
+    contentType: 'text/css; charset=utf-8',
+  },
+  'IBMPlexSansVar-Roman.woff2': {
+    file: join(BOXEL_UI_STYLES_DIR, 'IBMPlexSansVar-Roman.woff2'),
+    contentType: 'font/woff2',
   },
 };
 
@@ -81,10 +105,6 @@ const CREDENTIALS_ASSETS: Record<
   'credentials.css': {
     file: join(SHELL_DIR, 'credentials.css'),
     contentType: 'text/css; charset=utf-8',
-  },
-  'IBMPlexSansVar-Roman.woff2': {
-    file: join(BOXEL_UI_STYLES_DIR, 'IBMPlexSansVar-Roman.woff2'),
-    contentType: 'font/woff2',
   },
 };
 
@@ -173,19 +193,22 @@ export interface CredentialFieldsOptions {
 }
 
 export interface ShellOptions {
-  // The realm server the shell's modes sign in to and act on. It is the only
-  // server the shell talks to, so it comes from the realm server's own
-  // configuration, never from the page.
+  // The realm server the shell's modes sign in to and act on. It comes from
+  // the realm server's own configuration, never from the page.
   realmServerURL: URL;
+  // The Matrix server the shell's modes create accounts on and reset
+  // passwords with. With the realm server, it is the only server the shell
+  // talks to, and it too comes from the realm server's configuration.
+  matrixURL?: URL;
 }
 
 // `url` is where the shell is served: its host is the secure origin and its
 // path is the shell's (`https://secure.boxel.ai/`, or
 // `https://localhost:4208/secure` in development). With `credentialFields`,
 // the origin also serves the credential fields the app frames, at
-// `credentials` beneath the shell. With `shell`, the shell's modes talk to the
-// realm server it names, and the sign-in page may hand a session to the CLI's
-// loopback listener.
+// `credentials` beneath the shell. With `shellOptions`, the shell's modes talk
+// to the realm server and the Matrix server it names, and the sign-in page may
+// hand a session to the CLI's loopback listener.
 export function createSecureOrigin(
   url: URL,
   credentialFields?: CredentialFieldsOptions,
@@ -197,6 +220,10 @@ export function createSecureOrigin(
     .replace(
       REALM_SERVER_URL_PLACEHOLDER,
       escapeAttribute(shellOptions?.realmServerURL.href ?? ''),
+    )
+    .replace(
+      MATRIX_URL_PLACEHOLDER,
+      escapeAttribute(shellOptions?.matrixURL?.href ?? ''),
     );
   // Everything the origin serves, by path, each with the headers its
   // response carries.
@@ -207,7 +234,12 @@ export function createSecureOrigin(
     ...(shellOptions
       ? {
           headers: {
-            connectSrc: [shellOptions.realmServerURL.origin],
+            connectSrc: [
+              shellOptions.realmServerURL.origin,
+              ...(shellOptions.matrixURL
+                ? [shellOptions.matrixURL.origin]
+                : []),
+            ],
             formAction: [CLI_LOOPBACK_FORM_ACTION],
           },
         }
@@ -218,7 +250,7 @@ export function createSecureOrigin(
   routes.set(`${shellBase}/${GOOGLE_CALLBACK_PATH}`, shell);
   for (let [name, { file, contentType }] of Object.entries(SHELL_ASSETS)) {
     routes.set(`${shellBase}/${name}`, {
-      body: readFileSync(join(SHELL_DIR, file)),
+      body: readFileSync(file),
       contentType,
     });
   }
@@ -300,13 +332,7 @@ function addCredentialFieldRoutes(
   shellBase: string,
   { matrixURL, appOrigins }: CredentialFieldsOptions,
 ) {
-  let origins = appOrigins.map((origin) => {
-    let parsed = new URL(origin).origin;
-    if (parsed === 'null') {
-      throw new Error(`secure origin: ${origin} is not an app origin`);
-    }
-    return parsed;
-  });
+  let origins = appOrigins.map(appOrigin);
   if (origins.length === 0) {
     throw new Error(`secure origin: credential fields need an app origin`);
   }
@@ -331,6 +357,33 @@ function addCredentialFieldRoutes(
       contentType,
     });
   }
+}
+
+// An app origin as the credential fields' page and `frame-ancestors` name
+// it. A host starting with `*.` stands for every subdomain of the rest, and a
+// port of `*` for every port of the host, such as `http://localhost:*` for a
+// host app served from this machine on whatever port it was started on.
+// Anything that isn't a single origin of that shape, such as a bare `*`, a
+// scheme alone, or a path, is refused rather than widened.
+export function appOrigin(origin: string): string {
+  let anyPort = origin.endsWith(':*');
+  let rest = anyPort ? origin.slice(0, -2) : origin;
+  let url: URL;
+  try {
+    url = new URL(rest);
+  } catch {
+    throw new Error(`secure origin: ${origin} is not an app origin`);
+  }
+  // Compared as written, so a port or a slash before the `*` is refused even
+  // where the URL parser would drop it as the scheme's default.
+  if (url.origin === 'null' || (anyPort && rest.toLowerCase() !== url.origin)) {
+    throw new Error(`secure origin: ${origin} is not an app origin`);
+  }
+  let normalized = anyPort ? `${url.origin}:*` : url.origin;
+  if (normalized.includes('*') && !parseListedOrigin(normalized)) {
+    throw new Error(`secure origin: ${origin} is not an app origin`);
+  }
+  return normalized;
 }
 
 function escapeAttribute(value: string): string {

@@ -16,6 +16,7 @@ import {
   resealUnderCurrentKey,
   resetSecretsAtRest,
   SEALED_COLUMNS,
+  sealedColumnBindings,
   sealedFromColumns,
   SecretsKeyring,
 } from '../lib/secrets-at-rest/index.ts';
@@ -26,7 +27,6 @@ import {
   insertIncomingWebhook,
   readIncomingWebhookSecret,
   rotateIncomingWebhookSecret,
-  sealIncomingWebhookSecrets,
   type IncomingWebhookSecretRow,
 } from '../lib/incoming-webhook-secrets.ts';
 
@@ -60,13 +60,29 @@ module(basename(import.meta.filename), function () {
       },
     });
 
-    // A row as a server running the previous revision writes it: plain text
-    // only, with no record of when the secret was issued.
-    async function insertPlainTextRow(id: string, signingSecret: string) {
+    // A row as the application writes it: the secret sealed under its
+    // binding.
+    async function insertSealedRow(
+      id: string,
+      signingSecret: string,
+      ring: SecretsKeyring = keyring,
+    ) {
       await dbAdapter.execute(
-        `INSERT INTO incoming_webhooks (id, username, webhook_path, verification_type, verification_config, signing_secret, created_at, updated_at)
-         VALUES ($1, $2, $3, 'HMAC_SHA256_HEADER', '{"header": "X-Hub-Signature-256", "encoding": "hex"}'::jsonb, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
-        { bind: [id, OWNER, `whk_${id}`, signingSecret] },
+        `INSERT INTO incoming_webhooks (id, username, webhook_path, verification_type, verification_config, signing_secret_ciphertext, signing_secret_nonce, signing_secret_tag, signing_secret_key_id, created_at, updated_at)
+         VALUES ($1, $2, $3, 'HMAC_SHA256_HEADER', '{"header": "X-Hub-Signature-256", "encoding": "hex"}'::jsonb, decode($4, 'base64'), decode($5, 'base64'), decode($6, 'base64'), $7, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`,
+        {
+          bind: [
+            id,
+            OWNER,
+            `whk_${id}`,
+            ...sealedColumnBindings(
+              ring.seal(
+                signingSecret,
+                incomingWebhookSecretBinding({ id, username: OWNER }),
+              ),
+            ),
+          ],
+        },
       );
     }
 
@@ -85,353 +101,26 @@ module(basename(import.meta.filename), function () {
       );
     }
 
-    async function censusLine(): Promise<string | undefined> {
+    test('the table holds no plain-text secret, and the census reports no plain-text secret columns', async function (assert) {
+      let columns = await dbAdapter.execute(
+        `SELECT column_name FROM information_schema.columns
+         WHERE table_name = 'incoming_webhooks'
+           AND column_name = 'signing_secret'`,
+      );
+      assert.deepEqual(columns, [], 'the plain-text column is dropped');
+
       let lines = await logLinesDuring(['secrets-at-rest'], () =>
         reportPlaintextCensus(dbAdapter),
       );
-      return lines
-        .map(({ message }) => message)
-        .find((message) =>
-          message.startsWith('plaintext census: incoming_webhooks'),
-        );
-    }
-
-    test('the backfill seals a plain-text row under its binding, and the census reaches zero', async function (assert) {
-      await insertPlainTextRow(FIRST_ID, FIRST_SECRET);
-      await insertPlainTextRow(SECOND_ID, SECOND_SECRET);
-      assert.strictEqual(
-        await censusLine(),
-        'plaintext census: incoming_webhooks.signing_secret plaintextRows=2',
-      );
-
-      let result = await sealIncomingWebhookSecrets(dbAdapter);
-
-      assert.deepEqual(result, {
-        sealed: 2,
-        unchanged: 0,
-        unloadedKey: 0,
-        tampered: 0,
-        skipped: 0,
-      });
-      let row = await secretRow(FIRST_ID);
-      assert.strictEqual(row.signing_secret_key_id, keyring.currentKeyId);
-      assert.strictEqual(
-        keyring.open(sealedFromColumns({ ...row }, 'signing_secret')!, {
-          field: INCOMING_WEBHOOK_SECRET_FIELD,
-          owner: OWNER,
-          id: FIRST_ID,
-        }),
-        FIRST_SECRET,
-        'the sealed value opens to the secret under its field, its owner and its id',
-      );
-      assert.strictEqual(
-        row.signing_secret,
-        FIRST_SECRET,
-        'the plain-text column is kept',
-      );
-      assert.strictEqual(
-        await censusLine(),
-        'plaintext census: incoming_webhooks.signing_secret plaintextRows=0',
-      );
-      assert.strictEqual(readIncomingWebhookSecret(row), FIRST_SECRET);
-    });
-
-    test('a second backfill changes nothing', async function (assert) {
-      await insertPlainTextRow(FIRST_ID, FIRST_SECRET);
-      await sealIncomingWebhookSecrets(dbAdapter);
-      let before = await secretRow(FIRST_ID);
-
-      let result = await sealIncomingWebhookSecrets(dbAdapter);
-
-      assert.deepEqual(result, {
-        sealed: 0,
-        unchanged: 1,
-        unloadedKey: 0,
-        tampered: 0,
-        skipped: 0,
-      });
       assert.deepEqual(
-        await secretRow(FIRST_ID),
-        before,
-        'the sealed columns are untouched',
+        lines
+          .map(({ message }) => message)
+          .filter((message) => message.startsWith('plaintext census:')),
+        ['plaintext census: no plain-text secret columns'],
       );
     });
 
-    test('a row the backfill has not sealed is read from its plain-text secret', async function (assert) {
-      await insertPlainTextRow(FIRST_ID, FIRST_SECRET);
-
-      let row = await secretRow(FIRST_ID);
-      assert.strictEqual(readIncomingWebhookSecret(row), FIRST_SECRET);
-      assert.strictEqual(
-        (await secretRow(FIRST_ID)).signing_secret_ciphertext,
-        null,
-        'reading does not seal',
-      );
-    });
-
-    test('a sealed secret whose owner was edited outside the application is read from plain text, and the backfill reports it and leaves it for an operator', async function (assert) {
-      await insertPlainTextRow(FIRST_ID, FIRST_SECRET);
-      await sealIncomingWebhookSecrets(dbAdapter);
-      let newOwner = '@new-owner:localhost';
-      await dbAdapter.execute(
-        `UPDATE incoming_webhooks SET username = $1 WHERE id = $2`,
-        { bind: [newOwner, FIRST_ID] },
-      );
-
-      let read: string[] = [];
-      let lines = await logLinesDuring(
-        ['incoming-webhook-secrets'],
-        async () => {
-          read.push(readIncomingWebhookSecret(await secretRow(FIRST_ID)));
-          read.push(readIncomingWebhookSecret(await secretRow(FIRST_ID)));
-        },
-      );
-
-      assert.deepEqual(read, [FIRST_SECRET, FIRST_SECRET]);
-      let warnings = lines.filter(({ level }) => level === 'warn');
-      assert.strictEqual(
-        warnings.length,
-        1,
-        'the failure is reported once, not on every delivery',
-      );
-      assert.true(warnings[0].message.includes(FIRST_ID));
-      assert.false(
-        warnings[0].message.includes(FIRST_SECRET),
-        'the report never carries the secret',
-      );
-
-      let edited = await secretRow(FIRST_ID);
-      let result: Awaited<ReturnType<typeof sealIncomingWebhookSecrets>>;
-      let sentry = startSentryCapture({ tracing: false });
-      let events: SentryEvent[];
-      let backfillLines: Awaited<ReturnType<typeof logLinesDuring>>;
-      try {
-        backfillLines = await logLinesDuring(
-          ['incoming-webhook-secrets'],
-          async () => {
-            result = await sealIncomingWebhookSecrets(dbAdapter);
-          },
-        );
-        events = await sentry.flushedEvents();
-      } finally {
-        await sentry.stop();
-      }
-      assert.strictEqual(result!.tampered, 1);
-      assert.strictEqual(result!.sealed, 0);
-      assert.deepEqual(
-        await secretRow(FIRST_ID),
-        edited,
-        'the backfill does not seal the secret to its new owner',
-      );
-      let errors = backfillLines!.filter(({ level }) => level === 'error');
-      assert.strictEqual(errors.length, 1, 'the backfill logs the row');
-      assert.true(errors[0].message.includes(FIRST_ID));
-      assert.false(
-        errors[0].message.includes(FIRST_SECRET),
-        'the log line never carries the secret',
-      );
-      assert.strictEqual(events!.length, 1, 'the backfill reports to Sentry');
-      let reported = JSON.stringify(events![0]);
-      assert.true(reported.includes(FIRST_ID));
-      assert.false(
-        reported.includes(FIRST_SECRET),
-        'the Sentry event never carries the secret',
-      );
-
-      result = await sealIncomingWebhookSecrets(dbAdapter, undefined, {
-        resealTampered: true,
-      });
-      assert.strictEqual(result.sealed, 1);
-      assert.strictEqual(result.tampered, 0);
-      let row = await secretRow(FIRST_ID);
-      assert.strictEqual(
-        openedFrom(row),
-        FIRST_SECRET,
-        'an operator re-seals the secret to its new owner',
-      );
-    });
-
-    test('a secret whose plain text was edited outside the application is read at once, and the backfill reports it and leaves it for an operator', async function (assert) {
-      await insertPlainTextRow(FIRST_ID, FIRST_SECRET);
-      await sealIncomingWebhookSecrets(dbAdapter);
-      await dbAdapter.execute(
-        `UPDATE incoming_webhooks SET signing_secret = 'edited-by-hand' WHERE id = $1`,
-        { bind: [FIRST_ID] },
-      );
-
-      let read: string | undefined;
-      let lines = await logLinesDuring(
-        ['incoming-webhook-secrets'],
-        async () => {
-          read = readIncomingWebhookSecret(await secretRow(FIRST_ID));
-        },
-      );
-      assert.strictEqual(read, 'edited-by-hand');
-      let warnings = lines.filter(({ level }) => level === 'warn');
-      assert.strictEqual(warnings.length, 1, 'the disagreement is reported');
-      assert.false(warnings[0].message.includes('edited-by-hand'));
-      assert.false(warnings[0].message.includes(FIRST_SECRET));
-
-      let edited = await secretRow(FIRST_ID);
-      let result: Awaited<ReturnType<typeof sealIncomingWebhookSecrets>>;
-      let backfillLines = await logLinesDuring(
-        ['incoming-webhook-secrets'],
-        async () => {
-          result = await sealIncomingWebhookSecrets(dbAdapter);
-        },
-      );
-
-      assert.strictEqual(result!.tampered, 1);
-      assert.strictEqual(result!.sealed, 0);
-      assert.deepEqual(await secretRow(FIRST_ID), edited);
-      let errors = backfillLines.filter(({ level }) => level === 'error');
-      assert.strictEqual(errors.length, 1, 'the backfill reports the row');
-      assert.true(errors[0].message.includes(FIRST_ID));
-      assert.false(errors[0].message.includes('edited-by-hand'));
-      assert.false(errors[0].message.includes(FIRST_SECRET));
-
-      result = await sealIncomingWebhookSecrets(dbAdapter, undefined, {
-        resealTampered: true,
-      });
-      assert.strictEqual(result.sealed, 1);
-      assert.strictEqual(
-        openedFrom(await secretRow(FIRST_ID)),
-        'edited-by-hand',
-      );
-    });
-
-    test('the backfill leaves a secret sealed under a data key this process has not loaded', async function (assert) {
-      // Another task, further into a data-key rotation, sealed the row under
-      // a key this one doesn't hold.
-      let newer = new SecretsKeyring(
-        [{ keyId: 'kms-newer', key: Buffer.alloc(32, 7) }],
-        'kms-newer',
-      );
-      await insertPlainTextRow(FIRST_ID, FIRST_SECRET);
-      await sealIncomingWebhookSecrets(dbAdapter, newer);
-      let before = await secretRow(FIRST_ID);
-
-      let result = await sealIncomingWebhookSecrets(dbAdapter);
-
-      assert.strictEqual(result.unloadedKey, 1);
-      assert.strictEqual(result.sealed, 0);
-      assert.deepEqual(await secretRow(FIRST_ID), before);
-      assert.strictEqual(
-        readIncomingWebhookSecret(before),
-        FIRST_SECRET,
-        'this process reads the plain-text secret meanwhile',
-      );
-    });
-
-    test('a process sealing with another data key reports a secret sealed under the public local development key and leaves it for an operator', async function (assert) {
-      await insertPlainTextRow(FIRST_ID, FIRST_SECRET);
-      await sealIncomingWebhookSecrets(dbAdapter);
-      assert.strictEqual(
-        (await secretRow(FIRST_ID)).signing_secret_key_id,
-        'local-development',
-      );
-      let deployed = new SecretsKeyring(
-        [{ keyId: 'kms-deployed', key: Buffer.alloc(32, 9) }],
-        'kms-deployed',
-      );
-      let before = await secretRow(FIRST_ID);
-
-      let result: Awaited<ReturnType<typeof sealIncomingWebhookSecrets>>;
-      let lines = await logLinesDuring(
-        ['incoming-webhook-secrets'],
-        async () => {
-          result = await sealIncomingWebhookSecrets(dbAdapter, deployed);
-        },
-      );
-
-      assert.strictEqual(result!.tampered, 1);
-      assert.strictEqual(result!.sealed, 0);
-      assert.deepEqual(await secretRow(FIRST_ID), before);
-      let errors = lines.filter(({ level }) => level === 'error');
-      assert.strictEqual(errors.length, 1, 'the backfill reports the row');
-      assert.true(errors[0].message.includes(FIRST_ID));
-      assert.false(errors[0].message.includes(FIRST_SECRET));
-
-      result = await sealIncomingWebhookSecrets(dbAdapter, deployed, {
-        resealTampered: true,
-      });
-      assert.strictEqual(result.sealed, 1);
-      let row = await secretRow(FIRST_ID);
-      assert.strictEqual(row.signing_secret_key_id, 'kms-deployed');
-      assert.strictEqual(openedFrom(row, deployed), FIRST_SECRET);
-    });
-
-    test('an owner edited alongside a local development key seal is reported, not sealed to the new owner', async function (assert) {
-      let deployed = new SecretsKeyring(
-        [{ keyId: 'kms-deployed', key: Buffer.alloc(32, 9) }],
-        'kms-deployed',
-      );
-      let newOwner = '@new-owner:localhost';
-      await insertPlainTextRow(FIRST_ID, FIRST_SECRET);
-      await sealIncomingWebhookSecrets(dbAdapter, deployed);
-      // The second row's owner is edited and its secret sealed to the new
-      // owner with the public local key, which anyone can do.
-      await insertPlainTextRow(SECOND_ID, SECOND_SECRET);
-      await sealIncomingWebhookSecrets(dbAdapter, keyring);
-      await dbAdapter.execute(
-        `UPDATE incoming_webhooks SET username = $1 WHERE id = $2`,
-        { bind: [newOwner, SECOND_ID] },
-      );
-      await sealIncomingWebhookSecrets(dbAdapter, keyring, {
-        resealTampered: true,
-      });
-      // The first row, sealed under the deployed key, has its owner edited and
-      // its key id pointed at the public local key.
-      await dbAdapter.execute(
-        `UPDATE incoming_webhooks SET username = $1,
-           signing_secret_key_id = 'local-development'
-         WHERE id = $2`,
-        { bind: [newOwner, FIRST_ID] },
-      );
-      let second = await secretRow(SECOND_ID);
-      assert.strictEqual(second.username, newOwner);
-      assert.strictEqual(second.signing_secret_key_id, 'local-development');
-      assert.strictEqual(openedFrom(second), SECOND_SECRET);
-      let first = await secretRow(FIRST_ID);
-
-      let result = await sealIncomingWebhookSecrets(dbAdapter, deployed);
-
-      assert.strictEqual(result.tampered, 2);
-      assert.strictEqual(result.sealed, 0);
-      assert.deepEqual(await secretRow(FIRST_ID), first);
-      assert.deepEqual(await secretRow(SECOND_ID), second);
-    });
-
-    test('the backfill leaves a row whose secret was rotated after it was read', async function (assert) {
-      await insertPlainTextRow(FIRST_ID, FIRST_SECRET);
-      let execute = dbAdapter.execute.bind(dbAdapter);
-      let rotatedSecret: string | undefined;
-      let racing = Object.create(dbAdapter);
-      racing.execute = async (sql: string, opts?: any) => {
-        if (!rotatedSecret && sql.trimStart().startsWith('UPDATE')) {
-          rotatedSecret = (
-            await rotateIncomingWebhookSecret(dbAdapter, {
-              id: FIRST_ID,
-              username: OWNER,
-            })
-          )?.signingSecret;
-        }
-        return execute(sql, opts);
-      };
-
-      let result = await sealIncomingWebhookSecrets(racing);
-
-      assert.strictEqual(result.skipped, 1);
-      let row = await secretRow(FIRST_ID);
-      assert.strictEqual(row.signing_secret, rotatedSecret);
-      assert.strictEqual(
-        openedFrom(row),
-        rotatedSecret,
-        "the rotation's sealed secret stands",
-      );
-    });
-
-    test('registering and rotating write the sealed secret and the plain-text secret together', async function (assert) {
+    test('registering and rotating seal the secret under its binding, and reads open it', async function (assert) {
       let { signingSecret } = await insertIncomingWebhook(
         dbAdapter,
         {
@@ -446,8 +135,17 @@ module(basename(import.meta.filename), function () {
         { id: FIRST_ID },
       );
       let row = await secretRow(FIRST_ID);
-      assert.strictEqual(row.signing_secret, signingSecret);
-      assert.strictEqual(openedFrom(row), signingSecret);
+      assert.strictEqual(row.signing_secret_key_id, keyring.currentKeyId);
+      assert.strictEqual(
+        keyring.open(sealedFromColumns({ ...row }, 'signing_secret')!, {
+          field: INCOMING_WEBHOOK_SECRET_FIELD,
+          owner: OWNER,
+          id: FIRST_ID,
+        }),
+        signingSecret,
+        'the sealed value opens to the secret under its field, its owner and its id',
+      );
+      assert.strictEqual(readIncomingWebhookSecret(row), signingSecret);
 
       let rotated = await rotateIncomingWebhookSecret(dbAdapter, {
         id: FIRST_ID,
@@ -457,12 +155,10 @@ module(basename(import.meta.filename), function () {
       assert.ok(rotated);
       assert.notStrictEqual(rotated!.signingSecret, signingSecret);
       let rotatedRow = await secretRow(FIRST_ID);
-      assert.strictEqual(rotatedRow.signing_secret, rotated!.signingSecret);
       assert.strictEqual(openedFrom(rotatedRow), rotated!.signingSecret);
       assert.strictEqual(
-        (await sealIncomingWebhookSecrets(dbAdapter)).unchanged,
-        1,
-        'a written row needs no backfill',
+        readIncomingWebhookSecret(rotatedRow),
+        rotated!.signingSecret,
       );
       assert.strictEqual(
         await rotateIncomingWebhookSecret(dbAdapter, {
@@ -474,17 +170,141 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a sealed secret whose owner was edited outside the application is not read, and is reported once to the log and Sentry', async function (assert) {
+      await insertSealedRow(FIRST_ID, FIRST_SECRET);
+      let newOwner = '@new-owner:localhost';
+      await dbAdapter.execute(
+        `UPDATE incoming_webhooks SET username = $1 WHERE id = $2`,
+        { bind: [newOwner, FIRST_ID] },
+      );
+
+      let failures: string[] = [];
+      let sentry = startSentryCapture({ tracing: false });
+      let events: SentryEvent[];
+      let lines: Awaited<ReturnType<typeof logLinesDuring>>;
+      try {
+        lines = await logLinesDuring(['incoming-webhook-secrets'], async () => {
+          for (let i = 0; i < 2; i++) {
+            let row = await secretRow(FIRST_ID);
+            try {
+              readIncomingWebhookSecret(row);
+            } catch (e: any) {
+              failures.push(e.message);
+            }
+          }
+        });
+        events = await sentry.flushedEvents();
+      } finally {
+        await sentry.stop();
+      }
+
+      assert.strictEqual(
+        failures.length,
+        2,
+        'the secret bound to the old owner never verifies for the new one',
+      );
+      assert.false(failures.some((message) => message.includes(FIRST_SECRET)));
+      let errors = lines!.filter(({ level }) => level === 'error');
+      assert.strictEqual(
+        errors.length,
+        1,
+        'the failure is logged once, not on every delivery',
+      );
+      assert.true(errors[0].message.includes(FIRST_ID));
+      assert.false(
+        errors[0].message.includes(FIRST_SECRET),
+        'the log line never carries the secret',
+      );
+      assert.strictEqual(events!.length, 1, 'the failure reaches Sentry once');
+      let reported = JSON.stringify(events![0]);
+      assert.true(reported.includes(FIRST_ID));
+      assert.false(
+        reported.includes(FIRST_SECRET),
+        'the Sentry event never carries the secret',
+      );
+
+      let rotated = await rotateIncomingWebhookSecret(dbAdapter, {
+        id: FIRST_ID,
+        username: newOwner,
+      });
+      assert.strictEqual(
+        readIncomingWebhookSecret(await secretRow(FIRST_ID)),
+        rotated!.signingSecret,
+        'rotating issues a secret bound to the new owner',
+      );
+    });
+
+    test('a secret sealed under a data key this process has not loaded is not read, and is reported', async function (assert) {
+      // Another task, further into a data-key rotation, sealed the row under
+      // a key this one doesn't hold.
+      let newer = new SecretsKeyring(
+        [{ keyId: 'kms-newer', key: Buffer.alloc(32, 7) }],
+        'kms-newer',
+      );
+      await insertSealedRow(FIRST_ID, FIRST_SECRET, newer);
+
+      let lines = await logLinesDuring(
+        ['incoming-webhook-secrets'],
+        async () => {
+          let row = await secretRow(FIRST_ID);
+          assert.throws(
+            () => readIncomingWebhookSecret(row),
+            /has no signing secret to verify with/,
+          );
+          assert.strictEqual(
+            readIncomingWebhookSecret(row, newer),
+            FIRST_SECRET,
+            'a process that holds the key reads it',
+          );
+        },
+      );
+
+      let errors = lines.filter(({ level }) => level === 'error');
+      assert.strictEqual(errors.length, 1);
+      assert.true(errors[0].message.includes(FIRST_ID));
+      assert.false(errors[0].message.includes(FIRST_SECRET));
+    });
+
+    test('a webhook with no sealed secret is not read, and is reported', async function (assert) {
+      await insertSealedRow(FIRST_ID, FIRST_SECRET);
+      await dbAdapter.execute(
+        `UPDATE incoming_webhooks SET signing_secret_ciphertext = NULL WHERE id = $1`,
+        { bind: [FIRST_ID] },
+      );
+
+      let lines = await logLinesDuring(
+        ['incoming-webhook-secrets'],
+        async () => {
+          let row = await secretRow(FIRST_ID);
+          assert.throws(
+            () => readIncomingWebhookSecret(row),
+            /has no signing secret to verify with/,
+          );
+        },
+      );
+
+      let errors = lines.filter(({ level }) => level === 'error');
+      assert.strictEqual(errors.length, 1);
+      assert.true(errors[0].message.includes('is not sealed'));
+    });
+
     test('a secret in a statement that fails never reaches the error or its log', async function (assert) {
-      await insertPlainTextRow(FIRST_ID, FIRST_SECRET);
+      await insertSealedRow(FIRST_ID, FIRST_SECRET);
       let logged: string[] = [];
       let originalConsoleError = console.error;
       console.error = (...args: unknown[]) => {
         logged.push(args.map((arg) => inspect(arg, { depth: 10 })).join(' '));
       };
       let thrown: unknown;
+      let sealedSecrets: string[] = [];
+      let recording = Object.create(keyring) as SecretsKeyring;
+      recording.seal = (value, binding) => {
+        sealedSecrets.push(value);
+        return keyring.seal(value, binding);
+      };
       let issued: string[] = [];
-      let recording = Object.create(dbAdapter);
-      recording.execute = async (sql: string, opts?: any) => {
+      let recordingAdapter = Object.create(dbAdapter);
+      recordingAdapter.execute = async (sql: string, opts?: any) => {
         issued.push(...(opts?.bind ?? []).map(String));
         return dbAdapter.execute(sql, opts);
       };
@@ -492,14 +312,14 @@ module(basename(import.meta.filename), function () {
         // The webhook path is unique, and Postgres quotes the failing key in
         // the error.
         await insertIncomingWebhook(
-          recording,
+          recordingAdapter,
           {
             username: OWNER,
             webhookPath: `whk_${FIRST_ID}`,
             verificationType: 'HMAC_SHA256_HEADER',
             verificationConfig: {},
           },
-          { id: SECOND_ID },
+          { id: SECOND_ID, keyring: recording },
         );
       } catch (e) {
         thrown = e;
@@ -508,8 +328,12 @@ module(basename(import.meta.filename), function () {
       }
 
       assert.ok(thrown, 'the statement fails');
-      let secret = issued[5];
-      assert.ok(secret, 'the statement carried a secret');
+      let [secret] = sealedSecrets;
+      assert.ok(secret, 'a secret was issued');
+      assert.false(
+        issued.some((binding) => binding.includes(secret)),
+        'the statement carries only the sealed secret',
+      );
       assert.false(
         inspect(thrown, { depth: 10 }).includes(secret),
         'the error carries no secret',
@@ -522,9 +346,8 @@ module(basename(import.meta.filename), function () {
     });
 
     test('a data-key rotation re-seals signing secrets under the new data key, and they still verify', async function (assert) {
-      await insertPlainTextRow(FIRST_ID, FIRST_SECRET);
-      await insertPlainTextRow(SECOND_ID, SECOND_SECRET);
-      await sealIncomingWebhookSecrets(dbAdapter);
+      await insertSealedRow(FIRST_ID, FIRST_SECRET);
+      await insertSealedRow(SECOND_ID, SECOND_SECRET);
       let column = SEALED_COLUMNS.find(
         ({ field }) => field === INCOMING_WEBHOOK_SECRET_FIELD,
       );
@@ -549,23 +372,18 @@ module(basename(import.meta.filename), function () {
       ]);
       let row = await secretRow(FIRST_ID);
       assert.strictEqual(row.signing_secret_key_id, 'kms-new');
-      let warnings = (
+      let errors = (
         await logLinesDuring(['incoming-webhook-secrets'], async () => {
           assert.strictEqual(
             readIncomingWebhookSecret(row, rotated),
             FIRST_SECRET,
           );
         })
-      ).filter(({ level }) => level === 'warn');
+      ).filter(({ level }) => level === 'error');
       assert.strictEqual(
-        warnings.length,
+        errors.length,
         0,
         'the re-sealed secret opens under the binding its writes use',
-      );
-      assert.strictEqual(
-        (await sealIncomingWebhookSecrets(dbAdapter, rotated)).unchanged,
-        2,
-        'the backfill agrees with the re-sealed rows',
       );
     });
 
@@ -606,7 +424,7 @@ module(basename(import.meta.filename), function () {
       for (let statement of statements) {
         await dbAdapter.execute(statement);
       }
-      await insertPlainTextRow(FIRST_ID, FIRST_SECRET);
+      await insertSealedRow(FIRST_ID, FIRST_SECRET);
 
       async function selectAsReadOnly(sql: string, role = 'readonly_role') {
         return await dbAdapter.withTransaction(async (query: any) => {
@@ -616,7 +434,9 @@ module(basename(import.meta.filename), function () {
       }
 
       await assert.rejects(
-        selectAsReadOnly('SELECT signing_secret FROM incoming_webhooks'),
+        selectAsReadOnly(
+          'SELECT signing_secret_ciphertext FROM incoming_webhooks',
+        ),
         /permission denied for table incoming_webhooks/,
       );
       await assert.rejects(
@@ -625,7 +445,7 @@ module(basename(import.meta.filename), function () {
       );
       await assert.rejects(
         selectAsReadOnly(
-          'SELECT signing_secret FROM incoming_webhooks',
+          'SELECT signing_secret_ciphertext FROM incoming_webhooks',
           'readonly_member_for_incoming_webhooks_test',
         ),
         /permission denied for table incoming_webhooks/,
@@ -639,7 +459,7 @@ module(basename(import.meta.filename), function () {
     });
 
     test('the migration records when each existing secret was issued', async function (assert) {
-      await insertPlainTextRow(FIRST_ID, FIRST_SECRET);
+      await insertSealedRow(FIRST_ID, FIRST_SECRET);
       await dbAdapter.execute(
         `UPDATE incoming_webhooks
            SET created_at = '2026-01-02 03:04:05', signing_secret_created_at = NULL
@@ -894,7 +714,7 @@ module(basename(import.meta.filename), function () {
         await assert.rejects(
           selectAs(
             DELEGATED_MEMBER,
-            'SELECT signing_secret FROM incoming_webhooks',
+            'SELECT signing_secret_ciphertext FROM incoming_webhooks',
           ),
           /permission denied for table incoming_webhooks/,
           'the member is denied',
@@ -935,7 +755,7 @@ module(basename(import.meta.filename), function () {
         await assert.rejects(
           selectAs(
             DIRECT_MEMBER,
-            'SELECT signing_secret FROM incoming_webhooks',
+            'SELECT signing_secret_ciphertext FROM incoming_webhooks',
           ),
           /permission denied for table incoming_webhooks/,
           'the member is denied',
@@ -1120,7 +940,7 @@ module(basename(import.meta.filename), function () {
         await assert.rejects(
           selectAs(
             GROUP_MEMBER,
-            'SELECT signing_secret FROM incoming_webhooks',
+            'SELECT signing_secret_ciphertext FROM incoming_webhooks',
           ),
           /permission denied for table incoming_webhooks/,
           'the role reading through the group is denied',

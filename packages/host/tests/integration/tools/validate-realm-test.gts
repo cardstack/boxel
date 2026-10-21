@@ -61,23 +61,23 @@ module('Integration | tools | validate-realm', function (hooks) {
     assert.strictEqual(result.realmIdentifier, testRealmURL);
   });
 
-  test('normalizes an equivalent URL spelling of a valid realm', async function (assert) {
-    // The input is model-authored, so it can name the right realm in a
-    // non-canonical spelling. Parsing canonicalizes those away; without it the
-    // membership check compares literally and rejects a realm that exists.
-    let toolService = getService('tool-service');
-    let command = new ValidateRealmTool(toolService.toolContext);
-    let { host, pathname } = new URL(testRealmURL);
-    for (let spelling of [
-      `http://${host.toUpperCase()}${pathname}`,
-      `http://${host}${pathname}sub/../`,
-    ]) {
-      let result = await command.execute({ realmIdentifier: spelling });
-      assert.strictEqual(
-        result.realmIdentifier,
-        testRealmURL,
-        `${spelling} normalizes to the realm it names`,
-      );
+  test('accepts a realm by its prefix and by its URL', async function (assert) {
+    let { virtualNetwork } = getService('network');
+    let testRealmPrefix = '@test/validate-realm/';
+    virtualNetwork.addRealmMapping(testRealmPrefix, testRealmURL);
+    try {
+      let toolService = getService('tool-service');
+      let command = new ValidateRealmTool(toolService.toolContext);
+      for (let realmIdentifier of [testRealmPrefix, testRealmURL]) {
+        let result = await command.execute({ realmIdentifier });
+        assert.strictEqual(
+          result.realmIdentifier,
+          testRealmURL,
+          `${realmIdentifier} returns the realm as the realm server lists it`,
+        );
+      }
+    } finally {
+      virtualNetwork.removeRealmMapping(testRealmPrefix);
     }
   });
 
@@ -93,6 +93,14 @@ module('Integration | tools | validate-realm', function (hooks) {
       assert.ok(
         e.message.includes('Invalid realm'),
         `Error message includes "Invalid realm": ${e.message}`,
+      );
+      assert.ok(
+        e.message.includes(`Valid realms: `),
+        `Error message lists the valid realms: ${e.message}`,
+      );
+      assert.ok(
+        e.message.includes(testRealmURL),
+        `The list names the available realm: ${e.message}`,
       );
     }
   });

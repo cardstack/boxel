@@ -4,9 +4,10 @@ import Component from '@glimmer/component';
 import { modifier } from 'ember-modifier';
 
 import ENV from '@cardstack/host/config/environment';
-import type {
-  CredentialFields,
-  CredentialForm,
+import {
+  credentialFieldsURL,
+  type CredentialFields,
+  type CredentialForm,
 } from '@cardstack/host/lib/credential-fields';
 import { isTrustedMessageOrigin } from '@cardstack/host/utils/trusted-message-origin';
 
@@ -187,13 +188,11 @@ export default class CredentialFieldsFrame extends Component<Signature> {
   </template>
 
   private get src() {
-    let base = ENV.secureOriginURL.endsWith('/')
-      ? ENV.secureOriginURL
-      : `${ENV.secureOriginURL}/`;
-    let url = new URL('credentials', base);
-    url.searchParams.set('form', this.args.form);
-    url.searchParams.set('origin', window.location.origin);
-    return url.href;
+    return credentialFieldsURL(
+      ENV.secureOriginURL,
+      this.args.form,
+      window.location.origin,
+    );
   }
 
   private connectFrame = modifier((element: HTMLDivElement) => {

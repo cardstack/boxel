@@ -268,12 +268,12 @@ you change it, change it everywhere — `alloy/config.alloy` (local) and
 `cardstack/infra:modules/aws/ecs/firelens/templates/extra.conf.tftpl`
 (staging + production).
 
-| Label       | Local source                                                                                                                                                 | Staging / production source                                                                                                                                                   | When set                                 |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------- |
-| `env`       | constant `local` — Alloy relabel rule (Docker source) and inline target attribute (file source)                                                              | constant `staging` / `production` (Fluent Bit static `Labels`)                                                                                                                | always                                   |
-| `service`   | Docker container name, leading `/` stripped (Docker source) — or `realm-server` / `worker` / `prerender` / `prerender-manager` (file source, mise dev tasks) | ECS task family — `realm-server`, `worker`, `prerender`, `prerender-manager`, `synapse`                                                                                       | always                                   |
-| `realm`     | opt-in via Docker label `boxel.realm=<name>`                                                                                                                 | task env when the task pins a single realm (omitted on multi-realm workloads)                                                                                                 | when meaningful                          |
-| `worker_id` | not set locally                                                                                                                                              | per-process worker id (`<runtime-id>-pid-<pid>`), parsed from `[worker <id> priority N]:` log line prefixes by a Fluent Bit Lua filter. Matches `job_reservations.worker_id`. | worker tasks only, lines with the prefix |
+| Label       | Local source                                                                                                                                                 | Staging / production source                                                                                                                                                    | When set                                 |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------- |
+| `env`       | constant `local` — Alloy relabel rule (Docker source) and inline target attribute (file source)                                                              | constant `staging` / `production` (Fluent Bit static `Labels`)                                                                                                                 | always                                   |
+| `service`   | Docker container name, leading `/` stripped (Docker source) — or `realm-server` / `worker` / `prerender` / `prerender-manager` (file source, mise dev tasks) | ECS task family — `realm-server`, `worker`, `prerender`, `prerender-manager`, `synapse`                                                                                        | always                                   |
+| `realm`     | opt-in via Docker label `boxel.realm=<name>`                                                                                                                 | task env when the task pins a single realm (omitted on multi-realm workloads)                                                                                                  | when meaningful                          |
+| `worker_id` | not set locally                                                                                                                                              | per-process worker id (`<instance-id>-pid-<pid>`), parsed from `[worker <id> priority N]:` log line prefixes by a Fluent Bit Lua filter. Matches `job_reservations.worker_id`. | worker tasks only, lines with the prefix |
 
 The local Alloy scraper drops the observability stack's own Compose
 services (`grafana`, `loki`, `alloy`) so `{env="local"}` queries don't
@@ -356,7 +356,7 @@ window, not the query window.
 
 # Per-worker tail (worker_id matches job_reservations.worker_id —
 # look it up there, e.g. for the worker that ran a specific job).
-{env="<env>", service="worker", worker_id="abc123-3236013547-pid-42"}
+{env="<env>", service="worker", worker_id="ip-10-0-1-23.ec2.internal-9f3c2a1b-pid-42"}
 
 # Logs around a specific job id (LogQL line-filter, not regex)
 {env="<env>", service="worker"} |= "job_id=42"
@@ -401,7 +401,7 @@ URL from SSM.
 | `--env`                    | (required) | `local`, `staging`, `production`                                                                    |
 | `--service`                | (required) | `realm-server`, `worker`, `prerender`, `prerender-manager`, `synapse` (or any local container name) |
 | `--realm`                  | unset      | Restrict to a single realm.                                                                         |
-| `--worker-id`              | unset      | Per-Fargate-task id; workers only.                                                                  |
+| `--worker-id`              | unset      | One worker process, `<instance-id>-pid-<pid>`; workers only.                                        |
 | `--filter`                 | unset      | LogQL line-filter (`\|=`); literal substring.                                                       |
 | `--regex`                  | unset      | LogQL line-regex (`\|~`). Mutually exclusive with `--filter`.                                       |
 | `--since`                  | `15m`      | `30s`, `15m`, `1h`, `2d` — pattern `^\d+[smhd]$`.                                                   |

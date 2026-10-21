@@ -9,7 +9,13 @@ import type { AddressInfo } from 'net';
 import type { SuperTest, Test } from 'supertest';
 import supertest from 'supertest';
 import type { PgAdapter } from '@cardstack/postgres';
-import { getOrCreateUser, upsertSessionRoom } from '@cardstack/runtime-common';
+import {
+  clearSessionRoom,
+  fetchSessionRoom,
+  getOrCreateUser,
+  upsertSessionRoom,
+} from '@cardstack/runtime-common';
+import { APP_BOXEL_REALMS_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import {
   setupDB,
   setupSimpleRealmServerTemplate,
@@ -28,7 +34,13 @@ import {
   retrieveTokenClaim,
 } from '../utils/jwt.ts';
 import { createJWT as createRealmJWT } from '../jwt.ts';
-import { getMatrixAdminToken, registerUser } from '../synapse.ts';
+import {
+  fetchAccountData,
+  getMatrixAdminToken,
+  impersonateAsMatrixAdmin,
+  logoutMatrixAccessToken,
+  registerUser,
+} from '../synapse.ts';
 import { keepsMethodAndPathOnly } from '../lib/request-telemetry.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 import {
@@ -98,6 +110,65 @@ async function linkGoogle(userId: string, sub: string) {
   await updateAccount(userId, {
     external_ids: [{ auth_provider: 'oidc-google', external_id: sub }],
   });
+}
+
+async function account(userId: string) {
+  let response = await adminRequest(
+    `_synapse/admin/v2/users/${encodeURIComponent(userId)}`,
+  );
+  return (await response.json()) as Record<string, any>;
+}
+
+function sortedExternalIds(account: Record<string, any>) {
+  return (
+    (account.external_ids ?? []) as {
+      auth_provider: string;
+      external_id: string;
+    }[]
+  )
+    .map(({ auth_provider, external_id }) => ({ auth_provider, external_id }))
+    .sort((a, b) => a.auth_provider.localeCompare(b.auth_provider));
+}
+
+// The realms the user's account data lists, as the app reads them.
+async function accountRealms(userId: string): Promise<string[]> {
+  let accessToken = await impersonateAsMatrixAdmin({ ...ADMIN, userId });
+  try {
+    let { realms } = await fetchAccountData(
+      matrixURL,
+      userId,
+      accessToken,
+      APP_BOXEL_REALMS_EVENT_TYPE,
+    );
+    return (realms ?? []) as string[];
+  } finally {
+    await logoutMatrixAccessToken({ matrixURL, accessToken });
+  }
+}
+
+async function setAccountRealms(userId: string, realms: string[]) {
+  let accessToken = await impersonateAsMatrixAdmin({ ...ADMIN, userId });
+  try {
+    let response = await fetch(
+      new URL(
+        `_matrix/client/v3/user/${encodeURIComponent(userId)}/account_data/${APP_BOXEL_REALMS_EVENT_TYPE}`,
+        matrixURL,
+      ),
+      {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ realms }),
+      },
+    );
+    if (!response.ok) {
+      throw new Error(`could not set account data: ${response.status}`);
+    }
+  } finally {
+    await logoutMatrixAccessToken({ matrixURL, accessToken });
+  }
 }
 
 async function threepids(userId: string) {
@@ -304,12 +375,20 @@ module(basename(import.meta.filename), function () {
     function passwordSignIn(
       username: string,
       password: string,
-      origin: string | null = secureOrigin,
+      {
+        origin = secureOrigin,
+        registrationToken,
+      }: { origin?: string | null; registrationToken?: string } = {},
     ) {
       return post(
         '/_secure-session',
         'secure-session',
-        { username, password, client: 'window' },
+        {
+          username,
+          password,
+          client: 'window',
+          ...(registrationToken ? { registrationToken } : {}),
+        },
         origin,
       );
     }
@@ -408,9 +487,6 @@ module(basename(import.meta.filename), function () {
 
     test('a failed password sign-in says nothing about the account', async function (assert) {
       let { username, password } = await registerPasswordUser(dbAdapter);
-      let outsider = await registerPasswordUser(dbAdapter, {
-        boxelAccount: false,
-      });
       let wrongPassword = await passwordSignIn(username, `${password}-wrong`);
       let noSuchUser = await passwordSignIn(
         `nobody-${randomBytes(6).toString('hex')}`,
@@ -420,11 +496,11 @@ module(basename(import.meta.filename), function () {
         `${randomBytes(6).toString('hex')}@nowhere.test`,
         password,
       );
-      let notInBoxel = await passwordSignIn(
-        outsider.username,
-        outsider.password,
+      let otherServer = await passwordSignIn(
+        `@${username}:elsewhere.test`,
+        password,
       );
-      for (let refusal of [noSuchUser, noSuchEmail, notInBoxel]) {
+      for (let refusal of [noSuchUser, noSuchEmail, otherServer]) {
         assert.strictEqual(refusal.status, 401);
         assert.deepEqual(
           refusal.body,
@@ -439,23 +515,203 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('password sign-ins are limited per account', async function (assert) {
+    test("a sign-in the Matrix server can't look up is unavailable, not a wrong password", async function (assert) {
+      let { username, password, userId } =
+        await registerPasswordUser(dbAdapter);
+      // The Matrix server fails the admin lookup of this one account.
+      let lookup = `/_synapse/admin/v2/users/${encodeURIComponent(userId)}`;
+      let originalFetch = globalThis.fetch;
+      globalThis.fetch = (async (
+        input: RequestInfo | URL,
+        init?: RequestInit,
+      ) => {
+        let url = new URL(input instanceof Request ? input.url : String(input));
+        if (url.pathname === lookup && (init?.method ?? 'GET') === 'GET') {
+          return new Response(JSON.stringify({ errcode: 'M_UNKNOWN' }), {
+            status: 502,
+          });
+        }
+        return await originalFetch(input, init);
+      }) as typeof fetch;
+      let attempts;
+      try {
+        attempts = [];
+        for (let attempt = 0; attempt < 4; attempt++) {
+          attempts.push(await passwordSignIn(username, password));
+        }
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+      for (let response of attempts) {
+        assert.strictEqual(response.status, 503, response.text);
+        assert.strictEqual(response.body.errors[0].code, 'unavailable');
+      }
+      let recovered = await passwordSignIn(username, password);
+      assert.strictEqual(
+        recovered.status,
+        201,
+        'the failures were not counted against the account',
+      );
+    });
+
+    test('a first password sign-in to Boxel sets the account up, recording its invite code', async function (assert) {
+      // An account just registered on the secure origin: a Matrix account
+      // that has never signed in to Boxel.
+      let { username, password, userId } = await registerPasswordUser(
+        dbAdapter,
+        { boxelAccount: false },
+      );
+      await updateAccount(userId, { displayname: 'New Registrant' });
+
+      let wrong = await passwordSignIn(username, `${password}-wrong`, {
+        registrationToken: 'invite-code',
+      });
+      assert.strictEqual(wrong.status, 401);
+      assert.strictEqual(wrong.body.errors[0].code, 'invalid-credentials');
+      assert.notOk(
+        await fetchSessionRoom(dbAdapter, userId),
+        'a wrong password sets nothing up',
+      );
+      assert.deepEqual(
+        await dbAdapter.execute(
+          `SELECT 1 FROM users WHERE matrix_user_id = $1`,
+          { bind: [userId] },
+        ),
+        [],
+        'nor makes a realm-server user',
+      );
+
+      let response = await passwordSignIn(username, password, {
+        registrationToken: 'invite-code',
+      });
+      assert.strictEqual(response.status, 201, response.text);
+      assert.strictEqual(response.body.data.attributes.user, userId);
+      assert.ok(
+        await fetchSessionRoom(dbAdapter, userId),
+        'the user has a session room',
+      );
+      let [user] = await dbAdapter.execute(
+        `SELECT matrix_registration_token FROM users WHERE matrix_user_id = $1`,
+        { bind: [userId] },
+      );
+      assert.strictEqual(
+        user?.matrix_registration_token,
+        'invite-code',
+        'the realm-server user records the invite code',
+      );
+      let localpart = userId.slice(1).split(':')[0];
+      let realms = await accountRealms(userId);
+      assert.deepEqual(
+        realms.map((url) => new URL(url).pathname.split('/').slice(-3)),
+        [[localpart, 'personal', '']],
+        'the user has a personal realm',
+      );
+
+      let again = await passwordSignIn(username, password);
+      assert.strictEqual(again.status, 201, again.text);
+      assert.deepEqual(
+        await accountRealms(userId),
+        realms,
+        'signing in again makes no second realm',
+      );
+    });
+
+    test('successful password sign-ins are never limited', async function (assert) {
       let { username, password } = await registerPasswordUser(dbAdapter);
       let statuses = [];
-      for (let attempt = 0; attempt < 5; attempt++) {
-        statuses.push(
-          (await passwordSignIn(username, `${password}-wrong-${attempt}`))
-            .status,
-        );
+      for (let attempt = 0; attempt < 6; attempt++) {
+        statuses.push((await passwordSignIn(username, password)).status);
       }
-      assert.deepEqual(statuses, [401, 401, 401, 401, 401]);
+      assert.deepEqual(statuses, [201, 201, 201, 201, 201, 201]);
+    });
+
+    test('password sign-ins from one address are not limited across accounts', async function (assert) {
+      // Every request here comes from the loopback address.
+      let accounts = await Promise.all(
+        Array.from({ length: 31 }, () => registerPasswordUser(dbAdapter)),
+      );
+      let statuses = [];
+      for (let { username, password } of accounts) {
+        statuses.push((await passwordSignIn(username, password)).status);
+      }
+      assert.deepEqual(
+        statuses,
+        accounts.map(() => 201),
+      );
+    });
+
+    test('repeated failed password sign-ins for an account are refused with when to try again', async function (assert) {
+      let { username, password, userId } =
+        await registerPasswordUser(dbAdapter);
+      let other = await registerPasswordUser(dbAdapter);
+      let email = `${randomBytes(6).toString('hex')}@secure-session.test`;
+      await updateAccount(userId, {
+        threepids: [{ medium: 'email', address: email }],
+      });
+      // Sent together, so all of them land well within the time one failure
+      // takes to drain, and naming the account each way it can be named.
+      let failures = await Promise.all(
+        [username, userId, email].map((name, attempt) =>
+          passwordSignIn(name, `${password}-wrong-${attempt}`),
+        ),
+      );
+      assert.deepEqual(
+        failures.map((failure) => failure.status),
+        [401, 401, 401],
+      );
+
       let limited = await passwordSignIn(username, password);
       assert.strictEqual(
         limited.status,
         429,
-        'even the right password waits once the limit is reached',
+        'even the right password waits once the failures fill the limit',
       );
-      assert.strictEqual(limited.body.errors[0].code, 'rate-limited');
+      let [error] = limited.body.errors;
+      assert.strictEqual(error.code, 'rate-limited');
+      // Three failures drain at 0.17 a second, so the next attempt waits
+      // until about six seconds after the first one.
+      assert.true(error.meta.retryAfterMs > 0, 'it says when to try again');
+      assert.true(
+        error.meta.retryAfterMs <= Math.ceil(1000 / 0.17),
+        `no longer than one failure takes to drain (${error.meta.retryAfterMs}ms)`,
+      );
+      assert.strictEqual(
+        limited.headers['retry-after'],
+        String(Math.ceil(error.meta.retryAfterMs / 1000)),
+        'and says so in Retry-After',
+      );
+
+      for (let name of [userId, email.toUpperCase()]) {
+        assert.strictEqual(
+          (await passwordSignIn(name, password)).status,
+          429,
+          `the account is limited however it is named (${name})`,
+        );
+      }
+      let otherAccount = await passwordSignIn(other.username, other.password);
+      assert.strictEqual(
+        otherAccount.status,
+        201,
+        'another account signs in from the same address',
+      );
+    });
+
+    test('failed password sign-ins do not limit signing in with Google', async function (assert) {
+      let { username, password, userId } =
+        await registerPasswordUser(dbAdapter);
+      let sub = `google-${randomUUID()}`;
+      await linkGoogle(userId, sub);
+      for (let attempt = 0; attempt < 4; attempt++) {
+        await passwordSignIn(username, `${password}-wrong-${attempt}`);
+      }
+      assert.strictEqual(
+        (await passwordSignIn(username, password)).status,
+        429,
+        'the password sign-in is limited',
+      );
+      let response = await googleSignIn(google.issue(sub));
+      assert.strictEqual(response.status, 201, response.text);
+      assert.strictEqual(response.body.data.attributes.user, userId);
     });
 
     test('signing in is answered only for the secure origin', async function (assert) {
@@ -464,7 +720,7 @@ module(basename(import.meta.filename), function () {
       let sub = `google-${randomUUID()}`;
       await linkGoogle(userId, sub);
       for (let origin of [APP_ORIGIN, 'null', null]) {
-        let viaPassword = await passwordSignIn(username, password, origin);
+        let viaPassword = await passwordSignIn(username, password, { origin });
         assert.strictEqual(
           viaPassword.status,
           403,
@@ -515,10 +771,6 @@ module(basename(import.meta.filename), function () {
       let sub = `google-${randomUUID()}`;
       await linkGoogle(userId, sub);
 
-      let unlinked = await googleSignIn(google.issue(`google-${randomUUID()}`));
-      assert.strictEqual(unlinked.status, 403, 'an unlinked Google account');
-      assert.strictEqual(unlinked.body.errors[0].code, 'not-linked');
-
       let wrongNonce = await googleSignIn({
         ...google.issue(sub),
         nonce: 'another-sign-in',
@@ -555,6 +807,288 @@ module(basename(import.meta.filename), function () {
       let response = await googleSignIn(google.issue(sub));
       assert.strictEqual(response.status, 403);
       assert.strictEqual(response.body.errors[0].code, 'deactivated');
+      assert.strictEqual(
+        response.body.errors[0].detail,
+        'Sign-in failed. Please check your credentials and try again.',
+        "the app's words for a deactivated account",
+      );
+    });
+
+    test('a locked account is refused with Google', async function (assert) {
+      let { userId } = await registerPasswordUser(dbAdapter);
+      let email = `${userId.slice(1).split(':')[0]}@example.com`;
+      let linkedSub = `google-${randomUUID()}`;
+      await linkGoogle(userId, linkedSub);
+      await updateAccount(userId, {
+        threepids: [{ medium: 'email', address: email }],
+        locked: true,
+      });
+
+      let byLink = await googleSignIn(google.issue(linkedSub));
+      assert.strictEqual(byLink.status, 403, 'through its link');
+      assert.strictEqual(byLink.body.errors[0].code, 'locked');
+
+      let byEmail = await googleSignIn(
+        google.issue(`google-${randomUUID()}`, {
+          claims: { email, email_verified: true },
+        }),
+      );
+      assert.strictEqual(byEmail.status, 403, 'through its email');
+      assert.strictEqual(byEmail.body.errors[0].code, 'locked');
+      assert.deepEqual(
+        sortedExternalIds(await account(userId)),
+        [{ auth_provider: 'oidc-google', external_id: linkedSub }],
+        'nothing more is linked to it',
+      );
+    });
+
+    test('an unlinked Google account is linked to the one account holding its verified email', async function (assert) {
+      let { userId } = await registerPasswordUser(dbAdapter);
+      let email = `${userId.slice(1).split(':')[0]}@example.com`;
+      // Synapse outlives a test run, so every external id is unique.
+      let otherId = `other-${randomUUID()}`;
+      await updateAccount(userId, {
+        threepids: [{ medium: 'email', address: email }],
+        external_ids: [{ auth_provider: 'oidc-other', external_id: otherId }],
+      });
+      let sub = `google-${randomUUID()}`;
+
+      let response = await googleSignIn(
+        google.issue(sub, {
+          claims: {
+            email: email.toUpperCase(),
+            email_verified: true,
+            name: 'Someone Else',
+          },
+        }),
+      );
+      assert.strictEqual(response.status, 201, response.text);
+      assert.strictEqual(response.body.data.attributes.user, userId);
+      let linked = await account(userId);
+      assert.deepEqual(
+        sortedExternalIds(linked),
+        [
+          { auth_provider: 'oidc-google', external_id: sub },
+          { auth_provider: 'oidc-other', external_id: otherId },
+        ],
+        'the Google identity is linked, and the account keeps its other links',
+      );
+      assert.strictEqual(
+        linked.displayname,
+        userId.slice(1).split(':')[0],
+        'the account keeps its display name',
+      );
+
+      // The link signs in from then on, whatever Google says about the email.
+      let again = await googleSignIn(google.issue(sub));
+      assert.strictEqual(again.status, 201, again.text);
+      assert.strictEqual(again.body.data.attributes.user, userId);
+    });
+
+    test('a Google account with no verified email and no link is refused', async function (assert) {
+      let { userId } = await registerPasswordUser(dbAdapter);
+      let email = `${userId.slice(1).split(':')[0]}@example.com`;
+      await updateAccount(userId, {
+        threepids: [{ medium: 'email', address: email }],
+      });
+      for (let claims of [
+        { email, email_verified: false },
+        { email, email_verified: 'true' },
+        {},
+      ]) {
+        let response = await googleSignIn(
+          google.issue(`google-${randomUUID()}`, { claims }),
+        );
+        assert.strictEqual(response.status, 403, JSON.stringify(claims));
+        assert.deepEqual(
+          {
+            code: response.body.errors[0].code,
+            detail: response.body.errors[0].detail,
+          },
+          {
+            code: 'unverified-email',
+            detail: 'Google sign-in requires a verified email address.',
+          },
+        );
+      }
+      assert.deepEqual(
+        sortedExternalIds(await account(userId)),
+        [],
+        'nothing is linked',
+      );
+    });
+
+    test('a new Google account gets an account, set up as a first sign-in to Boxel', async function (assert) {
+      // The localpart the email suggests already belongs to an account that
+      // doesn't hold the email, which the new account must not land in.
+      let { userId: taken } = await registerPasswordUser(dbAdapter);
+      let base = taken.slice(1).split(':')[0];
+      let email = `${base}@example.com`;
+      let sub = `google-${randomUUID()}`;
+      let issue = () =>
+        google.issue(sub, {
+          claims: { email, email_verified: true, name: 'New Googler' },
+        });
+
+      let response = await googleSignIn(issue());
+      assert.strictEqual(response.status, 201, response.text);
+      let user = response.body.data.attributes.user;
+      assert.strictEqual(
+        user,
+        `@${base}1:localhost`,
+        'the next free localpart',
+      );
+      let created = await account(user);
+      assert.strictEqual(created.displayname, 'New Googler');
+      assert.deepEqual(
+        created.threepids.map(
+          ({ medium, address }: { medium: string; address: string }) => ({
+            medium,
+            address,
+          }),
+        ),
+        [{ medium: 'email', address: email }],
+      );
+      assert.deepEqual(sortedExternalIds(created), [
+        { auth_provider: 'oidc-google', external_id: sub },
+      ]);
+      assert.deepEqual(
+        sortedExternalIds(await account(taken)),
+        [],
+        'the account that had the localpart is untouched',
+      );
+      assert.ok(
+        await fetchSessionRoom(dbAdapter, user),
+        'the user has a session room',
+      );
+      let realms = await accountRealms(user);
+      assert.deepEqual(
+        realms.map((url) => new URL(url).pathname.split('/').slice(-3)),
+        [[`${base}1`, 'personal', '']],
+        'the user has a personal realm',
+      );
+
+      let again = await googleSignIn(issue());
+      assert.strictEqual(again.status, 201, again.text);
+      assert.strictEqual(
+        again.body.data.attributes.user,
+        user,
+        'signing in again uses the same account',
+      );
+      assert.strictEqual(
+        (await adminRequest(`_synapse/admin/v2/users/@${base}2:localhost`))
+          .status,
+        404,
+        'no second account is made',
+      );
+      assert.deepEqual(await accountRealms(user), realms, 'nor a second realm');
+    });
+
+    test('a first sign-in that stopped part way sets up again, without a second realm', async function (assert) {
+      let base = `secure-${randomBytes(6).toString('hex')}`;
+      let sub = `google-${randomUUID()}`;
+      let issue = () =>
+        google.issue(sub, {
+          claims: {
+            email: `${base}@example.com`,
+            email_verified: true,
+            name: 'Interrupted Googler',
+          },
+        });
+      let first = await googleSignIn(issue());
+      assert.strictEqual(first.status, 201, first.text);
+      let user = first.body.data.attributes.user;
+      let realms = await accountRealms(user);
+      assert.strictEqual(realms.length, 1, 'the first sign-in made a realm');
+
+      // As if the first sign-in had made the realm and stopped before
+      // recording it or the session room.
+      let sessionRoom = (await fetchSessionRoom(dbAdapter, user))!;
+      await clearSessionRoom(dbAdapter, user, sessionRoom);
+      await setAccountRealms(user, []);
+
+      let again = await googleSignIn(issue());
+      assert.strictEqual(again.status, 201, again.text);
+      assert.strictEqual(again.body.data.attributes.user, user);
+      assert.deepEqual(
+        await accountRealms(user),
+        realms,
+        'the realm it made is recorded, not made again',
+      );
+      assert.ok(
+        await fetchSessionRoom(dbAdapter, user),
+        'the session room is made again',
+      );
+    });
+
+    test("a realm shared with the user before their first sign-in doesn't stand in for their own", async function (assert) {
+      // An account that has never signed in to Boxel, already granted
+      // someone else's realm, which puts that realm in its account data.
+      let { userId } = await registerPasswordUser(dbAdapter, {
+        boxelAccount: false,
+      });
+      let localpart = userId.slice(1).split(':')[0];
+      let email = `${localpart}@example.com`;
+      await updateAccount(userId, {
+        threepids: [{ medium: 'email', address: email }],
+      });
+      let shared = 'http://127.0.0.1:4444/someone-else/shared/';
+      await setAccountRealms(userId, [shared]);
+
+      let response = await googleSignIn(
+        google.issue(`google-${randomUUID()}`, {
+          claims: { email, email_verified: true },
+        }),
+      );
+      assert.strictEqual(response.status, 201, response.text);
+      assert.strictEqual(response.body.data.attributes.user, userId);
+      let realms = await accountRealms(userId);
+      assert.strictEqual(realms[0], shared, 'the shared realm is kept');
+      assert.deepEqual(
+        realms
+          .slice(1)
+          .map((url) => new URL(url).pathname.split('/').slice(-3)),
+        [[localpart, 'personal', '']],
+        'and the user gets their own personal realm',
+      );
+    });
+
+    test('an account a new Google sign-in could not finish is not signed into later', async function (assert) {
+      let base = `secure-${randomBytes(6).toString('hex')}`;
+      let sub = `google-${randomUUID()}`;
+      // An address Synapse can't store as a third-party id, so the account is
+      // made and linked, and then setting it up fails.
+      let failed = await googleSignIn(
+        google.issue(sub, {
+          claims: { email: `${base}@@example.com`, email_verified: true },
+        }),
+      );
+      assert.strictEqual(failed.status, 500, 'the sign-in fails');
+      let abandoned = await account(`@${base}:localhost`);
+      assert.true(abandoned.deactivated, 'the account it made is deactivated');
+      assert.deepEqual(
+        sortedExternalIds(abandoned),
+        [],
+        'and unlinked from the Google identity',
+      );
+
+      let next = await googleSignIn(
+        google.issue(sub, {
+          claims: { email: `${base}@example.com`, email_verified: true },
+        }),
+      );
+      assert.strictEqual(next.status, 201, next.text);
+      assert.strictEqual(
+        next.body.data.attributes.user,
+        `@${base}1:localhost`,
+        'the next sign-in makes a complete account',
+      );
+      assert.deepEqual(
+        (await account(`@${base}1:localhost`)).threepids.map(
+          ({ address }: { address: string }) => address,
+        ),
+        [`${base}@example.com`],
+      );
     });
 
     test('a Google sign-in signs in once, even after its session ends', async function (assert) {
@@ -687,6 +1221,156 @@ module(basename(import.meta.filename), function () {
       );
     });
 
+    test('a secure session can check that it is still signed in', async function (assert) {
+      let { userId } = await registerPasswordUser(dbAdapter);
+      let auth = await secureSessionAuth(dbAdapter, userId);
+      let check = (authorization: string) =>
+        request.get('/_secure-session').set('Authorization', authorization);
+
+      assert.strictEqual((await check(auth)).status, 204, 'signed in');
+
+      let appSession = `Bearer ${createRealmServerJWT(
+        { user: userId, sessionRoom: 'test-session' },
+        realmSecretSeed,
+      )}`;
+      let app = await check(appSession);
+      assert.strictEqual(app.status, 401, "the app's session is not one");
+      assert.strictEqual(app.body.errors[0].code, 'signed-out');
+
+      await request.delete('/_secure-session').set('Authorization', auth);
+      let ended = await check(auth);
+      assert.strictEqual(ended.status, 401, 'a signed-out session is not one');
+      assert.strictEqual(ended.body.errors[0].code, 'signed-out');
+    });
+
+    test("signing out of the app signs the user's secure windows out", async function (assert) {
+      let { userId } = await registerPasswordUser(dbAdapter);
+      let other = await registerPasswordUser(dbAdapter);
+      let windows = [
+        await secureSessionAuth(dbAdapter, userId),
+        await secureSessionAuth(dbAdapter, userId),
+      ];
+      let cli = await secureSessionAuth(dbAdapter, userId, { client: 'cli' });
+      let othersWindow = await secureSessionAuth(dbAdapter, other.userId);
+      let appSession = `Bearer ${createRealmServerJWT(
+        { user: userId, sessionRoom: 'test-session' },
+        realmSecretSeed,
+      )}`;
+      let endWindows = (query = '?client=window') =>
+        request.delete(`/_secure-sessions${query}`);
+
+      assert.strictEqual(
+        (await endWindows()).status,
+        401,
+        'an unauthenticated request is refused',
+      );
+      for (let query of ['', '?client=cli']) {
+        assert.strictEqual(
+          (await endWindows(query).set('Authorization', appSession)).status,
+          400,
+          `only window sessions are ended (${query || 'no client'})`,
+        );
+      }
+      for (let auth of windows) {
+        assert.strictEqual((await mint(auth)).status, 201, 'signed in');
+      }
+
+      let ended = await endWindows().set('Authorization', appSession);
+      assert.strictEqual(ended.status, 204);
+      assert.deepEqual(ended.body, {}, 'the answer says nothing');
+      for (let auth of windows) {
+        assert.strictEqual(
+          (await mint(auth)).status,
+          403,
+          'a signed-out window mints nothing',
+        );
+      }
+      assert.strictEqual(
+        (await mint(cli)).status,
+        201,
+        "the user's CLI session is left alone",
+      );
+      assert.strictEqual(
+        (await mint(othersWindow)).status,
+        201,
+        "another user's window is left alone",
+      );
+
+      let rows = (await dbAdapter.execute(
+        `SELECT expires_at <= NOW() AS ended FROM secure_sessions
+          WHERE user_id = $1 AND client = 'window'`,
+        { bind: [userId] },
+      )) as { ended: boolean }[];
+      assert.deepEqual(
+        rows.map((row) => row.ended),
+        [true, true],
+        'the rows are expired, not deleted, so their proofs stay spent',
+      );
+
+      assert.strictEqual(
+        (await endWindows().set('Authorization', appSession)).status,
+        204,
+        'answered alike when there is nothing to end',
+      );
+    });
+
+    test("an app session whose refresh came late still signs the user's secure windows out", async function (assert) {
+      let { userId } = await registerPasswordUser(dbAdapter);
+      let secureWindow = await secureSessionAuth(dbAdapter, userId);
+      let appSessionExpired = (seconds: number) =>
+        `Bearer ${createRealmServerJWT(
+          { user: userId, sessionRoom: 'test-session' },
+          realmSecretSeed,
+          -seconds,
+        )}`;
+      let endWindows = (authorization: string) =>
+        request
+          .delete('/_secure-sessions?client=window')
+          .set('Authorization', authorization);
+
+      assert.strictEqual(
+        (await endWindows(appSessionExpired(8 * 24 * 60 * 60))).status,
+        401,
+        'a session that expired longer ago than a secure session lasts is refused',
+      );
+      assert.strictEqual(
+        (await mint(secureWindow)).status,
+        201,
+        'still signed in',
+      );
+
+      assert.strictEqual(
+        (await endWindows(appSessionExpired(60 * 60))).status,
+        204,
+        'a session that expired an hour ago is still the user’s',
+      );
+      assert.strictEqual(
+        (await mint(secureWindow)).status,
+        403,
+        'the window is signed out',
+      );
+
+      let expiredSecure = `Bearer ${createSecureSessionJWT(
+        {
+          user: userId,
+          sessionRoom: 'test-session',
+          secureSession: retrieveTokenClaim(secureWindow, realmSecretSeed)
+            .secureSession!,
+        },
+        realmSecretSeed,
+        -60,
+      )}`;
+      assert.strictEqual(
+        (
+          await request
+            .get('/_secure-session')
+            .set('Authorization', expiredSecure)
+        ).status,
+        401,
+        'other routes still refuse an expired session',
+      );
+    });
+
     test('no other path mints the secure-session claim', async function (assert) {
       assert.throws(
         () =>
@@ -755,7 +1439,11 @@ module(basename(import.meta.filename), function () {
           'nor the verifier',
         );
       }
-      for (let path of ['/_secure-session', '/_secure-session/google']) {
+      for (let path of [
+        '/_secure-session',
+        '/_secure-session/google',
+        '/_secure-sessions?client=window',
+      ]) {
         assert.true(
           keepsMethodAndPathOnly({ url: `http://127.0.0.1:4444${path}` }),
           `${path} keeps only method and path`,
@@ -852,6 +1540,11 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(
         response.body.data.attributes.url,
         secureOriginURL.href,
+      );
+      assert.strictEqual(
+        response.body.data.attributes.matrixServerName,
+        'localhost',
+        'with the Matrix server its accounts are on',
       );
     });
   });

@@ -12,6 +12,7 @@ import {
   type Query,
   type Loader,
   getAncestor,
+  rri,
 } from '@cardstack/runtime-common';
 
 import {
@@ -24,6 +25,7 @@ import {
   type CardOrFieldDeclaration,
   type ModuleDeclaration,
   isCardOrFieldDeclaration,
+  isComponentDeclaration,
   isReexportCardOrField,
 } from '../services/module-contents-service';
 
@@ -103,11 +105,8 @@ class SpecTypeGuesser {
       return false;
     }
     const superName = declaration.super.name;
-    const superModule = declaration.super.module;
     return (
-      superModule === '@glimmer/component' ||
-      (superName === 'Component' &&
-        superModule === 'https://cardstack.com/base/card-api') ||
+      isComponentDeclaration(declaration) ||
       superName === 'GlimmerComponent' ||
       superName?.includes('Component')
     );
@@ -267,7 +266,7 @@ export default class CreateSpecTool extends HostBaseTool<
 
     let url: string;
     if (codeRef) {
-      let relativeTo = new URL(targetRealm);
+      let relativeTo = rri(targetRealm);
       let maybeAbsoluteRef = codeRefWithAbsoluteIdentifier(
         codeRef,
         relativeTo,
@@ -395,7 +394,7 @@ async function getSpecClassFromDeclaration(
     };
     const loadedSpec = await loadCardDef(specCodeRef, {
       loader,
-      relativeTo: new URL(targetRealm),
+      relativeTo: rri(targetRealm),
     });
 
     if (

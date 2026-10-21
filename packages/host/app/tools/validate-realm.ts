@@ -1,16 +1,24 @@
-import { RealmPaths, ri } from '@cardstack/runtime-common';
+import { service } from '@ember/service';
 
 import HostBaseTool from '../lib/host-base-tool';
+import {
+  canonicalRealmIdentifier,
+  canonicalRealmIdentifiers,
+} from '../lib/realm-utils';
 
 import GetAvailableRealmIdentifiersTool from './get-available-realm-identifiers';
 
+import type NetworkService from '../services/network';
 import type * as BaseToolModule from '@cardstack/base/command';
 
 export default class ValidateRealmTool extends HostBaseTool<
   typeof BaseToolModule.ValidateRealmInput,
   typeof BaseToolModule.ValidateRealmResult
 > {
-  description = 'Validate that a realm URL is available and normalize it';
+  @service declare private network: NetworkService;
+
+  description =
+    'Validate that a realm is available, given its URL or its realm-prefix identifier, and return it as the realm server lists it';
 
   async getInputType() {
     let commandModule = await this.loadToolModule();
@@ -23,26 +31,30 @@ export default class ValidateRealmTool extends HostBaseTool<
   protected async run(
     input: BaseToolModule.ValidateRealmInput,
   ): Promise<BaseToolModule.ValidateRealmResult> {
-    // Normalizing the input is part of this tool's contract, and the input is
-    // model-authored, so an equivalent-but-non-canonical URL spelling — host
-    // casing, `..` segments, a default port — has to resolve to the realm it
-    // names rather than be reported invalid. Parsing is what canonicalizes a
-    // URL; a scoped prefix identifier has no such spelling variance and
-    // doesn't parse as one, so it is taken as written.
-    let canonical = input.realmIdentifier;
-    try {
-      canonical = new URL(input.realmIdentifier).href;
-    } catch {
-      // not URL-shaped — a scoped prefix identifier
-    }
-    let realmIdentifier = new RealmPaths(ri(canonical)).url;
-
     let { realmIdentifiers } = await new GetAvailableRealmIdentifiersTool(
       this.toolContext,
     ).execute();
 
-    if (!realmIdentifiers.includes(realmIdentifier)) {
-      throw new Error(`Invalid realm: ${realmIdentifier}`);
+    // The input may name a realm by its prefix or by its URL, and the
+    // available list holds whichever spelling each realm is registered under,
+    // so both sides are folded to one identity before they are compared. The
+    // result is the realm's spelling from the available list.
+    let { virtualNetwork } = this.network;
+    let wanted = canonicalRealmIdentifier(
+      virtualNetwork,
+      input.realmIdentifier,
+    );
+    let realmIdentifier = realmIdentifiers.find(
+      (available) =>
+        canonicalRealmIdentifier(virtualNetwork, available) === wanted,
+    );
+    if (!realmIdentifier) {
+      throw new Error(
+        `Invalid realm: ${input.realmIdentifier}. Valid realms: ${canonicalRealmIdentifiers(
+          virtualNetwork,
+          realmIdentifiers,
+        ).join(', ')}`,
+      );
     }
 
     let commandModule = await this.loadToolModule();

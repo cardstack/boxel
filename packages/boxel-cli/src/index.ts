@@ -3,6 +3,8 @@ import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { buildBoxelProgram } from './build-program.ts';
 import { setQuiet } from './lib/cli-log.ts';
+import { FG_RED, RESET } from './lib/colors.ts';
+import { PromptInputClosedError } from './lib/prompt.ts';
 
 const pkg = JSON.parse(
   readFileSync(resolve(import.meta.dirname, '../package.json'), 'utf-8'),
@@ -22,4 +24,14 @@ if (process.argv.includes('--quiet')) {
   setQuiet(true);
 }
 
-buildBoxelProgram(pkg.version).parse();
+buildBoxelProgram(pkg.version)
+  .parseAsync()
+  .catch((err: unknown) => {
+    if (err instanceof PromptInputClosedError) {
+      console.error(`${FG_RED}Error:${RESET} ${err.message}`);
+      process.exitCode = 1;
+      return;
+    }
+    // Anything else is unexpected, and its stack is what explains it.
+    throw err;
+  });

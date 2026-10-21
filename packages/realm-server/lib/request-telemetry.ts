@@ -48,12 +48,14 @@ const proxyRoutePaths = new Set([
 // The routes that manage a user's own keys: `/_user-keys`, each key beneath
 // it, the key write tickets, and the shares of keys into realms with their
 // notices. With them, the secure-origin sign-in routes, whose bodies carry a
-// password or the session they sign in.
+// password or the session they sign in, and the route that signs a user's
+// secure windows out.
 export const USER_KEYS_PATH = '/_user-keys';
 export const KEY_WRITE_TICKETS_PATH = '/_key-write-tickets';
 export const KEY_SHARES_PATH = '/_key-shares';
 export const KEY_SHARE_NOTICES_PATH = '/_key-share-notices';
 export const SECURE_SESSION_PATH = '/_secure-session';
+export const SECURE_SESSIONS_PATH = '/_secure-sessions';
 
 const keyRoutePaths = [
   USER_KEYS_PATH,
@@ -61,6 +63,7 @@ const keyRoutePaths = [
   KEY_SHARES_PATH,
   KEY_SHARE_NOTICES_PATH,
   SECURE_SESSION_PATH,
+  SECURE_SESSIONS_PATH,
 ];
 
 // The operator routes that store a system key, and everything beneath them.

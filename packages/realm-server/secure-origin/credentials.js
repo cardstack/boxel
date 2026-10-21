@@ -17,8 +17,13 @@
 //   one of the origins the realm server lists in this page's markup, and only
 //   the window that is this frame's parent.
 //
-// The form shown, and the requests it may make, are named by the `form` query
-// parameter; the app page's origin by `origin`.
+// The form shown, and the requests it may make, are named by the `form`
+// parameter; the app page's origin by `origin`. The app passes both in the
+// URL's fragment, which is never sent to the server, so no filter in front of
+// it sees an app origin such as `http://localhost:4200`, which a WAF rule
+// refuses in a query string. A page that is not on the user's own machine
+// may pass them in the query as well, or in the query alone, so the query is
+// read when the fragment names no form.
 
 import { isListedOrigin } from './app-origins.js';
 import { redactResponse } from './redact.js';
@@ -203,7 +208,10 @@ function readConfig() {
 }
 
 let config = readConfig();
-let params = new URL(window.location.href).searchParams;
+let fragmentParams = new URLSearchParams(window.location.hash.slice(1));
+let params = fragmentParams.has('form')
+  ? fragmentParams
+  : new URL(window.location.href).searchParams;
 let formName = params.get('form');
 let form = Object.hasOwn(FORMS, formName) ? FORMS[formName] : undefined;
 let appOrigin = params.get('origin');
@@ -694,12 +702,14 @@ function renderField(formElement, form, field) {
   let vertical = form.layout !== 'settings';
   let wrapper = document.createElement('label');
   wrapper.className = `boxel-field ${vertical ? 'vertical' : 'horizontal'}`;
+  wrapper.setAttribute('data-test-boxel-field', '');
 
   let labelContainer = document.createElement('div');
   labelContainer.className = 'label-container';
   if (field.label) {
     let label = document.createElement('div');
     label.className = 'boxel-label label';
+    label.setAttribute('data-test-boxel-field-label', '');
     label.textContent = field.label;
     labelContainer.append(label);
   }

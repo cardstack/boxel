@@ -17,7 +17,7 @@ import { cloneDeep } from 'lodash-es';
 import { isEqual } from 'lodash-es';
 import { merge, mergeWith } from 'lodash-es';
 
-import { TrackedObject, TrackedMap } from 'tracked-built-ins';
+import { TrackedObject, TrackedMap, TrackedSet } from 'tracked-built-ins';
 
 import {
   baseFileRef,
@@ -371,6 +371,10 @@ export default class StoreService extends Service implements StoreInterface {
   private referenceCount: ReferenceCount = new Map();
   private newReferencePromises: Promise<void>[] = [];
   private autoSaveStates: TrackedMap<string, AutoSaveState> = new TrackedMap();
+  // Ids whose card read the realm answered with a file's metadata. The store
+  // files such a read's instance and error under file-meta, so an untyped read
+  // of one of these ids is served from that bucket (see `readTypeFor`).
+  private fileReadIds = new TrackedSet<string>();
   // Bumped whenever a hydrated card instance's fields change (edit / save).
   // Adds and deletes are already observable through the tracked identity map
   // (see `allCardInstances`); this signal covers the in-place mutations that
@@ -550,6 +554,7 @@ export default class StoreService extends Service implements StoreInterface {
     this.referenceCount = new Map();
     this.newReferencePromises = [];
     this.autoSaveStates = new TrackedMap();
+    this.fileReadIds.clear();
     this.inflightGetCards = new Map();
     this.inflightGetFileMeta = new Map();
     this.inflightCardMutations = new Map();
@@ -638,6 +643,7 @@ export default class StoreService extends Service implements StoreInterface {
     }
     this.cardApiCache = undefined;
     this.autoSaveStates = new TrackedMap();
+    this.fileReadIds.clear();
     this.newReferencePromises = [];
     this.inflightGetCards = new Map();
     this.inflightGetFileMeta = new Map();
@@ -995,6 +1001,21 @@ export default class StoreService extends Service implements StoreInterface {
     })) as T;
   }
 
+  // Deserializes `doc` into an instance the caller constructed, then hydrates
+  // it into the store like `addWithoutPersisting`. For a card class that has no
+  // code ref (one not exported from its module): the instance's own class
+  // decides how its fields deserialize, whatever `meta.adoptsFrom` names. Links
+  // come out as they do for a document added to the store: present when the
+  // card is resident, otherwise loading lazily.
+  async addWithoutPersistingFromSerialized<T extends CardDef>(
+    instance: T,
+    doc: LooseSingleCardDocument,
+  ): Promise<T> {
+    let api = await this.cardService.getAPI();
+    await api.updateFromSerialized(instance, doc, this.store);
+    return await this.addWithoutPersisting(instance);
+  }
+
   // Hydrates and starts the write without waiting for it. The outcome lands on
   // the auto-save state for `id`, not on this call.
   async addWithoutWaiting<T extends CardDef>(
@@ -1183,6 +1204,13 @@ export default class StoreService extends Service implements StoreInterface {
       primitive: api.primitive,
       virtualNetwork: this.network.virtualNetwork,
     };
+  }
+
+  // The bucket an untyped read of `id` lands in: file-meta once a card read of
+  // it was answered with a file's metadata, card otherwise.
+  readTypeFor(id: string): StoreReadType {
+    let url = asURL(id, this.network.virtualNetwork);
+    return url && this.fileReadIds.has(url) ? 'file-meta' : 'card';
   }
 
   // peekError will always return the current server state regarding errors for this id
@@ -2292,6 +2320,12 @@ export default class StoreService extends Service implements StoreInterface {
           instanceOrError = await this.getCardInstance({
             idOrDoc: url,
           });
+          // The card read of a file URL reroutes to a file-meta load, which
+          // has already filed its instance or error under file-meta.
+          if (this.readTypeFor(url) === 'file-meta') {
+            deferred.fulfill();
+            return;
+          }
           this.setIdentityContext(instanceOrError);
         }
         await this.startAutoSaving(instanceOrError);
@@ -2327,7 +2361,7 @@ export default class StoreService extends Service implements StoreInterface {
   async __dangerousCreateFromSerialized<T extends CardDef>(
     resource: LooseCardResource,
     doc: LooseSingleCardDocument | CardDocument,
-    relativeTo?: URL | undefined,
+    relativeTo?: RealmResourceIdentifier | URL | undefined,
     dependencyTrackingContext?: RuntimeDependencyTrackingContext,
   ): Promise<T> {
     return this.createFromSerialized(
@@ -3711,6 +3745,9 @@ export default class StoreService extends Service implements StoreInterface {
           // caller gets a FileDef instead of a hard failure.
           if (isSingleFileMetaDocument(json)) {
             // URL was a binary file; reroute to the file-meta bucket.
+            if (id) {
+              this.fileReadIds.add(id);
+            }
             let fileMeta = await this.getFileMetaInstance<FileDef>({
               idOrDoc: url,
               opts: {
@@ -3718,6 +3755,11 @@ export default class StoreService extends Service implements StoreInterface {
                 dependencyTrackingContext: opts?.dependencyTrackingContext,
               },
             });
+            // The file-meta load files only a loaded instance; its error is
+            // filed here so the read's error lives in the same bucket.
+            if (id && !isFileDefInstance(fileMeta)) {
+              this.store.addFileMetaInstanceOrError(id, fileMeta);
+            }
             // Resolve inflightGetCards so concurrent callers don't hang.
             deferred?.fulfill(fileMeta as unknown as T | CardErrorJSONAPI);
             return fileMeta as unknown as T;

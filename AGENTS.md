@@ -113,6 +113,10 @@ Diagnosing a stuck test page fast (do this FIRST, before assuming it's a slow bu
 
 Prefer the headless `vite build --mode development && pnpm exec ember test --path dist --filter "…"` path over a second live dev server: the shared `pnpm start` server is env-mode/Traefik-locked (one slug at a time) and switching the shared tree under it triggers a long Vite dep re-optimize + full reloads. The realm-server stack the tests talk to (`../realm-server && pnpm start:all`) is backend-only and can be shared across checkouts on the usual localhost ports.
 
+#### Signing a browser into a host
+
+- A local host (`https://localhost:<port>/`, `http://localhost:<port>/` or the same on `127.0.0.1`) against staging or production can use the email/password sign-in form: the secure origin lets loopback origins frame it. The `local-host-against-remote` skill covers pointing the host at the environment and a blank password frame. Any other origin that isn't the environment's own, such as a Railway deployment against staging, can't, until it is added to staging's `--secureOriginAppOrigin` by name; production lists only loopback origins. When the user wants a browser signed in without typing a password, run `boxel browse --profile <id> --host-url <host origin>` for them: it opens their default browser already signed in, as a one-time login whose token never reaches the terminal or the chat. To sign in a specific browser such as Chrome, or a browser you drive, follow the skill: `--print-url` prints the token, so its output only ever goes straight into a browser launcher or the clipboard. The `boxel-cli:browser-sign-in` skill (`packages/boxel-cli/plugin/skills/browser-sign-in/SKILL.md`) has the details.
+
 #### CSS Guidance
 
 - Use scalable units such as rem
@@ -140,6 +144,9 @@ Prefer the headless `vite build --mode development && pnpm exec ember test --pat
     `MATRIX_REGISTRATION_SHARED_SECRET='xxxx' mise run test-services:matrix`
   - Run tests:
     `pnpm test`
+  - `pnpm test` starts Synapse from the `test` template, which asks for an invite code at registration. A spec that needs a Synapse configured otherwise goes under `tests/with-synapse/<template>/`, named for a template in `support/synapse/`, and runs in a pass of its own against a Synapse from that template:
+    `MATRIX_SYNAPSE_TEMPLATE=test-without-registration-token pnpm test`
+    In CI each such template needs its own `include` entry in `ci.yaml`'s `matrix-client-test` job, which runs it beside the shards. A template other than `test` differs from it only by the settings `TEMPLATE_DIFFERENCES` in `support/shard-spec-files.test.ts` declares. `pnpm test:shard-assignment` checks both.
 - Focusing on single test or module:
 - make sure to kill previously running matrix tests if they are still running before starting a new test run.
   Add `--grep` flag to command (`--grep 'it can register a user with a registration token'`)
@@ -291,8 +298,8 @@ Symptom differs from triggers 1–2: the template body is silently dropped, so t
 
 ## Architecture decision records
 
-- `docs/adr/` records why the codebase is shaped as it is, as numbered MUST/SHOULD requirements. ADR 001 defines the format. Each ADR declares `scope` globs for the code it governs. Before reversing or working around an established pattern, run `node scripts/adr-for.mts <path>...` and read the ADRs it lists. Don't silently break a MUST of an `accepted` ADR: follow it, or say that the change needs a superseding ADR. Cite a rule as "ADR NNN §x.y" rather than restating it.
-- When a change makes a decision that outlives its PR (ADR 001 §1.1), load the `adr` skill and draft a `proposed` ADR in the same PR. Only a person marks an ADR `accepted`.
+- `docs/adr/` records why the codebase is shaped as it is, as numbered MUST/SHOULD requirements. ADR 001 defines the format. Each ADR declares `scope` globs for the code it governs. Before reversing or working around an established pattern, run `node scripts/adr-for.mts <path>...` and read the ADRs it lists. Don't silently break a MUST of an `accepted` or `proposed` ADR: follow it, or say that the change needs a superseding ADR (accepted) or an edit to the ADR's Decision (proposed). A proposed ADR's Remediation section lists code that doesn't conform yet. Leave it or fix it, but don't copy it. Cite a rule as "ADR NNN §x.y" rather than restating it.
+- When a change makes a decision that outlives its PR (ADR 001 §1.1), load the `adr` skill and draft a `proposed` ADR in the same PR. A proposed ADR may merge before the code conforms, with the gaps listed under Remediation. Only a person marks an ADR `accepted`, once those gaps are closed (ADR 001 §1.6).
 
 ## Linear Ticket Process (Reusable)
 

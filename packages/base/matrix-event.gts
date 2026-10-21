@@ -194,6 +194,10 @@ export interface BoxelErrorForContext {
 export interface BoxelContext {
   agentId?: string;
   openCardIds?: RealmResourceIdentifier[];
+  // The registered realm prefixes (`@cardstack/base/`), each mapped to the URL
+  // its realm is served from. Identifiers elsewhere in the context are in
+  // prefix form for a file in one of these realms.
+  realmPrefixes?: Record<string, string>;
   realmUrl?: string;
   realmPermissions?: {
     canRead: boolean;

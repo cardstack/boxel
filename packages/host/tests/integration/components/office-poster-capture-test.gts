@@ -3,7 +3,7 @@ import type { RenderingTestContext } from '@ember/test-helpers';
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
-import { baseRealm, type Loader } from '@cardstack/runtime-common';
+import type { Loader } from '@cardstack/runtime-common';
 
 import { renderComponent } from '../../helpers/render-component';
 import { setupRenderingTest } from '../../helpers/setup';
@@ -32,19 +32,19 @@ module('Integration | office poster capture', function (hooks) {
   hooks.beforeEach(async function (this: RenderingTestContext) {
     loader = getService('loader-service').loader;
     ({ OfficePosterCapture } = await loader.import<typeof OfficeCapturesModule>(
-      `${baseRealm.url}file-formats/office-captures`,
+      `@cardstack/base/file-formats/office-captures`,
     ));
     ({ DocxDef } = await loader.import<typeof DocxDefModule>(
-      `${baseRealm.url}docx-file-def`,
+      `@cardstack/base/docx-file-def`,
     ));
     ({ PptxDef } = await loader.import<typeof PptxDefModule>(
-      `${baseRealm.url}pptx-file-def`,
+      `@cardstack/base/pptx-file-def`,
     ));
     ({ XlsxDef } = await loader.import<typeof XlsxDefModule>(
-      `${baseRealm.url}xlsx-file-def`,
+      `@cardstack/base/xlsx-file-def`,
     ));
     ({ OfficeMetadataField } = await loader.import<typeof MetadataFieldsModule>(
-      `${baseRealm.url}file-formats/metadata-fields`,
+      `@cardstack/base/file-formats/metadata-fields`,
     ));
   });
 
