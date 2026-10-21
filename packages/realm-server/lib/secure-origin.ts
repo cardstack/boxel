@@ -183,10 +183,13 @@ export interface SecureOrigin {
 
 export interface CredentialFieldsOptions {
   // The Matrix server the credential fields sign in to and change passwords
-  // on. It is the only server a password typed into them is ever sent to, so
-  // it comes from the realm server's own configuration, never from the page
-  // that frames them.
+  // on. With the realm server, it is the only server a password typed into
+  // them is ever sent to, so it comes from the realm server's own
+  // configuration, never from the page that frames them.
   matrixURL: URL;
+  // The realm server, which a changed password's new password is sent to so
+  // it can end the account's secure sessions.
+  realmServerURL: URL;
   // Origins of the app pages that may frame the credential fields, and the
   // only ones the fields talk to.
   appOrigins: string[];
@@ -325,12 +328,13 @@ export function createSecureOrigin(
 
 // The credential fields are the one document the app frames, so their page
 // alone names the app's origins in `frame-ancestors`, and names the Matrix
-// server in `connect-src`. Their script, stylesheet and font are loaded by
-// that page, never framed, and keep the locked-down defaults.
+// server and the realm server in `connect-src`. Their script, stylesheet and
+// font are loaded by that page, never framed, and keep the locked-down
+// defaults.
 function addCredentialFieldRoutes(
   routes: Map<string, SecureOriginRoute>,
   shellBase: string,
-  { matrixURL, appOrigins }: CredentialFieldsOptions,
+  { matrixURL, realmServerURL, appOrigins }: CredentialFieldsOptions,
 ) {
   let origins = appOrigins.map(appOrigin);
   if (origins.length === 0) {
@@ -340,13 +344,14 @@ function addCredentialFieldRoutes(
   let html = readFileSync(join(SHELL_DIR, 'credentials.html'), 'utf8')
     .replace(SHELL_BASE_PLACEHOLDER, escapeAttribute(shellBase))
     .replace(MATRIX_URL_PLACEHOLDER, escapeAttribute(matrixURL.href))
+    .replace(REALM_SERVER_URL_PLACEHOLDER, escapeAttribute(realmServerURL.href))
     .replace(APP_ORIGINS_PLACEHOLDER, escapeAttribute(origins.join(' ')));
   routes.set(base, {
     body: html,
     contentType: 'text/html; charset=utf-8',
     headers: {
       frameAncestors: origins,
-      connectSrc: [matrixURL.origin],
+      connectSrc: [matrixURL.origin, realmServerURL.origin],
     },
   });
   for (let [name, { file, contentType }] of Object.entries(

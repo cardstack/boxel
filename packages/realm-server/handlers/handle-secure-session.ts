@@ -1,6 +1,6 @@
 import type Koa from 'koa';
 import { logger, SupportedMimeType } from '@cardstack/runtime-common';
-import { SignInLimiter } from '../lib/sign-in-limiter.ts';
+import type { SignInLimiter } from '../lib/sign-in-limiter.ts';
 import {
   sendResponseForError,
   setContextResponse,
@@ -10,6 +10,7 @@ import type { CreateRealmDeps } from './create-realm.ts';
 import type { RealmServerTokenClaim } from '../utils/jwt.ts';
 import {
   endSecureSession,
+  endSessionsForNewPassword,
   endWindowSessions,
   googleSignInStart,
   isSecureSession,
@@ -210,14 +211,15 @@ function optionalTextOf(
 
 // POST /_secure-session: signs in with a username, email address or Matrix id
 // and the account's password. Failed sign-ins are limited per account, with the
-// Matrix server's default limit on failed logins to the app. An account's
-// first sign-in to Boxel makes its personal realm, hence the realm deps, and
-// records the invite code it registered with (`registrationToken`).
+// Matrix server's default limit on failed logins to the app, by `limiter`,
+// which every route that checks a password shares. An account's first sign-in
+// to Boxel makes its personal realm, hence the realm deps, and records the
+// invite code it registered with (`registrationToken`).
 export function handlePasswordSignIn(
   args: CreateRoutesArgs,
   createRealm: CreateRealmDeps,
+  limiter: SignInLimiter,
 ): Handler {
-  let limiter = new SignInLimiter();
   return secureSessionHandler(async (ctxt) => {
     requireSecureOrigin(ctxt, args.secureOriginURL);
     let attributes = await readAttributes(ctxt, 'secure-session');
@@ -231,6 +233,29 @@ export function handlePasswordSignIn(
         registrationToken: optionalTextOf(attributes, 'registrationToken'),
       }),
     );
+  });
+}
+
+// POST /_secure-sessions/password-change: ends every secure session of the
+// account, the CLI's included, once the account's new password checks out.
+// The secure origin's pages send it right after they change a password, with
+// the username, email address or Matrix id the account was named by and the
+// new password. Answered only for the secure origin, checked and limited as a
+// password sign-in is (sharing its `limiter`), and 204 whether or not there
+// was a session to end.
+export function handlePasswordChange(
+  args: CreateRoutesArgs,
+  limiter: SignInLimiter,
+): Handler {
+  return secureSessionHandler(async (ctxt) => {
+    requireSecureOrigin(ctxt, args.secureOriginURL);
+    let attributes = await readAttributes(ctxt, 'password-change');
+    let { username, password } = attributes;
+    await endSessionsForNewPassword(deps(args), limiter, {
+      username: typeof username === 'string' ? username : '',
+      password: typeof password === 'string' ? password : '',
+    });
+    await setContextResponse(ctxt, new Response(null, { status: 204 }));
   });
 }
 

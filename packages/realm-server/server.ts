@@ -888,6 +888,7 @@ export class RealmServer {
           secureOriginURL,
           {
             matrixURL: matrixClient.matrixURL,
+            realmServerURL: serverURL,
             appOrigins: [
               ...new Set([
                 serverURL.origin,

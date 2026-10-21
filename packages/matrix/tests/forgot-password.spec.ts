@@ -10,6 +10,10 @@ import {
   createSubscribedUser,
   updateSynapseUser,
 } from '../helpers/index.ts';
+import {
+  keyWriteTicketStatus,
+  signInSecureSession,
+} from '../helpers/secure-origin-pages.ts';
 
 test.describe('Forgot password', () => {
   let user: { username: string; password: string; credentials: any };
@@ -26,6 +30,14 @@ test.describe('Forgot password', () => {
 
   test('It can reset password', async ({ page }) => {
     let newPassword = 'mynewpassword!1';
+    // A secure session signed in with the old password, as whoever it leaked
+    // to would have.
+    let secureSession = await signInSecureSession(
+      page,
+      user.username,
+      user.password,
+    );
+    expect(await keyWriteTicketStatus(page, secureSession)).toBe(201);
     await gotoForgotPassword(page, appURL);
 
     await expect(
@@ -90,6 +102,10 @@ test.describe('Forgot password', () => {
     await expect(
       resetPasswordPage.locator('[data-test-reset-password-success]'),
     ).toContainText('Your password is now reset');
+    expect(
+      await keyWriteTicketStatus(page, secureSession),
+      'the reset ended the secure session signed in with the old password',
+    ).toBe(403);
     await resetPasswordPage.locator('[data-test-back-to-login-btn]').click();
 
     await login(resetPasswordPage, user.username, newPassword, {

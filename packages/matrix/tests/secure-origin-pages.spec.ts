@@ -11,7 +11,9 @@ import {
 import {
   fillRegistration,
   followEmailLink,
+  keyWriteTicketStatus,
   openSecurePage,
+  signInSecureSession,
   signedInUser,
   uniqueName,
 } from '../helpers/secure-origin-pages.ts';
@@ -545,6 +547,14 @@ test.describe('The secure origin’s pages', () => {
     await updateSynapseUser(user.credentials.userId, {
       emailAddresses: [email],
     });
+    // A secure session signed in with the old password, as whoever it leaked
+    // to would have.
+    let oldSession = await signInSecureSession(
+      page,
+      user.username,
+      user.password,
+    );
+    expect(await keyWriteTicketStatus(page, oldSession)).toBe(201);
 
     let secure = await openSecurePage(page, 'mode=sign-in');
     await secure.locator('[data-test-secure-forgot-password]').click();
@@ -595,6 +605,10 @@ test.describe('The secure origin’s pages', () => {
       confirm.locator('[data-test-reset-password-success]'),
     ).toHaveText('Your password is now reset');
     await snapshot(testInfo, confirm, 'secure-reset-4-done');
+    expect(
+      await keyWriteTicketStatus(page, oldSession),
+      'the reset ended the secure session signed in with the old password',
+    ).toBe(403);
 
     await confirm.locator('[data-test-back-to-login-btn]').click();
     await confirm.getByLabel('Email Address or Username').fill(user.username);

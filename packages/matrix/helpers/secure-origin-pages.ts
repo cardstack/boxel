@@ -24,6 +24,77 @@ export async function signedInUser(secure: Page): Promise<string> {
   ).user;
 }
 
+// Signs a secure session in with the account's password, from a page on the
+// secure origin as the secure window does, and returns its token. An account
+// that has never signed in to Boxel gets its first-sign-in setup.
+export async function signInSecureSession(
+  page: Page,
+  username: string,
+  password: string,
+): Promise<string> {
+  let secure = await openSecurePage(page, 'mode=sign-in');
+  try {
+    let { status, body } = await secure.evaluate(
+      async ({ username, password }) => {
+        let realmServerURL = document
+          .querySelector('meta[name="boxel-realm-server-url"]')!
+          .getAttribute('content')!;
+        let response = await fetch(new URL('_secure-session', realmServerURL), {
+          method: 'POST',
+          headers: {
+            Accept: 'application/vnd.api+json',
+            'Content-Type': 'application/vnd.api+json',
+          },
+          body: JSON.stringify({
+            data: {
+              type: 'secure-session',
+              attributes: { username, password, client: 'window' },
+            },
+          }),
+        });
+        return { status: response.status, body: await response.json() };
+      },
+      { username, password },
+    );
+    expect(status, 'the secure session signs in').toBe(201);
+    return body.data.attributes.token;
+  } finally {
+    await secure.close();
+  }
+}
+
+// The status minting a key write ticket gets under a secure session: 201 while
+// it is signed in, 403 once it has ended.
+export async function keyWriteTicketStatus(
+  page: Page,
+  token: string,
+): Promise<number> {
+  let secure = await openSecurePage(page, 'mode=sign-in');
+  try {
+    return await secure.evaluate(async (token) => {
+      let realmServerURL = document
+        .querySelector('meta[name="boxel-realm-server-url"]')!
+        .getAttribute('content')!;
+      let response = await fetch(
+        new URL('_key-write-tickets', realmServerURL),
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            data: { type: 'key-write-ticket', attributes: { action: 'add' } },
+          }),
+        },
+      );
+      return response.status;
+    }, token);
+  } finally {
+    await secure.close();
+  }
+}
+
 // The newest email to `email` in smtp4dev whose body contains `button`, and
 // clicks that button, which opens a page. Returns it.
 export async function followEmailLink(
