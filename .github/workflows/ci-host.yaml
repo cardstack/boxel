@@ -1228,6 +1228,17 @@ jobs:
           echo "attempted=$attempted" >> "$GITHUB_OUTPUT"
           echo "taken=$taken" >> "$GITHUB_OUTPUT"
           echo "marker_broken=$marker_broken" >> "$GITHUB_OUTPUT"
+          # Every attempt that seals a build leaves a marker, so an attempt
+          # later than the one after the last seal means an earlier attempt of
+          # this build ended unsealed: a shard failed, and this attempt re-ran
+          # it. Percy keeps the first copy of a snapshot name, so the build can
+          # still hold a snapshot that shard took in the failed attempt, of a
+          # render that may be why the test failed.
+          completed_by_rerun=false
+          if [ "${{ github.run_attempt }}" -gt "$((sealed_attempt + 1))" ]; then
+            completed_by_rerun=true
+          fi
+          echo "completed_by_rerun=$completed_by_rerun" >> "$GITHUB_OUTPUT"
           # The tally upload does not fail its shard (see host-test), so a
           # shard can pass and still leave no tally behind. The totals over
           # the tallies that did arrive stay valid — a missing shard adds
@@ -1295,10 +1306,14 @@ jobs:
       # builds without review, a build that lacks snapshots becomes the
       # baseline every later branch is compared against, and the missing
       # snapshots resurface as diffs on unrelated PRs. Rejecting the build
-      # keeps it from becoming a baseline. A shard that fails never gets here,
-      # because finalize waits for every shard to pass; but a shard can pass
-      # while abandoning an upload the CLI never received, which is what the
-      # tally shortfall catches.
+      # keeps it from becoming a baseline. Finalize waits for every shard to
+      # pass, but two kinds of sealed build can still be wrong. A shard can
+      # pass while abandoning an upload the CLI never received, which the
+      # tally shortfall catches. And a build that a re-run completed can hold
+      # a snapshot the re-run shard took in the attempt where it failed,
+      # because Percy keeps the first copy of a snapshot name. A pull request
+      # keeps that build for review; on `main` it is rejected, so the next
+      # run's build becomes the baseline instead.
       #
       # `percy build:reject` authenticates with BrowserStack account
       # credentials rather than the project token: @percy/cli-build reads
@@ -1307,7 +1322,7 @@ jobs:
       # exits non-zero when either is missing — so the step runs only when
       # both are present and otherwise skips itself rather than failing the
       # job.
-      # The snapshot-loss trigger is scoped to `main`. Rejecting exists to stop a build becoming a baseline, and
+      # Both triggers are scoped to `main`. Rejecting exists to stop a build becoming a baseline, and
       # only `main` builds are auto-approved into that role — so on a PR a
       # reject protects nothing. It also cannot be undone (the reviews
       # endpoint answers 409 for any later action on a rejected build), and it
@@ -1317,7 +1332,7 @@ jobs:
       # of builds for no protective gain.
       - name: Reject the Percy build when its snapshot set is incomplete
         if: >-
-          steps.tally.outputs.lost != '0'
+          (steps.tally.outputs.lost != '0' || steps.tally.outputs.completed_by_rerun == 'true')
           && github.ref == 'refs/heads/main'
           && steps.finalize.outputs.build_id != ''
           && env.BROWSERSTACK_USERNAME != ''
@@ -1343,7 +1358,7 @@ jobs:
             echo "Percy is still processing build $BUILD_ID; trying the reject again in 20s"
             sleep 20
           done
-          echo "::warning::Rejected Percy build ${{ steps.finalize.outputs.build_url }} — the shards attempted ${{ steps.tally.outputs.attempted }} snapshot(s) of which the Percy CLI received ${{ steps.tally.outputs.taken }}. An incomplete snapshot set must not become a baseline."
+          echo "::warning::Rejected Percy build ${{ steps.finalize.outputs.build_url }} so it cannot become the baseline. Completed by a re-run of failed shards: ${{ steps.tally.outputs.completed_by_rerun }}. The shards attempted ${{ steps.tally.outputs.attempted }} snapshot(s) of which the Percy CLI received ${{ steps.tally.outputs.taken }}."
         working-directory: packages/host
         env:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
@@ -1354,7 +1369,7 @@ jobs:
       - name: Note that an incomplete build was left unrejected
         if: >-
           needs.host-test.result == 'success'
-          && steps.tally.outputs.lost != '0'
+          && (steps.tally.outputs.lost != '0' || steps.tally.outputs.completed_by_rerun == 'true')
           && github.ref == 'refs/heads/main'
           && (
             steps.finalize.outputs.build_id == ''
@@ -1362,7 +1377,7 @@ jobs:
             || env.BROWSERSTACK_ACCESS_KEY == ''
           )
         run: |
-          echo "::warning::The shards attempted ${{ steps.tally.outputs.attempted }} snapshot(s) of which the Percy CLI received ${{ steps.tally.outputs.taken }}, so this Percy build's snapshot set is incomplete, but it could not be rejected and may be auto-approved into the baseline. Percy build id: '${{ steps.finalize.outputs.build_id }}' (empty means the finalize output could not be parsed); BROWSERSTACK_USERNAME set: ${{ env.BROWSERSTACK_USERNAME != '' }}; BROWSERSTACK_ACCESS_KEY set: ${{ env.BROWSERSTACK_ACCESS_KEY != '' }}."
+          echo "::warning::This Percy build should not become the baseline, but it could not be rejected and may be auto-approved into it. Completed by a re-run of failed shards: ${{ steps.tally.outputs.completed_by_rerun }}. The shards attempted ${{ steps.tally.outputs.attempted }} snapshot(s) of which the Percy CLI received ${{ steps.tally.outputs.taken }}. Percy build id: '${{ steps.finalize.outputs.build_id }}' (empty means the finalize output could not be parsed); BROWSERSTACK_USERNAME set: ${{ env.BROWSERSTACK_USERNAME != '' }}; BROWSERSTACK_ACCESS_KEY set: ${{ env.BROWSERSTACK_ACCESS_KEY != '' }}."
 
       # Runs after finalize so the Percy build is sealed either way. The tally
       # already declined to reject on this reading, so all that is left is to
