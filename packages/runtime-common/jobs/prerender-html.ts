@@ -118,6 +118,8 @@ export interface PrerenderHtmlEnqueueArgs {
   // module pre-warm sweep — O(realm module count) — runs at the start of the
   // job only when set; incremental spawns leave it false.
   preWarm: boolean;
+  // See PrerenderHtmlArgs. Absent, the job announces.
+  announce?: boolean;
   // The lane the job runs in: the spawning writer's lane of the realm's
   // prerender-html family (`prerenderHtmlLaneFollowing` /
   // `prerenderHtmlWriterLane`). Absent, the job is the family's exclusive work,
@@ -349,6 +351,7 @@ export async function enqueuePrerenderHtmlJob(
     spawningPriority,
     timeoutSec,
     preWarm,
+    announce,
     awaitedByPublish,
     lane,
   }: PrerenderHtmlEnqueueArgs,
@@ -363,6 +366,7 @@ export async function enqueuePrerenderHtmlJob(
     spawningJobId,
     coalescedPublishes: null,
     preWarm,
+    announce: announce !== false,
   };
   return await queuePublisher.publish({
     jobType: 'prerender_html',

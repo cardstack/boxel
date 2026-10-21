@@ -74,6 +74,12 @@ export interface PrerenderHtmlArgs extends WorkerArgs {
   // once at the start of the pass. Incremental spawns leave it false — the
   // sweep is O(realm module count), deliberately not paid on incrementals.
   preWarm: boolean;
+  // Whether the job tells the realm's subscribers its HTML is live (the
+  // `prerender_html` realm event). False only when every write behind it
+  // asked for no realm events (see `IncrementalArgs.realmEvents`). OR-merged,
+  // so one announcing publish makes the merged job announce. Absent from the
+  // args of a job enqueued by a worker predating the field, which announces.
+  announce: boolean;
 }
 
 export interface PrerenderHtmlResult extends JSONTypes.Object {
@@ -132,6 +138,7 @@ function parsePrerenderHtmlArgsForCoalesce(
     spawningJobId,
     coalescedPublishes,
     preWarm,
+    announce,
   } = args;
   if (
     typeof realmURL !== 'string' ||
@@ -154,6 +161,7 @@ function parsePrerenderHtmlArgsForCoalesce(
     coalescedPublishes:
       typeof coalescedPublishes === 'number' ? coalescedPublishes : null,
     preWarm: preWarm === true,
+    announce: announce !== false,
     legacy: passes === undefined,
   };
 }
@@ -291,6 +299,7 @@ function choosePrerenderHtmlCoalesceDecision(
           // job still runs the realm-wide sweep. The pass runs the sweep once
           // at its start regardless of how many publishes coalesced into it.
           preWarm: existingArgs.preWarm || incomingArgs.preWarm,
+          announce: existingArgs.announce || incomingArgs.announce,
         },
       },
     };
@@ -309,7 +318,10 @@ function choosePrerenderHtmlCoalesceDecision(
       if (
         waitsOnEverySpawner(existingArgs, incomingArgs) &&
         existingArgs.loaderEpoch === incomingArgs.loaderEpoch &&
-        incrementalChangesCover(existingArgs.changes, incomingArgs.changes)
+        incrementalChangesCover(existingArgs.changes, incomingArgs.changes) &&
+        // A running job's args can no longer change, so a publish that
+        // announces cannot ride on one that won't.
+        (existingArgs.announce || !incomingArgs.announce)
       ) {
         return { type: 'join', jobId: candidate.id };
       }
@@ -444,13 +456,16 @@ const prerenderHtml: Task<PrerenderHtmlArgs, PrerenderHtmlResult> = ({
     // re-run and pick up the new renderings / corrected full-text
     // membership. Rides the worker→manager→realm-server event bridge. The
     // generation is the committed one the renders were stamped against, which
-    // is the floor the host's live search reads at.
-    reportRealmEvent?.({
-      eventName: 'prerender_html',
-      realmURL,
-      generation: pass.generation,
-      invalidations,
-    });
+    // is the floor the host's live search reads at. A job whose writes all
+    // asked for no realm events renders without saying so.
+    if (args.announce !== false) {
+      reportRealmEvent?.({
+        eventName: 'prerender_html',
+        realmURL,
+        generation: pass.generation,
+        invalidations,
+      });
+    }
 
     reportStatus(jobInfo, 'finish');
     log.debug(

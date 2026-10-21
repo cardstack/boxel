@@ -89,6 +89,7 @@ module(basename(import.meta.filename), function () {
       clientRequestId: string | null;
       priority?: number;
       initiatedBy?: string[];
+      realmEvents?: boolean;
     }) {
       let priority = args.priority ?? userInitiatedPriority;
       return await publisher.publish<IncrementalDoneResult>({
@@ -99,6 +100,9 @@ module(basename(import.meta.filename), function () {
         args: makeIncrementalArgsWithCallerMetadata(
           args.args,
           args.clientRequestId,
+          args.realmEvents === undefined
+            ? undefined
+            : { realmEvents: args.realmEvents },
         ),
         ...(args.initiatedBy ? { initiatedBy: args.initiatedBy } : {}),
         mapResult: mapIncrementalDoneResult(args.clientRequestId),
@@ -1614,6 +1618,79 @@ module(basename(import.meta.filename), function () {
           rows.length,
           2,
           'one running pass and one pending pass, however many writers arrive',
+        );
+      } finally {
+        release.fulfill();
+        await worker.destroy();
+      }
+    });
+
+    test('incremental dedup: a publish that announces does not attach to a running pass that announces nothing', async function (assert) {
+      // A running job's args can no longer change, so a publish attaching to
+      // a pass whose writes asked for no realm events would have the render
+      // job that pass spawns render its cards without announcing them.
+      await runner.destroy();
+      let realmURL = 'http://example.com/in-flight-silent/';
+      let started = new Deferred<void>();
+      let release = new Deferred<void>();
+
+      let worker = new PgQueueRunner({
+        adapter,
+        workerId: 'in-flight-silent-worker',
+      });
+      worker.register(
+        'incremental-index',
+        async (args: { changes: { url: string }[] }) => {
+          started.fulfill();
+          await release.promise;
+          return {
+            invalidations: args.changes.map((change) => change.url),
+            ignoreData: {},
+            stats: {
+              instancesIndexed: 0,
+              filesIndexed: 0,
+              instanceErrors: 0,
+              fileErrors: 0,
+              totalIndexEntries: 0,
+            },
+          };
+        },
+      );
+      let changeArgs = () => ({
+        realmURL,
+        realmUsername: 'owner',
+        ignoreData: {},
+        changes: [{ url: `${realmURL}a`, operation: 'update' as const }],
+      });
+
+      try {
+        await worker.start();
+        let running = await publishIncrementalIndexJob({
+          clientRequestId: 'silent-1',
+          args: changeArgs(),
+          realmEvents: false,
+        });
+        await started.promise;
+
+        let silent = await publishIncrementalIndexJob({
+          clientRequestId: 'silent-2',
+          args: changeArgs(),
+          realmEvents: false,
+        });
+        assert.strictEqual(
+          silent.id,
+          running.id,
+          'a publish that announces nothing attaches to the running pass',
+        );
+
+        let announcing = await publishIncrementalIndexJob({
+          clientRequestId: 'announcing',
+          args: changeArgs(),
+        });
+        assert.notStrictEqual(
+          announcing.id,
+          running.id,
+          'a publish that announces waits for a pass that will announce it',
         );
       } finally {
         release.fulfill();

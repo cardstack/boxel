@@ -916,7 +916,9 @@ function isSkipIndexWaitRequest(request: Request): boolean {
 // A write sent with `X-Boxel-Realm-Events: none` lands and is indexed like any
 // other, but announces nothing to the realm's subscribers: no
 // `incremental-index-initiation`, no file `update`, no `incremental` index
-// event. It is for writers that replace a realm's content wholesale out of
+// event, and no `prerender_html` event from the render job its pass spawns
+// (see `IncrementalArgs.realmEvents`). A pass it shares with writes that do
+// announce is announced on their behalf, naming this write among them. It is for writers that replace a realm's content wholesale out of
 // band — a deploy pushing a git tree — where every open tab reacting to the
 // push would reset its loader mid-session for code its user did not ask for.
 // Those tabs pick the new content up on their next load instead.
@@ -3955,6 +3957,10 @@ export class Realm {
       // unless the pass is only a step toward a later one the same write
       // runs; see `CoalescedCaller.announcesPass`.
       announcesPass?: boolean;
+      // False for a caller that asked for no realm events (see
+      // `WriteOptions.broadcastRealmEvents`): it announces neither this pass
+      // nor anything the pass spawns.
+      broadcastRealmEvents?: boolean;
       // See `IncrementalIndexOptions.modulesWithoutSchemaChange`.
       modulesWithoutSchemaChange?: string[];
     },
@@ -3976,7 +3982,9 @@ export class Realm {
     await this.#realmIndexUpdater.updateChanges(changes, {
       clientRequestId: opts?.clientRequestId ?? null,
       ...(opts?.clientAuthored ? { clientAuthored: opts.clientAuthored } : {}),
-      announcesPass: opts?.announcesPass !== false,
+      announcesPass:
+        opts?.announcesPass !== false && opts?.broadcastRealmEvents !== false,
+      realmEvents: opts?.broadcastRealmEvents !== false,
       initiatedBy: opts?.initiatedBy ?? null,
       ...(opts?.deferPrerenderHtml ? { deferPrerenderHtml: true } : {}),
       ...(opts?.carriedPrerenderHtmlChanges?.length
@@ -4077,6 +4085,7 @@ export class Realm {
       clientRequestId: opts?.clientRequestId ?? null,
       ...(opts?.clientAuthored ? { clientAuthored: opts.clientAuthored } : {}),
       announcesPass: opts.broadcastRealmEvents !== false,
+      realmEvents: opts.broadcastRealmEvents !== false,
       initiatedBy: opts?.initiatedBy ?? null,
       ...(opts?.carriedPrerenderHtmlChanges?.length
         ? { carriedPrerenderHtmlChanges: opts.carriedPrerenderHtmlChanges }
@@ -5149,9 +5158,9 @@ export class Realm {
         clientRequestId,
         ...(clientAuthored ? { clientAuthored } : {}),
         // A deferring pass is the module flush ahead of this write's own
-        // pass, which is the one it announces after. A write that asked for
-        // no realm events announces neither.
-        announcesPass: broadcastRealmEvents && !opts?.deferPrerenderHtml,
+        // pass, which is the one it announces after.
+        announcesPass: !opts?.deferPrerenderHtml,
+        broadcastRealmEvents,
         initiatedBy: initiatingUser,
         // The write answers from the index once this lands, so it cannot be
         // settled by a pass that read the file before these bytes did.
@@ -5654,6 +5663,7 @@ export class Realm {
             this.enqueueDeferredPrerenderHtml(
               deferredPrerenderHtml,
               initiatingUser,
+              broadcastRealmEvents,
             ),
           );
           answeredAhead = true;
@@ -5782,6 +5792,7 @@ export class Realm {
       await this.enqueueDeferredPrerenderHtml(
         deferredPrerenderHtml,
         initiatingUser,
+        broadcastRealmEvents,
       );
     }
     return {
@@ -5807,6 +5818,8 @@ export class Realm {
   private async enqueueDeferredPrerenderHtml(
     deferred: DeferredPrerenderHtml | undefined,
     initiatingUser: string | null,
+    // False when the write asked for no realm events.
+    announce = true,
   ): Promise<void> {
     if (!deferred || deferred.changes.length === 0) {
       return;
@@ -5830,6 +5843,7 @@ export class Realm {
         }),
         timeoutSec: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
         preWarm: false,
+        announce,
         lane: prerenderHtmlWriterLane(this.url, initiatingUser),
       });
     } catch (e: any) {
@@ -7376,7 +7390,7 @@ export class Realm {
           [{ url, operation: 'delete' }],
           {
             initiatedBy: options?.initiatingUser ?? null,
-            announcesPass: broadcastRealmEvents,
+            broadcastRealmEvents,
           },
         );
       this.broadcastIncrementalInvalidationEvent(invalidations, {
@@ -17057,6 +17071,7 @@ export class Realm {
       deferPrerenderHtml: false,
       carriedPrerenderHtmlChanges: [],
       readsOwnWrite: false,
+      realmEvents: true,
     };
     let job = await this.#queue.publish({
       jobType: 'incremental-index',

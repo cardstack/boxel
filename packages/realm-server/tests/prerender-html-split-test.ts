@@ -74,6 +74,7 @@ function prerenderHtmlArgs(
     spawningJobId: 100,
     coalescedPublishes: null,
     preWarm: false,
+    announce: true,
     ...overrides,
   };
 }
@@ -357,6 +358,77 @@ module(basename(import.meta.filename), function () {
         }),
       );
       assert.deepEqual(decision, { type: 'join', jobId: 9 });
+    });
+
+    test('a merged job announces when either publish does', function (assert) {
+      for (let [existingAnnounces, incomingAnnounces] of [
+        [true, false],
+        [false, true],
+        [false, false],
+      ]) {
+        let decision = coalesce(
+          context({
+            incoming: spec(prerenderHtmlArgs({ announce: incomingAnnounces })),
+            candidates: [
+              candidate(42, prerenderHtmlArgs({ announce: existingAnnounces })),
+            ],
+          }),
+        );
+        if (decision.type !== 'join') {
+          throw new Error('expected a join decision');
+        }
+        assert.strictEqual(
+          (decision.update?.args as PrerenderHtmlArgs).announce,
+          existingAnnounces || incomingAnnounces,
+          `existing ${existingAnnounces}, incoming ${incomingAnnounces}`,
+        );
+      }
+    });
+
+    test('a job enqueued without the announce flag announces', function (assert) {
+      let { announce: _announce, ...withoutFlag } = prerenderHtmlArgs();
+      let decision = coalesce(
+        context({
+          incoming: spec(prerenderHtmlArgs({ announce: false })),
+          candidates: [candidate(42, withoutFlag)],
+        }),
+      );
+      if (decision.type !== 'join') {
+        throw new Error('expected a join decision');
+      }
+      assert.true((decision.update?.args as PrerenderHtmlArgs).announce);
+    });
+
+    test('an announcing publish does not ride on an in-flight job that announces nothing', function (assert) {
+      let inFlight = prerenderHtmlArgs({
+        spawningIndexPasses: passes(100, 200),
+        announce: false,
+      });
+      let announcing = coalesce(
+        context({
+          incoming: spec(
+            prerenderHtmlArgs({ spawningIndexPasses: passes(200) }),
+          ),
+          inFlightCandidates: [candidate(9, inFlight)],
+        }),
+      );
+      assert.deepEqual(announcing, { type: 'insert' });
+      let silent = coalesce(
+        context({
+          incoming: spec(
+            prerenderHtmlArgs({
+              spawningIndexPasses: passes(200),
+              announce: false,
+            }),
+          ),
+          inFlightCandidates: [candidate(9, inFlight)],
+        }),
+      );
+      assert.deepEqual(
+        silent,
+        { type: 'join', jobId: 9 },
+        'a publish that announces nothing still rides on it',
+      );
     });
 
     test('inserts rather than joining an in-flight job that does not wait on the incoming spawning pass', function (assert) {
