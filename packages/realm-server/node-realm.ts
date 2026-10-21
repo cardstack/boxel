@@ -1,5 +1,6 @@
 import type {
   RealmAdapter,
+  RealmEventDelivery,
   Kind,
   FileRef,
   DBAdapter,
@@ -426,6 +427,7 @@ export class NodeAdapter implements RealmAdapter {
     realmUrl: string,
     matrixClient: MatrixClient,
     dbAdapter: DBAdapter,
+    opts?: RealmEventDelivery,
   ): Promise<void> {
     realmEventsLog.debug('Broadcasting realm event', event);
     const eventWithRealmURL: RealmEventContent = {
@@ -453,6 +455,12 @@ export class NodeAdapter implements RealmAdapter {
     }
 
     let dmRooms = await this.waitForSessionRooms(dbAdapter, realmUrl);
+    if (opts?.recipients) {
+      let recipients = new Set(opts.recipients);
+      dmRooms = Object.fromEntries(
+        Object.entries(dmRooms).filter(([userId]) => recipients.has(userId)),
+      );
+    }
 
     realmEventsLog.debug('Sending to dm rooms', Object.values(dmRooms));
 

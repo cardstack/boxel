@@ -147,6 +147,60 @@ module(basename(import.meta.filename), function (hooks) {
 
     assert.true(true, 'broadcast resolves even if stale room cleanup fails');
   });
+
+  test('delivers only to the named recipients when the broadcast names any', async function (assert) {
+    await insertSessionForAlice();
+    await insertUser(
+      dbAdapter,
+      '@carol:localhost',
+      'cus_carol',
+      'c@example.com',
+    );
+    await upsertSessionRoom(
+      dbAdapter,
+      '@carol:localhost',
+      '!room-carol:localhost',
+    );
+    await insertPermissions(dbAdapter, realmURL, {
+      '@carol:localhost': ['read'],
+    });
+
+    let sentTo: string[] = [];
+    let matrixClient = {
+      login: async () => undefined,
+      getUserId: () => '@realm_server:localhost',
+      sendEvent: async (roomId: string) => {
+        sentTo.push(roomId);
+      },
+    } as unknown as MatrixClient;
+
+    let adapter = new NodeAdapter('/tmp');
+    await adapter.broadcastRealmEvent(
+      makeEvent(),
+      realmURL.href,
+      matrixClient,
+      dbAdapter,
+    );
+    assert.deepEqual(
+      sentTo.sort(),
+      ['!room-alice:localhost', '!room-carol:localhost'],
+      'with no recipients, every subscriber receives the event',
+    );
+
+    sentTo = [];
+    await adapter.broadcastRealmEvent(
+      makeEvent(),
+      realmURL.href,
+      matrixClient,
+      dbAdapter,
+      { recipients: ['@carol:localhost', '@nobody:localhost'] },
+    );
+    assert.deepEqual(
+      sentTo,
+      ['!room-carol:localhost'],
+      "only the named subscriber's room receives the event",
+    );
+  });
 });
 
 module(`${basename(import.meta.filename)} | file stat probing`, function () {
