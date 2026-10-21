@@ -21,3 +21,4 @@ or backfill one.
 | [006](006-grant-realm-permissions-per-realm-and-widen-them-only-with-a-policy.md) | Grant realm permissions per realm, and widen them only with a realm policy                | proposed |
 | [007](007-keep-motion-a-reactive-layer-that-state-never-waits-on.md)              | Keep motion a reactive layer that application state never waits on                        | proposed |
 | [008](008-build-the-secure-origins-pages-as-their-own-ember-app.md)               | Build the secure origin's pages as their own Ember app                                    | proposed |
+| [010](010-give-loaded-modules-native-esm-semantics.md)                            | Give the modules the Loader loads native ES module semantics                              | proposed |
