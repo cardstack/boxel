@@ -170,7 +170,7 @@ module('Acceptance | Choreo gallery | guide pages', function (hooks) {
       .dom(`${article} .markdown-bfm-card-slot--block .tile-title`)
       .hasText('Enter', 'core-start embeds the enter demo');
     assert
-      .dom(`${article} .markdown-bfm-card-slot--block [data-demo-stage]`)
+      .dom(`${article} .markdown-bfm-card-slot--block .tile-stage`)
       .exists('with its live stage');
     assert
       .dom(`${article} .guide-link`)
