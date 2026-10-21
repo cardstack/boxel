@@ -17,6 +17,17 @@ import {
 import { appURL } from '../support/isolated-realm-server.ts';
 
 test.describe('Profile', () => {
+  // CI HACK (do not merge): on even repeats, hold Synapse's answer to the
+  // logout request for 3 s, so the sign-in form is filled before it returns.
+  test.beforeEach(async ({ page }, testInfo) => {
+    if (testInfo.repeatEachIndex % 2 === 0) {
+      await page.route('**/_matrix/client/v3/logout', async (route) => {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        await route.continue();
+      });
+    }
+  });
+
   let user: {
     username: string;
     password: string;
