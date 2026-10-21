@@ -1,7 +1,8 @@
 /**
  * The guides, their links and the lab: a guide renders from the realm with
- * its live demo embedded, every tile and demo page links its demo's guide,
- * and the lab tunes a demo through `demoTuning`.
+ * its live demo embedded, every tile and demo page links its demo's guide
+ * page, an embedded demo leaves that link out inside its own guide, and the
+ * lab tunes a demo through `demoTuning`.
  */
 import { click, render, waitFor, waitUntil } from '@ember/test-helpers';
 import GlimmerComponent from '@glimmer/component';
@@ -13,7 +14,10 @@ import { module, test } from 'qunit';
 
 import { CardContextName } from '@cardstack/runtime-common';
 
-import { choreoGalleryGuides } from '../helpers/choreo-gallery';
+import {
+  choreoGalleryGuideIndex,
+  choreoGalleryGuides,
+} from '../helpers/choreo-gallery';
 import {
   GALLERY_DEMOS,
   galleryInstance,
@@ -22,6 +26,7 @@ import {
 import { testRealmURL } from '../helpers/index';
 
 import type * as DemoModule from '../../../choreo-gallery/realm/demo';
+import type * as GuideIndexModule from '../../../choreo-gallery/realm/lib/guide-index';
 import type * as LabModule from '../../../choreo-gallery/realm/lib/lab';
 import type * as PresetsModule from '../../../choreo-gallery/realm/lib/presets';
 import type * as TuningModule from '../../../choreo-gallery/realm/lib/tuning';
@@ -29,7 +34,7 @@ import type { ComponentLike } from '@glint/template';
 
 const GUIDES = choreoGalleryGuides();
 
-const guideURL = (slug: string) => `${testRealmURL}docs/guides/${slug}.md`;
+const guideURL = (slug: string) => `${testRealmURL}docs/guides/${slug}`;
 
 /** the guide a demo's lesson names */
 const guideOf = (slug: string) =>
@@ -68,6 +73,23 @@ class OpensOnClick extends GlimmerComponent<{
   @provide(CardContextName)
   get cardContext() {
     return { cardComponentModifier: this.opensOnClick };
+  }
+
+  <template>
+    {{! template-lint-disable no-yield-only }}
+    {{yield}}
+  </template>
+}
+
+/** what a guide's page provides to what it renders: the guide being read */
+class InGuide extends GlimmerComponent<{
+  Args: { slug: string };
+  Blocks: { default: [] };
+}> {
+  // the context's key is the gallery's, read from the realm in the test
+  @provide('choreo-gallery:current-guide')
+  get currentGuide() {
+    return this.args.slug;
   }
 
   <template>
@@ -147,6 +169,92 @@ module('Integration | Choreo gallery | guides and the lab', function (hooks) {
     assert
       .dom('.markdown-bfm-card-slot--block [data-demo-lab="enter"]')
       .exists('the embedded demo opens its lab');
+  });
+
+  test('an embedded demo leaves out the link to the guide it sits in', async function (assert) {
+    let { CurrentGuideContext } =
+      await gallery.import<typeof GuideIndexModule>('lib/guide-index');
+    assert.strictEqual(
+      CurrentGuideContext,
+      'choreo-gallery:current-guide',
+      'the context the page provides is the one this test provides',
+    );
+    let enter = await demoCard('enter');
+    let MarkdownTemplate = (
+      (await gallery.loader.import(
+        '@cardstack/base/default-templates/markdown',
+      )) as { default: ComponentLike<MarkdownSignature> }
+    ).default;
+    let content = '::card[../../demos/enter]';
+    let linkedCards = [enter];
+    let own = guideOf('enter');
+    let other = 'core-start';
+    assert.notStrictEqual(own, other, 'enter’s guide is not core-start');
+
+    await render(
+      <template>
+        <div class='own'>
+          <InGuide @slug={{own}}>
+            <MarkdownTemplate
+              @content={{content}}
+              @linkedCards={{linkedCards}}
+              @cardReferenceBaseUrl={{guideURL own}}
+            />
+          </InGuide>
+        </div>
+        <div class='other'>
+          <InGuide @slug={{other}}>
+            <MarkdownTemplate
+              @content={{content}}
+              @linkedCards={{linkedCards}}
+              @cardReferenceBaseUrl={{guideURL other}}
+            />
+          </InGuide>
+        </div>
+      </template>,
+    );
+    await waitFor('.own .markdown-bfm-card-slot--block .tile', {
+      timeout: 10_000,
+    });
+    await waitFor('.other .markdown-bfm-card-slot--block .tile', {
+      timeout: 10_000,
+    });
+
+    assert
+      .dom('.own .tile .guide-link')
+      .doesNotExist('in its own guide it does not link the page being read');
+    assert
+      .dom('.other .tile .guide-link')
+      .hasAttribute('href', guideURL(own), 'in another guide it links its own');
+  });
+
+  test("the guides' index reads as its sections, in order, listing every guide once", async function (assert) {
+    let { guideSections, guideSlug } =
+      await gallery.import<typeof GuideIndexModule>('lib/guide-index');
+    let sections = guideSections(choreoGalleryGuideIndex());
+    assert.deepEqual(
+      sections.map(({ number, title }) => `${number} ${title}`),
+      [
+        '01 Core glimmer-motion',
+        '02 Interactive Choreo',
+        '03 Spatial & 3D Choreo',
+        '04 Recorded & Film Choreo',
+      ],
+    );
+    let listed = sections.flatMap((section) =>
+      section.guides.map(({ slug }) => slug),
+    );
+    assert.deepEqual(
+      [...listed].sort(),
+      Object.keys(GUIDES).sort(),
+      'each guide in the realm is listed once',
+    );
+    assert.deepEqual(sections[0]!.guides[0], {
+      slug: 'core-start',
+      title: 'Getting Started',
+    });
+    assert.strictEqual(guideSlug(guideURL('core-start')), 'core-start');
+    assert.strictEqual(guideSlug(guideURL('README')), 'README');
   });
 
   test('an embedded demo keeps its own clicks, and opens its card from what it is', async function (assert) {
