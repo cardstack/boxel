@@ -3,8 +3,8 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 
-import { refusal } from '../build/import-allowlist.mjs';
-import { PACKAGE_ROOT } from '../build/module-package.mjs';
+import { refusal, stylesheetRefusal } from '../build/import-allowlist.ts';
+import { PACKAGE_ROOT } from '../build/module-package.ts';
 
 const require = createRequire(import.meta.url);
 const emberSource = dirname(require.resolve('ember-source/package.json'));
@@ -55,4 +55,40 @@ test("another workspace package's source may not", () => {
 test('only the bundler modules named may ship', () => {
   assert.equal(refusal('\0rolldown/runtime.js'), undefined);
   assert.match(refusal('\0some-plugin/virtual.js') ?? '', /is not allowed/);
+});
+
+test("a stylesheet's relative url() inside the package may be built", () => {
+  assert.equal(
+    stylesheetRefusal(
+      join(PACKAGE_ROOT, 'src/shell/shell.css'),
+      "src: url('./IBMPlexSansVar-Roman.woff2') format('woff2');",
+    ),
+    undefined,
+  );
+});
+
+test('a stylesheet may not @import', () => {
+  assert.match(
+    stylesheetRefusal(
+      join(PACKAGE_ROOT, 'src/shell/shell.css'),
+      "@import '../../../boxel-ui/addon/src/styles/global.css';",
+    ) ?? '',
+    /uses @import/,
+  );
+});
+
+test('a stylesheet may not name a file outside the package or another origin', () => {
+  let shellCSS = join(PACKAGE_ROOT, 'src/shell/shell.css');
+  assert.match(
+    stylesheetRefusal(shellCSS, "background: url('../../../host/logo.svg');") ??
+      '',
+    /outside the package/,
+  );
+  for (let url of ['https://example.test/font.woff2', '//example.test/x.png']) {
+    assert.match(
+      stylesheetRefusal(shellCSS, `background: url(${url});`) ?? '',
+      /not a relative path/,
+      url,
+    );
+  }
 });

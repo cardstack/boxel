@@ -14,7 +14,8 @@
     "lint:js:fix": "eslint . --report-unused-disable-directives --fix",
     "lint:hbs": "ember-template-lint . --no-error-on-unmatched-pattern",
     "lint:hbs:fix": "ember-template-lint . --no-error-on-unmatched-pattern --fix",
-    "test": "node --test 'tests/**/*.test.mjs'"
+    "test": "node --test 'tests/**/*.test.ts'",
+    "lint:types": "ember-tsc --noEmit"
   },
   "exports": {
     "./package.json": "./package.json",
@@ -35,12 +36,16 @@
     "@embroider/core": "^4.6.3",
     "@embroider/macros": "^1.20.5",
     "@embroider/vite": "^1.7.10",
+    "@glint/ember-tsc": "catalog:",
+    "@glint/template": "catalog:",
     "@rollup/plugin-babel": "catalog:",
+    "@types/node": "catalog:",
     "babel-plugin-ember-template-compilation": "catalog:",
     "concurrently": "catalog:",
     "ember-template-lint": "catalog:",
     "eslint": "catalog:",
     "prettier": "catalog:",
+    "typescript": "catalog:",
     "vite": "^8.0.10"
   },
   "engines": {

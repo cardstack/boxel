@@ -16,13 +16,30 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 
-import { modulePackage, PACKAGE_ROOT } from './module-package.mjs';
+import type { Plugin, Rollup } from 'vite';
+
+import { modulePackage, PACKAGE_ROOT } from './module-package.ts';
+
+type Bundle = Rollup.OutputBundle;
+
+interface ModuleName {
+  package: string;
+  module: string;
+}
+
+interface FileRecord {
+  bytes: number;
+  modules?: (ModuleName & { size: number })[];
+  sources?: ModuleName[];
+}
 
 export const RECORD_FILE = join(PACKAGE_ROOT, 'build-record.json');
 export const MANIFEST_FILE = 'manifest.json';
 
-export function buildRecord({ mode = 'write' } = {}) {
-  let base;
+export function buildRecord({
+  mode = 'write',
+}: { mode?: 'write' | 'check' } = {}): Plugin {
+  let base: string;
   return {
     name: 'secure-origin-build-record',
     apply: 'build',
@@ -73,8 +90,8 @@ export function buildRecord({ mode = 'write' } = {}) {
 
 // Each entry document, by its path in the output, and every file it loads:
 // itself, its script, the chunks that script imports, and their stylesheets.
-function entryDocuments(bundle) {
-  let entries = {};
+function entryDocuments(bundle: Bundle): Record<string, string[]> {
+  let entries: Record<string, string[]> = {};
   for (let chunk of Object.values(bundle)) {
     if (
       chunk.type !== 'chunk' ||
@@ -87,7 +104,7 @@ function entryDocuments(bundle) {
     let files = new Set([documentName]);
     let pending = [chunk.fileName];
     while (pending.length > 0) {
-      let fileName = pending.pop();
+      let fileName = pending.pop()!;
       if (files.has(fileName)) {
         continue;
       }
@@ -109,8 +126,11 @@ function entryDocuments(bundle) {
   );
 }
 
-function describeFiles(bundle, loaded) {
-  let stylesheetSources = new Map();
+function describeFiles(
+  bundle: Bundle,
+  loaded: Set<string>,
+): Record<string, FileRecord> {
+  let stylesheetSources = new Map<string, Map<string, ModuleName>>();
   for (let output of Object.values(bundle)) {
     if (output.type !== 'chunk') {
       continue;
@@ -127,7 +147,7 @@ function describeFiles(bundle, loaded) {
     }
   }
 
-  let files = {};
+  let files: Record<string, FileRecord> = {};
   for (let fileName of [...loaded].sort()) {
     let output = bundle[fileName];
     let bytes = Buffer.byteLength(
@@ -147,7 +167,7 @@ function describeFiles(bundle, loaded) {
     } else if (stylesheetSources.has(fileName)) {
       files[fileName] = {
         bytes,
-        sources: [...stylesheetSources.get(fileName).values()].sort(byModule),
+        sources: [...stylesheetSources.get(fileName)!.values()].sort(byModule),
       };
     } else {
       files[fileName] = { bytes };
@@ -156,24 +176,24 @@ function describeFiles(bundle, loaded) {
   return files;
 }
 
-function moduleName(id) {
+function moduleName(id: string): ModuleName {
   let found = modulePackage(id);
-  if (found.virtual) {
+  if (found.virtual !== undefined) {
     return { package: '(bundler)', module: found.virtual.replace('\0', '') };
   }
   return {
-    package: found.own ? found.name : `${found.name}@${found.version}`,
+    package: found.own ? found.name! : `${found.name}@${found.version}`,
     module: found.path,
   };
 }
 
-function byModule(a, b) {
+function byModule(a: ModuleName, b: ModuleName): number {
   return a.package.localeCompare(b.package) || a.module.localeCompare(b.module);
 }
 
 // The record's lines that one side has and the other doesn't, enough to see
 // which files and modules moved.
-function lineDiff(before, after) {
+function lineDiff(before: string, after: string): string {
   let beforeLines = before.split('\n');
   let afterLines = after.split('\n');
   let removed = beforeLines.filter((line) => !afterLines.includes(line));

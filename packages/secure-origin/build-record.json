@@ -27,7 +27,7 @@
       "bytes": 770
     },
     "credentials.js": {
-      "bytes": 13025,
+      "bytes": 13058,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -50,12 +50,12 @@
       "bytes": 908
     },
     "session.js": {
-      "bytes": 4133,
+      "bytes": 4834,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/session.js",
-          "size": 6330
+          "size": 7110
         }
       ]
     },
@@ -69,7 +69,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 24799,
+      "bytes": 24958,
       "modules": [
         {
           "package": "@cardstack/secure-origin",

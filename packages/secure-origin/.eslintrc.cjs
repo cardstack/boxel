@@ -8,7 +8,7 @@ module.exports = {
       env: { browser: false, node: true },
     },
     {
-      files: ['./build/**/*.mjs', './tests/**/*.mjs', './*.mjs'],
+      files: ['./build/**/*.ts', './tests/**/*.ts', './vite.config.ts'],
       env: { browser: false, node: true },
     },
     {
