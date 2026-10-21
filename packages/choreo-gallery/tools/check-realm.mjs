@@ -20,8 +20,9 @@
  *   records sketch APIs that were never built, so their imports aren't
  *   checked); every choreo.boxel.site URL names a file in the realm, and
  *   every link into the monorepo a file that exists, down to the heading a
- *   `#fragment` names; and a link to a guide leads to its page, not its
- *   Markdown file.
+ *   `#fragment` names; and a realm doc's link to a guide, like any
+ *   choreo.boxel.site URL of one, leads to its page, not its Markdown file.
+ *   (A package README links a guide's file, which is what GitHub can show.)
  *
  * Reads sources and JSON only, so it needs no build.
  */
@@ -479,7 +480,7 @@ for (const file of [...realmDocs, ...packageReadmes]) {
     const problem = exists && fragmentProblem(resolved, fragment);
     if (inRealm && (!resolved.startsWith(realm + path.sep) || !exists)) {
       brokenLinks.push(`${relative(file)}: ${target} is not a realm file`);
-    } else if (guideFileWithPage(resolved)) {
+    } else if (inRealm && guideFileWithPage(resolved)) {
       brokenLinks.push(
         `${relative(file)}: ${target} is the guide's file; link its page, without .md`,
       );

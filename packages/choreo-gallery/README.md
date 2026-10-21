@@ -340,8 +340,9 @@ against the libraries it documents:
 - every `choreo.boxel.site` URL names a file in the realm, and every link into
   the monorepo names a file that exists, along with the heading any `#fragment`
   names;
-- a link to a guide, relative or on `choreo.boxel.site`, leads to its page,
-  not its `.md` file.
+- a realm doc's link to a guide, and any `choreo.boxel.site` URL of one, leads
+  to its page, not its `.md` file. A package README's relative link to a guide
+  stays on its `.md` file, which is what GitHub can show.
 
 Tests that load the gallery's cards from their realm source run in the host
 suite, `packages/host/tests/integration/choreo-*-test.gts`, through
