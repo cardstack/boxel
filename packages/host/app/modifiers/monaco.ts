@@ -39,7 +39,9 @@ export default class Monaco extends Modifier<Signature> {
   private lastLanguage: string | undefined;
   private lastContent: string | undefined;
   private lastReadOnly: boolean | undefined;
-  private lastModified = Date.now();
+  // Set when the user edits in monaco. Unset until then, so content that
+  // arrives soon after the editor opens is shown rather than taken for an echo.
+  private lastModified: number | undefined;
   private lastCursorPosition: MonacoSDK.Position | undefined;
   private waiterManager = createMonacoWaiterManager();
   private onDispose: (() => void) | undefined;
@@ -70,8 +72,9 @@ export default class Monaco extends Modifier<Signature> {
         content !== this.model.getValue() &&
         // ignore realm event echoes of our own saves by not processing content changes
         // within serverEchoDebounceMs of the last monaco change in memory
-        Date.now() >=
-          this.lastModified + this.monacoService.serverEchoDebounceMs
+        (this.lastModified === undefined ||
+          Date.now() >=
+            this.lastModified + this.monacoService.serverEchoDebounceMs)
       ) {
         this.lastContent = content;
         this.model.setValue(content);
