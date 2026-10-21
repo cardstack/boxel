@@ -94,6 +94,36 @@ Silent on an idle, healthy server — so its presence in the logs is itself the
 signal. Lag climbing in step with `inFlightSearch` is the fingerprint of the loop
 being starved by concurrent search serialization.
 
+The line also reports the realm event queue: the per-process line every realm
+event takes to its subscribers' session rooms on synapse
+(`realm-event-dispatcher.ts`):
+
+```
+realmEventsQueued=… realmEventQueuedKB=… realmEventQueueAgeMs=… realmEventSendsInFlight=… realmEventSends=… realmEventSendMs(mean/max)=… realmEventFailedSends=… realmEventBackPressure=… realmEventsCoalesced=… realmEventsDropped=…
+```
+
+`realmEventQueueAgeMs` is how long the oldest event still waiting to start has
+waited, which is the delay a browser sees on top of the send itself. A burst
+that drains keeps it low however deep the queue gets, so it, not the depth, is
+what the "Realm Server Realm Event Backlog" alert reads. When it climbs, the
+next field to read is `realmEventBackPressure`, the count of sends in the window
+that synapse or the proxy in front of it answered with 429, 502, 503 or 504:
+
+- Nonzero: synapse is overloaded, and the queue is pausing to let it recover.
+  Look at synapse CPU and at what is writing in bulk.
+- Zero: the queue is running at its configured rate. That rate is set by
+  `REALM_EVENT_SENDS_PER_SECOND` (default 50) and
+  `REALM_EVENT_MAX_SENDS_IN_FLIGHT` (default 8).
+
+`realmEventsDropped` counts events discarded because the queue passed
+`REALM_EVENT_MAX_QUEUED_BYTES` (default 64 MiB). The queue drops the oldest
+event of the realm with the longest backlog.
+
+The counters (`realmEventSends`, `realmEventFailedSends`,
+`realmEventBackPressure`, `realmEventsCoalesced`, `realmEventsDropped`) cover
+the window since the previous line. The others are read at the moment of the
+sample.
+
 ## `_readiness-check` is not one of them
 
 `GET /<realm>/_readiness-check` shares the word "readiness" but answers a different

@@ -31,6 +31,18 @@ const joinedRoomsRequests = new WeakMap<object, Promise<JoinedRoomsResponse>>();
 // sharing the device must never reuse a transaction id; see nextTxnId.
 export const SERVER_MATRIX_DEVICE_ID = 'boxel-server';
 
+// A homeserver request that came back with a non-2xx status. The status is
+// carried as a field so a caller can tell an overloaded or unreachable
+// homeserver (429, 502, 503, 504) from a request the homeserver refused.
+export class MatrixRequestError extends Error {
+  readonly status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'MatrixRequestError';
+    this.status = status;
+  }
+}
+
 export interface MatrixAccess {
   accessToken: string;
   deviceId: string;
@@ -333,11 +345,19 @@ export class MatrixClient {
     return await fetchMatrixProfile(this.matrixURL, userId);
   }
 
-  async sendEvent<T>(roomId: string, type: string, content: T) {
+  // A caller that retries a send passes the same `txnId` on every attempt, so
+  // synapse answers a retry of a send it already stored with the stored event
+  // rather than storing a second copy. That matters when a proxy in front of
+  // synapse times the request out while synapse goes on to complete it.
+  async sendEvent<T>(
+    roomId: string,
+    type: string,
+    content: T,
+    txnId: string = this.nextTxnId(),
+  ) {
     if (!this.access) {
       throw new Error(`Missing matrix access token`);
     }
-    let txnId = this.nextTxnId();
 
     let response = await this.request(
       `_matrix/client/v3/rooms/${roomId}/send/${type}/${txnId}`,
@@ -345,14 +365,23 @@ export class MatrixClient {
       { body: JSON.stringify(content) },
     );
 
-    let json = (await response.json()) as { event_id: string };
     if (!response.ok) {
-      throw new Error(
-        `Unable to send room event '${type}' to room ${roomId}: status ${
-          response.status
-        } - ${JSON.stringify(json)}`,
+      // A proxy in front of synapse answers a timeout or an unreachable
+      // upstream with an HTML page, not a matrix error, so the body is read as
+      // text and kept out of the message unless it is JSON.
+      let body = await response.text().catch(() => '');
+      let detail: string;
+      try {
+        detail = JSON.stringify(JSON.parse(body));
+      } catch {
+        detail = `non-JSON body (${body.length} bytes)`;
+      }
+      throw new MatrixRequestError(
+        `Unable to send room event '${type}' to room ${roomId}: status ${response.status} - ${detail}`,
+        response.status,
       );
     }
+    let json = (await response.json()) as { event_id: string };
     return json.event_id;
   }
 
@@ -530,7 +559,7 @@ export class MatrixClient {
     return uint8ArrayToHex(await hash.digest());
   }
 
-  private nextTxnId() {
+  nextTxnId() {
     // Unique per client instance, and within it even when several events are
     // sent in the same millisecond. Every process logs in to the same device,
     // and synapse answers a repeated (device, transaction id) send with the
