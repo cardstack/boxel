@@ -22,7 +22,7 @@ if [ ! -f "$SUBMISSION_REALM_PATH/realm.json" ]; then
     },
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/realm-config",
+        "module": "@cardstack/base/realm-config",
         "name": "RealmConfig"
       }
     }
@@ -37,7 +37,7 @@ if [ ! -f "$SUBMISSION_REALM_PATH/index.json" ]; then
     "type": "card",
     "meta": {
       "adoptsFrom": {
-        "module": "https://cardstack.com/base/cards-grid",
+        "module": "@cardstack/base/cards-grid",
         "name": "CardsGrid"
       }
     }

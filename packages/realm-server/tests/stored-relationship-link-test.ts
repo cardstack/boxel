@@ -1,45 +1,27 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import type { VirtualNetwork } from '@cardstack/runtime-common/virtual-network';
+import { VirtualNetwork } from '@cardstack/runtime-common/virtual-network';
 import { storedRelationshipLink } from '@cardstack/runtime-common/file-serializer';
 
 const realmURL = new URL('http://test/realm/');
 const relativeTo = new URL('http://test/realm/hassan.json');
-const ownPrefix = '@cardstack/realm/';
+const ownPrefix = '@test/realm/';
 const otherPrefix = '@cardstack/catalog/';
 const otherRealm = 'http://test/catalog/';
 
-// A VirtualNetwork stand-in that maps one prefix onto the realm under test and
-// another onto a second realm, so a scoped reference can point either inside
-// or outside the writing realm — the distinction the helper exists to draw.
-function makeStubNetwork(): VirtualNetwork {
-  let targets: [string, string][] = [
-    [ownPrefix, realmURL.href],
-    [otherPrefix, otherRealm],
-  ];
-  return {
-    isRegisteredPrefix(reference: string) {
-      return targets.some(([prefix]) => reference.startsWith(prefix));
-    },
-    resolveURL(reference: string, base: URL | string | undefined) {
-      for (let [prefix, target] of targets) {
-        if (reference.startsWith(prefix)) {
-          return new URL(reference.slice(prefix.length), target);
-        }
-      }
-      return new URL(reference, base ?? undefined);
-    },
-  } as unknown as VirtualNetwork;
+// One prefix maps onto the realm under test and another onto a second realm,
+// so a reference can point either inside or outside the writing realm — the
+// distinction the helper exists to draw.
+function makeNetwork(): VirtualNetwork {
+  let network = new VirtualNetwork();
+  network.addRealmMapping(ownPrefix, realmURL.href);
+  network.addRealmMapping(otherPrefix, otherRealm);
+  return network;
 }
 
 function stored(selfLink: string): string {
-  return storedRelationshipLink(
-    selfLink,
-    relativeTo,
-    realmURL,
-    makeStubNetwork(),
-  );
+  return storedRelationshipLink(selfLink, relativeTo, realmURL, makeNetwork());
 }
 
 module(basename(import.meta.filename), function () {
@@ -62,10 +44,8 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    // The case the write suite caught and this stub originally hid: the stub
-    // registered every prefix it was asked about, while the realm-server
-    // harness registers only `@cardstack/base/`. Resolving an unregistered
-    // scoped reference joins it against the base as though it were relative.
+    // Resolving a scoped reference whose prefix is not registered would join
+    // it against the base as though it were relative.
     test('stores an unregistered scoped reference exactly as sent', function (assert) {
       assert.strictEqual(
         stored('@nobody/knows-this/Pet/vangogh'),
@@ -73,7 +53,21 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('stores a cross-realm URL resolved', function (assert) {
+    test('stores a URL in a prefix-registered realm by its prefix', function (assert) {
+      assert.strictEqual(
+        stored(`${otherRealm}Pet/vangogh`),
+        `${otherPrefix}Pet/vangogh`,
+      );
+    });
+
+    test('stores a relative reference that leaves the realm by the prefix of the realm it lands in', function (assert) {
+      assert.strictEqual(
+        stored('../catalog/Pet/vangogh'),
+        `${otherPrefix}Pet/vangogh`,
+      );
+    });
+
+    test('stores a URL in a realm with no registered prefix resolved', function (assert) {
       assert.strictEqual(
         stored('http://elsewhere/other/Pet/vangogh'),
         'http://elsewhere/other/Pet/vangogh',
