@@ -58,6 +58,11 @@ export default class ScrollPositionService extends Service {
     this.persist();
   }
 
+  forgetScrollPosition(container: string) {
+    this.keyToScrollPosition.delete(container);
+    this.persist();
+  }
+
   private persist() {
     window.localStorage.setItem(
       ScrollPositions,

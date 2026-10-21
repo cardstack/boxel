@@ -194,6 +194,24 @@ const friendCardSource = `
   }
 `;
 
+// Describes the file tree's scroll state, appended to scroll-position
+// assertion messages so a failure shows what was stored and what was rendered.
+function fileTreeScrollDiagnostics() {
+  let panel = document.querySelector('[data-test-togglable-left-panel]');
+  let selected = document.querySelector('[data-test-file].selected');
+  return JSON.stringify({
+    storedScrollPositions: window.localStorage.getItem(ScrollPositions),
+    panelScrollTop: panel?.scrollTop,
+    panelScrollHeight: panel?.scrollHeight,
+    panelClientHeight: panel?.clientHeight,
+    selectedFile: selected?.getAttribute('data-test-file'),
+    selectedFileOffsetTop: (selected as HTMLElement | null)?.offsetTop,
+    testingContainerScrollTop: document.getElementById(
+      'ember-testing-container',
+    )?.scrollTop,
+  });
+}
+
 const realmInfo = {
   name: 'Test Workspace B',
   backgroundURL:
@@ -850,7 +868,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     } else {
       assert.notOk(
         await elementIsVisible(endDirectoryElement),
-        'expected previously-stored scroll position to have been forgotten',
+        `expected previously-stored scroll position to have been forgotten after choosing another file; ${fileTreeScrollDiagnostics()}`,
       );
 
       endDirectoryElement.scrollIntoView({ block: 'center' });
@@ -894,7 +912,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     } else {
       assert.notOk(
         await elementIsVisible(endDirectoryElement),
-        'expected previously-stored scroll position to have been forgotten',
+        `expected previously-stored scroll position to have been forgotten after visiting another realm; ${fileTreeScrollDiagnostics()}`,
       );
     }
   });
