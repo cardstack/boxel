@@ -3,7 +3,6 @@ status: proposed
 date: 2026-10-20
 scope:
   - packages/secure-origin/**
-  - packages/realm-server/secure-origin/**
   - packages/realm-server/lib/secure-origin.ts
   - packages/realm-server/realm-server.Dockerfile
   - packages/realm-server/tests/helpers/index.ts
@@ -188,15 +187,6 @@ screens still needs the same change in the package.
 
 ## 6. Remediation
 
-- `packages/realm-server/secure-origin/index.html`, `shell.js`, `shell.css`,
-  `sign-in.js`, `sign-in-copy.js`, `register.js`, `password-reset.js`,
-  `password-fields.js` and `dom.js` break §1.1. They are served as written,
-  not built from `packages/secure-origin`.
-- `packages/realm-server/secure-origin/credentials.html` and
-  `credentials.css` break §1.1, for the same reason.
-- `packages/realm-server/secure-origin/credentials.js`, `matrix.js`,
-  `session.js`, `redact.js` and `app-origins.js` break §1.1 and §1.6. They
-  are served as written, and they are not in `packages/secure-origin/src/security/`.
-- `packages/realm-server/lib/secure-origin.ts` (`SHELL_ASSETS`,
-  `CREDENTIALS_ASSETS`) breaks §1.1 and §1.7. It serves fixed source files,
-  not the package's build output read through a manifest.
+- `packages/secure-origin/src/security/credentials.js` breaks §1.6. It
+  renders the credential fields itself when it loads, so it can't be tested
+  without rendering.

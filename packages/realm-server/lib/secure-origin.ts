@@ -1,16 +1,17 @@
 import type Koa from 'koa';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { createRequire } from 'module';
-import { dirname, join } from 'path';
+import { dirname, extname, join } from 'path';
 import { logger } from '@cardstack/runtime-common';
 import { registerSecureOriginHost } from './request-telemetry.ts';
-import { parseListedOrigin } from '../secure-origin/app-origins.js';
+import { parseListedOrigin } from '@cardstack/secure-origin/security/app-origins.js';
 
 // The secure origin is where a user types a credential: a page on an origin
 // that card code can't reach, so the same-origin policy keeps what is typed
 // there out of the app page and every card evaluated in it. It is only as
-// isolated as what else it serves, so it serves the pages in `secure-origin/`
-// — the shell, and the credential fields the app frames — and nothing else.
+// isolated as what else it serves, so it serves the pages `packages/secure-origin`
+// builds — the shell, and the credential fields the app frames — and nothing
+// else.
 // No realm, card module, realm asset or host app bundle is ever reachable on
 // it: every request on the origin is answered here, ahead of all other
 // routing, and anything that isn't one of those pages or their files is a
@@ -20,8 +21,6 @@ import { parseListedOrigin } from '../secure-origin/app-origins.js';
 // requests are told apart by their Host. In development it is a dedicated
 // port the realm-server listens on, which serves this and nothing else.
 
-const SHELL_DIR = join(import.meta.dirname, '..', 'secure-origin');
-const SHELL_BASE_PLACEHOLDER = /%SHELL_BASE%/g;
 const MATRIX_URL_PLACEHOLDER = /%MATRIX_URL%/g;
 const APP_ORIGINS_PLACEHOLDER = /%APP_ORIGINS%/g;
 const REALM_SERVER_URL_PLACEHOLDER = /%REALM_SERVER_URL%/g;
@@ -34,79 +33,108 @@ export const GOOGLE_CALLBACK_PATH = 'google-callback';
 // machine's loopback address, on whatever port the CLI chose.
 const CLI_LOOPBACK_FORM_ACTION = 'http://127.0.0.1:*';
 
+// The entry documents `packages/secure-origin` builds: the shell, and the
+// credential fields the app frames, which are served at `credentials`
+// beneath the shell.
+const SHELL_DOCUMENT = 'index.html';
+const CREDENTIALS_DOCUMENT = 'credentials.html';
+const CREDENTIALS_PATH = 'credentials';
+
 // The typeface the app's forms are set in, and boxel-ui's design tokens,
 // served by the secure origin itself so its pages, and the credential fields
 // it frames, match the app's. They come from boxel-ui, where the app gets
-// them, so the two can't drift apart.
-const BOXEL_UI_STYLES_DIR = dirname(
-  createRequire(import.meta.url).resolve(
-    '@cardstack/boxel-ui/styles/fonts.css',
-  ),
-);
+// them, so the two can't drift apart. They are the only files the origin
+// serves that its build doesn't emit.
+const BOXEL_UI_ASSETS = [
+  'variables.css',
+  'theme.css',
+  'IBMPlexSansVar-Roman.woff2',
+];
 
-// The shell's static files, by the path they are served at beneath the shell.
-const SHELL_ASSETS: Record<string, { file: string; contentType: string }> = {
-  ...Object.fromEntries(
-    [
-      'shell.js',
-      'session.js',
-      'sign-in.js',
-      'sign-in-copy.js',
-      'register.js',
-      'password-reset.js',
-      'password-fields.js',
-      'matrix.js',
-      'dom.js',
-    ].map((name) => [
+const CONTENT_TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.woff2': 'font/woff2',
+};
+
+interface SecureOriginFile {
+  body: string | Buffer;
+  contentType: string;
+}
+
+// The secure origin's build, read once, at startup: each entry document and
+// the files it loads, as its manifest lists them, with the placeholder base
+// the build writes asset URLs under replaced by the shell's path. Nothing is
+// built or read at request time.
+function readSecureOriginBuild(shellBase: string): {
+  entries: Record<string, string[]>;
+  files: Map<string, SecureOriginFile>;
+} {
+  let packageDir = dirname(
+    createRequire(import.meta.url).resolve(
+      '@cardstack/secure-origin/package.json',
+    ),
+  );
+  let distDir = join(packageDir, 'dist');
+  let manifestFile = join(distDir, 'manifest.json');
+  if (!existsSync(manifestFile)) {
+    throw new Error(
+      `secure origin: ${distDir} holds no build. Build it with \`pnpm --dir=packages/secure-origin build\` before starting the realm server.`,
+    );
+  }
+  let { base, entries }: { base: string; entries: Record<string, string[]> } =
+    JSON.parse(readFileSync(manifestFile, 'utf8'));
+  // Replaced wherever it appears, so it must be a placeholder no page could
+  // spell by chance.
+  if (!/^\/__[A-Z_]+__\/$/.test(base)) {
+    throw new Error(
+      `secure origin: the build's base ${base} is not a placeholder`,
+    );
+  }
+  let files = new Map<string, SecureOriginFile>();
+  for (let name of new Set(Object.values(entries).flat())) {
+    let contentType = CONTENT_TYPES[extname(name)];
+    if (!contentType || name.includes('..') || name.startsWith('/')) {
+      throw new Error(
+        `secure origin: the build emits ${name}, which it may not serve`,
+      );
+    }
+    let body: string | Buffer = readFileSync(join(distDir, name));
+    if (contentType.startsWith('text/')) {
+      body = body
+        .toString('utf8')
+        .replaceAll(
+          base,
+          `${contentType.startsWith('text/html') ? escapeAttribute(shellBase) : shellBase}/`,
+        );
+    }
+    files.set(name, { body, contentType });
+  }
+  for (let document of [SHELL_DOCUMENT, CREDENTIALS_DOCUMENT]) {
+    if (!entries[document]?.includes(document)) {
+      throw new Error(`secure origin: the build has no ${document}`);
+    }
+  }
+  return { entries, files };
+}
+
+function boxelUIAssets(): Map<string, SecureOriginFile> {
+  let stylesDir = dirname(
+    createRequire(import.meta.url).resolve(
+      '@cardstack/boxel-ui/styles/fonts.css',
+    ),
+  );
+  return new Map(
+    BOXEL_UI_ASSETS.map((name) => [
       name,
       {
-        file: join(SHELL_DIR, name),
-        contentType: 'text/javascript; charset=utf-8',
+        body: readFileSync(join(stylesDir, name)),
+        contentType: CONTENT_TYPES[extname(name)],
       },
     ]),
-  ),
-  'shell.css': {
-    file: join(SHELL_DIR, 'shell.css'),
-    contentType: 'text/css; charset=utf-8',
-  },
-  'variables.css': {
-    file: join(BOXEL_UI_STYLES_DIR, 'variables.css'),
-    contentType: 'text/css; charset=utf-8',
-  },
-  'theme.css': {
-    file: join(BOXEL_UI_STYLES_DIR, 'theme.css'),
-    contentType: 'text/css; charset=utf-8',
-  },
-  'IBMPlexSansVar-Roman.woff2': {
-    file: join(BOXEL_UI_STYLES_DIR, 'IBMPlexSansVar-Roman.woff2'),
-    contentType: 'font/woff2',
-  },
-};
-
-// The credential fields the app frames (see `credentials.js`): the page, by
-// the path beneath the shell it is served at, and its static files.
-const CREDENTIALS_PATH = 'credentials';
-const CREDENTIALS_ASSETS: Record<
-  string,
-  { file: string; contentType: string }
-> = {
-  'credentials.js': {
-    file: join(SHELL_DIR, 'credentials.js'),
-    contentType: 'text/javascript; charset=utf-8',
-  },
-  'app-origins.js': {
-    file: join(SHELL_DIR, 'app-origins.js'),
-    contentType: 'text/javascript; charset=utf-8',
-  },
-  'redact.js': {
-    file: join(SHELL_DIR, 'redact.js'),
-    contentType: 'text/javascript; charset=utf-8',
-  },
-  'credentials.css': {
-    file: join(SHELL_DIR, 'credentials.css'),
-    contentType: 'text/css; charset=utf-8',
-  },
-};
+  );
+}
 
 const log = logger('realm:secure-origin');
 
@@ -218,8 +246,8 @@ export function createSecureOrigin(
   shellOptions?: ShellOptions,
 ): SecureOrigin {
   let shellBase = url.pathname.replace(/\/+$/, '');
-  let indexHTML = readFileSync(join(SHELL_DIR, 'index.html'), 'utf8')
-    .replace(SHELL_BASE_PLACEHOLDER, shellBase)
+  let build = readSecureOriginBuild(shellBase);
+  let indexHTML = String(build.files.get(SHELL_DOCUMENT)!.body)
     .replace(
       REALM_SERVER_URL_PLACEHOLDER,
       escapeAttribute(shellOptions?.realmServerURL.href ?? ''),
@@ -251,14 +279,14 @@ export function createSecureOrigin(
   routes.set(shellBase, shell);
   routes.set(`${shellBase}/`, shell);
   routes.set(`${shellBase}/${GOOGLE_CALLBACK_PATH}`, shell);
-  for (let [name, { file, contentType }] of Object.entries(SHELL_ASSETS)) {
-    routes.set(`${shellBase}/${name}`, {
-      body: readFileSync(file),
-      contentType,
-    });
-  }
+  addFileRoutes(routes, shellBase, [
+    ...build.entries[SHELL_DOCUMENT].filter(
+      (name) => name !== SHELL_DOCUMENT,
+    ).map((name): [string, SecureOriginFile] => [name, build.files.get(name)!]),
+    ...boxelUIAssets(),
+  ]);
   if (credentialFields) {
-    addCredentialFieldRoutes(routes, shellBase, credentialFields);
+    addCredentialFieldRoutes(routes, shellBase, build, credentialFields);
   }
   let expectedHost = url.host.toLowerCase();
   registerSecureOriginHost(expectedHost);
@@ -334,19 +362,18 @@ export function createSecureOrigin(
 function addCredentialFieldRoutes(
   routes: Map<string, SecureOriginRoute>,
   shellBase: string,
+  build: ReturnType<typeof readSecureOriginBuild>,
   { matrixURL, realmServerURL, appOrigins }: CredentialFieldsOptions,
 ) {
   let origins = appOrigins.map(appOrigin);
   if (origins.length === 0) {
     throw new Error(`secure origin: credential fields need an app origin`);
   }
-  let base = `${shellBase}/${CREDENTIALS_PATH}`;
-  let html = readFileSync(join(SHELL_DIR, 'credentials.html'), 'utf8')
-    .replace(SHELL_BASE_PLACEHOLDER, escapeAttribute(shellBase))
+  let html = String(build.files.get(CREDENTIALS_DOCUMENT)!.body)
     .replace(MATRIX_URL_PLACEHOLDER, escapeAttribute(matrixURL.href))
     .replace(REALM_SERVER_URL_PLACEHOLDER, escapeAttribute(realmServerURL.href))
     .replace(APP_ORIGINS_PLACEHOLDER, escapeAttribute(origins.join(' ')));
-  routes.set(base, {
+  routes.set(`${shellBase}/${CREDENTIALS_PATH}`, {
     body: html,
     contentType: 'text/html; charset=utf-8',
     headers: {
@@ -354,13 +381,30 @@ function addCredentialFieldRoutes(
       connectSrc: [matrixURL.origin, realmServerURL.origin],
     },
   });
-  for (let [name, { file, contentType }] of Object.entries(
-    CREDENTIALS_ASSETS,
-  )) {
-    routes.set(`${shellBase}/${name}`, {
-      body: readFileSync(file),
-      contentType,
-    });
+  addFileRoutes(
+    routes,
+    shellBase,
+    build.entries[CREDENTIALS_DOCUMENT].filter(
+      (name) => name !== CREDENTIALS_DOCUMENT,
+    ).map((name) => [name, build.files.get(name)!]),
+  );
+}
+
+// The files a page loads, each at its name beneath the shell, with the
+// locked-down default headers: they are loaded, never framed. A file the
+// shell and the credential fields share is served once.
+function addFileRoutes(
+  routes: Map<string, SecureOriginRoute>,
+  shellBase: string,
+  files: Iterable<[string, SecureOriginFile]>,
+) {
+  for (let [name, file] of files) {
+    let path = `${shellBase}/${name}`;
+    let existing = routes.get(path);
+    if (existing && existing.body !== file.body) {
+      throw new Error(`secure origin: two files would be served at ${path}`);
+    }
+    routes.set(path, { body: file.body, contentType: file.contentType });
   }
 }
 
