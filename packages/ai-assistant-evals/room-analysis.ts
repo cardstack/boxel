@@ -39,6 +39,16 @@ export interface RoomAnalysis {
   // save, listing install/remix/use, ...). A card those write is as much the
   // model's output as one written with run-realm-code.
   toolWrites: number;
+  // Every realm.* action named in run-realm-code calls, applied or not, by
+  // name: how much work each call carries.
+  realmActions: Record<string, number>;
+  // The turn whose call made the first applied write, by run-realm-code or by
+  // another writing tool.
+  firstWriteTurn: number | undefined;
+  // Prompt tokens on the turn after the first skill read (turn one without a
+  // read): the first prompt that carries the full tool list and no
+  // conversation beyond the skills, so it tracks the size of the tool list.
+  coldPromptTokens: number | undefined;
   // URLs the model read with readRealmFile. A skill file under test that is
   // missing here was never in the model's context.
   filesRead: string[];
@@ -61,6 +71,8 @@ const WRITE_TOOL =
 const REALM_CODE_WRITE =
   /realm\.fs\.(?:(?:writeText|replace)\(\s*|copy\(\s*(?:(['"`])[^'"`]*\1|[^,()]+)\s*,\s*)(?:(['"`])([^'"`]+)\2)?/g;
 const REALM_SEARCH = /realm\.(cards|entries)\.search\(/g;
+// A realm.* call such as `realm.fs.readText(` or `realm.cards.update(`.
+const REALM_ACTION = /\brealm((?:\.[A-Za-z_$][\w$]*)+)\s*\(/g;
 
 function searchRealmLabel(realm: unknown): string {
   if (typeof realm !== 'string' || realm === '') {
@@ -116,6 +128,9 @@ export function analyzeRoom(
     emptyBotReplies: 0,
     realmCodeWrites: 0,
     toolWrites: 0,
+    realmActions: {},
+    firstWriteTurn: undefined,
+    coldPromptTokens: undefined,
     filesRead: [],
     filesWritten: [],
     showCardIds: [],
@@ -244,10 +259,18 @@ export function analyzeRoom(
       }
       if (WRITE_TOOL.test(name) && outcome?.key === 'applied') {
         result.toolWrites++;
+        result.firstWriteTurn ??= result.turns;
       }
       if (name.startsWith('run-realm-code')) {
         let args = parseArguments(request.arguments);
         let code = args.attributes?.code ?? args.code;
+        if (typeof code === 'string') {
+          for (let match of code.matchAll(REALM_ACTION)) {
+            let action = `realm${match[1]}`;
+            result.realmActions[action] =
+              (result.realmActions[action] ?? 0) + 1;
+          }
+        }
         let realmLabel = searchRealmLabel(args.attributes?.realm ?? args.realm);
         for (let match of typeof code === 'string'
           ? code.matchAll(REALM_SEARCH)
@@ -267,6 +290,7 @@ export function analyzeRoom(
         if (typeof code === 'string') {
           for (let match of code.matchAll(REALM_CODE_WRITE)) {
             result.realmCodeWrites++;
+            result.firstWriteTurn ??= result.turns;
             if (match[3]) {
               result.filesWritten.push(match[3]);
             }
@@ -288,6 +312,9 @@ export function analyzeRoom(
   // numbers are one-based, so turn n is `turnUsage[n - 1]`.
   let windowStart =
     firstSkillReadTurn === undefined ? 2 : firstSkillReadTurn + 2;
+  // Turn numbers are one-based, so the turn after the read is at the read's
+  // own number.
+  result.coldPromptTokens = turnUsage[firstSkillReadTurn ?? 0]?.promptTokens;
   for (let [index, usage] of turnUsage.entries()) {
     if (index + 1 < windowStart || readTurns.has(index)) {
       continue;

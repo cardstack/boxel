@@ -404,6 +404,9 @@ async function sendPrompt(
 
 interface Activity {
   idle: boolean;
+  // The terms of `idle` that are holding it false, so a room that never goes
+  // idle names the element that kept it busy.
+  busy: string[];
   botMessages: number;
   applying: number;
   generating: boolean;
@@ -448,7 +451,14 @@ async function readActivityOnce(page: Page): Promise<Activity> {
   return page.evaluate(() => {
     let q = (sel: string) => document.querySelectorAll(sel).length;
     let settled = q('[data-test-room-settled]') > 0;
-    let actionBar = q('[data-test-ai-assistant-action-bar]');
+    // The bar also holds the "new messages" button, which stays when the
+    // panel is not scrolled to the end; only its other states mean work is
+    // still pending.
+    let actionBar = Array.from(
+      document.querySelectorAll('[data-test-ai-assistant-action-bar]'),
+    ).filter(
+      (bar) => !bar.querySelector('[data-test-unread-messages-button]'),
+    ).length;
     // Only a call the host is running. A call still streaming ("preparing")
     // is the model writing, which the stall check below watches instead.
     let applying = q('[data-test-apply-state="applying"]');
@@ -527,14 +537,17 @@ async function readActivityOnce(page: Page): Promise<Activity> {
         'the same tool call was made three times with the same arguments',
       );
     }
+    let busy = [
+      settled ? '' : 'room not settled',
+      actionBar ? `${actionBar} action bar` : '',
+      applying ? `${applying} applying` : '',
+      preparing ? `${preparing} preparing` : '',
+      loading ? 'session preparation' : '',
+      pending ? `${pending} pending message` : '',
+    ].filter(Boolean);
     return {
-      idle:
-        settled &&
-        actionBar === 0 &&
-        applying === 0 &&
-        preparing === 0 &&
-        loading === 0 &&
-        pending === 0,
+      idle: busy.length === 0,
+      busy,
       // Finished bot turns, not messages: every completed turn renders its
       // token usage, while tool results and correctness notes are messages too.
       botMessages: q('[data-test-token-usage]'),
@@ -676,7 +689,15 @@ async function waitForIdle(
     }
     if (now > deadline) {
       await stopGeneration(page);
-      return { stoppedBy: 'wall-clock', irregularities: [] };
+      return {
+        stoppedBy: 'wall-clock',
+        // The bot finished, but something on the page still held the room
+        // busy: that is the host, not a model still working.
+        irregularities:
+          activity.busy.length && !activity.generating
+            ? [`the room never went idle: ${activity.busy.join(', ')}`]
+            : [],
+      };
     }
     await page.waitForTimeout(2_000);
   }
@@ -804,6 +825,12 @@ function classify(
   if (stoppedBy === 'irregularity') {
     reasons.push(`stopped early: ${irregularities.join('; ')}`);
     return { verdict: 'model-failure', reasons };
+  }
+  if (stoppedBy === 'wall-clock' && irregularities.length > 0) {
+    reasons.push(
+      `the bot finished but ${irregularities.join('; ')}; stopped after ${MAX_MINUTES} minutes`,
+    );
+    return { verdict: 'host-failure', reasons };
   }
   if (stoppedBy === 'wall-clock') {
     reasons.push(
@@ -1034,7 +1061,7 @@ async function runModel(
         deadline,
         botMessagesBefore,
         (activity) => {
-          let key = `${activity.botMessages}|${activity.generating}|${activity.applying}`;
+          let key = `${activity.botMessages}|${activity.generating}|${activity.applying}|${activity.busy.join(',')}`;
           if (key !== lastActivity) {
             lastActivity = key;
             progress(requestedModel, {
@@ -1044,6 +1071,7 @@ async function runModel(
                   ? 'bot generating'
                   : 'waiting',
               botMessages: activity.botMessages,
+              ...(activity.busy.length ? { busy: activity.busy } : {}),
             });
           }
         },
@@ -1261,8 +1289,8 @@ test.afterAll(async () => {
   }
   rows.sort((a, b) => a.requestedModel.localeCompare(b.requestedModel));
   let header =
-    '| Result | Model | Effort | Verdict | Turns | Tool calls | Realm writes | Cost | Cache | Time | Card | Notes |\n' +
-    '|---|---|---|---|---|---|---|---|---|---|---|---|\n';
+    '| Result | Model | Effort | Verdict | Turns | First write | Tool calls | Realm actions | Realm writes | Cold prompt | Cost | Cache | Time | Card | Notes |\n' +
+    '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|\n';
   let body = rows
     .map((r) => {
       let a = r.analysis;
@@ -1281,9 +1309,19 @@ test.afterAll(async () => {
             : '')
         : '';
       let writes = a ? `${a.realmCodeWrites + a.toolWrites}` : '';
+      let actions = a
+        ? Object.entries(a.realmActions ?? {})
+            .map(([name, count]) => `${name}×${count}`)
+            .join(', ')
+        : '';
+      let firstWrite = a?.firstWriteTurn ? `turn ${a.firstWriteTurn}` : '–';
+      let coldPrompt =
+        a?.coldPromptTokens !== undefined
+          ? `${a.coldPromptTokens.toLocaleString('en-US')} tok`
+          : '–';
       return `| ${graded.grade} | ${r.modelId ?? r.requestedModel} | ${r.reasoningEffort ?? '–'} | ${r.verdict} | ${
         a?.turns ?? '–'
-      } | ${tools} | ${writes} | ${a ? `$${a.costUsd.toFixed(3)}` : '–'} | ${
+      } | ${firstWrite} | ${tools} | ${actions} | ${writes} | ${coldPrompt} | ${a ? `$${a.costUsd.toFixed(3)}` : '–'} | ${
         a && a.cacheWindowInputTokens > 0
           ? `${Math.round((100 * a.cacheWindowCachedTokens) / a.cacheWindowInputTokens)}%${
               a.cacheMisses ? ` (${a.cacheMisses} miss)` : ''
