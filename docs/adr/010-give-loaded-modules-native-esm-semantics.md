@@ -49,23 +49,40 @@ departure MUST add it to §1.4 in the same PR.
 
 ### 1.2. `resolveImport` is an import map
 
+Resolution MUST follow the HTML algorithm to resolve a module specifier.
+`resolveImport` MUST take the specifier and the URL of the module that imports
+it (the referrer). A specifier that starts with `/`, `./` or `../`, or that is
+an absolute URL, MUST be parsed against the referrer's URL before any mapping
+is matched. The mappings are then matched against the resulting URL. A bare
+specifier is matched as written. Static imports, dynamic imports, and a shim's
+declared dependencies (§1.4.2) MUST all go through this one algorithm. A call
+to `Loader.import` from outside a module has no referrer. It MUST pass an
+absolute URL or a bare specifier.
+
 `resolveImport` MUST only do what an import map can: map exact specifiers and
-prefixes to URLs. It MUST NOT read the network, probe for files, rewrite the
-remainder of a matched prefix, or depend on any state other than its mappings.
-An unmapped bare specifier MUST fail to resolve, as it does in a browser.
+URL prefixes to URLs, optionally scoped by the referrer's URL. It MUST NOT read
+the network, probe for files, rewrite the remainder of a matched prefix, or
+depend on any state other than its mappings. An unmapped bare specifier MUST
+fail to resolve, as it does in a browser.
 
 `resolveImport` MUST map every spelling of one module (a realm prefix, an
 alias URL, the real URL) to the same URL. That is what gives one module one
-instance and one set of classes. The Loader MUST NOT fold spellings into one
-module itself. ADR 002 governs the form identifiers take when they leave the
-Loader.
+instance and one set of classes. ADR 002 governs the form identifiers take
+when they leave the Loader.
 
-An extensionless specifier is resolved the same way. `resolveImport` maps it
-to the URL of the file it names, with an exact entry such as `./foo` to
-`./foo.gts`, as an import map would hold. An implementation MAY generate those
-entries ahead of time from a realm's file listing. It MUST NOT discover them
-by fetching during resolution. The Loader MUST treat `./foo` and `./foo.gts`
-as the distinct URLs they are.
+An extensionless specifier MAY be mapped to a file URL with an exact entry.
+For example, an entry from `https://example.test/realm/foo` to
+`https://example.test/realm/foo.gts` makes `./foo` and `./foo.gts`, imported
+from that realm, resolve to one URL and share one instance. An implementation
+MAY generate those entries ahead of time from a realm's file listing. It MUST
+NOT discover them by fetching during resolution. When more than one file could
+match, the generator MUST apply a documented precedence or refuse the
+ambiguity. The Loader takes no part in that choice.
+
+The Loader MUST key modules only by the URL that resolution returns and the
+module type (§1.1). It MUST NOT fold extensions, or any other spelling, into
+one module. Distinct resolved URLs stay distinct modules, even when fetching
+one redirects to the other.
 
 ### 1.3. `fetch` obtains source
 
@@ -84,8 +101,9 @@ This is the closed list of ways the Loader departs from native ESM.
 
 1. **`import.meta.loader`.** The Loader injects itself into each module's
    `import.meta`. `loaderPlugin` rewrites bare `fetch()` and dynamic
-   `import()` in card code to go through it. A relative `import()` still
-   resolves against `import.meta.url`.
+   `import()` in card code to go through it. A dynamic `import()` MUST still
+   resolve with the importing module as its referrer (§1.2), whatever
+   expression its specifier is.
 2. **Shimmed responses.** The `fetch` implementation MAY answer a module URL
    with a pre-evaluated module. It does so by setting a property keyed by
    `Symbol.for('shimmed-module')` on the `Response` it resolves with. When that
@@ -99,7 +117,8 @@ This is the closed list of ways the Loader departs from native ESM.
 3. **Observation APIs.** `identify`, `getConsumedModules`,
    `getKnownConsumedModules`, runtime dependency tracking, and evaluation
    timing read the module graph. They MUST NOT change what any module
-   observes. They report each module by the URL `resolveImport` gave it. A
+   observes, and they MUST NOT load or evaluate a module. A caller that needs
+   a module's whole graph imports the module first. They report each module by the URL `resolveImport` gave it. A
    caller that needs the RRI form (ADR 002) converts the URL itself. We intend
    to phase out `identify`. New code SHOULD NOT add callers of it.
 4. **Discarding modules.** The host MAY replace a Loader to pick up changed
@@ -156,11 +175,12 @@ the volatile parts of the application in an iframe with its own loader.
 - **Native ESM semantics with a closed list of exceptions (chosen).**
 - **Match ESM as a SHOULD.** Each departure would need only a reason in its
   PR. That is how the current departures accumulated.
-- **Keep extensionless specifiers as a Loader exception.** The Loader would
-  fold `./foo`, `./foo.gts` and `./foo.ts` into one module, which no browser
-  does: they are distinct URLs, and a redirect between them still gives two
+- **Fold extensions implicitly inside the Loader.** The Loader would merge
+  `./foo`, `./foo.gts` and `./foo.ts` into one module, which no browser does:
+  they are distinct URLs, and a redirect between them still gives two
   modules. It also stops a failed fetch from being cached, because one
-  spelling's 404 would then fail its siblings.
+  spelling's 404 would then fail its siblings. Explicit import-map entries for
+  extensionless specifiers (§1.2) give the same sharing without either cost.
 - **A Loader method that registers shims (`shimModule`).** It is a second way
   into the module map that bypasses both `resolveImport` and `fetch`, and it
   makes shims a Loader feature instead of a `fetch` detail. A shimmed response
@@ -176,6 +196,19 @@ the volatile parts of the application in an iframe with its own loader.
 
 ## 4. Remediation
 
+- `packages/runtime-common/loader.ts` (`fetchModule`, dependency resolution)
+  breaks §1.2: it calls `resolveImport` on the raw specifier and only then
+  parses the result against the importing module. An exact entry for a
+  module's URL then misses relative static imports of it.
+- `packages/runtime-common/loader.ts` (the `resolveImport` constructor
+  parameter) and `packages/runtime-common/virtual-network.ts`
+  (`resolveImport`) break §1.2: the resolver takes no referrer, so it cannot
+  support mappings scoped by referrer.
+- `packages/runtime-common/loader-plugin.ts` (`createLoaderImportCall`) breaks
+  §1.4.1: only a literal relative specifier is resolved against
+  `import.meta.url`. `import(path)` with a variable loses its referrer.
+- `packages/runtime-common/loader.ts` (`getConsumedModules`) breaks §1.4.3: it
+  imports a module that is not loaded yet, which evaluates it.
 - `packages/runtime-common/loader.ts` (the `virtualNetwork` and `retrySleep`
   constructor options) breaks §1.7.
 - `packages/runtime-common/loader.ts` (the `onMappingChange` subscription)
