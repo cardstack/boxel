@@ -920,6 +920,81 @@ module(basename(import.meta.filename), function () {
           }
         });
 
+        test('an instance update that serializes to the stored card leaves its bytes alone', async function (assert) {
+          // The fixture's person-1.json is in source spelling: a trailing
+          // newline and a module ref with its extension, neither of which
+          // the serializer writes.
+          let path = 'person-1.json';
+          let storedBefore = await readDiskSnapshot(testRealmAdapter, path);
+          if (storedBefore.kind !== 'present') {
+            throw new Error(`expected ${path} in the fixture`);
+          }
+
+          let writeCalls = 0;
+          let originalWrite = testRealmAdapter.write.bind(testRealmAdapter);
+          testRealmAdapter.write = (async (path, contents) => {
+            writeCalls++;
+            return originalWrite(path, contents);
+          }) as RealmAdapter['write'];
+
+          let update = (data: Record<string, unknown>) =>
+            request
+              .post('/_atomic')
+              .set('Accept', SupportedMimeType.JSONAPI)
+              .set(
+                'Authorization',
+                `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+              )
+              .send(
+                JSON.stringify({
+                  'atomic:operations': [{ op: 'update', href: path, data }],
+                }),
+              );
+
+          try {
+            // Same document, spelled differently again: keys reordered and
+            // the module ref without its extension.
+            let sameResponse = await update({
+              meta: { adoptsFrom: { name: 'Person', module: './person' } },
+              attributes: { firstName: 'Mango' },
+              type: 'card',
+            });
+            assert.strictEqual(sameResponse.status, 201);
+            assert.strictEqual(
+              writeCalls,
+              0,
+              'adapter.write not invoked for a card that means the stored one',
+            );
+            assert.deepEqual(
+              await readDiskSnapshot(testRealmAdapter, path),
+              storedBefore,
+              'stored bytes and lastModified are kept',
+            );
+
+            let changedResponse = await update({
+              type: 'card',
+              attributes: { firstName: 'Papaya' },
+              meta: { adoptsFrom: { module: './person', name: 'Person' } },
+            });
+            assert.strictEqual(changedResponse.status, 201);
+            assert.strictEqual(
+              writeCalls,
+              1,
+              'adapter.write invoked for a card whose meaning changed',
+            );
+            let storedAfter = await readDiskSnapshot(testRealmAdapter, path);
+            assert.strictEqual(
+              storedAfter.kind === 'present'
+                ? JSON.parse(storedAfter.content).data.attributes.firstName
+                : undefined,
+              'Papaya',
+              'the changed card is stored',
+            );
+          } finally {
+            testRealmAdapter.write = originalWrite;
+          }
+        });
+
         test('waitForIndex write preserves compound field values backed by an unexported FieldDef', async function (assert) {
           let logSource = `
               import {

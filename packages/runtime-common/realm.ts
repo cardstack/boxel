@@ -424,7 +424,7 @@ import type {
   SharedIndexPass,
 } from './tasks/indexer.ts';
 import { isCodeRef, isRelativePath, moduleFrom } from './code-ref.ts';
-import { merge } from 'lodash-es';
+import { isEqual, merge } from 'lodash-es';
 import { inferContentType } from './infer-content-type.ts';
 import {
   fileContentToText,
@@ -5176,15 +5176,18 @@ export class Realm {
         urls = [];
       }
 
+      // The document this write stores, when the write re-serializes a card.
+      // The unchanged-file check below compares the stored file by it.
+      let serializedCard: LooseSingleCardDocument | undefined;
       if (typeof content === 'string') {
         try {
           let doc = JSON.parse(content);
           if (isCardResource(doc.data) && options?.serializeFile) {
-            let serialized = await this.fileSerialization(
+            serializedCard = await this.fileSerialization(
               { data: merge(doc.data, { meta: { realmURL: this.url } }) },
               url,
             );
-            content = JSON.stringify(serialized, null, 2);
+            content = JSON.stringify(serializedCard, null, 2);
           }
         } catch (e: any) {
           if (
@@ -5216,12 +5219,33 @@ export class Realm {
         (stored.size === undefined ||
           stored.size === computeContentSize(content));
       let unchanged: { lastModified: number } | undefined;
-      if (couldMatch && typeof content === 'string') {
+      if (
+        stored &&
+        typeof content === 'string' &&
+        (couldMatch || serializedCard)
+      ) {
         let existingFile = await readFileAsText(path, (p) =>
           this.#adapter.openFile(p),
         );
         if (existingFile?.content === content) {
           unchanged = existingFile;
+        } else if (
+          existingFile &&
+          serializedCard &&
+          (await this.#storedCardSerializesTo(
+            existingFile.content,
+            url,
+            serializedCard,
+          ))
+        ) {
+          // A re-serialized card doesn't byte-match a file written in another
+          // spelling — a source checkout's, or one another serializer version
+          // produced — so the stored card is compared by what it serializes
+          // to instead. A stored card that means the same document is kept
+          // byte for byte, and the result below reports its own bytes rather
+          // than the ones this write would have stored.
+          unchanged = existingFile;
+          content = existingFile.content;
         }
       } else if (
         couldMatch &&
@@ -17376,6 +17400,35 @@ export class Realm {
         },
       },
     }) as SingleCardDocument;
+  }
+
+  // Whether a stored card file serializes to `serialized`, the document a
+  // write to the same URL is about to store. A stored file that isn't a card
+  // document, or that no longer serializes (its definition is gone or
+  // broken), is never the same document.
+  async #storedCardSerializesTo(
+    stored: string,
+    url: URL,
+    serialized: LooseSingleCardDocument,
+  ): Promise<boolean> {
+    let doc: any;
+    try {
+      doc = JSON.parse(stored);
+    } catch {
+      return false;
+    }
+    if (!isCardResource(doc?.data)) {
+      return false;
+    }
+    try {
+      let storedSerialized = await this.fileSerialization(
+        { data: merge(doc.data, { meta: { realmURL: this.url } }) },
+        url,
+      );
+      return isEqual(storedSerialized, serialized);
+    } catch {
+      return false;
+    }
   }
 
   private async fileSerialization(
