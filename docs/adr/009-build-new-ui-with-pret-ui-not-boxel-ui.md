@@ -6,7 +6,8 @@ scope:
   - packages/pretui/**
   - packages/host/app/**
   - packages/base/**
-  - packages/experiments-realm/**
+  - packages/*-realm/**
+  - packages/*/realm/**
   - packages/software-factory/**
   - .claude/skills/gts-component-conventions/**
   - AGENTS.md
@@ -81,8 +82,8 @@ and MUST NOT point to a file in boxel-ui as their home.
 ### 1.6. Pret UI stands alone, then boxel-ui goes
 
 Pret UI MUST NOT import `@cardstack/boxel-ui` or depend on it. Where Pret
-UI needs a boxel-ui module, that module MUST move into Pret UI or into host,
-whichever fits it.
+UI needs a boxel-ui module, that module MUST move to its destination under
+§1.3.
 
 boxel-ui MUST NOT be removed while code in this repository, the catalog,
 boxel-home, or boxel-skills still imports it. Imports in user-realm cards,
