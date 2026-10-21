@@ -5,6 +5,7 @@ import { module, test } from 'qunit';
 
 import {
   baseRealm,
+  baseRRI,
   buildToolFunctionNameFromResolvedRef,
   type FileExtractResponse,
   type RenderRouteOptions,
@@ -383,7 +384,7 @@ boxel:
       renderPath(url, {
         fileExtract: true,
         fileDefCodeRef: {
-          module: `${baseRealm.url}markdown-file-def`,
+          module: baseRRI('markdown-file-def'),
           name: 'MarkdownDef',
         } as ResolvedCodeRef,
       }),
@@ -477,7 +478,7 @@ boxel:
       renderPath(url, {
         fileExtract: true,
         fileDefCodeRef: {
-          module: `${baseRealm.url}markdown-file-def`,
+          module: baseRRI('markdown-file-def'),
           name: 'MarkdownDef',
         } as ResolvedCodeRef,
       }),
@@ -525,7 +526,7 @@ boxel:
       renderPath(url, {
         fileExtract: true,
         fileDefCodeRef: {
-          module: `${baseRealm.url}markdown-file-def`,
+          module: baseRRI('markdown-file-def'),
           name: 'MarkdownDef',
         } as ResolvedCodeRef,
       }),

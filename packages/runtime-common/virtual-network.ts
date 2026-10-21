@@ -5,6 +5,7 @@ import {
 import { PREFIX_REALM_PREFIXES } from './realm-prefixes.ts';
 import { RealmPaths, ensureTrailingSlash } from './paths.ts';
 import { baseRealm } from './index.ts';
+import { isPrefixForm } from './realm-identifiers.ts';
 import type {
   RealmIdentifier,
   RealmResourceIdentifier,
@@ -471,6 +472,37 @@ export class VirtualNetwork {
     // exists; every other realm maps to itself and is unaffected.
     let virtual = this.mapURL(ensureTrailingSlash(best), 'real-to-virtual');
     return ensureTrailingSlash(virtual ? virtual.href : best);
+  }
+
+  /**
+   * The path of `identifier` below its namespace, for an identifier whose realm
+   * is not known: below `@scope/name/` for a prefix-form identifier, and below
+   * `scheme://authority` for a URL, with no leading slash.
+   *
+   * A URL's path comes back with its dot segments resolved, its query and hash
+   * dropped, and its percent-escapes decoded. A prefix-form path comes back as
+   * written. An identifier that is neither comes back as written, less any
+   * leading slash.
+   */
+  pathBelowNamespace(identifier: string): string {
+    if (isPrefixForm(identifier)) {
+      return identifier.split('/').slice(2).join('/');
+    }
+    let path: string;
+    try {
+      // Prefix forms return above, so this parses a URL or something that is
+      // neither, which the catch keeps as written.
+      // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
+      path = new URL(identifier).pathname;
+    } catch {
+      return identifier.replace(/^\//, '');
+    }
+    try {
+      path = decodeURI(path);
+    } catch {
+      // A malformed escape keeps the path as written.
+    }
+    return path.replace(/^\//, '');
   }
 
   /**

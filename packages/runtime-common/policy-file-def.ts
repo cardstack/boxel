@@ -1,7 +1,6 @@
 import {
   baseFileRef,
-  baseRealm,
-  baseRRI,
+  baseRealmRRI,
   executableExtensions,
 } from './constants.ts';
 import type { ResolvedCodeRef } from './code-ref.ts';
@@ -26,14 +25,13 @@ import {
 // of its, and `.gjs` as `GtsFileDef`. A module is matched on its code types
 // alone, not the whole chain (see `isModuleSource`).
 //
-// Entries whose module is not a base-realm URL are left out. Those are
-// resolved against the file's own URL at index time, which needs a virtual
-// network, and this table is consulted without one.
+// Entries whose module is not in the base realm are left out. Those are
+// relative, resolved against the file's own URL at index time, and this table
+// answers from the extension alone.
 //
 // Modules are spelled in the `@cardstack/base/` prefix form, the form
 // `identifyCard` emits for a base class and `baseFileRef` already uses, so
-// every answer here compares against a class's identity in one spelling. The
-// indexer's table spells them as base-realm URLs for its own resolution.
+// every answer here compares against a class's identity in one spelling.
 //
 // The key is the file's extension and nothing else: renaming a file changes
 // which rule matches it, and anyone who can write a file chooses its name.
@@ -45,16 +43,7 @@ export const POLICY_FILE_DEF_CODE_REF_BY_EXTENSION: Readonly<
       ...FILEDEF_CODE_REF_BY_EXTENSION,
       '.js': FILEDEF_CODE_REF_BY_EXTENSION['.ts'],
       '.gjs': FILEDEF_CODE_REF_BY_EXTENSION['.gts'],
-    }).flatMap(([extension, { module, name }]) =>
-      module.startsWith(baseRealm.url)
-        ? [
-            [
-              extension,
-              { module: baseRRI(module.slice(baseRealm.url.length)), name },
-            ],
-          ]
-        : [],
-    ),
+    }).filter(([, { module }]) => module.startsWith(baseRealmRRI)),
   ),
 );
 

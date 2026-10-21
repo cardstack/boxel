@@ -1060,7 +1060,7 @@ async function visitForPrerenderedHtml({
   }
 
   let fileURL = url.href;
-  let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL), virtualNetwork);
+  let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL));
 
   // Floored once and used by both consumers below, so the modified time the
   // render stamps onto the card's document and the one the file's HTML bakes

@@ -10,8 +10,11 @@ import { canonicalModuleKey, resolveAdoptsFrom } from './code-ref.ts';
 import { baseRealmRRI, realmURL } from './constants.ts';
 import { logger } from './log.ts';
 import type { LocalPath } from './paths.ts';
-import { isPrefixForm, ri, rri } from './realm-identifiers.ts';
-import type { RealmResourceIdentifier } from './realm-identifiers.ts';
+import { ri, rri } from './realm-identifiers.ts';
+import type {
+  RealmIdentifier,
+  RealmResourceIdentifier,
+} from './realm-identifiers.ts';
 import { resolveRRIReference } from './url.ts';
 import type { VirtualNetwork } from './virtual-network.ts';
 
@@ -144,13 +147,13 @@ export class ListingPathResolver {
   private virtualNetwork: VirtualNetwork;
 
   constructor(
-    targetRealm: string,
+    targetRealm: RealmIdentifier,
     listing: Listing,
     installDirId: string | undefined,
     virtualNetwork: VirtualNetwork,
   ) {
     this.virtualNetwork = virtualNetwork;
-    this.targetRealmPath = new RealmPaths(new URL(targetRealm), virtualNetwork);
+    this.targetRealmPath = new RealmPaths(targetRealm, virtualNetwork);
 
     const listingDirectoryName = kebabCase(listing.name);
 
@@ -166,7 +169,7 @@ export class ListingPathResolver {
 
     this.sourceRealmPath = this.canonicalRealmPath(sourceRealmURL);
     this.targetDirectoryPath = new RealmPaths(
-      new URL(join(this.targetRealmPath.url, this.targetDirectoryName)),
+      ri(this.targetRealmPath.directoryRRI(this.targetDirectoryName)),
       virtualNetwork,
     );
   }
@@ -214,22 +217,21 @@ export class ListingPathResolver {
     return this.localFallback(id);
   }
 
-  // No known realm contains this id: strip just the realm-identifying prefix
-  // and keep the rest of the path. That prefix is the origin for a URL, and the
-  // `@scope/name` namespace for a prefix RRI.
+  // No known realm contains this id: keep its path below its namespace. An id
+  // from a realm the listing never registered through `addKnownRealmURL` lands
+  // here, which is the usual case for an install that registers no foreign
+  // realms. A `.` or `..` segment is refused, because `target()` would resolve
+  // it outside the install directory.
   private localFallback(id: RealmResourceIdentifier): LocalPath {
-    if (isPrefixForm(id)) {
-      return id.split('/').slice(2).join('/').replace(/\/+$/, '');
+    let path = this.virtualNetwork.pathBelowNamespace(id).replace(/\/+$/, '');
+    if (
+      path.split('/').some((segment) => segment === '.' || segment === '..')
+    ) {
+      throw new Error(
+        `Cannot install ${id}: its path has a "." or ".." segment`,
+      );
     }
-    try {
-      // Prefix forms return above, so only a URL-shaped id reaches here; the
-      // catch covers one that is neither.
-      // eslint-disable-next-line @cardstack/boxel/no-url-from-realm-identifier
-      let { pathname } = new URL(id);
-      return decodeURI(pathname).replace(/^\//, '').replace(/\/+$/, '');
-    } catch {
-      return id.replace(/^\//, '').replace(/\/+$/, '');
-    }
+    return path;
   }
 
   targetLid(id: RealmResourceIdentifier): string {
@@ -257,7 +259,7 @@ export class PlanBuilder {
     virtualNetwork: VirtualNetwork,
   ) {
     this.resolver = new ListingPathResolver(
-      realmUrl,
+      ri(realmUrl),
       listing,
       undefined,
       virtualNetwork,

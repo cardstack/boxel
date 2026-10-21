@@ -1813,11 +1813,11 @@ export class Batch {
     }
 
     // Canonicalize dependency URLs to their portable RRI prefix form (e.g.
-    // `@cardstack/base/foo`) before persisting. Index paths arrive here with
-    // base deps in mixed forms: the instance render path already unresolves to
-    // the prefix form, but the file-extract path records the virtual-alias URL
-    // form. Normalizing here keeps one canonical form on disk; dependency
-    // invalidation already searches both the real and prefix forms.
+    // `@cardstack/base/foo`) before persisting. Deps the loader tracks during a
+    // render arrive as the URLs modules were served from, and an entry carried
+    // over from an earlier write may hold any spelling. Normalizing here keeps
+    // one canonical form on disk; dependency invalidation already searches both
+    // the real and prefix forms.
     if (preparedEntry.deps) {
       preparedEntry.deps = await this.internScopedCSSDeps(
         this.virtualNetwork.unresolveURLs(preparedEntry.deps),

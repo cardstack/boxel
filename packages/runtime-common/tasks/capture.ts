@@ -96,7 +96,6 @@ const capture: Task<CaptureArgs, CapturePrerenderResponse> = ({
   createPrerenderAuth,
   matrixURL,
   mediaCacheAdapter,
-  virtualNetwork,
 }) =>
   async function (args) {
     let {
@@ -282,10 +281,7 @@ const capture: Task<CaptureArgs, CapturePrerenderResponse> = ({
               loaderEpoch,
               fileExtract: true,
               fileRender: true,
-              fileDefCodeRef: resolveFileDefCodeRef(
-                new URL(cardId),
-                virtualNetwork,
-              ),
+              fileDefCodeRef: resolveFileDefCodeRef(new URL(cardId)),
             }
           : { loaderEpoch };
       prerenderStart = Date.now();
