@@ -16,13 +16,31 @@ import {
 } from '../helpers/secure-origin-pages.ts';
 import { appURL } from '../support/isolated-realm-server.ts';
 
+let releaseHeldLogout: (() => Promise<void>) | undefined;
+
 test.describe('Profile', () => {
   // CI HACK (do not merge): on even repeats, hold Synapse's answer to the
-  // logout request for 3 s, so the sign-in form is filled before it returns.
+  // logout request until the sign-in form has been filled, then let it go.
+  // That puts whatever logout does after the request between the fill and
+  // the check of the filled values.
   test.beforeEach(async ({ page }, testInfo) => {
+    releaseHeldLogout = undefined;
     if (testInfo.repeatEachIndex % 2 === 0) {
+      let held = new Promise<void>((resolve) => {
+        releaseHeldLogout = async () => {
+          let answered = page.waitForResponse((response) =>
+            response.url().endsWith('/_matrix/client/v3/logout'),
+          );
+          resolve();
+          await answered;
+          await page.waitForTimeout(1000);
+        };
+      });
       await page.route('**/_matrix/client/v3/logout', async (route) => {
-        await new Promise((resolve) => setTimeout(resolve, 3000));
+        await Promise.race([
+          held,
+          new Promise((resolve) => setTimeout(resolve, 30_000)),
+        ]);
         await route.continue();
       });
     }
@@ -110,6 +128,11 @@ test.describe('Profile', () => {
         await credentialFields(page)
           .locator('[data-test-password-field]')
           .fill(password);
+        if (releaseHeldLogout) {
+          let release = releaseHeldLogout;
+          releaseHeldLogout = undefined;
+          await release();
+        }
         await expect(
           credentialFields(page).locator('[data-test-username-field]'),
         ).toHaveValue(username);
