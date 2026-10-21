@@ -2297,11 +2297,9 @@ export interface WriteOptions {
   indexWaitBudgetMs?: number;
   // When false, the commit broadcasts none of its realm events — the
   // initiation, the file `update` and the `incremental` index event — while
-  // writing and indexing exactly as it otherwise would. The exception is an
-  // index pass this write shares with other writers and is the one chosen to
-  // announce: the others stood down for it, so the pass is announced anyway
-  // rather than leaving their tabs without word of their own writes. Defaults
-  // to true. See `REALM_EVENTS_HEADER`.
+  // writing and indexing exactly as it otherwise would. An index pass it
+  // shares with writers that do announce is still announced, by one of them.
+  // Defaults to true. See `REALM_EVENTS_HEADER`.
   broadcastRealmEvents?: boolean;
   // The matrix user whose request produced this write — the effective user
   // (post assume-user) that `checkPermission` records on the request context
@@ -4044,9 +4042,14 @@ export class Realm {
     changes: IndexChange[],
     opts: {
       clientRequestId?: string | null;
-      // See updateIndexAndCollectInvalidations. This form always announces
-      // the pass as it lands, from `onSettled`.
+      // See updateIndexAndCollectInvalidations. This form announces the pass
+      // as it lands, from `onSettled`, unless the caller asked for no realm
+      // events.
       clientAuthored?: string[];
+      // False for a caller that asked for no realm events (see
+      // `WriteOptions.broadcastRealmEvents`): it neither announces the pass
+      // nor broadcasts the failure of one.
+      broadcastRealmEvents?: boolean;
       initiatedBy?: string | null;
       // Invalidation sets earlier passes of this same write deferred, folded
       // into the prerender_html job this pass spawns.
@@ -4073,7 +4076,7 @@ export class Realm {
     let { settled } = await this.#realmIndexUpdater.enqueueChanges(changes, {
       clientRequestId: opts?.clientRequestId ?? null,
       ...(opts?.clientAuthored ? { clientAuthored: opts.clientAuthored } : {}),
-      announcesPass: true,
+      announcesPass: opts.broadcastRealmEvents !== false,
       initiatedBy: opts?.initiatedBy ?? null,
       ...(opts?.carriedPrerenderHtmlChanges?.length
         ? { carriedPrerenderHtmlChanges: opts.carriedPrerenderHtmlChanges }
@@ -4111,7 +4114,10 @@ export class Realm {
         await this.clearRealmIndexCachesAndBroadcast();
         this.broadcastIncrementalInvalidationEvent(
           changes.map(({ url }) => url.href.replace(/\.json$/, '')),
-          { clientRequestId: opts?.clientRequestId ?? null },
+          {
+            clientRequestId: opts?.clientRequestId ?? null,
+            broadcastRealmEvents: opts.broadcastRealmEvents,
+          },
         );
       },
     });
@@ -4147,14 +4153,13 @@ export class Realm {
     // announced that way: one pass nobody else speaks for and the event is
     // still owed, carrying the others' invalidations again along with it.
     let passes = opts?.passes ?? [];
-    // A writer that asked for silence still owes the event for a pass it
-    // shares with others and was chosen to announce: those writers stood
-    // down on its account, and nothing else will tell their tabs that their
-    // own writes landed.
-    if (
-      opts?.broadcastRealmEvents === false &&
-      !passes.some((pass) => pass !== undefined && !pass.announcedByPeer)
-    ) {
+    // A writer that asked for no realm events joins any pass it shares as a
+    // caller that does not announce it (`CoalescedCaller.announcesPass`), so
+    // it is never the one the others stand down for: a pass it shares with a
+    // writer that does announce is announced by that writer, naming this one
+    // among its coalesced writes, and a pass only such writers share is
+    // announced by nobody.
+    if (opts?.broadcastRealmEvents === false) {
       this.#log.debug(
         `not broadcasting index event for ${this.url} (request ${opts?.clientRequestId ?? 'none'}): the writer asked for no realm events`,
       );
@@ -5144,8 +5149,9 @@ export class Realm {
         clientRequestId,
         ...(clientAuthored ? { clientAuthored } : {}),
         // A deferring pass is the module flush ahead of this write's own
-        // pass, which is the one it announces after.
-        announcesPass: !opts?.deferPrerenderHtml,
+        // pass, which is the one it announces after. A write that asked for
+        // no realm events announces neither.
+        announcesPass: broadcastRealmEvents && !opts?.deferPrerenderHtml,
         initiatedBy: initiatingUser,
         // The write answers from the index once this lands, so it cannot be
         // settled by a pass that read the file before these bytes did.
@@ -5686,6 +5692,7 @@ export class Realm {
           {
             clientRequestId,
             ...(clientAuthored ? { clientAuthored } : {}),
+            broadcastRealmEvents,
             initiatedBy: initiatingUser,
             ...(carried.length ? { carriedPrerenderHtmlChanges: carried } : {}),
             modulesWithoutSchemaChange: [...modulesWithoutSchemaChange],
@@ -7367,7 +7374,10 @@ export class Realm {
       let { invalidations, generation, invalidatedTypes, sharedPass } =
         await this.updateIndexAndCollectInvalidations(
           [{ url, operation: 'delete' }],
-          { initiatedBy: options?.initiatingUser ?? null },
+          {
+            initiatedBy: options?.initiatingUser ?? null,
+            announcesPass: broadcastRealmEvents,
+          },
         );
       this.broadcastIncrementalInvalidationEvent(invalidations, {
         generation,
@@ -7386,6 +7396,7 @@ export class Realm {
         [{ url, operation: 'delete' }],
         {
           initiatedBy: options?.initiatingUser ?? null,
+          broadcastRealmEvents,
           onSettled: (deferredInvalidations, meta) => {
             this.broadcastIncrementalInvalidationEvent(deferredInvalidations, {
               generation: meta.generation,
