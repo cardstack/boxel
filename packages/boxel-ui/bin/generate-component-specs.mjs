@@ -33,33 +33,76 @@ const BARREL_FILE = path.join(ADDON_DIR, 'src', 'components.gts');
 const SPEC_MODULE = '@cardstack/boxel-ui/components';
 const SPEC_FILE_PREFIX = 'boxel-ui-';
 
-// Build a slug → exported-name map from the boxel-ui barrel file. For each
-// `import X[, ...] from './components/<slug>/index.gts'` line we record the
-// default binding (X). When a slug has multiple import lines, prefer the
-// binding without the `Boxel` prefix — that's the public-facing name. Components
-// whose slug never appears in the barrel are omitted from the map so the
-// generator can skip them rather than emit a spec advertising an export
-// that doesn't actually exist.
+// Splits an import or export specifier list (`a, b as c, type D`) into
+// `{ name, alias }` pairs, dropping type-only specifiers.
+function parseSpecifiers(list) {
+  return list
+    .split(',')
+    .map((s) => s.trim())
+    .filter((s) => s && !s.startsWith('type '))
+    .map((s) => {
+      const [name, alias] = s.split(/\s+as\s+/);
+      return { name, alias: alias ?? name };
+    });
+}
+
+// Build a slug → public-names map from the boxel-ui barrel file: for each
+// `import ... from './components/<slug>/index.gts'`, the names
+// `@cardstack/boxel-ui/components` exports its bindings under. `primary` is
+// the default import's exported name (its own binding when the barrel exports
+// that, as with `BoxelButton`, otherwise its alias, as with
+// `BrokenLink as BrokenLinkTemplate`). `named` lists the exported names of its
+// PascalCase named imports, for slugs whose components are named exports.
+// A binding the barrel imports but doesn't export isn't public, and a slug
+// with no public component is left out of the map, so the generator skips it
+// rather than emit a spec advertising an export that doesn't exist.
 function buildBarrelExportMap() {
   const source = fs.readFileSync(BARREL_FILE, 'utf8');
-  const re =
-    /^import\s+([A-Za-z0-9_$]+)[^;]*\s+from\s+['"]\.\/components\/([a-z0-9-]+)\/index\.gts['"]/gm;
-  const candidates = new Map();
-  let m;
-  while ((m = re.exec(source)) !== null) {
-    const [, binding, slug] = m;
-    const existing = candidates.get(slug);
-    if (!existing) {
-      candidates.set(slug, binding);
-      continue;
-    }
-    const existingHasPrefix = existing.startsWith('Boxel');
-    const newHasPrefix = binding.startsWith('Boxel');
-    if (existingHasPrefix && !newHasPrefix) {
-      candidates.set(slug, binding);
+
+  const exportedAs = new Map(); // local binding → exported names
+  for (const [, list] of source.matchAll(/^export\s*\{([^}]*)\}/gm)) {
+    for (const { name, alias } of parseSpecifiers(list)) {
+      exportedAs.set(name, [...(exportedAs.get(name) ?? []), alias]);
     }
   }
-  return candidates;
+  const publicName = (local) => {
+    const names = exportedAs.get(local);
+    if (!names) {
+      return null;
+    }
+    return names.includes(local) ? local : names[0];
+  };
+
+  const map = new Map();
+  const importRe =
+    /^import\s+(?!type\b)([^;]*?)\s+from\s+['"]\.\/components\/([a-z0-9-]+)\/index\.gts['"]/gm;
+  for (const [, clause, slug] of source.matchAll(importRe)) {
+    const [, defaultBinding, namedList = ''] =
+      /^([A-Za-z0-9_$]+)?\s*,?\s*(?:\{([^}]*)\})?$/.exec(clause.trim()) ?? [];
+    const primary = defaultBinding ? publicName(defaultBinding) : null;
+    const named = parseSpecifiers(namedList)
+      .map(({ alias }) => publicName(alias))
+      .filter((n) => n && /^[A-Z][a-z]/.test(n));
+    if (primary || named.length) {
+      map.set(slug, { primary, named });
+    }
+  }
+  return map;
+}
+
+// The export a slug's spec documents: its default export, or else the named
+// export its primary FreestyleUsage block is titled after (`'Kanban Plane'` →
+// `KanbanPlane`, `'Multi Select'` → `BoxelMultiSelect`), or else its only
+// named export.
+function resolveComponentName({ primary, named }, usageName) {
+  if (primary) {
+    return primary;
+  }
+  const wanted = (usageName ?? '').replace(/\s+/g, '');
+  return (
+    named.find((n) => n === wanted || n === `Boxel${wanted}`) ??
+    (named.length === 1 ? named[0] : null)
+  );
 }
 
 const args = process.argv.slice(2);
@@ -96,14 +139,6 @@ function listComponents() {
     components.push({ slug: entry.name, usagePath });
   }
   return components.sort((a, b) => a.slug.localeCompare(b.slug));
-}
-
-function toPascalCase(slug) {
-  return slug
-    .split('-')
-    .filter(Boolean)
-    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
-    .join('');
 }
 
 // Match the primary <FreestyleUsage>...</FreestyleUsage> in a file.
@@ -511,11 +546,26 @@ function buildSpecJson({ componentName, cardDescription, readMe }) {
   };
 }
 
-function generateForComponent({ slug, usagePath, barrelExportName }) {
+function generateForComponent({ slug, usagePath, barrelExports }) {
   const source = fs.readFileSync(usagePath, 'utf8');
   const block = extractPrimaryUsageBlock(source);
   if (!block) {
     return { slug, error: 'no FreestyleUsage block found' };
+  }
+  // The spec's `ref.name` and the readMe's import statement both use this
+  // name directly, so it must be what `@cardstack/boxel-ui/components`
+  // exports. The FreestyleUsage `@name` is only a display label (`'Input'`
+  // for BoxelInput, `'Field'` for FieldContainer); it picks among a slug's
+  // named exports but is never used as the name itself.
+  const componentName = resolveComponentName(
+    barrelExports,
+    extractStringAttr(block.openAttrs, 'name'),
+  );
+  if (!componentName) {
+    return {
+      slug,
+      error: `can't tell which of its exports (${barrelExports.named.join(', ')}) the primary FreestyleUsage block documents; title it after one of them`,
+    };
   }
   const topDescription = extractStringAttr(block.openAttrs, 'description');
   const descriptionRaw = extractNamedBlock(block.body, 'description');
@@ -527,16 +577,6 @@ function generateForComponent({ slug, usagePath, barrelExportName }) {
 
   const args = parseArgs(apiBlock, source);
   const cssVars = parseCssVars(cssBlock);
-
-  // Component name must match what `@cardstack/boxel-ui/components` actually
-  // exports — the spec's `ref.name` and the import statement in the readMe
-  // both use it directly. Always prefer the barrel-derived name; the
-  // FreestyleUsage `@name` attribute is a display label and frequently
-  // diverges (e.g. `<FreestyleUsage @name='Input'>` for the BoxelInput export,
-  // `@name='Field'` for FieldContainer). PascalCase-of-slug is the last-resort
-  // fallback for slugs not present in the barrel — those are caught earlier
-  // by the main loop and skipped.
-  const componentName = barrelExportName ?? toPascalCase(slug);
 
   const cardDescription = synthesizeCardDescription({
     componentName,
@@ -607,7 +647,7 @@ function main() {
   const eligible = components.filter((c) => barrelExports.has(c.slug));
 
   const results = eligible.map((c) =>
-    generateForComponent({ ...c, barrelExportName: barrelExports.get(c.slug) }),
+    generateForComponent({ ...c, barrelExports: barrelExports.get(c.slug) }),
   );
   const errors = results.filter((r) => r.error);
   if (errors.length) {

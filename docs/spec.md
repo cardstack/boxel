@@ -95,20 +95,23 @@ Each spec type has specific characteristics and use cases:
 
 #### Boxel-UI Component Specs
 
-All `@cardstack/boxel-ui` components ship a generated Spec card. The
-generator (`packages/boxel-ui/bin/generate-component-specs.mjs`)
-walks each component's `usage.gts` file, extracts the `FreestyleUsage`
-metadata (arguments, description, example, CSS variables), and emits a
-Spec JSON with:
+A generator (`packages/boxel-ui/bin/generate-component-specs.mjs`)
+writes a Spec card for each `@cardstack/boxel-ui` component into a local
+catalog clone. These specs exist only there: no deployed catalog serves
+them (see the end of this section). The generator walks each component's
+`usage.gts` file, extracts the `FreestyleUsage` metadata (arguments,
+description, example, CSS variables), and emits a Spec JSON with:
 
-- `ref: { module: '@cardstack/boxel-ui/components', name: ComponentName }`
+- `ref: { module: '@cardstack/boxel-ui/components', name: ComponentName }`,
+  where `ComponentName` is the name the `@cardstack/boxel-ui/components`
+  barrel exports the component under
 - `cardTitle: ComponentName`
 - `cardDescription`: the top-level `@description` attribute on the
   primary `<FreestyleUsage>` tag, or the first sentence of its
-  `<:description>` block. **For agent discoverability, add a
-  keyword-rich `@description` attribute to the primary
-  `<FreestyleUsage>` block in `usage.gts` whenever the synthesized
-  description is generic.**
+  `<:description>` block. When the synthesized description is generic,
+  add a keyword-rich `@description` attribute to the primary
+  `<FreestyleUsage>` block in `usage.gts`, so that an agent searching a
+  catalog that holds the specs can find the component.
 - `readMe`: a markdown body with the API table, a usage example, and the
   CSS-variable table.
 
@@ -134,7 +137,7 @@ source of truth.
 A deployed catalog realm serves exactly what boxel-catalog's deploy
 pushes (the `catalog-deploy` skill), and the realm-server's boot only
 creates the realm's directory. The generated specs aren't in
-boxel-catalog, so a deployed catalog doesn't serve them.
+boxel-catalog, so no deployed catalog serves them.
 
 ##### Gotchas
 
