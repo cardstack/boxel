@@ -100,6 +100,10 @@ export interface SyncOptions {
 }
 
 const REMOTE_CONCURRENCY = 10;
+// Files per /_atomic request. The realm answers only once it has written the
+// whole batch, so one request for a whole realm (thousands of files) outlasts
+// fetch's five-minute wait for response headers.
+export const ATOMIC_BATCH_SIZE = 500;
 
 // Directories that should always be skipped during local file traversal,
 // regardless of .gitignore / .boxelignore content.
@@ -630,10 +634,10 @@ export abstract class RealmSyncBase {
     return { succeeded, failed };
   }
 
-  // POST the text slice of a mixed batch to /_atomic and decode the
-  // result. `fatal` is set when the server rejected the whole batch
-  // (non-201) — callers map that to a top-level error message; `failed`
-  // carries the per-operation errors the server returned alongside.
+  // POST the text slice of a mixed batch to /_atomic, ATOMIC_BATCH_SIZE
+  // files per request, one request at a time. Each request is atomic on its
+  // own; a rejected one stops the upload, so `succeeded` holds what the
+  // earlier requests wrote and nothing after it is sent.
   private async uploadTextAtomic(
     textEntries: Array<[string, string]>,
     addPaths: Set<string>,
@@ -642,10 +646,32 @@ export abstract class RealmSyncBase {
     failed: UploadFailure[];
     fatal?: { status: number; message: string };
   }> {
-    if (textEntries.length === 0) {
-      return { succeeded: [], failed: [] };
+    const succeeded: string[] = [];
+    for (let i = 0; i < textEntries.length; i += ATOMIC_BATCH_SIZE) {
+      const outcome = await this.postTextAtomic(
+        textEntries.slice(i, i + ATOMIC_BATCH_SIZE),
+        addPaths,
+      );
+      succeeded.push(...outcome.succeeded);
+      if (outcome.fatal) {
+        return { ...outcome, succeeded };
+      }
     }
+    return { succeeded, failed: [] };
+  }
 
+  // POST one batch to /_atomic and decode the result. `fatal` is set when
+  // the server rejected the whole batch (non-201) — callers map that to a
+  // top-level error message; `failed` carries the per-operation errors the
+  // server returned alongside.
+  private async postTextAtomic(
+    textEntries: Array<[string, string]>,
+    addPaths: Set<string>,
+  ): Promise<{
+    succeeded: string[];
+    failed: UploadFailure[];
+    fatal?: { status: number; message: string };
+  }> {
     const operations = await Promise.all(
       textEntries.map(async ([relativePath, localPath]) => {
         const content = await fs.readFile(localPath, 'utf8');

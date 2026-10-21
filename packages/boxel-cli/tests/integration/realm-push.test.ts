@@ -5,6 +5,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { pushCommand } from '../../src/commands/realm/push.ts';
 import { CheckpointManager } from '../../src/lib/checkpoint-manager.ts';
+import { ATOMIC_BATCH_SIZE } from '../../src/lib/realm-sync-base.ts';
 import {
   startTestRealmServer,
   stopTestRealmServer,
@@ -639,6 +640,44 @@ describe('realm push (integration)', () => {
     expect(await remoteFileExists(realmUrl, 'a.gts')).toBe(true);
     expect(await remoteFileExists(realmUrl, 'b.gts')).toBe(true);
     expect(await remoteFileExists(realmUrl, 'c.gts')).toBe(true);
+  });
+
+  it('splits a large upload into several /_atomic requests', async () => {
+    // In-process so the /_atomic requests can be counted.
+    let realmUrl = await createTestRealm();
+    let localDir = makeLocalDir();
+    let count = ATOMIC_BATCH_SIZE + 1;
+    for (let i = 0; i < count; i++) {
+      writeLocalFile(localDir, `notes/note-${i}.md`, `# Note ${i}\n`);
+    }
+
+    let profileManager = reloadProfile(home);
+    let realFetch = profileManager.authedRealmFetch.bind(profileManager);
+    let atomicPosts = 0;
+    let fetchSpy = vi
+      .spyOn(profileManager, 'authedRealmFetch')
+      .mockImplementation(async (input, init) => {
+        let url = typeof input === 'string' ? input : (input as URL).href;
+        if (init?.method === 'POST' && url.includes('/_atomic')) {
+          atomicPosts++;
+        }
+        return realFetch(input, init);
+      });
+
+    try {
+      await pushCommand(localDir, realmUrl, { profileManager });
+    } finally {
+      fetchSpy.mockRestore();
+    }
+
+    expect(atomicPosts).toBe(2);
+    expect(Object.keys(readManifest(localDir).files)).toHaveLength(count);
+    expect(await fetchRemoteFile(realmUrl, 'notes/note-0.md')).toBe(
+      '# Note 0\n',
+    );
+    expect(await fetchRemoteFile(realmUrl, `notes/note-${count - 1}.md`)).toBe(
+      `# Note ${count - 1}\n`,
+    );
   });
 
   it('re-pushes a file that was deleted on the realm out-of-band', async () => {
