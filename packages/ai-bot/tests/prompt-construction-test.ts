@@ -62,6 +62,7 @@ import {
   SKILL_INSTRUCTIONS_MESSAGE,
   TRAILING_CONTEXT_PREAMBLE,
 } from '@cardstack/runtime-common/ai';
+import { STOPPED_TOOL_CALL_REASON } from '@cardstack/runtime-common/ai/stop';
 import type { TextContent } from '@cardstack/runtime-common/ai/types';
 
 const DEFAULT_CATALOG_REALM_URL = 'http://localhost:4201/catalog/';
@@ -4984,7 +4985,9 @@ ${patchedFileSource}
     );
     assert.notOk(
       messages?.some((message) =>
-        messageText(message).includes(CHECK_CORRECTNESS_SUMMARY_INSTRUCTION),
+        messageText(message).includes(
+          'The automated correctness checks have finished',
+        ),
       ),
       'The limit instruction is the last one the model reads: no trailing summary follows it',
     );
@@ -5644,7 +5647,7 @@ ${patchedFileSource}
     assert.equal(trailingMessage?.role, 'user');
     assert.false(
       messageText(trailingMessage).includes(
-        CHECK_CORRECTNESS_SUMMARY_INSTRUCTION,
+        'The automated correctness checks have finished',
       ),
       'The trailing message carries no summary to compete with the fix instruction',
     );
@@ -5839,13 +5842,15 @@ ${patchedFileSource}
 
   // A user message, a bot message asking for one check per result, and the
   // results in order. Each result is a card's attributes, `'no-output'` for a
-  // result with no card, or `'unreadable'` for a card whose download failed.
+  // result with no card, `'unreadable'` for a card whose download failed, or
+  // `'canceled'` for a check that never ran.
   // A result with warnings checks a card instance (a .json file), the only
   // target whose warnings ask for a fix; every other result checks a module.
   function correctnessBatchHistory(
     results: (
       | 'no-output'
       | 'unreadable'
+      | 'canceled'
       | { correct: boolean; errors: string[]; warnings?: string[] }
     )[],
   ): DiscreteMatrixEvent[] {
@@ -5910,17 +5915,20 @@ ${patchedFileSource}
             origin_server_ts: 3 + index,
             content: {
               msgtype:
-                result === 'no-output'
+                result === 'no-output' || result === 'canceled'
                   ? APP_BOXEL_TOOL_RESULT_WITH_NO_OUTPUT_MSGTYPE
                   : APP_BOXEL_TOOL_RESULT_WITH_OUTPUT_MSGTYPE,
               commandRequestId: `check-${index}`,
               'm.relates_to': {
                 event_id: aiMessageId,
-                key: 'applied',
+                key: result === 'canceled' ? 'canceled' : 'applied',
                 rel_type: APP_BOXEL_TOOL_RESULT_REL_TYPE,
               },
+              ...(result === 'canceled'
+                ? { failureReason: STOPPED_TOOL_CALL_REASON }
+                : {}),
               data: {
-                ...(result === 'no-output'
+                ...(result === 'no-output' || result === 'canceled'
                   ? {}
                   : {
                       card: {
@@ -5951,7 +5959,10 @@ ${patchedFileSource}
   }
 
   const SUCCESS_NOTE_START = 'The write above passed its checks.';
-  const TRAILING_SUMMARY_START = CHECK_CORRECTNESS_SUMMARY_INSTRUCTION;
+  // The note's stable opening: absence checks match on it, so a reworded
+  // note that is still sent would fail them.
+  const TRAILING_SUMMARY_START =
+    'The automated correctness checks have finished';
 
   function userMessagesWith(
     messages: Parameters<typeof messageText>[0][] | undefined,
@@ -6086,7 +6097,7 @@ ${patchedFileSource}
     );
   });
 
-  test('a warnings fix next to an unreadable check still gets the trailing note', async function () {
+  test('a warnings fix next to an unreadable check is the only instruction', async function () {
     const { messages } = await getPromptParts(
       correctnessBatchHistory([
         { correct: true, errors: [], warnings: ['title: undeclared field'] },
@@ -6101,11 +6112,48 @@ ${patchedFileSource}
       1,
       'The card with warnings asks for them to be fixed',
     );
+    assert.strictEqual(
+      userMessagesWith(messages, TRAILING_SUMMARY_START).length,
+      0,
+      'A note to finish the answer, read last, would compete with the request for another write',
+    );
+  });
+
+  test('a canceled check gets no trailing note', async function () {
+    const { messages } = await getPromptParts(
+      correctnessBatchHistory(['canceled']),
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
+    assert.true(
+      messageText(
+        messages?.find((message) => message.role === 'tool'),
+      ).includes('marked as canceled'),
+      'The tool message says the check never ran',
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, SUCCESS_NOTE_START).length,
+      0,
+      'A check that never ran did not pass',
+    );
+    assert.strictEqual(
+      userMessagesWith(messages, TRAILING_SUMMARY_START).length,
+      0,
+      'Nothing ran, so there is nothing to note and no reason to tell the model to carry on',
+    );
+  });
+
+  test('an unreadable check next to a canceled one still gets the trailing note', async function () {
+    const { messages } = await getPromptParts(
+      correctnessBatchHistory(['unreadable', 'canceled']),
+      '@aibot:localhost',
+      fakeMatrixClient,
+    );
     assert.true(
       messageText(messages?.at(-1)).endsWith(
         CHECK_CORRECTNESS_SUMMARY_INSTRUCTION,
       ),
-      'The warnings note says the write passed, so the trailing note still says one check did not come back clean',
+      'The unreadable check has no instruction of its own',
     );
   });
 
