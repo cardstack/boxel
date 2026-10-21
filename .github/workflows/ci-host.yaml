@@ -782,11 +782,6 @@ jobs:
             stack-pid-file=/tmp/test-services.pid \
             stack-started-file=/tmp/test-services.started
 
-      - name: Choose the Percy build for this attempt
-        id: percy-nonce
-        if: ${{ needs.check-percy.outputs.percy_needed == 'true' }}
-        uses: ./.github/actions/percy-nonce
-
       - name: host test suite (shard ${{ matrix.shardIndex }})
         run: |
           if [ "$PERCY_ENABLED" = "true" ]; then
@@ -875,14 +870,14 @@ jobs:
           # when the build is created by the first shard to upload, and finalize
           # only seals it.
           PERCY_TARGET_BRANCH: main
-          # One Percy build for the attempts of a run up to the one that seals
-          # it, not one per attempt. Finalize seals the build only once every
-          # shard has passed, so "Re-run failed jobs" adds the re-run shards'
-          # snapshots to the build an earlier attempt left open. A snapshot
-          # name the build already holds is ignored by Percy, which keeps the
-          # copy uploaded first. An attempt after a seal gets a new build; see
-          # .github/actions/percy-nonce.
-          PERCY_PARALLEL_NONCE: ${{ steps.percy-nonce.outputs.nonce }}
+          # One Percy build per run, not per attempt. Finalize seals the build
+          # only once every shard has passed, so "Re-run failed jobs" adds the
+          # re-run shards' snapshots to the build the first attempt left open.
+          # A snapshot name the build already holds is ignored by Percy, which
+          # keeps the copy uploaded first. An attempt after the build was
+          # sealed ("Re-run all jobs") uploads under the same nonce, and Percy
+          # starts a new build for it.
+          PERCY_PARALLEL_NONCE: ${{ github.run_id }}
           HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
           HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
           DBUS_SYSTEM_BUS_ADDRESS: unix:path=/run/dbus/system_bus_socket
@@ -1143,10 +1138,6 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: ./.github/actions/init
 
-      - name: Choose the Percy build for this attempt
-        id: percy-nonce
-        uses: ./.github/actions/percy-nonce
-
       # Per-shard counts of snapshots attempted vs snapshots the Percy CLI
       # actually received. Any shortfall means this build is missing a
       # snapshot it was supposed to carry — see the tally step in host-test.
@@ -1165,18 +1156,13 @@ jobs:
           taken=0
           shards=0
           expected=0
-          # The Percy build collects the snapshots of every attempt since the
-          # last seal, so each shard counts once, from the latest of those
-          # attempts that uploaded its tally. The
+          # The Percy build collects every attempt's snapshots, so each shard
+          # counts once, from the latest attempt that uploaded its tally. The
           # attempt and shard come from the artifact's directory name,
           # percy-tally-<attempt>-<shard>.
           tally_files=()
           seen=" "
-          sealed_attempt=${{ steps.percy-nonce.outputs.sealed-attempt }}
           while read -r attempt shard f; do
-            # A tally from the attempt that sealed an earlier build, or from
-            # before it, counts that build's snapshots, not this one's.
-            [ "$attempt" -gt "$sealed_attempt" ] || continue
             case "$seen" in *" $shard "*) continue ;; esac
             seen="$seen$shard "
             tally_files+=("$f")
@@ -1228,14 +1214,16 @@ jobs:
           echo "attempted=$attempted" >> "$GITHUB_OUTPUT"
           echo "taken=$taken" >> "$GITHUB_OUTPUT"
           echo "marker_broken=$marker_broken" >> "$GITHUB_OUTPUT"
-          # Every attempt that seals a build leaves a marker, so an attempt
-          # later than the one after the last seal means an earlier attempt of
-          # this build ended unsealed: a shard failed, and this attempt re-ran
-          # it. Percy keeps the first copy of a snapshot name, so the build can
+          # In a later attempt, an earlier attempt of this run either left
+          # the build open because a shard failed, and this attempt re-ran it,
+          # or sealed a build and this one started a new build. Percy keeps the
+          # first copy of a snapshot name, so in the first case the build can
           # still hold a snapshot that shard took in the failed attempt, of a
-          # render that may be why the test failed.
+          # render that may be why the test failed. The two cases are not told
+          # apart: on `main` a re-run is rare, and rejecting a complete
+          # re-run build only means the next run's build becomes the baseline.
           completed_by_rerun=false
-          if [ "${{ github.run_attempt }}" -gt "$((sealed_attempt + 1))" ]; then
+          if [ "${{ github.run_attempt }}" -gt 1 ]; then
             completed_by_rerun=true
           fi
           echo "completed_by_rerun=$completed_by_rerun" >> "$GITHUB_OUTPUT"
@@ -1277,25 +1265,7 @@ jobs:
         working-directory: packages/host
         env:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
-          PERCY_PARALLEL_NONCE: ${{ steps.percy-nonce.outputs.nonce }}
-
-      # A sealed build cannot take more snapshots, so a later attempt of this
-      # run ("Re-run all jobs", or one job re-run after the run passed) must
-      # start a new build. This marker is how .github/actions/percy-nonce
-      # knows. Losing it would send that attempt's snapshots to the sealed
-      # build, so a failed upload fails the job.
-      - name: Record that this attempt sealed the Percy build
-        if: ${{ steps.finalize.outcome == 'success' }}
-        run: echo "${{ github.run_attempt }}" > /tmp/percy-sealed.txt
-
-      - name: Upload the sealed-build marker
-        if: ${{ steps.finalize.outcome == 'success' }}
-        uses: ./.github/actions/upload-artifact-retry
-        with:
-          name: percy-sealed-${{ github.run_attempt }}
-          path: /tmp/percy-sealed.txt
-          retention-days: 30
-          if-no-files-found: error
+          PERCY_PARALLEL_NONCE: ${{ github.run_id }}
 
       - name: Note that the Percy build was left open
         if: ${{ needs.host-test.result != 'success' }}
