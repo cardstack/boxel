@@ -51,6 +51,12 @@ on:
         description: "Take Percy snapshots. Off by default because the quota is 10k snapshots/month and a hand-run build is usually a probe — the same reason draft PRs skip them."
         type: boolean
         default: false
+      # EXPERIMENT (not for merge): the main commit Percy should take the
+      # baseline from.
+      percy_target_commit:
+        description: "EXPERIMENT: PERCY_TARGET_COMMIT for this run's Percy build."
+        type: string
+        default: ""
 
 # Pull requests: a new push cancels the run in progress for the same branch.
 # Pushes to main share one group but never cancel a run in progress: GitHub
@@ -870,6 +876,7 @@ jobs:
           # when the build is created by the first shard to upload, and finalize
           # only seals it.
           PERCY_TARGET_BRANCH: main
+          PERCY_TARGET_COMMIT: ${{ inputs.percy_target_commit }}
           PERCY_PARALLEL_NONCE: ${{ github.run_id }}-${{ github.run_attempt }}
           HOST_TEST_PARTITION: ${{ matrix.shardIndex }}
           HOST_TEST_PARTITION_COUNT: ${{ matrix.shardTotal }}
