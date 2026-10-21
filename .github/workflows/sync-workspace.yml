@@ -11,7 +11,9 @@ name: Sync to Boxel workspace (reusable)
 # Each push to staging or production is recorded as a GitHub deployment
 # to that environment in the caller's repository, and uploads only the
 # files that changed since a revision the workspace may hold (see "Find
-# the revisions the workspace may hold" below).
+# the revisions the workspace may hold" below). The caller's token needs
+# `deployments: write`, so a caller that declares a `permissions:` block
+# has to grant it.
 #
 # Hosting this in the monorepo (rather than cardstack/gh-actions) means
 # changes to the realm-server's _publish/_unpublish-realm contract or
@@ -94,10 +96,11 @@ jobs:
   sync:
     name: Sync to Boxel Workspace
     runs-on: ubuntu-latest
-    # One sync per workspace at a time, in the order they started. Two
-    # overlapping pushes to one workspace could finish out of order and
-    # leave it holding the older revision while the newer deployment is
-    # recorded as the one it got.
+    # One sync per workspace at a time. Overlapping pushes to one workspace
+    # could finish out of order and leave it holding the older revision
+    # while the newer deployment is recorded as the one it got. Each run
+    # records its deployment once it holds the group, so the newest
+    # deployment is always the last sync that ran.
     concurrency:
       group: sync-workspace-${{ github.repository }}-${{ github.event_name == 'release' && 'production' || github.event_name == 'push' && 'staging' || format('pr-{0}', github.event.number) }}
       cancel-in-progress: false

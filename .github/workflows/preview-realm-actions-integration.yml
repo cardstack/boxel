@@ -162,7 +162,10 @@ jobs:
         # push --delete --changed-since` invocation against an
         # already-populated realm. A workflow run checks out a fresh tree
         # with no sync manifest, so the manifest the first push left is
-        # removed, and only the file changed since FIXTURE_BASE goes up.
+        # removed. The push is given two revisions, as sync-workspace.yml
+        # can be: README.md is unchanged since HEAD but changed since
+        # FIXTURE_BASE, so it goes up only if the push skips a file just
+        # when it's unchanged against every revision.
         shell: bash
         run: |
           cd /tmp/preview-realm-fixture
@@ -171,7 +174,7 @@ jobs:
           git -c user.name=ci -c user.email=ci@example.com commit -q -am "change README.md"
 
           set +e
-          OUTPUT=$(boxel realm push . "$SOURCE_URL" --delete --changed-since "$FIXTURE_BASE" 2>&1)
+          OUTPUT=$(boxel realm push . "$SOURCE_URL" --delete --changed-since "$FIXTURE_BASE" --changed-since HEAD 2>&1)
           STATUS=$?
           set -e
           echo "$OUTPUT"
