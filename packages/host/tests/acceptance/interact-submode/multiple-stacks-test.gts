@@ -3,6 +3,7 @@ import {
   click,
   find,
   focus,
+  settled,
   triggerEvent,
   triggerKeyEvent,
   waitFor,
@@ -136,6 +137,45 @@ module(
         await waitUntil(() => !find(fadhlan));
 
         assert.dom(vangogh).exists('the card in the other stack stays open');
+      });
+
+      test('closing a card whose opener is now covered by another card focuses the card on top', async function (assert) {
+        await visitOperatorMode({
+          stacks: [
+            [{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }],
+          ],
+        });
+        let opener = `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-view-pet]`;
+        let mango = `[data-test-stack-card="${testRealmURL}Pet/mango"]`;
+        let vangogh = `[data-test-stack-card="${testRealmURL}Pet/vangogh"]`;
+        let operatorModeStateService = getService(
+          'operator-mode-state-service',
+        );
+
+        await focus(opener);
+        operatorModeStateService.addItemToStack(
+          operatorModeStateService.createStackItem(
+            `${testRealmURL}Pet/vangogh`,
+            1,
+          ),
+        );
+        await settled();
+        assert.dom(vangogh).isFocused();
+        operatorModeStateService.addItemToStack(
+          operatorModeStateService.createStackItem(
+            `${testRealmURL}Pet/mango`,
+            0,
+          ),
+        );
+        await settled();
+
+        await click(`${vangogh} [data-test-close-button]`);
+        await waitUntil(() => !find(vangogh));
+
+        assert
+          .dom(opener)
+          .isNotFocused('the covered opener does not take focus');
+        assert.dom(mango).isFocused('the card covering it has focus');
       });
 
       test<TestContextWithSave>('can create a card when 2 stacks are present', async function (assert) {

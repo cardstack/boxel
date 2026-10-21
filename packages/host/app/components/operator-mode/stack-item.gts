@@ -1164,8 +1164,12 @@ export default class OperatorModeStackItem extends Component<Signature> {
               />
             {{/if}}
           {{/let}}
+          {{! A buried card's content is covered: inert keeps focus and Tab out
+          of it, while its header stays the control that closes the cards
+          above it. }}
           <div
             class='stack-item-content'
+            inert={{this.isBuried}}
             {{keepScrollWhileBuried buried=this.isBuried}}
             data-test-stack-item-content
           >
