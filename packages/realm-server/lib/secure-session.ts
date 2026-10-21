@@ -669,6 +669,16 @@ async function userLinkedToGoogle(
 // sign-in takes the account or localpart it chose first.
 const MAX_RESOLVE_ATTEMPTS = 5;
 
+// How many localparts a sign-in moves past when the Matrix server refuses them
+// as in use. Each refusal names an account that exists, so the candidates run
+// out of them as the mapping provider's do; this bounds only a Matrix server
+// that refuses every localpart.
+const MAX_REFUSED_LOCALPARTS = 100;
+
+// What `createGoogleAccount` answers when the Matrix server refuses the
+// localpart as in use: an account has it ignoring case.
+const LOCALPART_IN_USE = Symbol('localpart in use');
+
 // Links an unlinked Google identity to the one account holding its verified
 // email, or makes it a new account, as the mapping provider does.
 async function linkOrCreateForGoogle(
@@ -677,6 +687,13 @@ async function linkOrCreateForGoogle(
   identity: GoogleIdentity,
 ): Promise<string> {
   let serverName = await matrixServerName(deps);
+  // Localparts this sign-in failed to make an account with. Synapse's
+  // registration refuses a localpart that any account has ignoring case, as
+  // the mapping provider's `check_user_exists` does, while the admin lookup
+  // below matches only exactly. So an account that differs only in case
+  // (`@Alice` for `alice`) shows up only as that refusal, and counting it as
+  // taken moves on to the next candidate, as the mapping provider does.
+  let refused = new Set<string>();
   let lookups: GoogleAccountLookups = {
     // The Matrix server stores an email address lowercased and gives each
     // address to one account, so the admin lookup by the lowercased address
@@ -696,6 +713,9 @@ async function linkOrCreateForGoogle(
       return users;
     },
     localpartTaken: async (localpart) => {
+      if (refused.has(localpart)) {
+        return true;
+      }
       let { status } = await adminRequest(
         deps,
         userPath(`@${localpart}:${serverName}`),
@@ -706,7 +726,11 @@ async function linkOrCreateForGoogle(
       return status === 200;
     },
   };
-  for (let attempt = 0; attempt < MAX_RESOLVE_ATTEMPTS; attempt++) {
+  let races = 0;
+  while (
+    races < MAX_RESOLVE_ATTEMPTS &&
+    refused.size < MAX_REFUSED_LOCALPARTS
+  ) {
     let resolved = await resolveGoogleAccount(identity, lookups);
     let user =
       resolved.kind === 'existing'
@@ -717,12 +741,18 @@ async function linkOrCreateForGoogle(
             email: resolved.email,
             displayName: resolved.displayName,
           });
-    if (user) {
+    if (typeof user === 'string') {
       return user;
+    }
+    if (resolved.kind === 'new') {
+      refused.add(resolved.localpart);
+    }
+    if (user !== LOCALPART_IN_USE) {
+      races++;
     }
   }
   log.error(
-    `a Google sign-in lost ${MAX_RESOLVE_ATTEMPTS} races for its account`,
+    `a Google sign-in could not make or link an account: ${races} lost races, ${refused.size} localparts taken or refused`,
   );
   throw unavailable();
 }
@@ -765,8 +795,10 @@ async function linkGoogle(
 }
 
 // Makes the account a new Google user gets: the Google identity's link, its
-// display name, and its email address as a third-party id. Undefined when the
-// localpart was taken after it was found free, so the caller resolves again.
+// display name, and its email address as a third-party id. `LOCALPART_IN_USE`
+// when an account has the localpart ignoring case, and undefined when another
+// sign-in took it after it was found free. Either way the caller resolves
+// again past it.
 async function createGoogleAccount(
   deps: SecureSessionDeps,
   config: GoogleSignInConfig,
@@ -776,7 +808,7 @@ async function createGoogleAccount(
     email,
     displayName,
   }: { user: string; sub: string; email: string; displayName?: string },
-): Promise<string | undefined> {
+): Promise<string | typeof LOCALPART_IN_USE | undefined> {
   // An empty body creates the account, or changes nothing on an account that
   // appeared since the localpart was found free, so only a 201 means this
   // sign-in owns it.
@@ -784,7 +816,10 @@ async function createGoogleAccount(
     method: 'PUT',
     body: {},
   });
-  if (created.status === 200 || created.body.errcode === 'M_USER_IN_USE') {
+  if (created.body.errcode === 'M_USER_IN_USE') {
+    return LOCALPART_IN_USE;
+  }
+  if (created.status === 200) {
     return undefined;
   }
   if (created.status !== 201) {

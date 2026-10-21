@@ -21,17 +21,19 @@ def make_provider(existing_users=(), users_by_email=()):
     """Build a provider whose module_api is mocked.
 
     existing_users: localparts that already have an account (drives
-        check_user_exists).
+        check_user_exists, which matches them without case, as Synapse's does).
     users_by_email: full mxids returned for the email lookup (drives
         _find_users_by_email).
     """
-    existing = {f"@{lp}:localhost" for lp in existing_users}
+    existing = {
+        f"@{lp}:localhost".lower(): f"@{lp}:localhost" for lp in existing_users
+    }
     module_api = Mock()
     module_api.get_qualified_user_id = Mock(
         side_effect=lambda localpart: f"@{localpart}:localhost"
     )
     module_api.check_user_exists = AsyncMock(
-        side_effect=lambda user_id: user_id if user_id in existing else None
+        side_effect=lambda user_id: existing.get(user_id.lower())
     )
     module_api.run_db_interaction = AsyncMock(return_value=list(users_by_email))
     return BoxelOidcMappingProvider({}, module_api)

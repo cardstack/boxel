@@ -192,7 +192,10 @@ Matrix server's Google client (`lib/google-sign-in.ts`):
      `alice1`, `alice2`… past taken ones), Google's `name` as its display
      name, the email as a third-party id, and the Google link. An empty `PUT`
      makes the account, and only its `201` means this sign-in owns it, so a
-     taken localpart is never changed. A sign-in that fails after making the
+     taken localpart is never changed. A localpart is taken when an account
+     has it ignoring case, as Synapse's registration compares it; the admin
+     lookup matches only exactly, so a `M_USER_IN_USE` refusal of the `PUT`
+     counts the localpart as taken and the next one is tried. A sign-in that fails after making the
      account unlinks and deactivates it, so the next one resolves again.
 
    The rules live in `lib/google-account.ts`; the two implementations share
@@ -221,21 +224,21 @@ target, and `connect-src` to the realm server and the Matrix server (ADR 005 §1
 
 ## Refusals
 
-| Status, code              | Means                                                                                |
-| ------------------------- | ------------------------------------------------------------------------------------ |
-| 403 `forbidden`           | A sign-in not from the secure origin                                                 |
-| 401 `invalid-credentials` | Any failed password sign-in (no account, no password, wrong)                         |
-| 401 `signed-out`          | `GET /_secure-session` with a session that isn't, or is no longer, secure            |
-| 429 `rate-limited`        | Too many failed password sign-ins for the account; see `meta.retryAfterMs`           |
-| 401 `not-confirmed`       | Google's code didn't redeem, or its ID token didn't fit the sign-in                  |
-| 403 `unverified-email`    | An unlinked Google account whose email Google hasn't verified                        |
-| 403 `ambiguous-email`     | More than one account holds the unlinked Google account's email                      |
-| 403 `deactivated`         | The Google account's account is deactivated                                          |
-| 403 `locked`              | The Google account's account is locked                                               |
-| 403 `no-boxel-account`    | A session was asked for an account with no session room, which sign-in sets up first |
-| 409 `used`                | The proof already signed in                                                          |
-| 503 `unavailable`         | No Synapse admin credentials, or Synapse didn't answer with a challenge              |
-| 503 `google-unavailable`  | This server has no Google client                                                     |
+| Status, code              | Means                                                                                                                                                                                                                      |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 403 `forbidden`           | A sign-in not from the secure origin                                                                                                                                                                                       |
+| 401 `invalid-credentials` | Any failed password sign-in (no account, no password, wrong)                                                                                                                                                               |
+| 401 `signed-out`          | `GET /_secure-session` with a session that isn't, or is no longer, secure                                                                                                                                                  |
+| 429 `rate-limited`        | Too many failed password sign-ins for the account; see `meta.retryAfterMs`                                                                                                                                                 |
+| 401 `not-confirmed`       | Google's code didn't redeem, or its ID token didn't fit the sign-in                                                                                                                                                        |
+| 403 `unverified-email`    | An unlinked Google account whose email Google hasn't verified                                                                                                                                                              |
+| 403 `ambiguous-email`     | More than one account holds the unlinked Google account's email                                                                                                                                                            |
+| 403 `deactivated`         | The Google account's account is deactivated                                                                                                                                                                                |
+| 403 `locked`              | The Google account's account is locked                                                                                                                                                                                     |
+| 403 `no-boxel-account`    | A session was asked for an account with no session room, which sign-in sets up first                                                                                                                                       |
+| 409 `used`                | The proof already signed in                                                                                                                                                                                                |
+| 503 `unavailable`         | No Synapse admin credentials, Synapse didn't answer with a challenge, or a Google sign-in couldn't make or link an account (its `realm:secure-session` log line counts the lost races and the localparts taken or refused) |
+| 503 `google-unavailable`  | This server has no Google client                                                                                                                                                                                           |
 
 A Google refusal's message is the app's own copy: the mapping provider's
 words for an unverified or shared email, and the app's sign-in error for a
