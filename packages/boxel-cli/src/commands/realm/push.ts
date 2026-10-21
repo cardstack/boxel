@@ -20,10 +20,12 @@ import {
   saveManifest,
   pathExists,
 } from '../../lib/sync-manifest.ts';
+import { listChangedSince } from '../../lib/git-changes.ts';
 
 interface PushOptions extends SyncOptions {
   deleteRemote?: boolean;
   force?: boolean;
+  changedSince?: string;
 }
 
 // Fresh realms always include these server-managed cards even when the local
@@ -71,12 +73,50 @@ class RealmPusher extends RealmSyncBase {
     const filesToUpload: Map<string, string> = new Map();
     const driftedPaths: Set<string> = new Set();
 
+    const changedSince = this.pushOptions.changedSince;
     const canGoIncremental =
       !this.pushOptions.force &&
       manifest !== null &&
       manifest.realmUrl === this.normalizedRealmUrl;
 
-    if (!canGoIncremental) {
+    if (changedSince !== undefined) {
+      // The baseline is a git revision the realm is known to hold, not a
+      // manifest, so a fresh checkout (a CI runner) uploads only what git
+      // says changed. A file the realm doesn't have goes up too, whatever git
+      // says, so a realm missing files converges on the local tree. Skipped
+      // files are recorded in the new manifest as matching the realm.
+      const changed = await listChangedSince(
+        this.options.localDir,
+        changedSince,
+      );
+      let skipped = 0;
+      let missingRemote = 0;
+      for (const [relativePath, localPath] of localFiles) {
+        if (isProtectedFile(relativePath)) continue;
+        if (changed.has(relativePath)) {
+          filesToUpload.set(relativePath, localPath);
+        } else if (!initialRemoteFiles.has(relativePath)) {
+          filesToUpload.set(relativePath, localPath);
+          missingRemote++;
+        } else {
+          skipped++;
+          newManifest.files[relativePath] = await computeFileHash(localPath);
+        }
+      }
+      console.log(
+        `${filesToUpload.size - missingRemote} file(s) changed since ${changedSince}`,
+      );
+      if (missingRemote > 0) {
+        console.log(
+          `${missingRemote} unchanged file(s) are missing from the realm and will be uploaded`,
+        );
+      }
+      if (skipped > 0) {
+        console.log(
+          `Skipping ${skipped} files unchanged since ${changedSince}`,
+        );
+      }
+    } else if (!canGoIncremental) {
       if (this.pushOptions.force) {
         console.log('Force mode: uploading all files');
       } else if (!manifest) {
@@ -177,12 +217,13 @@ class RealmPusher extends RealmSyncBase {
       //   - File not in our manifest         →  op: add
       //   - File in manifest, remote-missing →  op: add (drift re-create)
       //   - File in manifest, on the remote  →  op: update
-      // With `--force`, or when there is no manifest (first push, or
-      // recovery from a malformed manifest), we defer to the actual
-      // remote state to avoid spurious 409/404s from intent the user
-      // never expressed.
+      // With `--force`, `--changed-since`, or when there is no manifest
+      // (first push, or recovery from a malformed manifest), we defer to
+      // the actual remote state to avoid spurious 409/404s from intent the
+      // user never expressed.
       const addPaths = new Set<string>();
-      const deferToRemote = this.pushOptions.force || !manifest;
+      const deferToRemote =
+        this.pushOptions.force || changedSince !== undefined || !manifest;
       for (const relativePath of filesToUpload.keys()) {
         if (deferToRemote) {
           if (!initialRemoteFiles.has(relativePath)) {
@@ -339,6 +380,11 @@ export interface PushCommandOptions {
   delete?: boolean;
   dryRun?: boolean;
   force?: boolean;
+  /**
+   * A git revision the realm already holds. Only files that differ from it in
+   * the local git checkout, and files the realm is missing, are uploaded.
+   */
+  changedSince?: string;
   profileManager?: ProfileManager;
   /**
    * Pre-resolved realm secret seed for administrative access. When set, the
@@ -367,6 +413,10 @@ export function registerPushCommand(realm: Command): void {
     .option('--dry-run', 'Show what would be done without making changes')
     .option('--force', 'Upload all files, even if unchanged')
     .option(
+      '--changed-since <revision>',
+      'Upload only files that differ from this git revision (one the realm already holds), plus files missing from the realm, instead of comparing against the sync manifest. The local directory must be a git checkout whose history reaches the revision',
+    )
+    .option(
       '--realm-secret-seed',
       'Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
     )
@@ -378,6 +428,7 @@ export function registerPushCommand(realm: Command): void {
           delete?: boolean;
           dryRun?: boolean;
           force?: boolean;
+          changedSince?: string;
           realmSecretSeed?: boolean;
         },
       ) => {
@@ -388,6 +439,7 @@ export function registerPushCommand(realm: Command): void {
           delete: options.delete,
           dryRun: options.dryRun,
           force: options.force,
+          changedSince: options.changedSince,
           realmSecretSeed,
         });
       },
@@ -424,6 +476,13 @@ export async function pushCommand(
     process.exit(1);
   }
 
+  if (options.force && options.changedSince !== undefined) {
+    console.error(
+      'Error: --force uploads every file and --changed-since uploads only changed ones; pass one of them.',
+    );
+    process.exit(1);
+  }
+
   try {
     const pusher = new RealmPusher(
       {
@@ -432,6 +491,7 @@ export async function pushCommand(
         deleteRemote: options.delete,
         dryRun: options.dryRun,
         force: options.force,
+        changedSince: options.changedSince,
       },
       authenticator,
     );

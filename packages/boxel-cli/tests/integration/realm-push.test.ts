@@ -3,6 +3,7 @@ import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { execFileSync } from 'child_process';
 import { pushCommand } from '../../src/commands/realm/push.ts';
 import { CheckpointManager } from '../../src/lib/checkpoint-manager.ts';
 import { ATOMIC_BATCH_SIZE } from '../../src/lib/realm-sync-base.ts';
@@ -168,6 +169,56 @@ async function writeRemoteFile(
       `Write ${url} failed: ${response.status} ${response.statusText}`,
     );
   }
+}
+
+// Commit everything in `dir` (initialising the repository on first use) and
+// return the commit, so a test can push with `--changed-since` against it.
+function commitLocal(dir: string, message: string): string {
+  let git = (...args: string[]) =>
+    execFileSync(
+      'git',
+      [
+        '-c',
+        'user.name=Test',
+        '-c',
+        'user.email=test@example.com',
+        '-c',
+        'commit.gpgsign=false',
+        ...args,
+      ],
+      { cwd: dir, encoding: 'utf8' },
+    ).trim();
+  if (!fs.existsSync(path.join(dir, '.git'))) {
+    git('init', '-q');
+  }
+  git('add', '-A');
+  git('commit', '-q', '--allow-empty', '-m', message);
+  return git('rev-parse', 'HEAD');
+}
+
+// The relative paths each /_atomic request carried, by spying on the
+// in-process push's fetches.
+function spyOnAtomicUploads(
+  profileManager: ReturnType<typeof reloadProfile>,
+  realmUrl: string,
+) {
+  let realFetch = profileManager.authedRealmFetch.bind(profileManager);
+  let uploaded: string[] = [];
+  let spy = vi
+    .spyOn(profileManager, 'authedRealmFetch')
+    .mockImplementation(async (input, init) => {
+      let url = typeof input === 'string' ? input : (input as URL).href;
+      if (init?.method === 'POST' && url.includes('/_atomic')) {
+        let body = JSON.parse(String(init.body)) as {
+          'atomic:operations': Array<{ href: string }>;
+        };
+        for (let op of body['atomic:operations']) {
+          uploaded.push(op.href.slice(realmUrl.length));
+        }
+      }
+      return realFetch(input, init);
+    });
+  return { uploaded, restore: () => spy.mockRestore() };
 }
 
 beforeAll(async () => {
@@ -722,6 +773,115 @@ describe('realm push (integration)', () => {
     expect(Object.keys(readManifest(localDir).files)).toHaveLength(
       ATOMIC_BATCH_SIZE,
     );
+  });
+
+  it('--changed-since uploads only the files git changed since the revision, with no manifest', async () => {
+    let realmUrl = await createTestRealm();
+    let localDir = makeLocalDir();
+    writeLocalFile(localDir, 'a.gts', 'export const a = 1;\n');
+    writeLocalFile(localDir, 'b.gts', 'export const b = 2;\n');
+    writeLocalFile(localDir, 'gone.md', '# Gone\n');
+    let deployed = commitLocal(localDir, 'deployed');
+    let res1 = await runPush(localDir, realmUrl);
+    expect(res1.ok, res1.stderr).toBe(true);
+
+    // A fresh checkout: no manifest from the push above.
+    fs.rmSync(path.join(localDir, '.boxel-sync.json'));
+    writeLocalFile(localDir, 'a.gts', 'export const a = 999;\n');
+    writeLocalFile(localDir, 'added.md', '# Added\n');
+    fs.rmSync(path.join(localDir, 'gone.md'));
+    commitLocal(localDir, 'target');
+
+    let profileManager = reloadProfile(home);
+    let atomic = spyOnAtomicUploads(profileManager, realmUrl);
+    try {
+      await pushCommand(localDir, realmUrl, {
+        profileManager,
+        changedSince: deployed,
+        delete: true,
+      });
+    } finally {
+      atomic.restore();
+    }
+
+    expect(atomic.uploaded.sort()).toEqual(['a.gts', 'added.md']);
+    expect(await fetchRemoteFile(realmUrl, 'a.gts')).toContain('a = 999');
+    expect(await fetchRemoteFile(realmUrl, 'b.gts')).toContain('b = 2');
+    expect(await remoteFileExists(realmUrl, 'added.md')).toBe(true);
+    expect(await remoteFileExists(realmUrl, 'gone.md')).toBe(false);
+    // Skipped files are recorded as matching the realm, so a later push
+    // from this directory can go incremental from the manifest.
+    expect(Object.keys(readManifest(localDir).files).sort()).toEqual([
+      'a.gts',
+      'added.md',
+      'b.gts',
+    ]);
+  });
+
+  it('--changed-since uploads an unchanged file the realm is missing', async () => {
+    let realmUrl = await createTestRealm();
+    let localDir = makeLocalDir();
+    writeLocalFile(localDir, 'a.gts', 'export const a = 1;\n');
+    writeLocalFile(localDir, 'b.gts', 'export const b = 2;\n');
+    let deployed = commitLocal(localDir, 'deployed');
+    let res1 = await runPush(localDir, realmUrl);
+    expect(res1.ok, res1.stderr).toBe(true);
+    await deleteRemoteFile(realmUrl, 'b.gts');
+
+    let res2 = await runPush(localDir, realmUrl, ['--changed-since', deployed]);
+    expect(res2.ok, res2.stderr).toBe(true);
+
+    expect(res2.stdout).toContain('1 unchanged file(s) are missing');
+    expect(res2.stdout).toContain('1 file(s) via /_atomic');
+    expect(await fetchRemoteFile(realmUrl, 'b.gts')).toContain('b = 2');
+  });
+
+  it('--changed-since at the current commit uploads nothing', async () => {
+    let realmUrl = await createTestRealm();
+    let localDir = makeLocalDir();
+    writeLocalFile(localDir, 'a.gts', 'export const a = 1;\n');
+    let deployed = commitLocal(localDir, 'deployed');
+    let res1 = await runPush(localDir, realmUrl);
+    expect(res1.ok, res1.stderr).toBe(true);
+    fs.rmSync(path.join(localDir, '.boxel-sync.json'));
+
+    let res2 = await runPush(localDir, realmUrl, ['--changed-since', deployed]);
+    expect(res2.ok, res2.stderr).toBe(true);
+
+    expect(res2.stdout).toContain('No files to upload');
+  });
+
+  it('--changed-since fails without uploading when the revision is not in the checkout', async () => {
+    let realmUrl = await createTestRealm();
+    let localDir = makeLocalDir();
+    writeLocalFile(localDir, 'a.gts', 'export const a = 1;\n');
+    commitLocal(localDir, 'only');
+
+    let res = await runPush(localDir, realmUrl, [
+      '--changed-since',
+      '0123456789abcdef0123456789abcdef01234567',
+    ]);
+
+    expect(res.ok).toBe(false);
+    expect(res.stdout + res.stderr).toContain('is not a commit');
+    expect(await remoteFileExists(realmUrl, 'a.gts')).toBe(false);
+  });
+
+  it('refuses --force together with --changed-since', async () => {
+    let realmUrl = await createTestRealm();
+    let localDir = makeLocalDir();
+    writeLocalFile(localDir, 'a.gts', 'export const a = 1;\n');
+    let deployed = commitLocal(localDir, 'deployed');
+
+    let res = await runPush(localDir, realmUrl, [
+      '--force',
+      '--changed-since',
+      deployed,
+    ]);
+
+    expect(res.ok).toBe(false);
+    expect(res.stderr).toContain('pass one of them');
+    expect(await remoteFileExists(realmUrl, 'a.gts')).toBe(false);
   });
 
   it('re-pushes a file that was deleted on the realm out-of-band', async () => {
