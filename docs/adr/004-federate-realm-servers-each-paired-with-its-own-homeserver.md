@@ -29,7 +29,9 @@ for that server. A user of one homeserver can be granted access to realms on
 another realm server, and that realm server verifies the user against the
 user's own homeserver through Matrix federation. Federation is not built yet,
 and the host still allows only one realm server. This ADR records the target
-design and the rules that keep new code compatible with it.
+design and the rules that keep new code compatible with it. The `users`-row
+rule in §1.4, and §1.5, §1.6, and §1.9, were decided when this ADR was
+recorded, not on its `date`.
 
 ## 1. Decision
 
