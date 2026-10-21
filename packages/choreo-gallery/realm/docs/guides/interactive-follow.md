@@ -52,4 +52,4 @@ Read the implementation: [`types.ts`](https://github.com/cardstack/boxel/blob/ma
 
 ---
 
-[← Text Delivery and Stagger](interactive-delivery.md) · [All guides](README.md) · [Tethers and Connector Geometry →](interactive-tethers.md)
+[← Text Delivery and Stagger](interactive-delivery) · [All guides](README) · [Tethers and Connector Geometry →](interactive-tethers)

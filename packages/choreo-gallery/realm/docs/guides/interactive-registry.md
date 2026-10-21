@@ -38,4 +38,4 @@ Read the implementation: [`registry.ts`](https://github.com/cardstack/boxel/blob
 
 ---
 
-[← Creating Composite Steps](interactive-composites.md) · [All guides](README.md) · [Composing a Continuous Loop →](interactive-circle-loop.md)
+[← Creating Composite Steps](interactive-composites) · [All guides](README) · [Composing a Continuous Loop →](interactive-circle-loop)

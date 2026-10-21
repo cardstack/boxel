@@ -47,4 +47,4 @@ Read the implementation: [`run.ts`](https://github.com/cardstack/boxel/blob/main
 
 ---
 
-[← Arming and Reliable Activation](interactive-arming.md) · [All guides](README.md) · [Perform Commands and Backward Folding →](interactive-commands.md)
+[← Arming and Reliable Activation](interactive-arming) · [All guides](README) · [Perform Commands and Backward Folding →](interactive-commands)

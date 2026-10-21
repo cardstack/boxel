@@ -41,6 +41,7 @@
     "concurrently": "catalog:",
     "dialkit": "2.0.2",
     "ember-modifier": "^4.3.0",
+    "ember-provide-consume-context": "catalog:",
     "ember-source": "catalog:",
     "ember-template-lint": "catalog:",
     "eslint": "^9.39.4",

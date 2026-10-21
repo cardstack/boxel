@@ -42,12 +42,12 @@ Many live interfaces in one scene can compete for the same browser frame budget.
 
 This is a gallery performance strategy, not a requirement of the core motion library. A smaller room may keep more content live. Profile on the device that will show the experience and check the transition into an exhibit as carefully as the camera movement.
 
-Continue with [Directing a 3D Camera](spatial-cameras.md), [Keeping the Interface Live](spatial-dom.md), and [Building a Spatial Gallery](spatial-gallery.md). When the camera and interaction need to follow a repeatable presentation, continue with [Recorded & Film Choreo](film-start.md).
+Continue with [Directing a 3D Camera](spatial-cameras), [Keeping the Interface Live](spatial-dom), and [Building a Spatial Gallery](spatial-gallery). When the camera and interaction need to follow a repeatable presentation, continue with [Recorded & Film Choreo](film-start).
 
 ## A complete working tutorial
 
-Continue with the [end-to-end tutorial](spatial-first-scene.md) for a runnable application, complete source, and verification commands.
+Continue with the [end-to-end tutorial](spatial-first-scene) for a runnable application, complete source, and verification commands.
 
 ---
 
-[← Turning a Gesture into a Scored Throw](interactive-hang.md) · [All guides](README.md) · [Build Your First Spatial Scene →](spatial-first-scene.md)
+[← Turning a Gesture into a Scored Throw](interactive-hang) · [All guides](README) · [Build Your First Spatial Scene →](spatial-first-scene)

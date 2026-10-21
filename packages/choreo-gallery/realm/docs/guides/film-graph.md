@@ -47,4 +47,4 @@ Read the implementation: [`types.ts`](https://github.com/cardstack/boxel/blob/ma
 
 ---
 
-[← Recording and Deployment](film-delivery.md) · [All guides](README.md) · [Shots, Tail Poses, and Eye-Level Views →](film-poses.md)
+[← Recording and Deployment](film-delivery) · [All guides](README) · [Shots, Tail Poses, and Eye-Level Views →](film-poses)

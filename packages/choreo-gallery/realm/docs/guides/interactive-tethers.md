@@ -48,4 +48,4 @@ Read the implementation: [`choreo.gts`](https://github.com/cardstack/boxel/blob/
 
 ---
 
-[← Derived Motion With Follow](interactive-follow.md) · [All guides](README.md) · [Nested Regions and Far Matching →](interactive-regions.md)
+[← Derived Motion With Follow](interactive-follow) · [All guides](README) · [Nested Regions and Far Matching →](interactive-regions)

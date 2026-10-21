@@ -52,4 +52,4 @@ Read the dedicated sequence, anchor, gate, property-step, and run guides before 
 
 ---
 
-[← Understanding a Choreo Scene](interactive-start.md) · [All guides](README.md) · [Connecting Regions and Destinations →](interactive-beacons.md)
+[← Understanding a Choreo Scene](interactive-start) · [All guides](README) · [Connecting Regions and Destinations →](interactive-beacons)

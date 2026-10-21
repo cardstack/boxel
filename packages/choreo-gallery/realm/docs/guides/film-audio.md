@@ -37,4 +37,4 @@ The [Film reference](../film.md) covers the built-in type, voice, and sound cont
 
 ---
 
-[← Building a Film](film-shots.md) · [All guides](README.md) · [Recording and Deployment →](film-delivery.md)
+[← Building a Film](film-shots) · [All guides](README) · [Recording and Deployment →](film-delivery)

@@ -43,4 +43,4 @@ Read the implementation: [`adjust.gts`](https://github.com/cardstack/boxel/blob/
 
 ---
 
-[← Posters, Menus, Rails, and Player Controls](film-interface.md) · [All guides](README.md) · [Film Math and Formatting Utilities →](film-utilities.md)
+[← Posters, Menus, Rails, and Player Controls](film-interface) · [All guides](README) · [Film Math and Formatting Utilities →](film-utilities)

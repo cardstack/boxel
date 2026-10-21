@@ -8,6 +8,8 @@ import { ThemePicker } from './pickers';
 
 interface Signature {
   Args: {
+    /** where the brand links: the gallery, from a page it doesn't open */
+    home?: string;
     /** a film's page in theater: the bar steps out and the page opens on the picture */
     theater?: Theater;
   };
@@ -21,7 +23,9 @@ interface Signature {
  *
  * Moving between pages belongs to the host, which opens each demo card in
  * its stack, so the frame has no navigation of its own: the brand is the
- * site's name, and the way back to the gallery is the host's.
+ * site's name, and the way back to the gallery is the host's. A page the
+ * gallery doesn't open, such as a guide, passes `@home`, and the brand is
+ * then the link back to the gallery.
  */
 export class SiteFrame extends Component<Signature> {
   /** the gallery's demos, hung in a walkable 3D room */
@@ -33,13 +37,28 @@ export class SiteFrame extends Component<Signature> {
       data-test-theater={{@theater.on}}
     >
       <header class='topbar'>
-        <span class='brand'>
-          <ChoreoMark />
-          <span class='brand-copy'>
-            <span class='brand-name'>Choreo</span>
-            <span class='brand-sub'>by Cardstack</span>
+        {{#if @home}}
+          <a
+            class='brand'
+            href={{@home}}
+            aria-label='Choreo gallery'
+            data-site-home
+          >
+            <ChoreoMark />
+            <span class='brand-copy'>
+              <span class='brand-name'>Choreo</span>
+              <span class='brand-sub'>by Cardstack</span>
+            </span>
+          </a>
+        {{else}}
+          <span class='brand'>
+            <ChoreoMark />
+            <span class='brand-copy'>
+              <span class='brand-name'>Choreo</span>
+              <span class='brand-sub'>by Cardstack</span>
+            </span>
           </span>
-        </span>
+        {{/if}}
         <nav class='top-links' aria-label='Gallery'>
           <ThemePicker />
           <a href={{this.roomHref}} data-gallery-room>3D Gallery</a>
@@ -99,6 +118,11 @@ export class SiteFrame extends Component<Signature> {
         align-items: center;
         gap: 12px;
         min-width: 0;
+      }
+
+      a.brand {
+        color: inherit;
+        text-decoration: none;
       }
 
       .brand-copy {

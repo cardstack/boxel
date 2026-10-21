@@ -40,4 +40,4 @@ Read the implementation: [`adjust.gts`](https://github.com/cardstack/boxel/blob/
 
 ---
 
-[← Lower Thirds, Captions, and Screen Overlays](film-typography.md) · [All guides](README.md) · [Posters, Menus, Rails, and Player Controls →](film-interface.md)
+[← Lower Thirds, Captions, and Screen Overlays](film-typography) · [All guides](README) · [Posters, Menus, Rails, and Player Controls →](film-interface)

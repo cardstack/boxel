@@ -47,4 +47,4 @@ From the deployed realm, open a guide, follow its next-page link, open the demo 
 
 ---
 
-[← Narration and Overlays](film-audio.md) · [All guides](README.md) · [Authoring a Film Graph →](film-graph.md)
+[← Narration and Overlays](film-audio) · [All guides](README) · [Authoring a Film Graph →](film-graph)

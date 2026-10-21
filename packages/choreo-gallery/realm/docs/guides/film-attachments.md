@@ -37,4 +37,4 @@ Read the implementation: [`choreo.gts`](https://github.com/cardstack/boxel/blob/
 
 ---
 
-[← Film Handles, Playback, and Exact Rendering](film-transport.md) · [All guides](README.md) · [The Standalone Choreo Player →](film-player.md)
+[← Film Handles, Playback, and Exact Rendering](film-transport) · [All guides](README) · [The Standalone Choreo Player →](film-player)

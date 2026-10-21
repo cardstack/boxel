@@ -50,4 +50,4 @@ Read the implementation: [`activity.ts`](https://github.com/cardstack/boxel/blob
 
 ---
 
-[← Slow Motion and Playback Rate](core-tempo.md) · [All guides](README.md) · [Testing Time, Gates, and Settlement →](core-test-timing.md)
+[← Slow Motion and Playback Rate](core-tempo) · [All guides](README) · [Testing Time, Gates, and Settlement →](core-test-timing)

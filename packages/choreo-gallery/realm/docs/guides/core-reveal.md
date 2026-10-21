@@ -22,8 +22,8 @@ The row's final text is the meaningful result. The count-up and bar fill are exp
 
 Curtain call gives the arrival, fill and readout time to register; Flash reveal makes the response brisk. Edit the fill delay without changing the row's spring to notice their distinct roles. A delayed bar can create a readable sequence, but a long delay can leave a seemingly empty row on screen.
 
-Scroll down and back up, including quick reversals at the container edge. Verify that once-only arrivals remain complete. For a transform that should continuously track scrolling, use [scroll progress](core-scroll.md) instead. A discrete entry event and a continuously sampled progress value have different lifecycle and reset requirements.
+Scroll down and back up, including quick reversals at the container edge. Verify that once-only arrivals remain complete. For a transform that should continuously track scrolling, use [scroll progress](core-scroll) instead. A discrete entry event and a continuously sampled progress value have different lifecycle and reset requirements.
 
 ---
 
-[← Moving a Shared Selection Marker](core-shared-layout.md) · [All guides](README.md) · [Responding to Scroll Direction →](core-header.md)
+[← Moving a Shared Selection Marker](core-shared-layout) · [All guides](README) · [Responding to Scroll Direction →](core-header)

@@ -45,7 +45,7 @@ This is a movement example, not a complete accessible slider. If dragging change
 
 Motion values hold frequently changing values without making Glimmer rerender for each update. The [pointer follower](../../demos/pointer) and [scroll demo](../../demos/parallax) show this distinction in practice.
 
-Keep essential information readable without animation. The next guide covers [reduced motion and testing](core-testing.md).
+Keep essential information readable without animation. The next guide covers [reduced motion and testing](core-testing).
 
 ## Designing an Input Contract
 
@@ -53,4 +53,4 @@ Before tuning the response, decide what the gesture means. A hover may preview a
 
 ---
 
-[← Animating Layout](core-layout.md) · [All guides](README.md) · [Accessibility and Testing →](core-testing.md)
+[← Animating Layout](core-layout) · [All guides](README) · [Accessibility and Testing →](core-testing)

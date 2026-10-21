@@ -10,16 +10,18 @@
  * - Every guide in realm/docs/guides meets the prose floor and has a
  *   preamble, the `-start` guides state their motivation and goals, the
  *   guides' index lists each guide once, and each guide's pager names its
- *   neighbours in that order.
+ *   neighbours in that order. Each guide, and the index, has its page: a
+ *   `Guide` card beside its Markdown that links it and the index.
  * - Every card a realm doc embeds (`::card[…]`) is a card instance in the
  *   realm, and every demo has a guide that embeds it.
  * - The docs and design records in the realm link only to files and
  *   headings that exist; every import written in the docs, the guides and
  *   the package READMEs names an export its package has (the design
  *   records sketch APIs that were never built, so their imports aren't
- *   checked); and every choreo.boxel.site URL names a file in the realm,
- *   and every link into the monorepo a file that exists, down to the
- *   heading a `#fragment` names.
+ *   checked); every choreo.boxel.site URL names a file in the realm, and
+ *   every link into the monorepo a file that exists, down to the heading a
+ *   `#fragment` names; and a link to a guide leads to its page, not its
+ *   Markdown file.
  *
  * Reads sources and JSON only, so it needs no build.
  */
@@ -27,6 +29,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { isDeepStrictEqual } from 'node:util';
 
 import { Marked } from 'marked';
 import { getHeadingList, gfmHeadingId } from 'marked-gfm-heading-id';
@@ -177,7 +180,7 @@ if (gaps.length) {
 const order = [
   ...fs
     .readFileSync(path.join(guidesDir, 'README.md'), 'utf8')
-    .matchAll(/^- \[[^\]]+\]\(([\w-]+)\.md\)/gm),
+    .matchAll(/^- \[[^\]]+\]\(([\w-]+)\)/gm),
 ].map((match) => match[1]);
 assert.equal(new Set(order).size, order.length, 'A guide is indexed twice');
 assert.deepEqual(
@@ -189,9 +192,9 @@ const titleOf = (slug) => pages.get(slug).match(/^# (.+)$/m)[1];
 order.forEach((slug, i) => {
   const [prev, next] = [order[i - 1], order[i + 1]];
   const pager = [
-    prev && `[← ${titleOf(prev)}](${prev}.md)`,
-    '[All guides](README.md)',
-    next && `[${titleOf(next)} →](${next}.md)`,
+    prev && `[← ${titleOf(prev)}](${prev})`,
+    '[All guides](README)',
+    next && `[${titleOf(next)} →](${next})`,
   ]
     .filter(Boolean)
     .join(' · ');
@@ -201,8 +204,48 @@ order.forEach((slug, i) => {
     `${slug}: its pager must name its neighbours in the index`,
   );
 });
+
+/*
+ * Each guide is read on its page: a `Guide` card beside the Markdown, at the
+ * Markdown's path without `.md`, linking the Markdown and the index. The
+ * index has one too. The card holds no prose, so nothing else belongs in it.
+ */
+const guideFiles = fs.readdirSync(guidesDir);
+const guideCardProblems = [];
+for (const slug of [...pages.keys(), 'README']) {
+  const file = `${slug}.json`;
+  if (!guideFiles.includes(file)) {
+    guideCardProblems.push(`${file} is missing`);
+    continue;
+  }
+  const expected = {
+    data: {
+      type: 'card',
+      relationships: {
+        document: { links: { self: `./${slug}.md` } },
+        index: { links: { self: './README.md' } },
+      },
+      meta: { adoptsFrom: { module: '../../guide', name: 'Guide' } },
+    },
+  };
+  if (!isDeepStrictEqual(readJSON(path.join(guidesDir, file)), expected)) {
+    guideCardProblems.push(
+      `${file} must adopt from ../../guide Guide and link only ./${slug}.md and ./README.md`,
+    );
+  }
+}
+for (const file of guideFiles.filter((name) => name.endsWith('.json'))) {
+  if (!guideFiles.includes(`${file.slice(0, -'.json'.length)}.md`)) {
+    guideCardProblems.push(`${file} has no Markdown beside it`);
+  }
+}
+assert.deepEqual(
+  guideCardProblems,
+  [],
+  'realm/docs/guides: each guide, and the index, needs its Guide card',
+);
 console.log(
-  `${actual.size} API/vocabulary entries mapped; ${pages.size} guides meet ${inventory.minimumProseWords} prose words; all preambles, section goals, the index and the pagers pass.`,
+  `${actual.size} API/vocabulary entries mapped; ${pages.size} guides meet ${inventory.minimumProseWords} prose words; all preambles, section goals, the index, the pagers and the guides' pages pass.`,
 );
 
 // ---- the catalog ---------------------------------------------------------
@@ -365,12 +408,28 @@ function linkTargets(file) {
   return targets;
 }
 /**
- * What is wrong with a `#fragment` on a link to `target`, a Markdown file or a
- * directory (whose README.md GitHub shows), if anything.
+ * The guide whose Markdown file `target` names, as `docs/guides/<slug>.md`,
+ * when it has a page: a guide is linked by its page, not its file.
+ */
+function guideFileWithPage(target) {
+  return (
+    path.dirname(target) === guidesDir &&
+    target.endsWith('.md') &&
+    fs.existsSync(`${target.slice(0, -'.md'.length)}.json`)
+  );
+}
+
+/**
+ * What is wrong with a `#fragment` on a link to `target`, a Markdown file, a
+ * guide's page (whose headings are its Markdown's) or a directory (whose
+ * README.md GitHub shows), if anything.
  */
 function fragmentProblem(target, fragment) {
   if (!fragment) {
     return undefined;
+  }
+  if (!fs.existsSync(target) && fs.existsSync(`${target}.md`)) {
+    target = `${target}.md`;
   }
   const id = decode(fragment);
   if (id === undefined) {
@@ -420,6 +479,10 @@ for (const file of [...realmDocs, ...packageReadmes]) {
     const problem = exists && fragmentProblem(resolved, fragment);
     if (inRealm && (!resolved.startsWith(realm + path.sep) || !exists)) {
       brokenLinks.push(`${relative(file)}: ${target} is not a realm file`);
+    } else if (guideFileWithPage(resolved)) {
+      brokenLinks.push(
+        `${relative(file)}: ${target} is the guide's file; link its page, without .md`,
+      );
     } else if (!exists) {
       brokenLinks.push(`${relative(file)}: ${target} names no file`);
     } else if (problem) {
@@ -625,6 +688,10 @@ for (const file of importedDocs) {
     const problem = exists && target && fragmentProblem(target, fragment);
     if (!exists) {
       siteURLs.push(`${relative(file)}: ${url}`);
+    } else if (guideFileWithPage(target)) {
+      siteURLs.push(
+        `${relative(file)}: ${url} is the guide's file; link its page, without .md`,
+      );
     } else if (problem) {
       siteURLs.push(`${relative(file)}: ${url} ${problem}`);
     }

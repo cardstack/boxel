@@ -41,4 +41,4 @@ Read the implementation: [`space.ts`](https://github.com/cardstack/boxel/blob/ma
 
 ---
 
-[← Camera Paths, Cuts, and Smoothing](spatial-paths.md) · [All guides](README.md) · [DOM and WebGL Compositing →](spatial-compositing.md)
+[← Camera Paths, Cuts, and Smoothing](spatial-paths) · [All guides](README) · [DOM and WebGL Compositing →](spatial-compositing)

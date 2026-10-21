@@ -52,4 +52,4 @@ Read the implementation: [`gesture.ts`](https://github.com/cardstack/boxel/blob/
 
 ---
 
-[← Motion Values and Derived Values](core-motion-values.md) · [All guides](README.md) · [Drag Handles and Coordinate Correction →](core-drag-handles.md)
+[← Motion Values and Derived Values](core-motion-values) · [All guides](README) · [Drag Handles and Coordinate Correction →](core-drag-handles)

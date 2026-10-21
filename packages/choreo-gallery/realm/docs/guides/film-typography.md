@@ -43,4 +43,4 @@ Read the implementation: [`nodes.gts`](https://github.com/cardstack/boxel/blob/m
 
 ---
 
-[← World Annotations and Construction Cues](film-world-annotations.md) · [All guides](README.md) · [Voice Cues, Mixing, and Browser Playback →](film-audio-mix.md)
+[← World Annotations and Construction Cues](film-world-annotations) · [All guides](README) · [Voice Cues, Mixing, and Browser Playback →](film-audio-mix)

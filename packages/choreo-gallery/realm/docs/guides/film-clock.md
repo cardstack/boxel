@@ -58,4 +58,4 @@ Use the standalone player when the application owns a few runs and needs explici
 
 ---
 
-[← Render Your First MP4](film-first-export.md) · [All guides](README.md) · [Building a Film →](film-shots.md)
+[← Render Your First MP4](film-first-export) · [All guides](README) · [Building a Film →](film-shots)

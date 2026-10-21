@@ -51,4 +51,4 @@ The same study appears in the [3D gallery](../../widget-room) and its full narra
 
 ---
 
-[← Region Lookup and External Providers](interactive-registry.md) · [All guides](README.md) · [Composing Slide Changes →](interactive-slides.md)
+[← Region Lookup and External Providers](interactive-registry) · [All guides](README) · [Composing Slide Changes →](interactive-slides)

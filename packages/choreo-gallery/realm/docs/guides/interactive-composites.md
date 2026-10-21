@@ -51,4 +51,4 @@ Read the implementation: [`steps.gts`](https://github.com/cardstack/boxel/blob/m
 
 ---
 
-[← Perform Commands and Backward Folding](interactive-commands.md) · [All guides](README.md) · [Region Lookup and External Providers →](interactive-registry.md)
+[← Perform Commands and Backward Folding](interactive-commands) · [All guides](README) · [Region Lookup and External Providers →](interactive-registry)

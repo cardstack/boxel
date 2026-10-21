@@ -1,0 +1,23 @@
+{
+  "data": {
+    "type": "card",
+    "relationships": {
+      "document": {
+        "links": {
+          "self": "./core-config.md"
+        }
+      },
+      "index": {
+        "links": {
+          "self": "./README.md"
+        }
+      }
+    },
+    "meta": {
+      "adoptsFrom": {
+        "module": "../../guide",
+        "name": "Guide"
+      }
+    }
+  }
+}
