@@ -425,6 +425,17 @@ export async function getMonacoContent(page: Page): Promise<string> {
   );
 }
 
+export async function describeMonacoModels(page: Page) {
+  return await page.evaluate(() =>
+    ((window as any).monaco?.editor?.getModels() ?? []).map((model: any) => ({
+      uri: model.uri?.toString(),
+      attached: model.isAttachedToEditor?.(),
+      length: model.getValueLength?.(),
+      start: model.getValue?.().slice(0, 300),
+    })),
+  );
+}
+
 export async function validateEmail(
   appPage: Page,
   email: string,

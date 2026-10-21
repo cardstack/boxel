@@ -7,7 +7,7 @@ import {
   postCardSource,
   postNewCard,
   getMonacoContent,
-  waitUntil,
+  describeMonacoModels,
   createSubscribedUserAndLogin,
 } from '../helpers/index.ts';
 
@@ -197,20 +197,50 @@ test.describe('Live Cards', () => {
 
     await page.locator('[data-test-format-chooser="edit"]').click();
 
-    // give monaco a moment to load
-    await new Promise((r) => setTimeout(r, 5000));
-    let content = await getMonacoContent(page);
+    await expect
+      .poll(() => getMonacoContent(page), {
+        message: 'monaco editor has loaded the card source',
+      })
+      .toContain('"adoptsFrom"');
+
+    // The realm answers the save only once the instance is re-indexed, and
+    // monaco can only show the new source after that. Under a busy prerenderer
+    // that wait has taken over 10 seconds, so wait for the save itself rather
+    // than giving the whole round trip a fixed window.
+    let saveStartedAt = Date.now();
+    let save = page.waitForResponse(
+      (response) =>
+        response.request().method() === 'PATCH' &&
+        response.url().startsWith(instanceUrl) &&
+        (response.request().postData() ?? '').includes('Replacement'),
+    );
 
     await page
       .locator('[data-test-field="cardInfo-name"] input')
       .fill('Replacement');
 
-    await waitUntil(async () => (await getMonacoContent(page)) !== content);
+    let saveResponse = await save;
+    console.log(
+      `card save: status=${saveResponse.status()} after ${
+        Date.now() - saveStartedAt
+      }ms`,
+    );
+    expect(saveResponse.ok(), 'card save succeeded').toBe(true);
 
-    await expect(
-      await getMonacoContent(page),
-      'monaco editor has been updated',
-    ).toContain('Replacement');
+    try {
+      await expect
+        .poll(() => getMonacoContent(page), {
+          message: 'monaco editor has been updated',
+        })
+        .toContain('Replacement');
+    } catch (e) {
+      console.log(
+        `monaco models when the update was missing: ${JSON.stringify(
+          await describeMonacoModels(page),
+        )}`,
+      );
+      throw e;
+    }
   });
 
   // End-to-end coverage of specifying a card type by URL in the card chooser,
