@@ -1015,6 +1015,68 @@ module('Acceptance | interact submode | single stack tests', function (hooks) {
       assert.dom(fieldInput).isFocused('focus stays in the input');
     });
 
+    test('a card opened while focus is on a checkbox takes focus', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      });
+      let checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.setAttribute('data-test-checkbox', '');
+      find('[data-test-stack-card]')?.append(checkbox);
+      await focus('[data-test-checkbox]');
+
+      let operatorModeStateService = getService('operator-mode-state-service');
+      operatorModeStateService.addItemToStack(
+        operatorModeStateService.createStackItem(`${testRealmURL}Pet/mango`, 0),
+      );
+      await settled();
+
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Pet/mango"]`)
+        .isFocused('the opened card has focus');
+    });
+
+    test('a card that moves to another stack keeps focus with it', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      });
+      await focus(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`);
+
+      let operatorModeStateService = getService('operator-mode-state-service');
+      operatorModeStateService.shiftStack(
+        operatorModeStateService.state.stacks[0],
+        1,
+      );
+      await settled();
+
+      assert
+        .dom(
+          `[data-test-operator-mode-stack="1"] [data-test-stack-card="${testRealmURL}Person/fadhlan"]`,
+        )
+        .isFocused('the card has focus in its new stack');
+    });
+
+    test('restoring stacks that put a card back where it was before it shifted focuses that card', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      });
+      getService('recent-cards-service').add(`${testRealmURL}Pet/mango`);
+
+      await click('[data-test-add-card-left-stack]');
+      await click(`[data-test-search-result="${testRealmURL}Pet/mango"]`);
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Pet/mango"]`)
+        .isFocused();
+
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      });
+
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .isFocused('the restored card has focus');
+    });
+
     test('duplicate card in a stack is not allowed', async function (assert) {
       await visitOperatorMode({
         stacks: [

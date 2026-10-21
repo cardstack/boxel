@@ -18,7 +18,7 @@ import DeselectIcon from '@cardstack/boxel-icons/deselect';
 import Maximize from '@cardstack/boxel-icons/maximize';
 import SelectAllIcon from '@cardstack/boxel-icons/select-all';
 import { dropTask } from 'ember-concurrency';
-import Modifier from 'ember-modifier';
+import Modifier, { modifier } from 'ember-modifier';
 import { provide, consume } from 'ember-provide-consume-context';
 
 import pluralize from 'pluralize';
@@ -84,6 +84,7 @@ import CardError from './card-error';
 import DeleteModal from './delete-modal';
 
 import OperatorModeOverlays from './operator-mode-overlays';
+import { leaveStackItem, openStackItem } from './stack-focus';
 
 import type CardService from '../../services/card-service';
 import type NetworkService from '../../services/network';
@@ -922,6 +923,14 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.args.item.markInteracted();
   };
 
+  // The card takes focus as it opens and hands it back as it closes.
+  private followFocus = modifier((element: HTMLElement) => {
+    let { item, stackItems } = this.args;
+    openStackItem(element, item, () => this.isTopCard);
+    return () =>
+      leaveStackItem(item, stackItems, this.operatorModeStateService);
+  });
+
   private setupItemEl = (el: HTMLElement) => {
     this.itemEl = el;
     this.trackOpeningAnimation();
@@ -984,11 +993,15 @@ export default class OperatorModeStackItem extends Component<Signature> {
       we use a selector that is not pruned out in production builds }}
       data-stack-card={{this.cardIdentifier}}
       {{! present while the card loads too, so the item can take focus as it opens }}
-      data-stack-item
+      data-stack-item={{@item.instanceId}}
+      {{! focusable, though no Tab stop: the card takes focus as it opens, and a
+      click anywhere in it makes it the card Escape acts on }}
+      tabindex='-1'
       role='region'
       aria-label={{this.headerTitle}}
       style={{this.styleForStackedCard}}
       {{on 'focusin' this.markInteracted}}
+      {{this.followFocus}}
       {{ContentElement onSetup=this.setupItemEl}}
     >
       <CardContainer
@@ -1230,8 +1243,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
           margin-top var(--boxel-transition),
           width var(--boxel-transition);
       }
-      /* the top card takes focus from script as it opens, to carry the
-         keyboard into it; it is no control, so it draws no ring */
+      /* the card takes focus as it opens, to carry the keyboard into it, and
+         as it is clicked; it is no control, so it draws no ring */
       .item:focus {
         outline: none;
       }

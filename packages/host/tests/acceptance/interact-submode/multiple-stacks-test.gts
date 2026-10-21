@@ -2,6 +2,7 @@ import {
   currentURL,
   click,
   find,
+  focus,
   triggerEvent,
   triggerKeyEvent,
   waitFor,
@@ -115,6 +116,23 @@ module(
         assert.dom(opener).isFocused('focus is back in the first stack');
 
         await triggerKeyEvent(opener, 'keydown', 'Escape');
+        await waitUntil(() => !find(fadhlan));
+
+        assert.dom(vangogh).exists('the card in the other stack stays open');
+      });
+
+      test('Escape closes a card the page loaded with once focus is in it', async function (assert) {
+        await visitOperatorMode({
+          stacks: [
+            [{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }],
+            [{ id: `${testRealmURL}Pet/vangogh`, format: 'isolated' }],
+          ],
+        });
+        let fadhlan = `[data-test-stack-card="${testRealmURL}Person/fadhlan"]`;
+        let vangogh = `[data-test-stack-card="${testRealmURL}Pet/vangogh"]`;
+
+        await focus(fadhlan);
+        await triggerKeyEvent(fadhlan, 'keydown', 'Escape');
         await waitUntil(() => !find(fadhlan));
 
         assert.dom(vangogh).exists('the card in the other stack stays open');

@@ -37,6 +37,7 @@ import type { Submode } from '@cardstack/host/components/submode-switcher';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 import {
   StackItem,
+  StackItemOpening,
   takesFileDeleteRoute,
   type StackItemType,
 } from '@cardstack/host/lib/stack-item';
@@ -1263,6 +1264,7 @@ export default class OperatorModeStateService extends Service {
             stackIndex,
             type: item.type,
             useBaseTemplate: item.useBaseTemplate,
+            opening: new StackItemOpening(true),
           }),
         );
       }

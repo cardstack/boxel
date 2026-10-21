@@ -1,172 +1,95 @@
-import { modifier } from 'ember-modifier';
+import { schedule } from '@ember/runloop';
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
+import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
 import {
   focusIfConnected,
-  focusStackItem,
-  isTextEntry,
+  focusedElement,
 } from '@cardstack/host/utils/stack-item-focus';
 
-interface Placed {
-  item: StackItem;
-  stackIndex: number;
-  itemIndex: number;
-}
+// Focus in the operator-mode stacks follows the cards the way it follows a
+// non-modal dialog. A card takes focus as it opens, so the keyboard and a
+// screen reader carry on in the card now on top, and hands focus back to
+// what opened it as it closes. Each stack item does this for itself, as it
+// first renders and as it leaves the page.
 
-function place(stacks: StackItem[][]): Placed[] {
-  return stacks.flatMap((stack, stackIndex) =>
-    stack.map((item, itemIndex) => ({ item, stackIndex, itemIndex })),
+// Whether focus stays where it is as a card opens. A text entry keeps it, so
+// a card opened on the user's behalf (by the AI assistant, say) doesn't take
+// keystrokes meant for a field. A panel that holds focus, like the AI
+// assistant's, keeps it too while the cards it opens appear in the stacks.
+function keepsFocus(active: Element | null): boolean {
+  return Boolean(
+    active?.matches(':read-write') || active?.closest('[data-holds-focus]'),
   );
 }
 
-function focusedElement(): Element | null {
-  let active = document.activeElement;
-  return active && active !== document.body ? active : null;
+// The top card Escape acts on: the one the user most recently interacted
+// with.
+function escapeTarget(topItems: StackItem[]): StackItem | undefined {
+  return topItems.length > 0
+    ? topItems.reduce((a, b) =>
+        b.lastInteractedAt > a.lastInteractedAt ? b : a,
+      )
+    : undefined;
 }
 
-// Keeps keyboard focus with the operator-mode stacks as cards open and close.
-// A card that opens takes focus, so the keyboard and a screen reader carry on
-// in the card that is now on top. A card that closes gives focus back to what
-// opened it. Focus is tracked per stack item rather than per stack, since a
-// card can open into the neighboring stack and a stack goes away with its
-// last card.
-export default class StackFocus {
-  // What had focus as each item opened.
-  private openers = new WeakMap<StackItem, Element | null>();
-  private previous: StackItem[][] | undefined;
-
-  // Applied to the element whose children are the stacks, in order, with a
-  // snapshot of every stack's items.
-  follow = modifier((element: HTMLElement, [stacks]: [StackItem[][]]) => {
-    let previous = this.previous;
-    this.previous = stacks.map((stack) => [...stack]);
-    // The stacks present as interact mode first renders were restored, not
-    // opened, so they move no focus. A later restore from the URL (back and
-    // forward navigation) rebuilds every item, taking any focus inside them
-    // with it, so its items arrive as opens and the top card takes focus.
-    if (!previous) {
-      return;
-    }
-
-    let before = place(previous);
-    let after = place(stacks);
-    let beforeItems = new Set(before.map(({ item }) => item));
-    let afterItems = new Set(after.map(({ item }) => item));
-    let arrived = after.filter(({ item }) => !beforeItems.has(item));
-    let left = before.filter(({ item }) => !afterItems.has(item));
-
-    if (arrived.length > 0) {
-      this.arrive(element, stacks, arrived, left);
-    } else if (left.length > 0) {
-      this.leave(element, stacks, previous, left[0]);
-    }
-  });
-
-  private arrive(
-    element: HTMLElement,
-    stacks: StackItem[][],
-    arrived: Placed[],
-    left: Placed[],
-  ) {
-    let active = focusedElement();
-    // A stack that shifts sideways is rebuilt from copies of its items: the
-    // copies are the same cards moving, not cards opening.
-    let movedFrom = new Map<Placed, Placed>();
-    for (let placed of arrived) {
-      let source = left.find(
-        ({ item, stackIndex }) =>
-          item.id === placed.item.id && stackIndex !== placed.stackIndex,
-      );
-      if (source) {
-        movedFrom.set(placed, source);
-      }
-    }
-    let moveSources = new Set(movedFrom.values());
-    let opened: Placed[] = [];
-    for (let placed of arrived) {
-      // An item that opens where another left takes over its opener, unless
-      // the one that left moved to another stack and keeps its own.
-      let replaced =
-        movedFrom.get(placed) ??
-        left.find(
-          (gone) =>
-            !moveSources.has(gone) &&
-            gone.stackIndex === placed.stackIndex &&
-            gone.itemIndex === placed.itemIndex,
-        );
-      this.openers.set(
-        placed.item,
-        replaced && this.openers.has(replaced.item)
-          ? (this.openers.get(replaced.item) ?? null)
-          : active,
-      );
-      if (!movedFrom.has(placed)) {
-        opened.push(placed);
-      }
-    }
-
-    // Focus in a text entry stays there, so a card opened on the user's behalf
-    // (by the AI assistant, say) doesn't take keystrokes meant for a field. A
-    // panel that holds focus, like the AI assistant's, keeps it too while the
-    // cards it opens appear in the stacks.
-    if (
-      opened.length === 0 ||
-      isTextEntry(active) ||
-      active?.closest('[data-holds-focus]')
-    ) {
-      return;
-    }
-    let target =
-      [...opened]
-        .reverse()
-        .find(
-          ({ stackIndex, itemIndex }) =>
-            itemIndex === stacks[stackIndex].length - 1,
-        ) ?? opened[opened.length - 1];
-    this.focusItem(element, target.stackIndex, target.itemIndex);
+// As a stack item first renders, a card that is opening records what had
+// focus, and takes focus itself when it opens on top of its stack.
+export function openStackItem(
+  element: HTMLElement,
+  item: StackItem,
+  isTopCard: () => boolean,
+) {
+  let { opening } = item;
+  if (opening.opened) {
+    return;
   }
+  opening.opened = true;
+  let active = focusedElement();
+  opening.opener = active ? new WeakRef(active) : undefined;
+  if (isTopCard() && !keepsFocus(active)) {
+    element.focus({ preventScroll: true });
+  }
+}
 
-  private leave(
-    element: HTMLElement,
-    stacks: StackItem[][],
-    previous: StackItem[][],
-    lowestClosed: Placed,
-  ) {
-    // Focus the user has put somewhere that is still on the page stays there;
-    // only focus lost with the closed card is handed back.
+// As a stack item leaves the page, focus that went with it is handed back.
+// A card that closed hands it to what opened the card, when that is still on
+// the page and not covered by another card. Otherwise, once the stacks have
+// rendered, it goes to the card on top of the item's stack, or to the top
+// card Escape acts on when that stack has gone. Focus the user has put
+// elsewhere stays where it is.
+export function leaveStackItem(
+  item: StackItem,
+  stack: StackItem[],
+  operatorModeStateService: OperatorModeStateService,
+) {
+  if (focusedElement()) {
+    return;
+  }
+  let stacks = operatorModeStateService.state?.stacks ?? [];
+  // A clone that continues the card (moving stacks, or taking its saved id)
+  // shares its opening; the card hasn't closed.
+  let closed = !stacks.some((items) =>
+    items.some((other) => other.opening === item.opening),
+  );
+  if (closed && focusIfConnected(item.opening.opener?.deref())) {
+    return;
+  }
+  // Scheduled, so that every item leaving in the same render gets to hand
+  // focus to its opener first.
+  schedule('afterRender', () => {
     if (focusedElement()) {
       return;
     }
-    if (focusIfConnected(this.openers.get(lowestClosed.item))) {
-      return;
+    let stacks = operatorModeStateService.state?.stacks ?? [];
+    let target =
+      stacks.includes(stack) && stack.length > 0
+        ? stack[stack.length - 1]
+        : escapeTarget(operatorModeStateService.topMostStackItems());
+    if (target) {
+      focusIfConnected(
+        document.querySelector(`[data-stack-item="${target.instanceId}"]`),
+      );
     }
-    let { stackIndex, itemIndex } = lowestClosed;
-    if (itemIndex > 0) {
-      let uncovered = previous[stackIndex][itemIndex - 1];
-      let at = place(stacks).find(({ item }) => item === uncovered);
-      if (at) {
-        this.focusItem(element, at.stackIndex, at.itemIndex);
-      }
-      return;
-    }
-    // The closed card was the last in its stack, and the stack went with it.
-    let neighbor = Math.min(stackIndex, stacks.length - 1);
-    if (neighbor >= 0 && stacks[neighbor].length > 0) {
-      this.focusItem(element, neighbor, stacks[neighbor].length - 1);
-    }
-  }
-
-  private focusItem(
-    element: HTMLElement,
-    stackIndex: number,
-    itemIndex: number,
-  ) {
-    let item =
-      element.children[stackIndex]?.querySelectorAll<HTMLElement>(
-        '[data-stack-item]',
-      )[itemIndex];
-    if (item) {
-      focusStackItem(item);
-    }
-  }
+  });
 }
