@@ -10,7 +10,7 @@ import { canonicalModuleKey, resolveAdoptsFrom } from './code-ref.ts';
 import { baseRealmRRI, realmURL } from './constants.ts';
 import { logger } from './log.ts';
 import type { LocalPath } from './paths.ts';
-import { isPrefixForm, ri, rri } from './realm-identifiers.ts';
+import { ri, rri } from './realm-identifiers.ts';
 import type {
   RealmIdentifier,
   RealmResourceIdentifier,
@@ -138,8 +138,6 @@ export function generateInstallFolderName(
   }
 }
 
-const URL_SCHEME_AND_AUTHORITY = /^[a-z][a-z\d+.-]*:\/\/[^/?#]*/i;
-
 export class ListingPathResolver {
   targetDirectoryName: string; //name of outer uuid  folder
   private targetRealmPath: RealmPaths;
@@ -219,22 +217,21 @@ export class ListingPathResolver {
     return this.localFallback(id);
   }
 
-  // No known realm contains this id: strip just the realm-identifying prefix
-  // and keep the rest of the path. That prefix is `scheme://authority` for a
-  // URL, and the `@scope/name` namespace for a prefix RRI. An id from a realm
-  // the listing never registered through `addKnownRealmURL` lands here, which
-  // is the usual case for an install that registers no foreign realms.
+  // No known realm contains this id: keep its path below its namespace. An id
+  // from a realm the listing never registered through `addKnownRealmURL` lands
+  // here, which is the usual case for an install that registers no foreign
+  // realms. A `.` or `..` segment is refused, because `target()` would resolve
+  // it outside the install directory.
   private localFallback(id: RealmResourceIdentifier): LocalPath {
-    if (isPrefixForm(id)) {
-      return id.split('/').slice(2).join('/').replace(/\/+$/, '');
+    let path = this.virtualNetwork.pathBelowNamespace(id).replace(/\/+$/, '');
+    if (
+      path.split('/').some((segment) => segment === '.' || segment === '..')
+    ) {
+      throw new Error(
+        `Cannot install ${id}: its path has a "." or ".." segment`,
+      );
     }
-    let path = id.replace(URL_SCHEME_AND_AUTHORITY, '').replace(/[?#].*$/, '');
-    try {
-      path = decodeURI(path);
-    } catch {
-      // A malformed escape keeps the path as written.
-    }
-    return path.replace(/^\//, '').replace(/\/+$/, '');
+    return path;
   }
 
   targetLid(id: RealmResourceIdentifier): string {

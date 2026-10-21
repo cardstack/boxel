@@ -623,6 +623,48 @@ module('Unit | Catalog | Install Plan Builder', function () {
       );
     });
 
+    test('ListingPathResolver.target() keeps an unregistered URL-form id with dot segments inside the install directory', function (assert) {
+      const listing = {
+        name: 'Some Listing',
+        specs: [],
+        examples: [],
+        skills: [],
+        [realmURL]: sourceRealmURL,
+      } as any;
+      let resolver = new ListingPathResolver(
+        ri(targetRealmURL.href),
+        listing,
+        'xyz',
+        virtualNetwork,
+      );
+
+      assert.strictEqual(
+        resolver.target(rri('https://other.example/../../evil')),
+        `${targetRealmURL.href}some-listing-xyz/evil`,
+      );
+    });
+
+    test('ListingPathResolver.local() refuses an unregistered prefix-form id with a dot segment', function (assert) {
+      const listing = {
+        name: 'Some Listing',
+        specs: [],
+        examples: [],
+        skills: [],
+        [realmURL]: sourceRealmURL,
+      } as any;
+      let resolver = new ListingPathResolver(
+        ri(targetRealmURL.href),
+        listing,
+        'xyz',
+        virtualNetwork,
+      );
+
+      assert.throws(
+        () => resolver.local(rri('@someone/elsewhere/../../evil')),
+        /has a "\." or "\.\." segment/,
+      );
+    });
+
     test('ListingPathResolver.target() maps cross-realm URLs into target directory', function (assert) {
       const listing = {
         name: 'Some Listing',
