@@ -5,7 +5,7 @@ import type { PgAdapter } from '@cardstack/postgres';
 import { param, type Expression } from '@cardstack/runtime-common';
 import { setupDB } from './helpers/index.ts';
 
-const OPEN_INDEX = 'job_reservations_open_job_id_locked_until_idx';
+const OPEN_INDEX = 'job_reservations_open_locked_until_job_id_idx';
 
 module(basename(import.meta.filename), function (hooks) {
   let dbAdapter: PgAdapter;

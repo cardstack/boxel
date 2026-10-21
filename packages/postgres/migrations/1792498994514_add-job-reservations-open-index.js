@@ -7,11 +7,13 @@
 // the whole table on each claim, as a parallel scan, so the queue's database
 // cost grows with every job ever run.
 //
-// Partial on `completed_at IS NULL` so the index stays proportional to the
-// reservations in flight rather than to their history, and a reservation
-// leaves the index when it completes. `job_id` leads so that a lookup for one
-// job is an index probe; `locked_until` follows so that the expiry test is
-// answered from the index.
+// Partial on `completed_at IS NULL`, so a reservation leaves the index when it
+// completes and the finished history stays out of it. A reservation whose
+// worker died before completing it never gets a `completed_at` and stays in
+// the index, so `locked_until` leads: the claim's `locked_until > NOW()` is a
+// range over the index that reads only unexpired entries, not every open one.
+// `job_id` follows so that a check for one job is answered from the index
+// alone; `job_reservations_job_id_index` serves that lookup too.
 //
 // CONCURRENTLY avoids locking queue writes during the build in production; it
 // cannot run inside a transaction, hence noTransaction(). node-pg-migrate logs
@@ -28,11 +30,11 @@ exports.shorthands = undefined;
 exports.up = (pgm) => {
   pgm.noTransaction();
   pgm.sql(
-    `DROP INDEX CONCURRENTLY IF EXISTS job_reservations_open_job_id_locked_until_idx;`,
+    `DROP INDEX CONCURRENTLY IF EXISTS job_reservations_open_locked_until_job_id_idx;`,
   );
   pgm.sql(`
-    CREATE INDEX CONCURRENTLY job_reservations_open_job_id_locked_until_idx
-      ON job_reservations (job_id, locked_until)
+    CREATE INDEX CONCURRENTLY job_reservations_open_locked_until_job_id_idx
+      ON job_reservations (locked_until, job_id)
       WHERE completed_at IS NULL;
   `);
 };
@@ -40,6 +42,6 @@ exports.up = (pgm) => {
 exports.down = (pgm) => {
   pgm.noTransaction();
   pgm.sql(
-    `DROP INDEX CONCURRENTLY IF EXISTS job_reservations_open_job_id_locked_until_idx;`,
+    `DROP INDEX CONCURRENTLY IF EXISTS job_reservations_open_locked_until_job_id_idx;`,
   );
 };
