@@ -119,7 +119,7 @@ describe('boxel parse (against the installed CLI)', () => {
   );
 
   it(
-    'surfaces a real diagnostic for a genuine type error (proves glint ran)',
+    'surfaces a real diagnostic, with its elaboration, for a genuine type error (proves glint ran)',
     async () => {
       let result = await parseFixture('deliberate-type-error');
       expect(result.status).toBe('failed');
@@ -131,6 +131,15 @@ describe('boxel parse (against the installed CLI)', () => {
       // …and specifically NOT the environmental "nothing got checked"
       // message that masks a broken type-resolution setup as a pass.
       expect(messages).not.toContain(NOTHING_CHECKED);
+
+      // tsc's elaboration lines, which name where the types differ, are
+      // part of the error's message.
+      let nested = result.errors.find((e) => e.file === 'nested-mismatch.gts');
+      expect(nested?.message.split('\n')).toEqual([
+        "Type '{ a: { b: string; }; }' is not assignable to type 'Want'.",
+        "  The types of 'a.b' are incompatible between these types.",
+        "    Type 'string' is not assignable to type 'number'.",
+      ]);
     },
     { timeout: 180_000 },
   );

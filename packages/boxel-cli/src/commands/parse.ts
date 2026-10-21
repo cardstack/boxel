@@ -17,15 +17,11 @@ import { dirname, join, relative, resolve, sep } from 'node:path';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import {
   REALM_CACHE_DIR,
-  createStagedDiagnosticSink,
-  isSilentSetupFailure,
+  collectGateDiagnostics,
   stageRealmSources,
 } from '@cardstack/runtime-common/realm-source-staging';
 import { SupportedMimeType } from '@cardstack/runtime-common/supported-mime-type';
-import {
-  diagnosticText,
-  parseTscDiagnostics,
-} from '@cardstack/runtime-common/tsc-diagnostics';
+import type { TscDiagnostic } from '@cardstack/runtime-common/tsc-diagnostics';
 
 import {
   getProfileManager,
@@ -906,54 +902,19 @@ export async function runGlintCheck(
       );
     });
 
-    let errors: ParseError[] = [];
-    let inputDiagnosticLines = 0;
-    let stagedDiagnostics = createStagedDiagnosticSink(tempDir);
-    for (let diagnostic of parseTscDiagnostics(output)) {
-      let { code: tsCode, message } = diagnostic;
-      let absolutePath = resolve(tempDir, diagnostic.file);
-      if (
-        stagedDiagnostics.trackIfStaged(absolutePath, {
-          line: String(diagnostic.line),
-          column: String(diagnostic.column),
-          tsCode,
-          message,
-        })
-      ) {
-        continue;
-      }
-
-      inputDiagnosticLines++;
-
-      if (!absolutePath.startsWith(tempDir)) continue;
-
-      if (tsCode === 'TS2353' && message.includes("'scoped'")) continue;
-
-      let realmPath = absolutePath.slice(tempDir.length + 1);
-      let originalFile = files.find((f) => f.path === realmPath);
-      if (!originalFile) continue;
-
-      errors.push({
-        file: originalFile.path,
-        line: diagnostic.line,
-        column: diagnostic.column,
-        message: explainDiagnostic(tsCode, diagnosticText(diagnostic)),
-      });
-    }
-
-    let stagedWarning = stagedDiagnostics.warning();
+    let { diagnostics, stagedWarning, silentSetupFailure } =
+      collectGateDiagnostics({ output, exitedWithError, tempDir, files });
+    let errors: ParseError[] = diagnostics.map((diagnostic) => ({
+      file: diagnostic.file,
+      line: diagnostic.line,
+      column: diagnostic.column,
+      message: explainDiagnostic(diagnostic),
+    }));
     if (stagedWarning) {
       warnings.push(stagedWarning);
     }
 
-    if (
-      isSilentSetupFailure({
-        exitedWithError,
-        errorCount: errors.length,
-        inputDiagnosticLines,
-        stagedDiagnosticLines: stagedDiagnostics.count(),
-      })
-    ) {
+    if (silentSetupFailure) {
       let truncatedOutput = output.slice(0, 500).trim();
       errors.push({
         file: files[0]?.path ?? 'unknown',
@@ -975,24 +936,25 @@ export async function runGlintCheck(
 
 /**
  * Turn a few cryptic TS diagnostics into actionable guidance for card
- * authors. The raw text is accurate but doesn't say what to change.
+ * authors. The raw text is accurate but doesn't say what to change. The
+ * guidance follows the headline, ahead of tsc's elaboration lines.
  */
-function explainDiagnostic(tsCode: string, message: string): string {
+export function explainDiagnostic(diagnostic: TscDiagnostic): string {
+  let headline = diagnostic.message;
   // TS1206 "Decorators are not valid here." Card code hits this when a
   // decorator (`@tracked`, `@field`) sits on a member of a format-class
   // *expression* (`static isolated = class { … }`). TypeScript's legacy
   // decorators are only allowed on class *declarations*, so this pattern
   // can't type-check even though it runs. The fix is to move the reactive
   // state into a top-level component the format class renders.
-  if (tsCode === 'TS1206') {
-    return (
-      `${message} Decorators like @tracked aren't allowed inside a ` +
+  if (diagnostic.code === 'TS1206') {
+    headline +=
+      ` Decorators like @tracked aren't allowed inside a ` +
       `format-class expression (e.g. \`static isolated = class { … }\`). ` +
       `Move reactive state into a top-level component that the format ` +
-      `class renders.`
-    );
+      `class renders.`;
   }
-  return message;
+  return [headline, ...diagnostic.elaboration].join('\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -1230,6 +1192,26 @@ interface ParseCliOptions {
   json?: boolean;
 }
 
+// Continuation lines (tsc's elaboration, or a multi-line warning) hang under
+// the first line's text rather than under the label. `--json` carries the
+// message as is.
+function hangingIndent(label: string, text: string): string {
+  let pad = ' '.repeat(label.length);
+  return text
+    .split('\n')
+    .map((line, i) => (i === 0 || line.trim() === '' ? line : pad + line))
+    .join('\n');
+}
+
+export function formatParseError(e: ParseError): string {
+  let label = `  error ${e.line}:${e.column} `;
+  return `  ${FG_RED}error${RESET} ${e.line}:${e.column} ${hangingIndent(label, e.message)}`;
+}
+
+export function formatParseWarning(warning: string): string {
+  return `${DIM}warning${RESET} ${hangingIndent('warning ', warning)}`;
+}
+
 export function registerParseCommand(program: Command): void {
   program
     .command('parse')
@@ -1281,7 +1263,7 @@ export function registerParseCommand(program: Command): void {
       // author deciding whether that matters needs them next to the verdict
       // line rather than scrolled past above it.
       for (let warning of result.warnings) {
-        console.log(`${DIM}warning${RESET} ${warning}`);
+        console.log(formatParseWarning(warning));
       }
 
       if (result.errors.length === 0) {
@@ -1301,12 +1283,7 @@ export function registerParseCommand(program: Command): void {
           currentFile = e.file;
           console.log(`\n${DIM}${e.file}${RESET}`);
         }
-        // Indent tsc's elaboration lines so they read as part of this error,
-        // not as sibling lines; `--json` keeps the message as is.
-        let message = e.message.replace(/\n/g, '\n    ');
-        console.log(
-          `  ${FG_RED}error${RESET} ${e.line}:${e.column} ${message}`,
-        );
+        console.log(formatParseError(e));
       }
 
       console.log(

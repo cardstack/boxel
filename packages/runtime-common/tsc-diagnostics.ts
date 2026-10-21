@@ -1,8 +1,8 @@
 /**
  * Parse the located `error TSxxxx` diagnostics out of a tsc / ember-tsc run's
  * text output, for the parse gates `boxel parse` and the software factory both
- * run. Each gate decides which diagnostics to keep; how the output is read
- * lives here once, so both report the same message for the same error.
+ * run (through `collectGateDiagnostics` in `realm-source-staging.ts`), so both
+ * report the same message for the same error.
  *
  * tsc elaborates many diagnostics as indented continuation lines under the
  * error line ("The types of 'a.b' are incompatible between these types.",

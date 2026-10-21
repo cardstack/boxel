@@ -29,14 +29,10 @@ import { specRef } from '@cardstack/runtime-common/constants';
 import { PREFIX_REALMS } from '@cardstack/runtime-common/realm-prefixes';
 import {
   REALM_CACHE_DIR,
-  createStagedDiagnosticSink,
-  isSilentSetupFailure,
+  collectGateDiagnostics,
   stageRealmSources,
 } from '@cardstack/runtime-common/realm-source-staging';
-import {
-  diagnosticText,
-  parseTscDiagnostics,
-} from '@cardstack/runtime-common/tsc-diagnostics';
+import { diagnosticText } from '@cardstack/runtime-common/tsc-diagnostics';
 
 import { logger } from './logger.ts';
 import type {
@@ -807,61 +803,19 @@ export async function runGlintCheck(
       }
     }
 
-    let errors: ParseErrorData[] = [];
-    let inputDiagnosticLines = 0;
-    let stagedDiagnostics = createStagedDiagnosticSink(tempDir);
-    for (let diagnostic of parseTscDiagnostics(output)) {
-      let { code: tsCode, message } = diagnostic;
-
-      let absolutePath = resolve(tempDir, diagnostic.file);
-      if (
-        stagedDiagnostics.trackIfStaged(absolutePath, {
-          line: String(diagnostic.line),
-          column: String(diagnostic.column),
-          tsCode,
-          message,
-        })
-      ) {
-        continue;
-      }
-
-      inputDiagnosticLines++;
-
-      if (!absolutePath.startsWith(tempDir)) {
-        continue;
-      }
-
-      if (tsCode === 'TS2353' && message.includes("'scoped'")) {
-        continue;
-      }
-
-      let realmPath = absolutePath.slice(tempDir.length + 1);
-      let originalFile = files.find((f) => f.path === realmPath);
-      if (!originalFile) {
-        continue;
-      }
-
-      errors.push({
-        file: originalFile.path,
-        line: diagnostic.line,
-        column: diagnostic.column,
-        message: diagnosticText(diagnostic),
-      });
-    }
-
-    let stagedWarning = stagedDiagnostics.warning();
+    let { diagnostics, stagedWarning, silentSetupFailure } =
+      collectGateDiagnostics({ output, exitedWithError, tempDir, files });
+    let errors: ParseErrorData[] = diagnostics.map((diagnostic) => ({
+      file: diagnostic.file,
+      line: diagnostic.line,
+      column: diagnostic.column,
+      message: diagnosticText(diagnostic),
+    }));
     if (stagedWarning) {
       warnings.push(stagedWarning);
     }
 
-    if (
-      isSilentSetupFailure({
-        exitedWithError,
-        errorCount: errors.length,
-        inputDiagnosticLines,
-        stagedDiagnosticLines: stagedDiagnostics.count(),
-      })
-    ) {
+    if (silentSetupFailure) {
       let truncatedOutput = output.slice(0, 500).trim();
       errors.push({
         file: files[0]?.path ?? 'unknown',
