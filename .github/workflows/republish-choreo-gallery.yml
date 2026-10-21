@@ -13,7 +13,10 @@ name: Republish the Choreo gallery
 # own it, and publishes through packages/choreo-gallery/scripts/republish.sh.
 # The writer's password is read through the boxel-choreo-republish role
 # (configs/boxel-choreo-republish in cardstack/infra), which trusts only this
-# repository's main branch, so a run on any other ref fails to assume it.
+# repository's main branch, so the job refuses to run on any other ref. The
+# role matches the token's subject, repo:cardstack/boxel:ref:refs/heads/main,
+# which holds only while the job sets no GitHub environment: an environment
+# changes the subject, and the role would need to trust that one instead.
 # See "Where it's served" in packages/choreo-gallery/README.md.
 
 on:
@@ -45,6 +48,12 @@ jobs:
     # the published copy.
     timeout-minutes: 200
     steps:
+      - name: Require main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error title=Choreo gallery not republished::Run this workflow on main. Its AWS role, boxel-choreo-republish, trusts only main, so a run on $GITHUB_REF can't read the writer's password."
+          exit 1
+
       - name: Set up env
         run: |
           case "${{ inputs.environment }}" in
