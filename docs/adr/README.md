@@ -18,3 +18,4 @@ or backfill one.
 | [003](003-reach-cloud-services-through-adapters.md)                          | Reach proprietary cloud services only through adapters                            | proposed |
 | [005](005-authorize-key-changes-only-with-a-session-card-code-cant-reach.md) | Authorize changes to a user's keys only with a session that card code can't reach | proposed |
 | [007](007-keep-motion-a-reactive-layer-that-state-never-waits-on.md)         | Keep motion a reactive layer that application state never waits on                | proposed |
+| [009](009-build-new-ui-with-pret-ui-not-boxel-ui.md)                         | Build new UI with Pret UI, and deprecate boxel-ui                                 | proposed |
