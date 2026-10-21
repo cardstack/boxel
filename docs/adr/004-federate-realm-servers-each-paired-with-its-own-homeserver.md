@@ -9,10 +9,15 @@ scope:
   - packages/runtime-common/matrix-backend-authentication.ts
   - packages/runtime-common/matrix-client.ts
   - packages/runtime-common/realm-permission-checker.ts
+  - packages/runtime-common/db-queries/realm-permission-queries.ts
+  - packages/runtime-common/realm.ts
   - packages/host/app/services/realm-server.ts
   - packages/host/app/services/matrix-service.ts
   - packages/host/app/services/realm.ts
+  - packages/host/app/services/store.ts
+  - packages/host/app/services/host-mode-service.ts
   - packages/boxel-cli/src/lib/profile-manager.ts
+  - packages/boxel-cli/src/lib/seed-auth.ts
   - packages/matrix/support/synapse/**
 ---
 
@@ -160,20 +165,10 @@ to find [10].
 
 ## 4. Consequences
 
-Before a realm server can serve users of another homeserver, this code must
-change:
+Beyond the gaps under Remediation, federation needs this work:
 
-- `verifyOpenIdToken` in `packages/runtime-common/matrix-client.ts` already
-  uses the federation endpoint, but asks only the paired homeserver and
-  ignores `matrix_server_name` (§1.3) [3].
-- The host's `assertOwnRealmServer` call sites (§1.8, §1.9).
-- Realm paths, the delete-ownership check, and published-realm domains are
-  keyed by localpart (`create-realm.ts`, `handle-delete-realm.ts`,
-  `handle-publish-realm.ts`) (§1.5).
-- `userIdFromUsername` derives a server name from the homeserver hostname
-  (§1.2).
-- `realm-permission-checker.ts` resolves the `users` row with a profile
-  lookup on the paired homeserver, which can also find remote users (§1.4).
+- The host's `assertOwnRealmServer` call sites go away once the host reaches
+  each realm server through its own per-server object (§1.8).
 - `assume-user`, prerender tokens, and account-data writes through the
   Synapse admin API reach only the local server's realms and users.
 - Every test realm server shares one homeserver.
@@ -215,3 +210,32 @@ change:
 12. `shimBundledBase` in `packages/host/app/lib/bundled-base.ts`, which serves
     `@cardstack/base/*` from the host bundle.
 13. `docs/realm-resource-identifiers.md`, added in #5720.
+
+## 7. Remediation
+
+- `packages/runtime-common/matrix-client.ts` (`verifyOpenIdToken`) breaks
+  §1.3. It asks only the paired homeserver and ignores `matrix_server_name`.
+- `packages/runtime-common/matrix-client.ts` (`userIdFromUsername`,
+  `ensureFullMatrixUserId`) breaks §1.2. They derive the server name from the
+  homeserver hostname.
+- `packages/realm-server/scripts/claude-prerender-token.ts`
+  (`deriveMatrixDomain`) breaks §1.2. It derives the server name from the
+  realm hostname.
+- `packages/boxel-cli/src/lib/seed-auth.ts` (`deriveHostFromRealmUrl`) breaks
+  §1.2. It derives the server name from the realm hostname.
+- `packages/boxel-cli/src/lib/profile-manager.ts` (`migrateFromEnv`) breaks
+  §1.2. It picks the server name from the Matrix URL.
+- `packages/runtime-common/db-queries/realm-permission-queries.ts`
+  (`fetchAllRealmsWithOwners`, `fetchRealmOwnerUsername`, `isBotAccount`)
+  breaks §1.2. They reduce realm owners to localparts and recognize service
+  accounts by localpart.
+- `packages/runtime-common/realm-permission-checker.ts`
+  (`effectiveRealmPermissions`) breaks §1.4. It applies the `users` row to any
+  user the paired homeserver finds a profile for, which can include users of
+  other homeservers.
+- `packages/realm-server/handlers/handle-delete-realm.ts` breaks §1.2. It
+  matches the caller's localpart against the realm's namespace.
+- `packages/realm-server/handlers/handle-publish-realm.ts` breaks §1.2. It
+  matches the caller's localpart against the owner's published-space domain.
+- `packages/realm-server/handlers/create-realm.ts` breaks §1.5. It builds
+  every realm path from the owner's localpart.
