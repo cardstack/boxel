@@ -222,6 +222,15 @@ export default class CodeSubmodeLeftPanelToggle extends Component<Signature> {
       .file-browser .content {
         background-color: var(--boxel-light);
       }
+      /*
+        The browser's scroll anchoring moves this panel's scroll offset when
+        its contents are replaced, as on a switch to another realm's file tree.
+        RestoreScrollPosition records the offset at every scrollend, so it
+        would store that jump as the selected item's position and restore it.
+      */
+      .content {
+        overflow-anchor: none;
+      }
       :deep(.realm-dropdown-trigger) {
         background-color: #e9e9ec;
         border-radius: 0;

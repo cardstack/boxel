@@ -194,6 +194,23 @@ const friendCardSource = `
   }
 `;
 
+// Describes the file tree's scroll state, for scroll-position assertion
+// messages, so a failure shows what was stored and what was rendered.
+function fileTreeScrollDiagnostics() {
+  let panel = document.querySelector('[data-test-togglable-left-panel]');
+  let selected = document.querySelector<HTMLElement>(
+    '[data-test-file].selected',
+  );
+  return JSON.stringify({
+    storedScrollPositions: window.localStorage.getItem(ScrollPositions),
+    panelScrollTop: panel?.scrollTop,
+    panelScrollHeight: panel?.scrollHeight,
+    panelClientHeight: panel?.clientHeight,
+    selectedFile: selected?.getAttribute('data-test-file'),
+    selectedFileOffsetTop: selected?.offsetTop,
+  });
+}
+
 const realmInfo = {
   name: 'Test Workspace B',
   backgroundURL:
@@ -848,9 +865,10 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     if (!endDirectoryElement) {
       assert.ok(endDirectoryElement, 'end directory should exist');
     } else {
+      let diagnostics = fileTreeScrollDiagnostics();
       assert.notOk(
         await elementIsVisible(endDirectoryElement),
-        'expected previously-stored scroll position to have been forgotten',
+        `expected previously-stored scroll position to have been forgotten after choosing another file; ${diagnostics}`,
       );
 
       endDirectoryElement.scrollIntoView({ block: 'center' });
@@ -874,6 +892,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     await waitFor('[data-test-realm-name="Test Workspace A"]', {
       timeout: 2000,
     });
+    let diagnosticsInOtherRealm = fileTreeScrollDiagnostics();
 
     await fillIn(
       '[data-test-card-url-bar-input]',
@@ -892,9 +911,10 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     if (!endDirectoryElement) {
       assert.ok(endDirectoryElement, 'end directory should exist');
     } else {
+      let diagnostics = fileTreeScrollDiagnostics();
       assert.notOk(
         await elementIsVisible(endDirectoryElement),
-        'expected previously-stored scroll position to have been forgotten',
+        `expected previously-stored scroll position to have been forgotten after visiting another realm; ${diagnostics}; while in the other realm: ${diagnosticsInOtherRealm}`,
       );
     }
   });
