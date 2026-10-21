@@ -38,15 +38,20 @@ import {
   fetchRealmSources,
   type RealmSourceFailure,
 } from './realm-source-cache.ts';
+import {
+  diagnosticText,
+  parseTscDiagnostics,
+  type TscDiagnostic,
+} from './tsc-diagnostics.ts';
 
 /**
  * Where fetched realm module sources land inside a parse run's temp dir. A
  * `paths` alias points each realm prefix at a subdirectory of this. Each
  * caller's tsconfig `exclude`s it, but `exclude` only keeps the staged sources
  * from becoming *root* files — a file imported by a checked file still enters
- * the program and is still checked. The callers' diagnostic loops partition on
- * this directory name to keep staged-source diagnostics out of the author's
- * errors without disarming their setup-failure detection.
+ * the program and is still checked. {@link collectGateDiagnostics} partitions
+ * on this directory name to keep staged-source diagnostics out of the author's
+ * errors without disarming the setup-failure detection.
  */
 export const REALM_CACHE_DIR = '.realm-sources';
 
@@ -225,10 +230,87 @@ async function resolveRealmSources(
   };
 }
 
+export interface CollectGateDiagnosticsOptions {
+  /** The type-checker's combined stdout and stderr. */
+  output: string;
+  exitedWithError: boolean;
+  /** The parse run's temp dir; diagnostic paths resolve against it. */
+  tempDir: string;
+  /** The files the run checked, by their path relative to `tempDir`. */
+  files: readonly { path: string }[];
+}
+
+export interface GateDiagnostics {
+  /** Diagnostics in a checked file, with `file` set to that file's path. */
+  diagnostics: TscDiagnostic[];
+  /** The sentence a gate's result carries for dropped staged-source diagnostics, if any. */
+  stagedWarning: string | undefined;
+  /** See {@link isSilentSetupFailure}. */
+  silentSetupFailure: boolean;
+}
+
+/**
+ * Decide which of a type-checker run's diagnostics are the author's — the
+ * classification both parse gates share, held here so they cannot drift apart
+ * on what reads as a pass. Each gate keeps only what is its own: how it words a
+ * message and a setup failure, and its error type.
+ *
+ * Dropped: diagnostics in staged realm sources (see
+ * {@link StagedDiagnosticSink}), anything outside the temp dir, the `scoped`
+ * attribute glint does not know on `<style>`, and files the run did not check.
+ * Every diagnostic but a staged one counts as explaining a non-zero exit, even
+ * when dropped.
+ */
+export function collectGateDiagnostics({
+  output,
+  exitedWithError,
+  tempDir,
+  files,
+}: CollectGateDiagnosticsOptions): GateDiagnostics {
+  let staged = createStagedDiagnosticSink(tempDir);
+  let checkedPaths = new Set(files.map((f) => f.path));
+  let diagnostics: TscDiagnostic[] = [];
+  let inputDiagnosticLines = 0;
+
+  for (let diagnostic of parseTscDiagnostics(output)) {
+    let absolutePath = resolve(tempDir, diagnostic.file);
+    if (staged.trackIfStaged(absolutePath, diagnostic)) {
+      continue;
+    }
+
+    inputDiagnosticLines++;
+
+    if (!absolutePath.startsWith(tempDir)) {
+      continue;
+    }
+    if (
+      diagnostic.code === 'TS2353' &&
+      diagnostic.message.includes("'scoped'")
+    ) {
+      continue;
+    }
+    let realmPath = absolutePath.slice(tempDir.length + 1);
+    if (!checkedPaths.has(realmPath)) {
+      continue;
+    }
+    diagnostics.push({ ...diagnostic, file: realmPath });
+  }
+
+  return {
+    diagnostics,
+    stagedWarning: staged.warning(),
+    silentSetupFailure: isSilentSetupFailure({
+      exitedWithError,
+      errorCount: diagnostics.length,
+      inputDiagnosticLines,
+      stagedDiagnosticLines: staged.count(),
+    }),
+  };
+}
+
 /**
  * Classifies and accumulates type-checker diagnostics anchored in staged realm
- * sources — the decision both parse gates share, held in one place beside the
- * files it classifies so the gates cannot drift apart on what reads as a pass.
+ * sources.
  *
  * `exclude` only keeps staged sources from being *root* files; a file imported
  * by a checked file still enters the program and still produces diagnostics.
@@ -238,45 +320,32 @@ async function resolveRealmSources(
  * {@link isSilentSetupFailure} and let a non-zero type-checker exit read as a
  * clean pass.
  */
-export interface StagedDiagnosticSink {
+interface StagedDiagnosticSink {
   /**
    * True — recorded, and the caller should skip the diagnostic — when
-   * `absolutePath` sits under the staged-sources dir. The first few are kept
-   * as samples for {@link StagedDiagnosticSink.warning}.
+   * `absolutePath` sits under the staged-sources dir. The first is kept as the
+   * sample {@link StagedDiagnosticSink.warning} quotes.
    */
-  trackIfStaged(
-    absolutePath: string,
-    diagnostic: {
-      line: string;
-      column: string;
-      tsCode: string;
-      message: string;
-    },
-  ): boolean;
+  trackIfStaged(absolutePath: string, diagnostic: TscDiagnostic): boolean;
   count(): number;
   /** The sentence a gate's result carries for the dropped diagnostics, if any. */
   warning(): string | undefined;
 }
 
-const STAGED_DIAGNOSTIC_SAMPLE_CAP = 3;
-
-export function createStagedDiagnosticSink(
-  tempDir: string,
-): StagedDiagnosticSink {
+function createStagedDiagnosticSink(tempDir: string): StagedDiagnosticSink {
   let stagedCacheRoot = join(tempDir, REALM_CACHE_DIR);
   let count = 0;
-  let samples: string[] = [];
+  let sample: string | undefined;
 
   return {
-    trackIfStaged(absolutePath, { line, column, tsCode, message }) {
+    trackIfStaged(absolutePath, diagnostic) {
       if (!absolutePath.startsWith(stagedCacheRoot + sep)) {
         return false;
       }
       count++;
-      if (samples.length < STAGED_DIAGNOSTIC_SAMPLE_CAP) {
-        samples.push(
-          `${absolutePath.slice(tempDir.length + 1)}(${line},${column}): ${tsCode}: ${message}`,
-        );
+      if (sample === undefined) {
+        let { line, column, code } = diagnostic;
+        sample = `${absolutePath.slice(tempDir.length + 1)}(${line},${column}): ${code}: ${diagnosticText(diagnostic)}`;
       }
       return true;
     },
@@ -285,7 +354,8 @@ export function createStagedDiagnosticSink(
       if (count === 0) {
         return undefined;
       }
-      return `ember-tsc reported ${count} diagnostic(s) in fetched realm sources rather than in the checked files (e.g. ${samples[0]}). These are dropped — staged realm code is not what this run checks. If they name missing modules, the fetch-failure warnings above carry the cause.`;
+      // The sample goes last: its elaboration lines would split the sentence.
+      return `ember-tsc reported ${count} diagnostic(s) in fetched realm sources rather than in the checked files. These are dropped — staged realm code is not what this run checks. If they name missing modules, the fetch-failure warnings above carry the cause. The first: ${sample}`;
     },
   };
 }
@@ -298,7 +368,7 @@ export function createStagedDiagnosticSink(
  * not make the run read as this failure — nor as a clean pass, which is why
  * they are counted apart from the input files' diagnostics at all.
  */
-export function isSilentSetupFailure(run: {
+function isSilentSetupFailure(run: {
   exitedWithError: boolean;
   errorCount: number;
   inputDiagnosticLines: number;
