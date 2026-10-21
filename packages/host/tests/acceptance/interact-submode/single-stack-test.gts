@@ -905,6 +905,17 @@ module('Acceptance | interact submode | single stack tests', function (hooks) {
       assert.dom(fadhlan).isFocused('the card now on top has focus');
     });
 
+    test('a stack card is a region named for the card', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      });
+
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .hasAttribute('role', 'region')
+        .hasAria('label', 'Fadhlan');
+    });
+
     test('the cards a page loads with do not take focus', async function (assert) {
       await visitOperatorMode({
         stacks: [

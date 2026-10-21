@@ -658,6 +658,16 @@ export default class OperatorModeStackItem extends Component<Signature> {
     return this.card ? this.card.cardTitle : undefined;
   }
 
+  // The name a screen reader gives the card's region, which has one while
+  // the card loads or fails to load too.
+  private get regionLabel() {
+    return (
+      this.headerTitle ||
+      this.headerType ||
+      (this.cardResource?.isLoaded ? 'Card' : 'Loading card')
+    );
+  }
+
   private get moreOptionsMenuItemsForErrorCard() {
     if (this.isBuried) {
       return undefined;
@@ -998,7 +1008,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
       click anywhere in it makes it the card Escape acts on }}
       tabindex='-1'
       role='region'
-      aria-label={{this.headerTitle}}
+      aria-label={{this.regionLabel}}
       style={{this.styleForStackedCard}}
       {{on 'focusin' this.markInteracted}}
       {{this.followFocus}}
