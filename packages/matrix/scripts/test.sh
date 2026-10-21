@@ -5,7 +5,13 @@ echo "running tests: ${1}"
 # this and narrows `testMatch` to the spec files bin-packed onto this shard;
 # Playwright's own `--shard` is not used because it balances test count rather
 # than test cost. See packages/matrix/support/shard-spec-files.ts.
-MATRIX_TEST_SHARD="${1:-}"
+# THROWAWAY VERIFICATION: every shard runs only the flake verification spec,
+# repeated, with no retries. The template job has nothing to run.
+if [ -n "${MATRIX_SYNAPSE_TEMPLATE:-}" ]; then
+  echo "verification run: skipping template job"
+  exit 0
+fi
+MATRIX_TEST_SHARD=""
 export MATRIX_TEST_SHARD
 
 BASE_REALM="https-get://localhost:4201/base/"
@@ -20,4 +26,4 @@ BASE_REALM_READY="$BASE_REALM$READY_PATH"
 WAIT_ON_TIMEOUT=600000 START_SERVER_AND_TEST_INSECURE=1 start-server-and-test \
   'pnpm run wait' \
   "$BASE_REALM_READY" \
-  'pnpm playwright test'
+  'pnpm playwright test tests/live-cards-verify.spec.ts --repeat-each=6 --retries=0'
