@@ -353,11 +353,8 @@ async function asUser<T>(
 }
 
 // Signs in with a password, checked by the Matrix server's UIA check as
-// described above. Only failures count against the account's limit (see
-// `sign-in-limiter.ts`), and an account over it is refused before its
-// password is checked. Failures are counted as the Matrix server counts failed
-// logins: against the Matrix user id the account resolves to, however it was
-// named, or against the name itself when it names no account.
+// described above, within the account's limit on failed attempts
+// (`withPasswordLimit`).
 //
 // An account that has never signed in to Boxel, as one just registered on the
 // secure origin, gets the app's first-sign-in setup once its password checks
@@ -374,6 +371,59 @@ export async function signInWithPassword(
     registrationToken?: string;
   },
 ): Promise<SignedInSession> {
+  return await withPasswordLimit(deps, limiter, attempt, async (user) => {
+    let uiaSession = await confirmPassword(deps, user, attempt.password);
+    if (!(await fetchSessionRoom(deps.dbAdapter, user))) {
+      await setUpFirstSignIn(deps, user, attempt.registrationToken);
+    }
+    return await createSecureSession(deps, {
+      user,
+      client: attempt.client,
+      proof: `uia:${uiaSession}`,
+    });
+  });
+}
+
+// Ends every secure session of the account a password belongs to, the
+// window's and the CLI's alike, once the password checks out. The secure
+// origin's pages call it as soon as they have changed an account's password,
+// with the new one: a session signed in with the old password, perhaps by
+// whoever it leaked to, must not outlive the change. The Matrix server signs
+// the account's devices out itself (`logout_devices`), but it has no way to
+// tell the realm server, so the page that changed the password does.
+//
+// The new password is the proof, as it is for signing in, so card code, which
+// never sees it, can't end the CLI's sessions this way; and whoever still
+// knows the old password can no longer use it here. It is checked, and
+// limited, exactly as a password sign-in is.
+export async function endSessionsForNewPassword(
+  deps: SecureSessionDeps,
+  limiter: SignInLimiter,
+  attempt: { username: string; password: string },
+): Promise<void> {
+  await withPasswordLimit(deps, limiter, attempt, async (user) => {
+    await confirmPassword(deps, user, attempt.password);
+    await deps.dbAdapter.execute(
+      `UPDATE secure_sessions SET expires_at = NOW()
+        WHERE user_id = $1 AND expires_at > NOW()`,
+      { bind: [user] },
+    );
+  });
+}
+
+// Runs `fn` for the Matrix user a password attempt names, within the
+// account's limit on failed attempts (see `sign-in-limiter.ts`): an account
+// over it is refused before its password is checked, and only a wrong
+// password or a name that matches no account counts. Failures are counted as
+// the Matrix server counts failed logins: against the Matrix user id the
+// account resolves to, however it was named, or against the name itself when
+// it names no account.
+async function withPasswordLimit<T>(
+  deps: SecureSessionDeps,
+  limiter: SignInLimiter,
+  attempt: { username: string; password: string },
+  fn: (user: string) => Promise<T>,
+): Promise<T> {
   if (!attempt.username.trim() || !attempt.password) {
     throw invalidCredentials();
   }
@@ -385,7 +435,10 @@ export async function signInWithPassword(
   }
   let failed = false;
   try {
-    return await checkPassword(deps, user, attempt);
+    if (!user) {
+      throw invalidCredentials();
+    }
+    return await fn(user);
   } catch (e) {
     failed =
       e instanceof SecureSessionError && e.code === 'invalid-credentials';
@@ -395,22 +448,13 @@ export async function signInWithPassword(
   }
 }
 
-async function checkPassword(
+// Checks `password` against the account with the UIA check described above,
+// and resolves to the UIA session that confirmed it.
+async function confirmPassword(
   deps: SecureSessionDeps,
-  user: string | undefined,
-  {
-    password,
-    client,
-    registrationToken,
-  }: {
-    password: string;
-    client: SecureSessionClient;
-    registrationToken?: string;
-  },
-): Promise<SignedInSession> {
-  if (!user) {
-    throw invalidCredentials();
-  }
+  user: string,
+  password: string,
+): Promise<string> {
   // The admin API mints a token for any user id, so a name that names no
   // account is caught here, before anything acts as it. Only "no such
   // account" is the account's answer; any other failure is the Matrix
@@ -481,14 +525,7 @@ async function checkPassword(
     );
     throw unavailable();
   }
-  if (!(await fetchSessionRoom(deps.dbAdapter, user))) {
-    await setUpFirstSignIn(deps, user, registrationToken);
-  }
-  return await createSecureSession(deps, {
-    user,
-    client,
-    proof: `uia:${uiaSession}`,
-  });
+  return uiaSession;
 }
 
 function googleRedirectURI(deps: SecureSessionDeps): string {
@@ -632,6 +669,16 @@ async function userLinkedToGoogle(
 // sign-in takes the account or localpart it chose first.
 const MAX_RESOLVE_ATTEMPTS = 5;
 
+// How many localparts a sign-in moves past when the Matrix server refuses them
+// as in use. Each refusal names an account that exists, so the candidates run
+// out of them as the mapping provider's do; this bounds only a Matrix server
+// that refuses every localpart.
+const MAX_REFUSED_LOCALPARTS = 100;
+
+// What `createGoogleAccount` answers when the Matrix server refuses the
+// localpart as in use: an account has it ignoring case.
+const LOCALPART_IN_USE = Symbol('localpart in use');
+
 // Links an unlinked Google identity to the one account holding its verified
 // email, or makes it a new account, as the mapping provider does.
 async function linkOrCreateForGoogle(
@@ -640,6 +687,13 @@ async function linkOrCreateForGoogle(
   identity: GoogleIdentity,
 ): Promise<string> {
   let serverName = await matrixServerName(deps);
+  // Localparts this sign-in failed to make an account with. Synapse's
+  // registration refuses a localpart that any account has ignoring case, as
+  // the mapping provider's `check_user_exists` does, while the admin lookup
+  // below matches only exactly. So an account that differs only in case
+  // (`@Alice` for `alice`) shows up only as that refusal, and counting it as
+  // taken moves on to the next candidate, as the mapping provider does.
+  let refused = new Set<string>();
   let lookups: GoogleAccountLookups = {
     // The Matrix server stores an email address lowercased and gives each
     // address to one account, so the admin lookup by the lowercased address
@@ -659,6 +713,9 @@ async function linkOrCreateForGoogle(
       return users;
     },
     localpartTaken: async (localpart) => {
+      if (refused.has(localpart)) {
+        return true;
+      }
       let { status } = await adminRequest(
         deps,
         userPath(`@${localpart}:${serverName}`),
@@ -669,7 +726,11 @@ async function linkOrCreateForGoogle(
       return status === 200;
     },
   };
-  for (let attempt = 0; attempt < MAX_RESOLVE_ATTEMPTS; attempt++) {
+  let races = 0;
+  while (
+    races < MAX_RESOLVE_ATTEMPTS &&
+    refused.size < MAX_REFUSED_LOCALPARTS
+  ) {
     let resolved = await resolveGoogleAccount(identity, lookups);
     let user =
       resolved.kind === 'existing'
@@ -680,12 +741,18 @@ async function linkOrCreateForGoogle(
             email: resolved.email,
             displayName: resolved.displayName,
           });
-    if (user) {
+    if (typeof user === 'string') {
       return user;
+    }
+    if (resolved.kind === 'new') {
+      refused.add(resolved.localpart);
+    }
+    if (user !== LOCALPART_IN_USE) {
+      races++;
     }
   }
   log.error(
-    `a Google sign-in lost ${MAX_RESOLVE_ATTEMPTS} races for its account`,
+    `a Google sign-in could not make or link an account: ${races} lost races, ${refused.size} localparts taken or refused`,
   );
   throw unavailable();
 }
@@ -728,8 +795,10 @@ async function linkGoogle(
 }
 
 // Makes the account a new Google user gets: the Google identity's link, its
-// display name, and its email address as a third-party id. Undefined when the
-// localpart was taken after it was found free, so the caller resolves again.
+// display name, and its email address as a third-party id. `LOCALPART_IN_USE`
+// when an account has the localpart ignoring case, and undefined when another
+// sign-in took it after it was found free. Either way the caller resolves
+// again past it.
 async function createGoogleAccount(
   deps: SecureSessionDeps,
   config: GoogleSignInConfig,
@@ -739,7 +808,7 @@ async function createGoogleAccount(
     email,
     displayName,
   }: { user: string; sub: string; email: string; displayName?: string },
-): Promise<string | undefined> {
+): Promise<string | typeof LOCALPART_IN_USE | undefined> {
   // An empty body creates the account, or changes nothing on an account that
   // appeared since the localpart was found free, so only a 201 means this
   // sign-in owns it.
@@ -747,7 +816,10 @@ async function createGoogleAccount(
     method: 'PUT',
     body: {},
   });
-  if (created.status === 200 || created.body.errcode === 'M_USER_IN_USE') {
+  if (created.body.errcode === 'M_USER_IN_USE') {
+    return LOCALPART_IN_USE;
+  }
+  if (created.status === 200) {
     return undefined;
   }
   if (created.status !== 201) {

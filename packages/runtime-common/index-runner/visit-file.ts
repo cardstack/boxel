@@ -25,7 +25,6 @@ import {
 } from '../index.ts';
 import { CardError, mergeErrorsByGeneration } from '../error.ts';
 import { resolveFileDefCodeRef } from '../file-def-code-ref.ts';
-import type { VirtualNetwork } from '../virtual-network.ts';
 
 interface RenderFileForIndexingOptions {
   url: URL;
@@ -52,7 +51,6 @@ interface RenderFileForIndexingOptions {
   // re-reads after peer commits moved the realm (see `renderScopeFor`).
   renderScopeRound: number;
   prerenderer: Prerenderer;
-  virtualNetwork: VirtualNetwork;
   consumeClearCacheForRender(): boolean;
   consumeResetStoreForRender(): boolean;
   logDebug(message: string): void;
@@ -145,7 +143,6 @@ export async function renderFileForIndexing({
   batchId,
   renderScopeRound,
   prerenderer,
-  virtualNetwork,
   consumeClearCacheForRender,
   consumeResetStoreForRender,
   logDebug,
@@ -219,7 +216,7 @@ export async function renderFileForIndexing({
   }
 
   let fileURL = url.href;
-  let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL), virtualNetwork);
+  let fileDefCodeRef = resolveFileDefCodeRef(new URL(fileURL));
 
   let clearCache = consumeClearCacheForRender();
   let resetStore = consumeResetStoreForRender();

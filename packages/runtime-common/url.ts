@@ -128,6 +128,27 @@ export function maybeRelativeReference(
   return reference instanceof URL ? reference.href : reference;
 }
 
+// How a file in `realm` writes a reference to the module or card at
+// `reference`: relative when it is inside the realm, by its realm's registered
+// prefix when it is in another realm that has one, and by its URL otherwise.
+// A reference to a well-known realm therefore never carries the URL that realm
+// answers to in the current environment. With no `realm`, nothing is treated
+// as inside it.
+export function portableReference(
+  reference: RealmResourceIdentifier | URL,
+  relativeTo: URL,
+  realm: URL | undefined,
+  virtualNetwork: VirtualNetwork,
+): string {
+  let absolute = reference instanceof URL ? reference.href : reference;
+  let relative = realm
+    ? maybeRelativeReference(reference, relativeTo, realm)
+    : absolute;
+  return relative === absolute
+    ? virtualNetwork.unresolveURL(absolute)
+    : relative;
+}
+
 // Synthetic origin used to borrow the URL parser's path-normalization for
 // prefix-form RRI bases. The host is invalid-by-construction so it can never
 // collide with a real realm URL.

@@ -521,6 +521,42 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         );
       });
 
+      test('cannot grant write without read from PATCH /_permissions', async function (assert) {
+        let response = await request
+          .patch('/_permissions')
+          .set('Accept', 'application/vnd.api+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'mary', [
+              'read',
+              'write',
+              'realm-owner',
+            ])}`,
+          )
+          .send({
+            data: {
+              id: testRealmHref,
+              type: 'permissions',
+              attributes: {
+                permissions: {
+                  mango: ['write'],
+                },
+              },
+            },
+          });
+
+        assert.strictEqual(response.status, 400, 'HTTP 400 status');
+        let permissions = await fetchRealmPermissions(dbAdapter, testRealmURL);
+        assert.deepEqual(
+          permissions,
+          {
+            mary: ['read', 'write', 'realm-owner'],
+            bob: ['read', 'write'],
+          },
+          'permissions are correct',
+        );
+      });
+
       // CS-11126: realm visibility / world-readable used to be memoized
       // per Realm instance, so a `*: read` grant or revoke on replica A
       // would be silently ignored by every other replica until restart.

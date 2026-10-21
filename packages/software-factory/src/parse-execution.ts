@@ -29,10 +29,10 @@ import { specRef } from '@cardstack/runtime-common/constants';
 import { PREFIX_REALMS } from '@cardstack/runtime-common/realm-prefixes';
 import {
   REALM_CACHE_DIR,
-  createStagedDiagnosticSink,
-  isSilentSetupFailure,
+  collectGateDiagnostics,
   stageRealmSources,
 } from '@cardstack/runtime-common/realm-source-staging';
+import { diagnosticText } from '@cardstack/runtime-common/tsc-diagnostics';
 
 import { logger } from './logger.ts';
 import type {
@@ -803,89 +803,19 @@ export async function runGlintCheck(
       }
     }
 
-    let errors: ParseErrorData[] = [];
-    let inputDiagnosticLines = 0;
-    let stagedDiagnostics = createStagedDiagnosticSink(tempDir);
-    let lines = output.split('\n');
-
-    // tsc elaborates many diagnostics ("Types of property 'x' are
-    // incompatible.", "Type 'A' is not assignable to type 'B'.") as indented
-    // continuation lines under the error line. Those name the actual
-    // incompatibility, so fold them into the error's message instead of
-    // dropping them.
-    let current: ParseErrorData | null = null;
-
-    for (let line of lines) {
-      let match = line.match(
-        /^(.+?)\((\d+),(\d+)\):\s*error\s+(TS\d+):\s*(.+)/,
-      );
-      if (!match) {
-        if (current && /^\s+\S/.test(line)) {
-          current.message += `\n${line.trimEnd()}`;
-        } else if (/^\S/.test(line)) {
-          // A non-indented line that isn't a diagnostic — e.g. an
-          // --explainFiles program-file path under SF_PARSE_DEBUG — ends the
-          // previous diagnostic. Clear `current` so the indented inclusion
-          // reasons that follow it don't fold into an unrelated error.
-          current = null;
-        }
-        continue;
-      }
-
-      current = null;
-
-      let [, filePath, lineStr, colStr, tsCode, message] = match;
-
-      let absolutePath = resolve(tempDir, filePath);
-      if (
-        stagedDiagnostics.trackIfStaged(absolutePath, {
-          line: lineStr,
-          column: colStr,
-          tsCode,
-          message,
-        })
-      ) {
-        continue;
-      }
-
-      inputDiagnosticLines++;
-
-      if (!absolutePath.startsWith(tempDir)) {
-        continue;
-      }
-
-      if (tsCode === 'TS2353' && message.includes("'scoped'")) {
-        continue;
-      }
-
-      let realmPath = absolutePath.slice(tempDir.length + 1);
-      let originalFile = files.find((f) => f.path === realmPath);
-      if (!originalFile) {
-        continue;
-      }
-
-      current = {
-        file: originalFile.path,
-        line: parseInt(lineStr, 10),
-        column: parseInt(colStr, 10),
-        message,
-      };
-      errors.push(current);
-    }
-
-    let stagedWarning = stagedDiagnostics.warning();
+    let { diagnostics, stagedWarning, silentSetupFailure } =
+      collectGateDiagnostics({ output, exitedWithError, tempDir, files });
+    let errors: ParseErrorData[] = diagnostics.map((diagnostic) => ({
+      file: diagnostic.file,
+      line: diagnostic.line,
+      column: diagnostic.column,
+      message: diagnosticText(diagnostic),
+    }));
     if (stagedWarning) {
       warnings.push(stagedWarning);
     }
 
-    if (
-      isSilentSetupFailure({
-        exitedWithError,
-        errorCount: errors.length,
-        inputDiagnosticLines,
-        stagedDiagnosticLines: stagedDiagnostics.count(),
-      })
-    ) {
+    if (silentSetupFailure) {
       let truncatedOutput = output.slice(0, 500).trim();
       errors.push({
         file: files[0]?.path ?? 'unknown',

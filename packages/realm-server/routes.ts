@@ -119,9 +119,11 @@ import {
   handleEndWindowSessions,
   handleGoogleSignIn,
   handleGoogleSignInStart,
+  handlePasswordChange,
   handlePasswordSignIn,
   handleSecureOriginInfo,
 } from './handlers/handle-secure-session.ts';
+import { SignInLimiter } from './lib/sign-in-limiter.ts';
 import { SECURE_SESSION_TTL_SECONDS } from './lib/secure-session.ts';
 import type { GoogleSignInConfig } from './lib/google-sign-in.ts';
 import {
@@ -290,7 +292,12 @@ export function createRoutes(args: CreateRoutesArgs) {
     handleCreateUserRequest(args),
   );
   router.get('/_secure-origin', handleSecureOriginInfo(args));
-  router.post(SECURE_SESSION_PATH, handlePasswordSignIn(args, createRealmDeps));
+  // Every route that checks a password counts failures against one limit.
+  let passwordLimiter = new SignInLimiter();
+  router.post(
+    SECURE_SESSION_PATH,
+    handlePasswordSignIn(args, createRealmDeps, passwordLimiter),
+  );
   router.get(`${SECURE_SESSION_PATH}/google`, handleGoogleSignInStart(args));
   router.post(
     `${SECURE_SESSION_PATH}/google`,
@@ -316,6 +323,10 @@ export function createRoutes(args: CreateRoutesArgs) {
       expiredWithinSeconds: SECURE_SESSION_TTL_SECONDS,
     }),
     handleEndWindowSessions(args),
+  );
+  router.post(
+    `${SECURE_SESSIONS_PATH}/password-change`,
+    handlePasswordChange(args, passwordLimiter),
   );
   router.post(
     KEY_WRITE_TICKETS_PATH,

@@ -53,7 +53,6 @@ import {
   internalKeyFor,
   isCardInstance,
   resolveFileDefCodeRef,
-  rri,
   stringifyErrorForLog,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
@@ -1279,7 +1278,9 @@ export default class Room extends Component<Signature> {
         let query: Query = {
           filter: {
             on: {
-              module: rri(new URL('openrouter-model', realmURL).href),
+              module: this.network.virtualNetwork.unresolveURL(
+                new URL('openrouter-model', realmURL).href,
+              ),
               name: 'OpenRouterModel',
             },
             in: { modelId: modelIds },
@@ -1318,11 +1319,12 @@ export default class Room extends Component<Signature> {
 
   private get isDefaultSystemCard(): boolean {
     let systemCardId = this.systemCardId;
-    let defaultSystemCardId = ENV.defaultSystemCardId;
-    if (!defaultSystemCardId) {
+    if (!ENV.defaultSystemCardId) {
       return true;
     }
-    return !systemCardId || systemCardId === defaultSystemCardId;
+    return (
+      !systemCardId || this.matrixService.isDefaultSystemCardId(systemCardId)
+    );
   }
 
   @action
@@ -1701,10 +1703,7 @@ export default class Room extends Component<Signature> {
     bytes: Uint8Array,
   ): Promise<FileDef> {
     let sourceUrl = this.buildLocalSourceUrl(localFile.name);
-    let fileDefCodeRef = resolveFileDefCodeRef(
-      new URL(sourceUrl),
-      this.network.virtualNetwork,
-    );
+    let fileDefCodeRef = resolveFileDefCodeRef(new URL(sourceUrl));
     let extractor = new FileDefAttributesExtractor({
       loaderService: this.loaderService,
       network: this.network,

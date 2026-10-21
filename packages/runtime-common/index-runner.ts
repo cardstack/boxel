@@ -1028,7 +1028,6 @@ export class IndexRunner {
         batchId: this.#batchId,
         renderScopeRound: this.#renderScopeRound,
         prerenderer: this.#prerenderer,
-        virtualNetwork: this.#virtualNetwork,
         consumeClearCacheForRender: () => this.#consumeClearCacheForRender(),
         consumeResetStoreForRender: () => this.#consumeResetStoreForRender(),
         logDebug: (message) => this.#log.debug(message),
@@ -1574,7 +1573,6 @@ export class IndexRunner {
       precomputedRenderResult: renderResult,
       diagnostics,
       dependencyResolver: this.#dependencyResolver,
-      virtualNetwork: this.#virtualNetwork,
       updateEntry: async (entryURL, entry) => {
         await this.#writeEntry(entryURL, entry);
         this.#dependencyResolver.invalidateRelationshipDependencyRowCache(

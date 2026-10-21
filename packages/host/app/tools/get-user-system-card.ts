@@ -1,13 +1,9 @@
 import { service } from '@ember/service';
 
-import ENV from '@cardstack/host/config/environment';
-
 import HostBaseTool from '../lib/host-base-tool';
 
 import type MatrixService from '../services/matrix-service';
 import type * as BaseToolModule from '@cardstack/base/command';
-
-const { defaultSystemCardId } = ENV;
 
 export default class GetUserSystemCardTool extends HostBaseTool<
   undefined,
@@ -31,7 +27,7 @@ export default class GetUserSystemCardTool extends HostBaseTool<
     const cardId = systemCard?.id ?? undefined;
     return new GetUserSystemCardResult({
       cardId,
-      isDefault: !cardId || cardId === defaultSystemCardId,
+      isDefault: !cardId || this.matrixService.isDefaultSystemCardId(cardId),
     });
   }
 }

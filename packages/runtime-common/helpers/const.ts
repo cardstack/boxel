@@ -4,9 +4,10 @@ import {
   type RealmResourceIdentifier,
 } from '../realm-identifiers.ts';
 import type { RealmInfo } from '../index.ts';
-export const testRealmURL = 'http://test-realm/test/' as RealmIdentifier;
+export const testRealmOrigin = 'http://test-realm';
+export const testRealmURL = `${testRealmOrigin}/test/` as RealmIdentifier;
 export const testHostModeRealmURL =
-  'http://test-realm/user/test/' as RealmIdentifier;
+  `${testRealmOrigin}/user/test/` as RealmIdentifier;
 
 /**
  * Build a `RealmResourceIdentifier` for a path inside the default test realm.

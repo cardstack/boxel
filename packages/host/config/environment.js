@@ -283,15 +283,11 @@ module.exports = function (environment) {
   // A test build is never such an environment — `resolvedCatalogRealmURL` is
   // cleared above — so the test-realm ids assigned there survive, and a test's
   // definitions never depend on what a running catalog holds.
+  // They name the catalog by its prefix, so the ids are the same in every
+  // environment and the realm-server serves them unchanged.
   if (ENV.resolvedCatalogRealmURL) {
-    ENV.defaultSystemCardId = new URL(
-      'SystemCard/default',
-      withTrailingSlash(ENV.resolvedCatalogRealmURL),
-    ).href;
-    ENV.defaultFieldSpecId = new URL(
-      'Spec/fields/field',
-      withTrailingSlash(ENV.resolvedCatalogRealmURL),
-    ).href;
+    ENV.defaultSystemCardId = '@cardstack/catalog/SystemCard/default';
+    ENV.defaultFieldSpecId = '@cardstack/catalog/Spec/fields/field';
   }
 
   return ENV;
@@ -331,8 +327,4 @@ function getLatestSchemaFile() {
     );
   }
   return path.join(schemaDir, latestSchemaFile);
-}
-
-function withTrailingSlash(url) {
-  return url.endsWith('/') ? url : `${url}/`;
 }

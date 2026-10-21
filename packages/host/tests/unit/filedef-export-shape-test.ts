@@ -30,10 +30,9 @@ module('Unit | FileDef subtype export shapes', function (hooks) {
     let loader = getService('loader-service').loader;
     let seen = new Set<string>();
     for (let ref of Object.values(FILEDEF_CODE_REF_BY_EXTENSION)) {
-      // Real entries are built by `baseModule()` in full-URL form; a bare
-      // relative specifier marks a synthetic test-only entry with no module
-      // behind it (`.mismatch` today).
-      if (!ref.module.includes('://')) {
+      // Real entries name base modules in prefix form; a relative specifier
+      // marks a synthetic test-only entry with no module behind it.
+      if (ref.module.startsWith('.')) {
         continue;
       }
       let key = `${ref.module}#${ref.name}`;

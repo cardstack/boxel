@@ -8,6 +8,7 @@ import {
   ListingPathResolver,
   meta,
   InstallPlan,
+  ri,
   rri,
   VirtualNetwork,
 } from '@cardstack/runtime-common';
@@ -55,7 +56,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
     const { modulesCopy, modulesToInstall } = planModuleInstall(
       specs,
       new ListingPathResolver(
-        targetRealmURL.href,
+        ri(targetRealmURL.href),
         listing,
         'xyz',
         virtualNetwork,
@@ -113,7 +114,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
       let { modulesCopy, modulesToInstall } = planModuleInstall(
         specs,
         new ListingPathResolver(
-          targetRealmURL.href,
+          ri(targetRealmURL.href),
           listing,
           'xyz',
           virtualNetwork,
@@ -183,7 +184,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
       const { modulesCopy, modulesToInstall } = planModuleInstall(
         specs,
         new ListingPathResolver(
-          targetRealmURL.href,
+          ri(targetRealmURL.href),
           listing,
           'xyz',
           virtualNetwork,
@@ -248,7 +249,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
       const { modulesCopy, modulesToInstall } = planModuleInstall(
         specs,
         new ListingPathResolver(
-          targetRealmURL.href,
+          ri(targetRealmURL.href),
           listing,
           'xyz',
           virtualNetwork,
@@ -273,7 +274,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
       const { modulesCopy, modulesToInstall } = planModuleInstall(
         specs,
         new ListingPathResolver(
-          targetRealmURL.href,
+          ri(targetRealmURL.href),
           listing,
           'xyz',
           virtualNetwork,
@@ -313,7 +314,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
       const { modulesToInstall } = planModuleInstall(
         specs,
         new ListingPathResolver(
-          targetRealmURL.href,
+          ri(targetRealmURL.href),
           listing,
           'xyz',
           mappedNetwork,
@@ -351,7 +352,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
           planModuleInstall(
             specs,
             new ListingPathResolver(
-              targetRealmURL.href,
+              ri(targetRealmURL.href),
               listing,
               'xyz',
               virtualNetwork,
@@ -388,7 +389,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
         planInstanceInstall(
           instances,
           new ListingPathResolver(
-            targetRealmURL.href,
+            ri(targetRealmURL.href),
             listing,
             'xyz',
             virtualNetwork,
@@ -456,7 +457,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
           planInstanceInstall(
             instances,
             new ListingPathResolver(
-              targetRealmURL.href,
+              ri(targetRealmURL.href),
               listing,
               'xyz',
               virtualNetwork,
@@ -510,7 +511,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
             planInstanceInstall(
               instances,
               new ListingPathResolver(
-                targetRealmURL.href,
+                ri(targetRealmURL.href),
                 listing,
                 'xyz',
                 virtualNetwork,
@@ -534,7 +535,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
         [realmURL]: sourceRealmURL,
       } as any;
       let resolver = new ListingPathResolver(
-        targetRealmURL.href,
+        ri(targetRealmURL.href),
         listing,
         'xyz',
         virtualNetwork,
@@ -563,7 +564,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
         [realmURL]: sourceRealmURL,
       } as any;
       let resolver = new ListingPathResolver(
-        targetRealmURL.href,
+        ri(targetRealmURL.href),
         listing,
         'xyz',
         virtualNetwork,
@@ -578,6 +579,92 @@ module('Unit | Catalog | Install Plan Builder', function () {
       );
     });
 
+    test('ListingPathResolver.local() falls back to the path after the namespace for an unregistered prefix-form id', function (assert) {
+      const listing = {
+        name: 'Some Listing',
+        specs: [],
+        examples: [],
+        skills: [],
+        [realmURL]: sourceRealmURL,
+      } as any;
+      let resolver = new ListingPathResolver(
+        ri(targetRealmURL.href),
+        listing,
+        'xyz',
+        virtualNetwork,
+      );
+
+      assert.strictEqual(
+        resolver.local(rri('@someone/elsewhere/some-folder/Example/1')),
+        'some-folder/Example/1',
+      );
+    });
+
+    test('ListingPathResolver.local() decodes the path of an unregistered URL-form id', function (assert) {
+      const listing = {
+        name: 'Some Listing',
+        specs: [],
+        examples: [],
+        skills: [],
+        [realmURL]: sourceRealmURL,
+      } as any;
+      let resolver = new ListingPathResolver(
+        ri(targetRealmURL.href),
+        listing,
+        'xyz',
+        virtualNetwork,
+      );
+
+      assert.strictEqual(
+        resolver.local(
+          rri('https://elsewhere.example:8080/my%20realm/Card/1/'),
+        ),
+        'my realm/Card/1',
+      );
+    });
+
+    test('ListingPathResolver.target() keeps an unregistered URL-form id with dot segments inside the install directory', function (assert) {
+      const listing = {
+        name: 'Some Listing',
+        specs: [],
+        examples: [],
+        skills: [],
+        [realmURL]: sourceRealmURL,
+      } as any;
+      let resolver = new ListingPathResolver(
+        ri(targetRealmURL.href),
+        listing,
+        'xyz',
+        virtualNetwork,
+      );
+
+      assert.strictEqual(
+        resolver.target(rri('https://other.example/../../evil')),
+        `${targetRealmURL.href}some-listing-xyz/evil`,
+      );
+    });
+
+    test('ListingPathResolver.local() refuses an unregistered prefix-form id with a dot segment', function (assert) {
+      const listing = {
+        name: 'Some Listing',
+        specs: [],
+        examples: [],
+        skills: [],
+        [realmURL]: sourceRealmURL,
+      } as any;
+      let resolver = new ListingPathResolver(
+        ri(targetRealmURL.href),
+        listing,
+        'xyz',
+        virtualNetwork,
+      );
+
+      assert.throws(
+        () => resolver.local(rri('@someone/elsewhere/../../evil')),
+        /has a "\." or "\.\." segment/,
+      );
+    });
+
     test('ListingPathResolver.target() maps cross-realm URLs into target directory', function (assert) {
       const listing = {
         name: 'Some Listing',
@@ -587,7 +674,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
         [realmURL]: sourceRealmURL,
       } as any;
       let resolver = new ListingPathResolver(
-        targetRealmURL.href,
+        ri(targetRealmURL.href),
         listing,
         'xyz',
         virtualNetwork,
@@ -600,6 +687,27 @@ module('Unit | Catalog | Install Plan Builder', function () {
       assert.strictEqual(
         target,
         `${targetRealmURL.href}some-listing-xyz/CyclingMileageLog/abc`,
+      );
+    });
+
+    test('ListingPathResolver.target() keeps a prefix-form target realm in prefix form', function (assert) {
+      const listing = {
+        name: 'Some Listing',
+        specs: [],
+        examples: [],
+        skills: [],
+        [realmURL]: sourceRealmURL,
+      } as any;
+      let resolver = new ListingPathResolver(
+        ri('@someone/target'),
+        listing,
+        'xyz',
+        virtualNetwork,
+      );
+
+      assert.strictEqual(
+        resolver.target(rri(`${sourceRealmURL.href}some-folder/Example/1`)),
+        '@someone/target/some-listing-xyz/some-folder/Example/1',
       );
     });
 
@@ -624,7 +732,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
         [realmURL]: sourceRealmURL,
       } as any;
       let resolver = new ListingPathResolver(
-        targetRealmURL.href,
+        ri(targetRealmURL.href),
         listing,
         'xyz',
         virtualNetwork,
@@ -667,7 +775,7 @@ module('Unit | Catalog | Install Plan Builder', function () {
         [realmURL]: sourceRealmURL,
       } as any;
       let resolver = new ListingPathResolver(
-        targetRealmURL.href,
+        ri(targetRealmURL.href),
         listing,
         'xyz',
         virtualNetwork,

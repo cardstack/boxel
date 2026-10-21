@@ -10,6 +10,10 @@ import {
   createUser,
   updateSynapseUser,
 } from '../helpers/index.ts';
+import {
+  keyWriteTicketStatus,
+  signInSecureSession,
+} from '../helpers/secure-origin-pages.ts';
 import { appURL } from '../support/isolated-realm-server.ts';
 
 test.describe('Profile', () => {
@@ -336,6 +340,14 @@ test.describe('Profile', () => {
   });
 
   test('it can change password in settings', async ({ page }) => {
+    // A secure session signed in with the old password, as whoever it leaked
+    // to would have.
+    let secureSession = await signInSecureSession(
+      page,
+      user.username,
+      user.password,
+    );
+    expect(await keyWriteTicketStatus(page, secureSession)).toBe(201);
     await expect(page.locator('[data-test-current-email]')).toContainText(
       userEmail,
     );
@@ -367,6 +379,10 @@ test.describe('Profile', () => {
     await expect(
       page.locator('[data-test-settings-modal] [data-test-boxel-header-title]'),
     ).toContainText('Settings');
+    expect(
+      await keyWriteTicketStatus(page, secureSession),
+      'the change ended the secure session signed in with the old password',
+    ).toBe(403);
     await page.locator('[data-test-confirm-cancel-button]').click();
 
     await logoutFromProfileSettings(page);

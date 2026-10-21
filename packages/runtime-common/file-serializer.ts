@@ -21,6 +21,7 @@ import { serialize as serializeCodeRef } from './serializers/code-ref.ts';
 import {
   isScopedReference,
   maybeRelativeReference as makeRelativeReference,
+  portableReference,
 } from './url.ts';
 
 export default async function serialize({
@@ -51,14 +52,13 @@ export default async function serialize({
   const metaCodeRefOpts = {
     ...codeRefOpts,
     allowRelative: true as true,
-    ...(realmURL && {
-      maybeRelativeReference: (reference: string) =>
-        makeRelativeReference(
-          new URL(reference, relativeTo),
-          relativeTo,
-          realmURL,
-        ),
-    }),
+    maybeRelativeReference: (reference: string) =>
+      portableReference(
+        new URL(reference, relativeTo),
+        relativeTo,
+        realmURL,
+        virtualNetwork,
+      ),
   };
 
   const result: LooseSingleCardDocument = {
@@ -333,8 +333,10 @@ async function resolveChildDef(
 // What a relationship's `links.self` should be stored as.
 //
 // Inside the writing realm a link is stored relative, whichever form the
-// client sent. Outside it, a scoped reference is stored exactly as sent and
-// anything else is stored resolved.
+// client sent. Outside it, a scoped reference is stored exactly as sent, and a
+// URL is stored by its realm's registered prefix when that realm has one, so
+// the catalog is written as `@cardstack/catalog/…` however the client spelled
+// it. A URL in a realm with no registered prefix is stored resolved.
 //
 // Whether a link is inside the realm is decided in URL space, so the link is
 // resolved before the question is asked: `relativeTo` is always a URL here,
@@ -343,8 +345,8 @@ async function resolveChildDef(
 // unchanged, which looks like "cannot be relativized" even for a link into
 // this very realm.
 //
-// Storing a resolved URL for a cross-realm scoped link is the bug this exists
-// to prevent: it bakes whatever URL the linked realm answers to in this
+// Storing a resolved URL for a link into a realm that has a registered prefix
+// is the bug this exists to prevent: it bakes whatever URL the linked realm answers to in this
 // environment into a realm that is version controlled.
 export function storedRelationshipLink(
   selfLink: string,
@@ -374,6 +376,9 @@ export function storedRelationshipLink(
     isScopedReference(selfLink, virtualNetwork)
   ) {
     return selfLink;
+  }
+  if (relative === resolved.href) {
+    return virtualNetwork.unresolveURL(resolved.href);
   }
   return relative;
 }

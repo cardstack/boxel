@@ -4,11 +4,10 @@ import { zipSync, strToU8 } from 'fflate';
 import { module, test } from 'qunit';
 
 import {
-  baseRealm,
+  baseRRI,
   type FileExtractResponse,
   type RenderRouteOptions,
   type ResolvedCodeRef,
-  type RealmResourceIdentifier,
 } from '@cardstack/runtime-common';
 
 import {
@@ -146,7 +145,7 @@ module('Acceptance | model file-extract', function (hooks) {
   };
 
   const baseFileDefCodeRef = (name: string): ResolvedCodeRef => ({
-    module: `${baseRealm.url}${MODULE_BY_DEF[name]}` as RealmResourceIdentifier,
+    module: baseRRI(MODULE_BY_DEF[name]),
     name,
   });
 

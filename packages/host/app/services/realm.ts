@@ -596,51 +596,6 @@ class RealmResource {
     );
   }
 
-  async setRealmPermission(
-    userId: string,
-    permissions: ('read' | 'write')[] | null,
-  ): Promise<void> {
-    return await this.setRealmPermissionTask.perform(userId, permissions);
-  }
-
-  private setRealmPermissionTask = restartableTask(
-    async (userId: string, permissions: ('read' | 'write')[] | null) => {
-      await this.loginTask.perform();
-      let headers: Record<string, string> = {
-        Accept: SupportedMimeType.Permissions,
-        Authorization: `Bearer ${this.token}`,
-      };
-      let response = await this.network.authedFetch(
-        `${this.realmURL}_permissions`,
-        {
-          method: 'PATCH',
-          headers,
-          body: JSON.stringify({
-            data: {
-              type: 'permissions',
-              id: this.url,
-              attributes: {
-                permissions: {
-                  [userId]: permissions,
-                } as RealmPermissions,
-              },
-            },
-          }),
-        },
-      );
-
-      if (response.status !== 200) {
-        throw new Error(
-          `Failed to set realm permissions for '${userId}:${
-            permissions ? permissions.join() : 'null'
-          }' in realm ${this.url}: ${response.status}`,
-        );
-      }
-      let json = await waitForPromise(response.json());
-      this.realmPermissions = json.data.attributes.permissions;
-    },
-  );
-
   private tokenRefresher = restartableTask(async () => {
     if ((globalThis as any).__boxelRenderContext || !this.claims) {
       return;
@@ -1238,14 +1193,6 @@ export default class RealmService extends Service {
       await this.identifyRealm.perform(url);
     }
     return await resource?.fetchRealmPermissions();
-  }
-
-  async setPermissions(
-    url: string,
-    userId: string,
-    permissions: ('read' | 'write')[],
-  ) {
-    await this.knownRealm(url)?.setRealmPermission(userId, permissions);
   }
 
   removeRealm(url: string) {

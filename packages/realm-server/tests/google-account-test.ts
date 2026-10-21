@@ -54,7 +54,10 @@ module(basename(import.meta.filename), function () {
       assert.ok(vectors.length > 0, 'there are vectors');
       for (let vector of vectors) {
         let { userinfo, expected } = vector;
-        let taken = new Set(vector.existingLocalparts);
+        // Compared without case, as Synapse compares localparts.
+        let taken = new Set(
+          vector.existingLocalparts.map((localpart) => localpart.toLowerCase()),
+        );
         let outcome: unknown;
         try {
           let resolved = await resolveGoogleAccount(
@@ -66,7 +69,8 @@ module(basename(import.meta.filename), function () {
             },
             {
               usersByEmail: async () => vector.usersByEmail,
-              localpartTaken: async (localpart) => taken.has(localpart),
+              localpartTaken: async (localpart) =>
+                taken.has(localpart.toLowerCase()),
             },
           );
           outcome = {

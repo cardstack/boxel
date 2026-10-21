@@ -395,6 +395,7 @@ function allCheckCorrectnessToolsHaveResults(
 function shouldPromptCheckCorrectnessSummary(
   history: DiscreteMatrixEvent[],
   aiBotUserId: string,
+  followUpsByMessage: ReadonlyMap<string, CorrectnessFollowUp[]>,
 ) {
   let lastEvent = history[history.length - 1];
   if (!isToolResultEvent(lastEvent)) {
@@ -404,10 +405,8 @@ function shouldPromptCheckCorrectnessSummary(
   if (!batch) {
     return false;
   }
-  // A batch that passed has its own note, sent after the tool results, and
-  // it is the only one the model should get: this summary sizes the reply
-  // at one sentence, which would cut short the answer that note asks for.
-  if (checkCorrectnessBatchPassed(batch, history)) {
+  let followUps = followUpsByMessage.get(history[batch.sourceIndex].event_id);
+  if (!followUps || !needsCheckCorrectnessSummary(followUps)) {
     return false;
   }
   let lastNonResultIndex = findLastIndex(
@@ -419,6 +418,28 @@ function shouldPromptCheckCorrectnessSummary(
   }
   let lastNonResultEvent = history[lastNonResultIndex];
   return lastNonResultEvent.sender === aiBotUserId;
+}
+
+// Whether a batch, given the follow-ups its checks produced in the history,
+// still needs the trailing note. Only a check that did not come back clean
+// and carries no instruction of its own calls for it. A batch whose checks
+// passed already has the success note, and a second note about the same
+// results would only repeat it. A batch with any instruction to act on (fix
+// the errors, fix the warnings, stop at the attempt limit) leaves it out:
+// the note asks the model to finish its answer, which read last competes with
+// that instruction. A canceled check never ran, so there is nothing to note,
+// and telling the model to carry on would work against the stop or the newer
+// message that canceled it.
+function needsCheckCorrectnessSummary(
+  followUps: readonly CorrectnessFollowUp[],
+): boolean {
+  return (
+    followUps.includes('unresolved') &&
+    !followUps.some(
+      (followUp) =>
+        followUp === 'fix' || followUp === 'limit' || followUp === 'warnings',
+    )
+  );
 }
 
 // The checks one message asked for: the message a check result answers, and
@@ -452,21 +473,6 @@ function checkCorrectnessBatchFor(
     return undefined;
   }
   return { sourceIndex, requests };
-}
-
-// Whether every check in the batch passed. Results come after the message
-// that asked for them, so only those events are searched.
-function checkCorrectnessBatchPassed(
-  batch: CheckCorrectnessBatch,
-  history: DiscreteMatrixEvent[],
-): boolean {
-  let laterEvents = history.slice(batch.sourceIndex + 1);
-  return batch.requests.every((request) => {
-    let result = findLast(laterEvents, (event) =>
-      isTerminalToolResultEventFor(event, request.id!),
-    ) as ToolResultEvent | undefined;
-    return result !== undefined && correctnessCheckPassed(result);
-  });
 }
 
 function getCheckCorrectnessToolRequests(
@@ -1551,12 +1557,17 @@ function toToolCalls(
   );
 }
 
+// The prompt messages for a bot message's tool results, and the follow-up
+// each of its correctness checks produced (empty when it asked for none).
 async function toResultMessages(
   event: CardMessageEvent,
   toolResults: ToolResultEvent[] = [],
   client: MatrixClient,
   history: DiscreteMatrixEvent[],
-): Promise<OpenAIPromptMessage[]> {
+): Promise<{
+  messages: OpenAIPromptMessage[];
+  correctnessFollowUps: CorrectnessFollowUp[];
+}> {
   let toolResultEntries = await Promise.all(
     promptToolRequests(event, toolResults).map(
       async (toolRequest: Partial<EncodedToolRequest>) => {
@@ -1566,11 +1577,12 @@ async function toResultMessages(
           return {
             toolMessage: unansweredToolMessage(event, toolRequest.id!),
             followUpMessage: undefined,
+            correctnessFollowUp: undefined,
           };
         }
         let content: string;
         let followUpUserMessage: string | undefined;
-        let checkPassed: boolean | undefined;
+        let correctnessFollowUp: CorrectnessFollowUp | undefined;
         let status = toolResult.content['m.relates_to']?.key;
         let isCheckCorrectnessRequest =
           decodedToolRequest?.name === CHECK_CORRECTNESS_TOOL_NAME;
@@ -1581,7 +1593,7 @@ async function toResultMessages(
           );
           content = checkCorrectnessContent.toolMessage;
           followUpUserMessage = checkCorrectnessContent.followUpUserMessage;
-          checkPassed = correctnessCheckPassed(toolResult);
+          correctnessFollowUp = checkCorrectnessContent.followUp;
         } else if (isReadFileCommand(decodedToolRequest)) {
           let fileUrl = getReadFileUrl(decodedToolRequest);
           if (fileUrl && !isFileAttachedInRoom(fileUrl, history)) {
@@ -1624,7 +1636,7 @@ async function toResultMessages(
               content: followUpUserMessage,
             } as OpenAIPromptMessage)
           : undefined;
-        return { toolMessage, followUpMessage, checkPassed };
+        return { toolMessage, followUpMessage, correctnessFollowUp };
       },
     ),
   );
@@ -1633,16 +1645,17 @@ async function toResultMessages(
       .map((entry) => entry?.toolMessage)
       .filter((message): message is OpenAIPromptMessage => Boolean(message)) ??
     [];
+  let correctnessFollowUps = toolResultEntries
+    .map((entry) => entry?.correctnessFollowUp)
+    .filter((followUp): followUp is CorrectnessFollowUp => Boolean(followUp));
   // The checks one message asked for get one instruction for the batch. If
   // any of them did not pass, the success note is left out: it would tell the
   // model the write passed and to finish, next to the instruction to fix it.
-  // Checks that end the same way share one note, so the model reads the same
-  // instruction once, not once per file.
-  // A request to fix warnings displaces it the same way.
-  let anyCheckNotPassed = toolResultEntries.some(
-    (entry) =>
-      entry?.checkPassed === false ||
-      entry?.followUpMessage?.content === CORRECTNESS_WARNINGS_FIX_INSTRUCTION,
+  // A request to fix warnings displaces it the same way. Checks that end the
+  // same way share one note, so the model reads the same instruction once,
+  // not once per file.
+  let anyCheckNotPassed = correctnessFollowUps.some(
+    (followUp) => followUp !== 'success' && followUp !== 'pending',
   );
   let followUpMessages = uniqBy(
     toolResultEntries
@@ -1655,7 +1668,10 @@ async function toResultMessages(
       ) ?? [],
     (message) => message.content,
   );
-  return [...toolMessages, ...followUpMessages];
+  return {
+    messages: [...toolMessages, ...followUpMessages],
+    correctnessFollowUps,
+  };
 }
 
 function buildCheckCorrectnessResultContent(
@@ -1666,6 +1682,7 @@ function buildCheckCorrectnessResultContent(
   if (!toolResult) {
     return {
       toolMessage: `Check correctness for ${targetDescription} is still pending.`,
+      followUp: 'pending',
     };
   }
   let status = toolResult.content['m.relates_to']?.key ?? 'unknown';
@@ -1690,22 +1707,28 @@ function buildCheckCorrectnessResultContent(
   if (read.kind === 'unreadable' && status === 'applied') {
     return {
       toolMessage: `The correctness result for ${targetDescription} could not be read${read.reason ? `: ${read.reason}` : ''}.`,
+      followUp: 'unresolved',
     };
   }
   if (status === 'applied') {
     return {
       toolMessage: `Check correctness passed for ${targetDescription}.`,
       followUpUserMessage: CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION,
+      followUp: 'success',
     };
   }
+  let followUp: CorrectnessFollowUp =
+    status === 'canceled' ? 'canceled' : 'unresolved';
   let failureReason = toolResult.content.failureReason;
   if (failureReason) {
     return {
       toolMessage: `Check correctness was marked as ${status} for ${targetDescription}: ${failureReason}`,
+      followUp,
     };
   }
   return {
     toolMessage: `Check correctness was marked as ${status} for ${targetDescription}.`,
+    followUp,
   };
 }
 
@@ -1742,9 +1765,26 @@ type CorrectnessResultSummary = {
   warnings: string[];
 };
 
+// What a check's result asks of the model next: fix its errors, stop at the
+// attempt limit, fix its warnings, note that it passed (`success`), nothing
+// it can act on (`unresolved`: the card says incorrect without naming an
+// error, the result could not be read, the check failed or was declined),
+// nothing because the check never ran (`canceled`), or nothing yet
+// (`pending`). The history's follow-up messages and the trailing note are
+// both decided from it.
+type CorrectnessFollowUp =
+  | 'fix'
+  | 'limit'
+  | 'warnings'
+  | 'success'
+  | 'unresolved'
+  | 'canceled'
+  | 'pending';
+
 type CheckCorrectnessResultContent = {
   toolMessage: string;
   followUpUserMessage?: string;
+  followUp: CorrectnessFollowUp;
 };
 
 type FormattedCorrectnessSummary = {
@@ -1781,14 +1821,16 @@ const CORRECTNESS_WARNINGS_FIX_INSTRUCTION =
 const CORRECTNESS_FAILURE_LIMIT_INSTRUCTION = `Automated correctness fixes have already been attempted ${MAX_CORRECTNESS_FIX_ATTEMPTS} times and the target is still failing validation. Stop proposing further automated patches; instead, summarize the remaining errors and ask the user how they want to proceed. Do not mention correctness or automated checks or tool calls.`;
 
 // Rides the trailing context message after a batch with a check that did
-// not pass (a clean batch gets the success note above instead). This lands
-// mid-answer, right after a file is written, and it is the last thing the
-// model reads before replying — so an instruction that only asks for a
-// summary reads as the end of the work. It was: a build announced as two
-// cards delivered one, reported it was clean, and stopped, because nothing
-// resumes a plan across turns.
-const CHECK_CORRECTNESS_SUMMARY_INSTRUCTION =
-  'The automated correctness checks have finished. Summarize the results based on the tool output above in one short sentence. Do not mention: correctness, automated correctness checks, tool calls. If work you already described remains unfinished, carry straight on with it in the same reply — this is a note on what just landed, not a request to stop.';
+// not come back clean and no instruction to act on: a card that says it is
+// incorrect without naming an error, a result card that could not be read, or
+// a check marked failed or invalid (see needsCheckCorrectnessSummary for the
+// batches that leave it out).
+// It is the last thing the model reads before replying, right after a file
+// is written, so it sizes the note at one line and sends the model back to
+// the user's message: an instruction that only asks for a summary reads as
+// the end of the work, and nothing resumes a plan across turns.
+export const CHECK_CORRECTNESS_SUMMARY_INSTRUCTION =
+  'The automated correctness checks have finished, and at least one did not come back clean. Note the outcome in at most one line of your reply, based on the tool output above; if it leaves something open, say what. Then finish your answer to the user: cover everything their last message asked for that you have not yet answered, any closing line your skills require, and any change you made that they did not ask for. If work you already described remains unfinished, carry straight on with it in the same reply. This is a note on what just landed, not a request to stop. Do not mention correctness, automated checks or tool calls.';
 
 // What a check result carries: no result card at all (a result with no
 // output), a card whose content could not be read (its download failed, or
@@ -2097,29 +2139,33 @@ function toCheckCorrectnessResultContent(
       return {
         toolMessage,
         followUpUserMessage: CORRECTNESS_WARNINGS_FIX_INSTRUCTION,
+        followUp: 'warnings',
       };
     }
     return {
       toolMessage,
       followUpUserMessage: CORRECTNESS_SUCCESS_SUMMARY_INSTRUCTION,
+      followUp: 'success',
     };
   }
   // Not passed, but nothing listed to fix (the card says incorrect without
   // naming an error): no note, and the trailing summary covers it.
   if (!formattedSummary.hasErrors) {
-    return { toolMessage };
+    return { toolMessage, followUp: 'unresolved' };
   }
 
   if (attemptNumber >= MAX_CORRECTNESS_FIX_ATTEMPTS) {
     return {
       toolMessage,
       followUpUserMessage: CORRECTNESS_FAILURE_LIMIT_INSTRUCTION,
+      followUp: 'limit',
     };
   }
 
   return {
     toolMessage,
     followUpUserMessage: CODE_FIX_INSTRUCTION,
+    followUp: 'fix',
   };
 }
 
@@ -2141,6 +2187,10 @@ export async function buildPromptForModel(
     throw new Error("Username must be a full id, e.g. '@aibot:localhost'");
   }
   let historicalMessages: OpenAIPromptMessage[] = [];
+  // The follow-up each correctness check produced, by the bot message that
+  // asked for the checks, so the trailing note is decided from the same
+  // results the history carries.
+  let correctnessFollowUpsByMessage = new Map<string, CorrectnessFollowUp[]>();
   // History through the compaction's cut point is replaced by its summary,
   // which leads the history. Single messages are never shortened or edited.
   for (let event of historyAfterCompaction(history, compaction)) {
@@ -2175,14 +2225,17 @@ export async function buildPromptForModel(
         }
         historicalMessages.push(historicalMessage);
       }
-      (
+      let { messages: resultMessages, correctnessFollowUps } =
         await toResultMessages(
           event as CardMessageEvent,
           toolResults,
           client,
           history,
-        )
-      ).forEach((message) => historicalMessages.push(message));
+        );
+      historicalMessages.push(...resultMessages);
+      if (correctnessFollowUps.length) {
+        correctnessFollowUpsByMessage.set(event.event_id, correctnessFollowUps);
+      }
     }
     if (
       event.sender !== aiBotUserId &&
@@ -2283,7 +2336,11 @@ export async function buildPromptForModel(
     TRAILING_CONTEXT_PREAMBLE,
     contextContent,
     unsupportedNote,
-    shouldPromptCheckCorrectnessSummary(history, aiBotUserId)
+    shouldPromptCheckCorrectnessSummary(
+      history,
+      aiBotUserId,
+      correctnessFollowUpsByMessage,
+    )
       ? CHECK_CORRECTNESS_SUMMARY_INSTRUCTION
       : undefined,
   ]

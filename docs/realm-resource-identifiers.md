@@ -85,10 +85,11 @@ Registration happens in two places:
   --fromUrl='@cardstack/catalog/' --toUrl="${CATALOG_REALM_URL}"
   ```
 
-Prefixes are a convention, not a registry: `@cardstack/<realm>/` maps to
-`<realm-server>/<realm>/`. `boxel-cli` relies on exactly this convention to
-resolve an RRI against the active profile's realm-server URL without consulting
-a VirtualNetwork at all (`packages/boxel-cli/src/lib/resolve-realm-identifier.ts`).
+A prefix's URL is whatever its mapping says, not a naming convention.
+`boxel-cli` still resolves `@cardstack/<realm>/` as `<realm-server>/<realm>/`
+without a VirtualNetwork (`packages/boxel-cli/src/lib/resolve-realm-identifier.ts`).
+ADR 002 §1.2 forbids that: a client without a VirtualNetwork builds one from
+the prefix map the realm server serves.
 
 Realms with no registered prefix — most user workspaces — are addressed by
 their URL, and that URL is their RRI. Nothing about the identifier system
@@ -143,7 +144,7 @@ identifiers arriving there are already canonical and only need joining — see
 | ------------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `toURL(rri)`              | RRI → `URL`             | Resolve a prefix through its mapping, or parse a URL-form RRI. Throws for an unmapped bare identifier.                                 |
 | `toURLHref(rri)`          | RRI → `string`          | Same resolution, memoized, no `URL` object allocated.                                                                                  |
-| `toRealURLHref(id)`       | any spelling → `string` | The canonical store key. Also collapses a virtual alias onto its real backing URL, so every spelling of one card converges on one key. |
+| `toRealURLHref(id)`       | any spelling → `string` | Internal store key only. Also collapses a virtual alias onto its real backing URL, so every spelling of one card converges on one key. |
 | `unresolveURL(url)`       | URL → RRI               | The inverse: rewrite a URL back to prefix form when a mapping matches. Chases through URL aliases first.                               |
 | `unresolveURLs(urls)`     | URL[] → RRI[]           | Canonicalize and dedupe a set (dependency lists, etc.).                                                                                |
 | `equivalentURLForms(url)` | URL → string[]          | Every known spelling of one resource — used to match index data written before a reference was canonicalized.                          |
@@ -270,8 +271,9 @@ The well-known base refs are built from the `@cardstack/base/` prefix in
 `skillCardRef`, …), so they match what `identifyCard` emits for base classes.
 
 **Card JSON.** `data.id`, `meta.adoptsFrom.module`, `links.self`, and
-relationship links are all RRIs. (`meta.realmURL` is the exception: it carries
-the realm's served URL, not its prefix.) Within a realm they are usually
+relationship links are all RRIs. (`meta.realmURL` still carries the realm's
+served URL, not its prefix. ADR 002 §1.1 deprecates it in favor of
+`meta.realmIdentifier`, an RRI.) Within a realm they are usually
 written relative (`./sibling`, `../Model/abc`) and resolved against the
 document's own id; cross-realm references are absolute, in whichever form that
 realm uses:
