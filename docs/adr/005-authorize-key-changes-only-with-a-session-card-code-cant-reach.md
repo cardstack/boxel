@@ -172,15 +172,17 @@ the validation session, which names no account.
 
 Like sign-out, the request is best effort. When it fails, a session signed in
 with the old password lasts until it expires, at most a week. Whoever holds
-the old password can try to make it fail by keeping the account's limit on
-failed attempts full with wrong passwords, so the pages try again for a
-minute when the limit refuses them. A correct password never counts against
-the limit, so each try competes only for the next free attempt. The limit
-stays because the route would otherwise answer guesses at the new password
-without limit to whoever still holds a session: that session ending is the
-answer. A password set
-outside Boxel, such as by an operator through Synapse's admin API, ends no
-session.
+the old password can make it fail on purpose: by keeping the account's limit
+on failed attempts full with wrong passwords, they get the request refused.
+The pages try again for a minute when the limit refuses them, which helps
+only against someone filling it by hand. A refused attempt costs nothing, and
+the limit says exactly when its next attempt is free, so a script that polls
+faster than the page takes every free attempt and keeps its sessions for the
+week. The limit stays anyway: without it, the route would answer guesses at
+the new password without limit to whoever still holds a session, since that
+session ending is the answer. Closing the gap needs a proof that doesn't
+share the sign-in limit. A password set outside Boxel, such as by an
+operator through Synapse's admin API, ends no session.
 
 ## 3. Considered options
 

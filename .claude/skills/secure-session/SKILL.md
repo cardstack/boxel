@@ -92,11 +92,16 @@ whether or not a row ended. Card code never sees the new password, so it
 can't end the CLI's sessions this way (ADR 005 §1.6). The call is best
 effort: the password stays changed when it fails, and a session signed in with
 the old password then lasts until it expires. Whoever holds the old password
-can keep the account's failure limit full to make it fail, so
+can keep the account's failure limit full to make it fail.
 `endSessionsForNewPassword` in `secure-origin/session.js` (which the credential
 fields import too) tries a 429 again, after `retryAfterMs`, for up to a
-minute. Don't drop the limit on this route: a caller holding a session would
-learn the new password from their session ending. A password set any other way,
+minute, but that only beats someone filling the limit by hand: a refused
+attempt costs nothing and `retryAfterMs` says when the next one is free, so a
+script that polls faster than the page takes every free attempt and keeps its
+sessions for the week. Don't treat the retry as the defense, and don't drop
+the limit on this route either: a caller holding a session would learn the
+new password from their session ending. Closing the gap needs a proof that
+doesn't share the sign-in limit. A password set any other way,
 such as by an operator through Synapse's admin `reset_password`, ends no
 secure session. To end them, expire the rows.
 

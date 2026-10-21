@@ -118,10 +118,12 @@ export async function signInWithPassword(
 // failure here is reported to the caller, which carries on regardless.
 //
 // The check shares the account's limit on failed password attempts with
-// signing in, which whoever knows the old password can keep full. So a 429 is
-// tried again, when the server says it may be, for up to a minute: a correct
-// password never counts against the limit, so each try competes only for the
-// next free attempt.
+// signing in, which whoever knows the old password can keep full. A 429 is
+// tried again, when the server says it may be, for up to a minute. That beats
+// someone filling the limit by hand, not a script: a refused attempt costs
+// nothing and the server says exactly when the next one is free, so a script
+// polling faster than this takes every free attempt, and its sessions last
+// the week (ADR 005 §2).
 export async function endSessionsForNewPassword(
   config,
   { username, password },
