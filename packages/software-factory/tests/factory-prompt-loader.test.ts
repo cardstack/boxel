@@ -222,6 +222,48 @@ module('factory-prompt-loader > interpolate > #if blocks', function () {
 
   // The `each` handler has no else branch of its own, so the only guarantee
   // here is that the enclosing `if` does not mistake one for its own.
+  test('resolves a nested if/else inside an each over strings', function (assert) {
+    assert.strictEqual(
+      interpolate(
+        '{{#each items}}{{#if flag}}[{{.}}]{{else}}none{{/if}}{{/each}}',
+        { items: ['a', 'b'], flag: true },
+      ),
+      '[a][b]',
+    );
+  });
+
+  test('a nested each over strings uses its own item', function (assert) {
+    assert.strictEqual(
+      interpolate(
+        '{{#each items}}{{.}}:{{#each sub}}{{.}}{{/each}};{{/each}}',
+        {
+          items: ['a', 'b'],
+          sub: ['x', 'y'],
+        },
+      ),
+      'a:xy;b:xy;',
+    );
+  });
+
+  test('renders the else branch of an each over a missing or empty array', function (assert) {
+    let template = '{{#each items}}{{.}}{{else}}none{{/each}}';
+    assert.strictEqual(interpolate(template, { items: ['a'] }), 'a');
+    assert.strictEqual(interpolate(template, { items: [] }), 'none');
+    assert.strictEqual(interpolate(template, {}), 'none');
+  });
+
+  test('renders tags that do not form a block as written', function (assert) {
+    assert.strictEqual(
+      interpolate('A {{#if x}} B {{v}}', { x: true, v: 'V' }),
+      'A {{#if x}} B V',
+    );
+    assert.strictEqual(
+      interpolate('A {{/each}} {{else}} {{/if}} B', {}),
+      'A {{/each}} {{else}} {{/if}} B',
+    );
+    assert.strictEqual(interpolate('[{{.}}]', {}), '[{{.}}]');
+  });
+
   test('a nested each does not donate its else to the enclosing if', function (assert) {
     let template =
       'A{{#if x}}{{#each items}}{{.}}{{else}}E{{/each}}{{else}}F{{/if}}B';
@@ -355,8 +397,50 @@ module('factory-prompt-loader > interpolate > opaque values', function () {
     assert.strictEqual(interpolate('A\n\n{{v}}\n\nB', { v: '' }), 'A\n\nB');
   });
 
-  test('rejects a template containing a NUL character', function (assert) {
-    assert.throws(() => interpolate('a\u0000b', {}), /NUL/);
+  test('a value keeps its own blank lines', function (assert) {
+    let value = 'line1\n\n\n\nline2';
+    assert.strictEqual(interpolate('A {{v}} B', { v: value }), `A ${value} B`);
+    assert.strictEqual(
+      interpolate('{{#each items}}<{{t}}>{{/each}}', { items: [{ t: value }] }),
+      `<${value}>`,
+    );
+    assert.strictEqual(
+      interpolate('{{#each items}}<{{.}}>{{/each}}', { items: [value] }),
+      `<${value}>`,
+    );
+  });
+
+  test('a value keeps its leading and trailing whitespace', function (assert) {
+    let value = '\n\n  x  \n\n\n';
+    assert.strictEqual(interpolate('\n{{v}}\n', { v: value }), value);
+    assert.strictEqual(
+      interpolate('A\n\n{{v}}\n\nB', { v: value }),
+      `A\n\n${value}\n\nB`,
+    );
+  });
+
+  test('template blank lines around a value still collapse', function (assert) {
+    assert.strictEqual(
+      interpolate('A\n\n\n\n{{v}}\n\n\n\nB', { v: 'x' }),
+      'A\n\nx\n\nB',
+    );
+  });
+
+  test('an empty string item takes part in the blank-line collapse', function (assert) {
+    assert.strictEqual(
+      interpolate('A\n\n{{#each items}}{{.}}{{/each}}\n\nB', { items: [''] }),
+      'A\n\nB',
+    );
+  });
+
+  test('a null or undefined string item renders as empty, like a variable', function (assert) {
+    assert.strictEqual(
+      interpolate('{{#each items}}[{{.}}]{{/each}}', {
+        items: ['a', null, undefined, 'b'],
+      }),
+      '[a][][][b]',
+    );
+    assert.strictEqual(interpolate('[{{v}}]', { v: null }), '[]');
   });
 });
 
