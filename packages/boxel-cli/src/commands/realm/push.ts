@@ -20,7 +20,7 @@ import {
   saveManifest,
   pathExists,
 } from '../../lib/sync-manifest.ts';
-import { listChangedSince } from '../../lib/git-changes.ts';
+import { listUnchangedSince } from '../../lib/git-changes.ts';
 
 interface PushOptions extends SyncOptions {
   deleteRemote?: boolean;
@@ -82,10 +82,12 @@ class RealmPusher extends RealmSyncBase {
     if (changedSince !== undefined) {
       // The baseline is a git revision the realm is known to hold, not a
       // manifest, so a fresh checkout (a CI runner) uploads only what git
-      // says changed. A file the realm doesn't have goes up too, whatever git
-      // says, so a realm missing files converges on the local tree. Skipped
-      // files are recorded in the new manifest as matching the realm.
-      const changed = await listChangedSince(
+      // says changed. A file is skipped only when git tracks it, reports it
+      // unchanged since the revision, and the realm has it. Everything else
+      // goes up, including files git doesn't track or ignores by rules the
+      // push doesn't read. Skipped files are recorded in the new manifest as
+      // matching the realm.
+      const unchanged = await listUnchangedSince(
         this.options.localDir,
         changedSince,
       );
@@ -93,7 +95,7 @@ class RealmPusher extends RealmSyncBase {
       let missingRemote = 0;
       for (const [relativePath, localPath] of localFiles) {
         if (isProtectedFile(relativePath)) continue;
-        if (changed.has(relativePath)) {
+        if (!unchanged.has(relativePath)) {
           filesToUpload.set(relativePath, localPath);
         } else if (!initialRemoteFiles.has(relativePath)) {
           filesToUpload.set(relativePath, localPath);
@@ -414,7 +416,7 @@ export function registerPushCommand(realm: Command): void {
     .option('--force', 'Upload all files, even if unchanged')
     .option(
       '--changed-since <revision>',
-      'Upload only files that differ from this git revision (one the realm already holds), plus files missing from the realm, instead of comparing against the sync manifest. The local directory must be a git checkout whose history reaches the revision',
+      'Upload only files that differ from this git revision (one the realm already holds), plus files git does not track and files missing from the realm, instead of comparing against the sync manifest. A file edited directly on the realm stays as it is until it changes in git. The local directory must be a git checkout whose history reaches the revision',
     )
     .option(
       '--realm-secret-seed',

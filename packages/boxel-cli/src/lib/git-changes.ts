@@ -29,16 +29,17 @@ function splitNul(output: string): string[] {
 }
 
 /**
- * The paths under `dir`, relative to it, whose working-tree content differs
- * from `revision`: files modified, added or deleted since that commit, plus
- * untracked files git doesn't ignore. A rename counts as a deletion of the old
- * path and an addition of the new one.
+ * The paths under `dir`, relative to it, that git tracks and whose
+ * working-tree content is the same as at `revision`. Anything else under `dir`
+ * — a file modified, added or renamed since that commit, an untracked file,
+ * one git ignores, or a file inside a submodule — is left out, so a caller
+ * that skips only these paths never skips a file git can't vouch for.
  *
  * Throws when `dir` isn't inside a git work tree or `revision` doesn't name a
  * commit in it, which in a CI checkout usually means the history wasn't
  * fetched deep enough to reach it.
  */
-export async function listChangedSince(
+export async function listUnchangedSince(
   dir: string,
   revision: string,
 ): Promise<Set<string>> {
@@ -62,7 +63,9 @@ export async function listChangedSince(
         `(a shallow CI checkout needs a deeper fetch).`,
     );
   }
-  const [changed, untracked] = await Promise.all([
+  const [tracked, changed] = await Promise.all([
+    // A submodule is listed as its own path, never the files inside it.
+    git(dir, ['ls-files', '--cached', '-z']),
     git(dir, [
       'diff',
       '--name-only',
@@ -72,7 +75,7 @@ export async function listChangedSince(
       commit,
       '--',
     ]),
-    git(dir, ['ls-files', '--others', '--exclude-standard', '-z']),
   ]);
-  return new Set([...splitNul(changed), ...splitNul(untracked)]);
+  const changedPaths = new Set(splitNul(changed));
+  return new Set(splitNul(tracked).filter((p) => !changedPaths.has(p)));
 }

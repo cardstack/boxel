@@ -836,6 +836,28 @@ describe('realm push (integration)', () => {
     expect(await fetchRemoteFile(realmUrl, 'b.gts')).toContain('b = 2');
   });
 
+  it('--changed-since uploads an edit to a file git does not track, even one git ignores', async () => {
+    let realmUrl = await createTestRealm();
+    let localDir = makeLocalDir();
+    writeLocalFile(localDir, 'a.gts', 'export const a = 1;\n');
+    let deployed = commitLocal(localDir, 'deployed');
+    // Never committed, so git can't vouch for it; the first push puts it on
+    // the realm.
+    writeLocalFile(localDir, 'local-only.md', '# Before\n');
+    let res1 = await runPush(localDir, realmUrl);
+    expect(res1.ok, res1.stderr).toBe(true);
+    // Ignored by a git rule the push doesn't read, so the push still lists it.
+    writeLocalFile(localDir, '.git/info/exclude', 'local-only.md\n');
+    writeLocalFile(localDir, 'local-only.md', '# After\n');
+
+    let res2 = await runPush(localDir, realmUrl, ['--changed-since', deployed]);
+    expect(res2.ok, res2.stderr).toBe(true);
+
+    expect(await fetchRemoteFile(realmUrl, 'local-only.md')).toContain(
+      '# After',
+    );
+  });
+
   it('--changed-since at the current commit uploads nothing', async () => {
     let realmUrl = await createTestRealm();
     let localDir = makeLocalDir();
