@@ -1,3 +1,5 @@
+import { registerDestructor } from '@ember/destroyable';
+import type Owner from '@ember/owner';
 import {
   click,
   waitFor,
@@ -15,6 +17,7 @@ import { module, test } from 'qunit';
 
 import { baseRealm, baseRealmRRI } from '@cardstack/runtime-common';
 
+import type ScrollPositionService from '@cardstack/host/services/scroll-position-service';
 import WriteTextFileTool from '@cardstack/host/tools/write-text-file';
 import { ScrollPositions } from '@cardstack/host/utils/local-storage-keys';
 
@@ -194,9 +197,49 @@ const friendCardSource = `
   }
 `;
 
+// Records, in order, every scroll position the app stores and every scroll and
+// scrollend on the file-tree panel, so a failing scroll-position assertion
+// shows which step stored the position it restored.
+function traceFileTreeScrolling(owner: Owner): string[] {
+  let trace: string[] = [];
+  let shorten = (key: string) => key.replace(testRealmURL, '');
+  let scrollPositionService = owner.lookup(
+    'service:scroll-position-service',
+  ) as ScrollPositionService;
+  let setScrollPosition = scrollPositionService.setScrollPosition;
+  scrollPositionService.setScrollPosition = function (
+    this: ScrollPositionService,
+    container: string,
+    key: string,
+    position: number,
+  ) {
+    trace.push(`set ${container} ${shorten(key)} ${position}`);
+    return setScrollPosition.call(this, container, key, position);
+  };
+  let onScroll = (event: Event) => {
+    let target = event.target;
+    if (
+      target instanceof HTMLElement &&
+      target.matches('[data-test-togglable-left-panel]')
+    ) {
+      let entry = `${event.type} ${target.scrollTop}`;
+      if (trace[trace.length - 1] !== entry) {
+        trace.push(entry);
+      }
+    }
+  };
+  document.addEventListener('scroll', onScroll, true);
+  document.addEventListener('scrollend', onScroll, true);
+  registerDestructor(owner, () => {
+    document.removeEventListener('scroll', onScroll, true);
+    document.removeEventListener('scrollend', onScroll, true);
+  });
+  return trace;
+}
+
 // Describes the file tree's scroll state, appended to scroll-position
 // assertion messages so a failure shows what was stored and what was rendered.
-function fileTreeScrollDiagnostics() {
+function fileTreeScrollDiagnostics(trace?: string[]) {
   let panel = document.querySelector('[data-test-togglable-left-panel]');
   let selected = document.querySelector('[data-test-file-selected]');
   return JSON.stringify({
@@ -209,6 +252,7 @@ function fileTreeScrollDiagnostics() {
     testingContainerScrollTop: document.getElementById(
       'ember-testing-container',
     )?.scrollTop,
+    trace: trace?.join(' | '),
   });
 }
 
@@ -777,6 +821,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
   });
 
   test('scroll position is restored when returning to file view but only for one file per realm', async function (assert) {
+    let scrollTrace = traceFileTreeScrolling(this.owner);
     window.localStorage.setItem(
       'code-mode-panel-widths',
       JSON.stringify({ leftPanel: 200 }),
@@ -869,7 +914,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     if (!endDirectoryElement) {
       assert.ok(endDirectoryElement, 'end directory should exist');
     } else {
-      let diagnostics = fileTreeScrollDiagnostics();
+      let diagnostics = fileTreeScrollDiagnostics(scrollTrace);
       assert.notOk(
         await elementIsVisible(endDirectoryElement),
         `expected previously-stored scroll position to have been forgotten after choosing another file; ${diagnostics}`,
@@ -887,6 +932,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
       '[data-test-card-url-bar-input]',
       `${testModuleRealm}mango.png`,
     );
+    scrollTrace.push('mark visit other realm');
     await triggerKeyEvent(
       '[data-test-card-url-bar-input]',
       'keypress',
@@ -900,11 +946,13 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     // tree to render so the scroll position under test is the one that realm
     // left behind, not the end-directory position this realm's tree still had.
     await waitFor('[data-test-file="mango.png"]');
+    scrollTrace.push('mark other realm rendered');
 
     await fillIn(
       '[data-test-card-url-bar-input]',
       `http://test-realm/test/Person/1.json`,
     );
+    scrollTrace.push('mark return to Person/1.json');
     await triggerKeyEvent(
       '[data-test-card-url-bar-input]',
       'keypress',
@@ -923,7 +971,7 @@ module('Acceptance | code submode | file-tree tests', function (hooks) {
     if (!endDirectoryElement) {
       assert.ok(endDirectoryElement, 'end directory should exist');
     } else {
-      let diagnostics = fileTreeScrollDiagnostics();
+      let diagnostics = fileTreeScrollDiagnostics(scrollTrace);
       assert.notOk(
         await elementIsVisible(endDirectoryElement),
         `expected previously-stored scroll position to have been forgotten after visiting another realm; ${diagnostics}`,
