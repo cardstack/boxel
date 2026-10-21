@@ -648,10 +648,23 @@ export abstract class RealmSyncBase {
   }> {
     const succeeded: string[] = [];
     for (let i = 0; i < textEntries.length; i += ATOMIC_BATCH_SIZE) {
-      const outcome = await this.postTextAtomic(
-        textEntries.slice(i, i + ATOMIC_BATCH_SIZE),
-        addPaths,
-      );
+      let outcome: Awaited<ReturnType<typeof this.postTextAtomic>>;
+      try {
+        outcome = await this.postTextAtomic(
+          textEntries.slice(i, i + ATOMIC_BATCH_SIZE),
+          addPaths,
+        );
+      } catch (err) {
+        // A request that got no answer (a timeout, a dropped connection)
+        // still leaves the earlier batches written, and the caller records
+        // them only from a returned result.
+        const reason = err instanceof Error ? err.message : String(err);
+        outcome = {
+          succeeded: [],
+          failed: [],
+          fatal: { status: 500, message: `Atomic upload failed: ${reason}` },
+        };
+      }
       succeeded.push(...outcome.succeeded);
       if (outcome.fatal) {
         return { ...outcome, succeeded };
