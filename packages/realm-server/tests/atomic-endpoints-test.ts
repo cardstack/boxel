@@ -11,6 +11,11 @@ import {
   readFileAsText,
   SupportedMimeType,
 } from '@cardstack/runtime-common';
+import type {
+  IncrementalIndexEventContent,
+  IncrementalIndexInitiationContent,
+  RealmEventContent,
+} from '@cardstack/base/matrix-event';
 import {
   setupPermissionedRealmCached,
   createJWT,
@@ -1045,6 +1050,209 @@ module(basename(import.meta.filename), function () {
             storedDoc.data.attributes?.logTitle,
             'Probe',
             'top-level attribute survives the waitForIndex write',
+          );
+        });
+      });
+      module('realm events', function (hooks) {
+        setupPermissionedRealmCached(hooks, {
+          fixture: 'simple',
+          permissions: {
+            '*': ['read', 'write'],
+          },
+          realmURL,
+          onRealmSetup,
+        });
+
+        // Every realm event the realm sends passes through its adapter, so
+        // wrapping the adapter's broadcast records each one a write produced.
+        let restoreBroadcast: (() => void) | undefined;
+        function recordRealmEvents() {
+          let original = testRealmAdapter.broadcastRealmEvent;
+          let events: RealmEventContent[] = [];
+          testRealmAdapter.broadcastRealmEvent = async (event, ...rest) => {
+            events.push(event);
+            return await original.call(testRealmAdapter, event, ...rest);
+          };
+          restoreBroadcast = () => {
+            testRealmAdapter.broadcastRealmEvent = original;
+          };
+          return events;
+        }
+        hooks.afterEach(function () {
+          restoreBroadcast?.();
+          restoreBroadcast = undefined;
+        });
+
+        function eventKinds(events: RealmEventContent[]) {
+          return events.map((event) =>
+            'indexType' in event
+              ? `${event.eventName}:${event.indexType}`
+              : event.eventName,
+          );
+        }
+
+        function peopleBatch(names: string[]) {
+          return {
+            'atomic:operations': names.map((name) => ({
+              op: 'add',
+              href: `${name}.json`,
+              data: {
+                type: 'card',
+                attributes: { firstName: name },
+                meta: {
+                  adoptsFrom: { module: './person', name: 'Person' },
+                },
+              },
+            })),
+          };
+        }
+
+        async function postAtomic(
+          doc: unknown,
+          headers: Record<string, string> = {},
+        ) {
+          let pending = request
+            .post('/_atomic?waitForIndex=true')
+            .set('Accept', SupportedMimeType.JSONAPI)
+            .set(
+              'Authorization',
+              `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+            );
+          for (let [name, value] of Object.entries(headers)) {
+            pending = pending.set(name, value);
+          }
+          return await pending.send(JSON.stringify(doc));
+        }
+
+        test('a multi-file batch sends one initiation, one update and one incremental event', async function (assert) {
+          let events = recordRealmEvents();
+          let response = await postAtomic(
+            peopleBatch(['batch-a', 'batch-b', 'batch-c']),
+          );
+          assert.strictEqual(response.status, 201);
+          await testRealm.incrementalIndexing();
+
+          assert.deepEqual(
+            eventKinds(events),
+            [
+              'index:incremental-index-initiation',
+              'update',
+              'index:incremental',
+            ],
+            'the batch is announced once, not once per file',
+          );
+          let initiation = events[0] as IncrementalIndexInitiationContent;
+          assert.strictEqual(
+            initiation.updatedFile,
+            `${testRealmHref}batch-a.json`,
+            'the initiation names the first file the batch changed',
+          );
+          let incremental = events[2] as IncrementalIndexEventContent;
+          assert.deepEqual(
+            [...incremental.invalidations].sort(),
+            [
+              `${testRealmHref}batch-a`,
+              `${testRealmHref}batch-b`,
+              `${testRealmHref}batch-c`,
+            ],
+            'the completion event names every card the batch wrote',
+          );
+        });
+
+        test('a batch sent with X-Boxel-Realm-Events: none is indexed without any realm event', async function (assert) {
+          let events = recordRealmEvents();
+          let response = await postAtomic(peopleBatch(['quiet-a', 'quiet-b']), {
+            'X-Boxel-Realm-Events': 'none',
+          });
+          assert.strictEqual(response.status, 201);
+          await testRealm.incrementalIndexing();
+
+          assert.deepEqual(eventKinds(events), [], 'no realm event was sent');
+          let card = await request
+            .get('/quiet-b')
+            .set('Accept', SupportedMimeType.CardJson);
+          assert.strictEqual(card.status, 200, 'the card is indexed');
+          assert.strictEqual(
+            (card.body as LooseSingleCardDocument).data.attributes?.firstName,
+            'quiet-b',
+          );
+
+          // The same bytes again leave every file as it is, which otherwise
+          // still sends a completion event.
+          let repeat = await postAtomic(
+            {
+              'atomic:operations': peopleBatch(['quiet-a'])[
+                'atomic:operations'
+              ].map((operation) => ({ ...operation, op: 'update' })),
+            },
+            { 'X-Boxel-Realm-Events': 'none' },
+          );
+          assert.strictEqual(repeat.status, 201);
+          await testRealm.incrementalIndexing();
+          assert.deepEqual(
+            eventKinds(events),
+            [],
+            'an unchanged batch sends nothing either',
+          );
+        });
+
+        test('per-file source writes and removals sent with X-Boxel-Realm-Events: none send no realm event', async function (assert) {
+          let events = recordRealmEvents();
+          let auth = `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
+          let write = await request
+            .post('/quiet-notes.txt')
+            .set('Accept', SupportedMimeType.CardSource)
+            .set('Content-Type', 'text/plain;charset=UTF-8')
+            .set('Authorization', auth)
+            .set('X-Boxel-Realm-Events', 'none')
+            .send('hello');
+          assert.strictEqual(write.status, 204);
+          let binary = await request
+            .post('/quiet-bytes.bin')
+            .set('Content-Type', 'application/octet-stream')
+            .set('Authorization', auth)
+            .set('X-Boxel-Realm-Events', 'none')
+            .send(Buffer.from([1, 2, 3]));
+          assert.strictEqual(binary.status, 204);
+          let removal = await request
+            .delete('/quiet-notes.txt')
+            .set('Accept', SupportedMimeType.CardSource)
+            .set('Authorization', auth)
+            .set('X-Boxel-Realm-Events', 'none');
+          assert.strictEqual(removal.status, 204);
+          await testRealm.incrementalIndexing();
+
+          assert.deepEqual(eventKinds(events), [], 'no realm event was sent');
+          assert.notOk(
+            await testRealmAdapter.exists('quiet-notes.txt'),
+            'the removal landed',
+          );
+          assert.ok(
+            await testRealmAdapter.exists('quiet-bytes.bin'),
+            'the binary write landed',
+          );
+        });
+
+        test('removing several files at once sends one initiation', async function (assert) {
+          await postAtomic(peopleBatch(['gone-a', 'gone-b', 'gone-c']));
+          await testRealm.incrementalIndexing();
+          let events = recordRealmEvents();
+
+          await testRealm.deleteAll([
+            'gone-a.json',
+            'gone-b.json',
+            'gone-c.json',
+          ]);
+          await testRealm.incrementalIndexing();
+
+          assert.deepEqual(
+            eventKinds(events),
+            [
+              'index:incremental-index-initiation',
+              'update',
+              'index:incremental',
+            ],
+            'the removal is announced once, not once per file',
           );
         });
       });

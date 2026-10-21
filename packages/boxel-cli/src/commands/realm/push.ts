@@ -339,6 +339,11 @@ export interface PushCommandOptions {
   delete?: boolean;
   dryRun?: boolean;
   force?: boolean;
+  /**
+   * False to push without the realm announcing the changes to its
+   * subscribers (see `SyncOptions.realmEvents`).
+   */
+  realmEvents?: boolean;
   profileManager?: ProfileManager;
   /**
    * Pre-resolved realm secret seed for administrative access. When set, the
@@ -367,6 +372,10 @@ export function registerPushCommand(realm: Command): void {
     .option('--dry-run', 'Show what would be done without making changes')
     .option('--force', 'Upload all files, even if unchanged')
     .option(
+      '--no-realm-events',
+      'Index the pushed changes without announcing them to open tabs, which pick them up on their next load (for deploys)',
+    )
+    .option(
       '--realm-secret-seed',
       'Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
     )
@@ -378,6 +387,7 @@ export function registerPushCommand(realm: Command): void {
           delete?: boolean;
           dryRun?: boolean;
           force?: boolean;
+          realmEvents?: boolean;
           realmSecretSeed?: boolean;
         },
       ) => {
@@ -388,6 +398,7 @@ export function registerPushCommand(realm: Command): void {
           delete: options.delete,
           dryRun: options.dryRun,
           force: options.force,
+          realmEvents: options.realmEvents,
           realmSecretSeed,
         });
       },
@@ -432,6 +443,7 @@ export async function pushCommand(
         deleteRemote: options.delete,
         dryRun: options.dryRun,
         force: options.force,
+        realmEvents: options.realmEvents,
       },
       authenticator,
     );

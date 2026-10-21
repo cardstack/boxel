@@ -97,6 +97,14 @@ export interface SyncOptions {
    * default.
    */
   waitForIndex?: boolean;
+  /**
+   * When false, every write this sync sends carries
+   * `X-Boxel-Realm-Events: none`, so the realm indexes the changes without
+   * announcing them to its subscribers. Open tabs pick the new content up on
+   * their next load instead of resetting mid-session. For pushes that replace
+   * a realm's content wholesale, such as a deploy. On by default.
+   */
+  realmEvents?: boolean;
 }
 
 const REMOTE_CONCURRENCY = 10;
@@ -149,6 +157,16 @@ export abstract class RealmSyncBase {
     }
     const cleanDir = dir.replace(/^\/+|\/+$/g, '');
     return `${this.normalizedRealmUrl}${cleanDir}/`;
+  }
+
+  // Headers for a request that writes or removes a file, with the realm-event
+  // opt-out added when this sync asked for it.
+  protected writeHeaders(
+    headers: Record<string, string>,
+  ): Record<string, string> {
+    return this.options.realmEvents === false
+      ? { ...headers, 'X-Boxel-Realm-Events': 'none' }
+      : headers;
   }
 
   protected buildFileUrl(relativePath: string): string {
@@ -444,10 +462,10 @@ export abstract class RealmSyncBase {
 
     const response = await this.authenticator.authedRealmFetch(url, {
       method: 'POST',
-      headers: {
+      headers: this.writeHeaders({
         'Content-Type': 'text/plain;charset=UTF-8',
         Accept: SupportedMimeType.CardSource,
-      },
+      }),
       body: content,
     });
 
@@ -474,9 +492,9 @@ export abstract class RealmSyncBase {
 
     const response = await this.authenticator.authedRealmFetch(url, {
       method: 'POST',
-      headers: {
+      headers: this.writeHeaders({
         'Content-Type': SupportedMimeType.OctetStream,
-      },
+      }),
       body: bytes,
     });
 
@@ -668,10 +686,10 @@ export abstract class RealmSyncBase {
       : `${this.normalizedRealmUrl}_atomic`;
     const response = await this.authenticator.authedRealmFetch(url, {
       method: 'POST',
-      headers: {
+      headers: this.writeHeaders({
         'Content-Type': 'application/vnd.api+json',
         Accept: 'application/vnd.api+json',
-      },
+      }),
       body: JSON.stringify({ 'atomic:operations': operations }),
     });
 
@@ -804,9 +822,9 @@ export abstract class RealmSyncBase {
     try {
       response = await this.authenticator.authedRealmFetch(url, {
         method: 'DELETE',
-        headers: {
+        headers: this.writeHeaders({
           Accept: SupportedMimeType.CardSource,
-        },
+        }),
         signal: AbortSignal.timeout(DELETE_TIMEOUT_MS),
       });
     } catch (error) {
