@@ -1322,13 +1322,32 @@ jobs:
           && steps.finalize.outputs.build_id != ''
           && env.BROWSERSTACK_USERNAME != ''
           && env.BROWSERSTACK_ACCESS_KEY != ''
+        # Finalize returns before Percy has processed the build, and Percy
+        # refuses to review a build it is still processing: the reject answers
+        # "Can only review finished builds". Left there, the build finishes
+        # unrejected and on main is auto-approved into the baseline. So that
+        # one answer is tried again until the build finishes; any other error
+        # fails the step at once. The deadline keeps the loop inside the job's
+        # timeout-minutes.
         run: |
-          set -eo pipefail
-          npx percy build:reject "${{ steps.finalize.outputs.build_id }}"
+          set -uo pipefail
+          deadline=$((SECONDS + 480))
+          until npx percy build:reject "$BUILD_ID" 2>&1 | tee /tmp/percy-reject.log; do
+            if ! grep -q 'Can only review finished builds' /tmp/percy-reject.log; then
+              exit 1
+            fi
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "::error::Percy was still processing build $BUILD_ID after 8 minutes, so it could not be rejected. An incomplete snapshot set may become a baseline: reject ${{ steps.finalize.outputs.build_url }} by hand."
+              exit 1
+            fi
+            echo "Percy is still processing build $BUILD_ID; trying the reject again in 20s"
+            sleep 20
+          done
           echo "::warning::Rejected Percy build ${{ steps.finalize.outputs.build_url }} — the shards attempted ${{ steps.tally.outputs.attempted }} snapshot(s) of which the Percy CLI received ${{ steps.tally.outputs.taken }}. An incomplete snapshot set must not become a baseline."
         working-directory: packages/host
         env:
           PERCY_TOKEN: ${{ secrets.PERCY_TOKEN_HOST }}
+          BUILD_ID: ${{ steps.finalize.outputs.build_id }}
 
       # The exact complement of the reject step's condition among sealed
       # builds, so an incomplete build never passes through both silently.
