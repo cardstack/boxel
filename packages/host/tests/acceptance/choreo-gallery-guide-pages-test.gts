@@ -22,6 +22,7 @@ import {
 } from '../helpers';
 import {
   choreoGalleryGuidePages,
+  choreoGalleryGuides,
   choreoGalleryRealmOf,
 } from '../helpers/choreo-gallery';
 import { setupMockMatrix } from '../helpers/mock-matrix';
@@ -123,8 +124,8 @@ module('Acceptance | Choreo gallery | guide pages', function (hooks) {
     assert
       .dom('[data-guide-nav-link]')
       .exists(
-        { count: 88 },
-        'every guide the index lists, whether or not this realm holds it',
+        { count: Object.keys(choreoGalleryGuides()).length },
+        'every guide, whether or not this realm holds it',
       );
     assert
       .dom('[data-guide-nav] [aria-current="page"]')
