@@ -151,14 +151,14 @@ jobs:
             glimmer-motion:
               - *shared
               - 'packages/glimmer-motion/**'
+            secure-origin:
+              - *shared
+              - 'packages/secure-origin/**'
             # Realm content the realm-server image carries and each deploy
             # copies onto the realm's disk, so a change to it needs a staging
             # deploy even when it touches no other boxel package. The gallery
             # realm's film app is built from choreo-film-app, which compiles
             # choreo and glimmer-motion from source.
-            secure-origin:
-              - *shared
-              - 'packages/secure-origin/**'
             deployed-realms:
               - 'packages/choreo-gallery/realm/**'
               - 'packages/choreo-film-app/**'
@@ -661,10 +661,6 @@ jobs:
         run: pnpm test
         working-directory: packages/choreo
 
-  # The film app's QUnit suite: the reference films' scores against their
-  # golden fixtures. It compiles glimmer-motion and Choreo from source through
-  # the `developing:choreo` export condition. Then the realm build `pnpm push`
-  # makes, so a change that breaks it fails here rather than at deploy.
   # The secure origin's pages: the credential frame's protocol and the
   # components each page draws, run in Chrome against a development build of
   # the package with its tests entry.
@@ -684,6 +680,10 @@ jobs:
         run: pnpm test:components
         working-directory: packages/secure-origin
 
+  # The film app's QUnit suite: the reference films' scores against their
+  # golden fixtures. It compiles glimmer-motion and Choreo from source through
+  # the `developing:choreo` export condition. Then the realm build `pnpm push`
+  # makes, so a change that breaks it fails here rather than at deploy.
   choreo-film-app-test:
     name: Choreo Film App Tests
     needs: [change-check]

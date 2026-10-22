@@ -1,6 +1,5 @@
-// A field is left by dispatching `blur` to it: test-helpers' `blur` sends
-// none to an input the headless browser never gave focus.
 import {
+  blur,
   fillIn,
   render,
   settled,
@@ -211,7 +210,7 @@ module('Integration | credential fields', function (hooks) {
     test('shows an invalid field as BoxelInput does, and clears it on typing', async function (assert) {
       await renderForm('reset');
       await fillIn('[data-test-password-field]', 'short');
-      await triggerEvent('[data-test-password-field]', 'blur');
+      await blur('[data-test-password-field]');
       assert
         .dom('[data-test-password-field]')
         .hasClass('invalid')
@@ -234,6 +233,35 @@ module('Integration | credential fields', function (hooks) {
         .doesNotHaveAttribute('aria-invalid')
         .hasAttribute('data-test-boxel-input-validation-state', 'initial');
       assert.dom('[data-test-boxel-input-error-message]').doesNotExist();
+    });
+
+    test('takes a value that arrives with only a `change` event', async function (assert) {
+      let { frame, sent } = await renderForm('login');
+      let password = document.querySelector<HTMLInputElement>(
+        '[data-test-password-field]',
+      )!;
+      password.value = 'a-long-password';
+      await triggerEvent(password, 'change');
+      assert.strictEqual(frame.value('password'), 'a-long-password');
+      assert.deepEqual(
+        sent.filter((message) => message.type === 'state').at(-1).filled,
+        { username: false, password: true },
+      );
+    });
+
+    test('a `change` after typing keeps the error the field was given', async function (assert) {
+      let { frame, receive } = await renderForm('login');
+      await fillIn('[data-test-password-field]', 'a-password');
+      receive({
+        type: 'field-error',
+        field: 'password',
+        message: 'Wrong password',
+      });
+      await triggerEvent('[data-test-password-field]', 'change');
+      assert.strictEqual(frame.error('password'), 'Wrong password');
+      assert
+        .dom('[data-test-boxel-input-error-message]')
+        .hasText('Wrong password');
     });
 
     test('shows the error the app reports for a field', async function (assert) {
@@ -291,7 +319,7 @@ module('Integration | credential fields', function (hooks) {
         'the height of the form',
       );
       await fillIn('[data-test-password-field]', 'short');
-      await triggerEvent('[data-test-password-field]', 'blur');
+      await blur('[data-test-password-field]');
       await waitUntil(() => sizes().length > 1);
       assert.true(
         sizes().at(-1).height > first.height,
@@ -305,11 +333,19 @@ module('Integration | credential fields', function (hooks) {
         type: 'style',
         properties: { [LAYOUT_PROPERTY]: 'narrow' },
       });
+      // The grid tracks each field has: its label and its input side by side,
+      // or the label stacked over the input.
+      let tracks = () =>
+        getComputedStyle(
+          document.querySelector('.password-settings-field')!,
+        ).gridTemplateColumns.split(' ').length;
       await settled();
       assert.dom('#credential-fields').hasClass('narrow');
+      assert.strictEqual(tracks(), 1, 'stacked');
       receive({ type: 'style', properties: { [LAYOUT_PROPERTY]: 'wide' } });
       await settled();
       assert.dom('#credential-fields').doesNotHaveClass('narrow');
+      assert.strictEqual(tracks(), 2, 'side by side');
     });
 
     test("applyStyle writes the app's values through the CSSOM", function (assert) {
