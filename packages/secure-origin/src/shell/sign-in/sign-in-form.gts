@@ -4,8 +4,9 @@
 // typed into, and sent from, this window; a session it signs in is handed to
 // `@onSignedIn`, never to the page that opened the window.
 import { on } from '@ember/modifier';
+import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { trackedObject } from '@ember/reactive/collections';
 
 import {
   beginGoogleSignIn,
@@ -16,7 +17,7 @@ import AuthButton from '../../components/auth-button.gts';
 import AuthFormField from '../../components/auth-form-field.gts';
 import Button from '../../components/button.gts';
 import GoogleColor from '../../components/icons/google-color.gts';
-import Input from '../../components/input.gts';
+import BoxelInput from '../../components/input.gts';
 import { navigation } from '../navigation.js';
 import { asSentence, signInFailed } from '../sign-in-copy.js';
 import { cliParams, modeURL } from '../urls.js';
@@ -47,18 +48,18 @@ export default class SignInForm extends Component<Signature> {
       data-test-secure-title
       data-test-secure-sign-in-title
     >Sign in to your Boxel Account</span>
-    {{#if this.google}}
+    {{#if this.state.google}}
       <p class='subtitle' data-test-secure-sign-in-subtitle>Use Google to get
         started in one tap - we'll create your Boxel account if you don't have
         one yet.</p>
     {{/if}}
     <form novalidate data-test-secure-sign-in-form {{on 'submit' this.submit}}>
-      {{#if this.google}}
+      {{#if this.state.google}}
         <AuthButton
           type='button'
           class='google-button'
-          @disabled={{this.startingGoogle}}
-          @loading={{this.startingGoogle}}
+          @disabled={{this.state.startingGoogle}}
+          @loading={{this.state.startingGoogle}}
           data-test-secure-google
           {{on 'click' this.startGoogle}}
         >
@@ -74,11 +75,11 @@ export default class SignInForm extends Component<Signature> {
         @label='Email Address or Username'
         data-test-secure-field='username'
       >
-        <Input
+        <BoxelInput
           @type='text'
           autocomplete='username'
           placeholder='Your email address'
-          @value={{this.username}}
+          @value={{this.state.username}}
           @onInput={{this.setUsername}}
           name='username'
           data-test-secure-username
@@ -86,11 +87,11 @@ export default class SignInForm extends Component<Signature> {
         />
       </AuthFormField>
       <AuthFormField @label='Password' data-test-secure-field='password'>
-        <Input
+        <BoxelInput
           @type='password'
           autocomplete='current-password'
           placeholder='Your password'
-          @value={{this.password}}
+          @value={{this.state.password}}
           @onInput={{this.setPassword}}
           name='password'
           data-test-secure-password
@@ -109,12 +110,12 @@ export default class SignInForm extends Component<Signature> {
         type='submit'
         @variant='primary'
         @disabled={{this.submitDisabled}}
-        @loading={{this.submitting}}
+        @loading={{this.state.submitting}}
         data-test-secure-password-submit
       >Sign In</AuthButton>
-      {{#if this.error}}
+      {{#if this.state.error}}
         <div class='error' role='alert' data-test-secure-error>
-          {{this.error}}
+          {{this.state.error}}
         </div>
       {{/if}}
       <p class='register-prompt'>
@@ -206,30 +207,36 @@ export default class SignInForm extends Component<Signature> {
     </style>
   </template>
 
-  @tracked private username = this.args.username ?? '';
-  @tracked private password = '';
-  @tracked private submitting = false;
-  @tracked private error: string | undefined;
-  @tracked private google: unknown;
-  @tracked private startingGoogle = false;
+  private state = trackedObject({
+    username: this.args.username ?? '',
+    password: '',
+    submitting: false,
+    error: undefined as string | undefined,
+    google: undefined as unknown,
+    startingGoogle: false,
+  });
 
   // The username the CLI suggested is filled in, so the password is what's
   // left to type.
   private focusUsername = !this.args.username;
   private focusPassword = Boolean(this.args.username);
 
-  constructor(owner: unknown, args: Signature['Args']) {
+  constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     this.offerGoogle();
   }
 
   private async offerGoogle() {
-    this.google = await googleSignInConfig(this.args.config);
+    this.state.google = await googleSignInConfig(this.args.config);
   }
 
   // Sign In waits for both fields, as the app's does.
   private get submitDisabled() {
-    return this.submitting || !this.username.trim() || !this.password;
+    return (
+      this.state.submitting ||
+      !this.state.username.trim() ||
+      !this.state.password
+    );
   }
 
   // The pages a sign-in links to carry the CLI along, so finishing there
@@ -240,13 +247,13 @@ export default class SignInForm extends Component<Signature> {
 
   // Typing clears an error.
   private setUsername = (value: string) => {
-    this.username = value;
-    this.error = undefined;
+    this.state.username = value;
+    this.state.error = undefined;
   };
 
   private setPassword = (value: string) => {
-    this.password = value;
-    this.error = undefined;
+    this.state.password = value;
+    this.state.error = undefined;
   };
 
   private forgotPassword = () => {
@@ -262,37 +269,38 @@ export default class SignInForm extends Component<Signature> {
     if (this.submitDisabled) {
       return;
     }
-    this.submitting = true;
-    this.error = undefined;
+    this.state.submitting = true;
+    this.state.error = undefined;
     let session;
     try {
       session = await signInWithPassword(this.args.config, {
-        username: this.username,
-        password: this.password,
+        username: this.state.username,
+        password: this.state.password,
         client: this.args.client,
+        registrationToken: undefined,
       });
     } catch (e) {
-      this.error = signInFailed(e);
-      this.submitting = false;
+      this.state.error = signInFailed(e);
+      this.state.submitting = false;
       return;
     }
     this.args.onSignedIn(session);
   };
 
   private startGoogle = async () => {
-    this.startingGoogle = true;
-    this.error = undefined;
+    this.state.startingGoogle = true;
+    this.state.error = undefined;
     try {
       navigation.assign(
-        await beginGoogleSignIn(this.google, {
+        await beginGoogleSignIn(this.state.google, {
           client: this.args.client,
           cli: this.args.cli,
           username: this.args.username,
         }),
       );
     } catch (e: any) {
-      this.error = asSentence(e.message);
-      this.startingGoogle = false;
+      this.state.error = asSentence(e.message);
+      this.state.startingGoogle = false;
     }
   };
 }

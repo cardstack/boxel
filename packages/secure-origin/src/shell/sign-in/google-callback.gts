@@ -1,8 +1,9 @@
 // Where Google sends the window back to. It finishes whichever sign-in began
 // there: the window's own, which it keeps, or the CLI's, which it hands to the
 // CLI's listener.
+import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
+import { trackedObject } from '@ember/reactive/collections';
 
 import {
   finishGoogleSignIn,
@@ -97,9 +98,15 @@ export default class GoogleCallback extends Component {
     </style>
   </template>
 
-  @tracked private state: State = { name: 'signing-in' };
+  private page = trackedObject<{ state: State }>({
+    state: { name: 'signing-in' },
+  });
 
-  constructor(owner: unknown, args: object) {
+  private get state(): State {
+    return this.page.state;
+  }
+
+  constructor(owner: Owner, args: object) {
     super(owner, args);
     this.finish();
   }
@@ -128,18 +135,26 @@ export default class GoogleCallback extends Component {
         navigation.replace(startAgain);
         return;
       }
-      this.state = { name: 'failed', error: asSentence(e.message), startAgain };
+      this.page.state = {
+        name: 'failed',
+        error: asSentence(e.message),
+        startAgain,
+      };
       return;
     }
     let { session, resume } = result;
     if (resume?.client === 'cli' && resume.cli) {
-      this.state = { name: 'handing-to-cli', callback: resume.cli, session };
+      this.page.state = {
+        name: 'handing-to-cli',
+        callback: resume.cli,
+        session,
+      };
       return;
     }
     storeSession(session);
     // Back to the window's own address, so a reload shows the signed-in window
     // rather than this callback.
     history.replaceState(null, '', modeURL('sign-in'));
-    this.state = { name: 'signed-in' };
+    this.page.state = { name: 'signed-in' };
   }
 }

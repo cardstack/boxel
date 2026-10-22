@@ -2,6 +2,7 @@
 // frame knows, framed by a page on one of the app origins the realm server
 // lists, and wires the fields' protocol (`src/security/credentials.js`) to the
 // page: the messages, the styles the app sends, and the fields' size.
+import '../styles/layers.css';
 import { renderComponent } from '@ember/renderer';
 
 import {

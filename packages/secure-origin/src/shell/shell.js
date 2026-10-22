@@ -7,6 +7,7 @@
 // query parameter and given the page's root element to render into. A request
 // naming no known mode leaves the page empty. The address Google returns to
 // after a sign-in is a mode of its own.
+import '../styles/layers.css';
 import { renderComponent } from '@ember/renderer';
 
 import CliSignInPage from './sign-in/cli-sign-in-page.gts';

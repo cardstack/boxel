@@ -15,10 +15,6 @@
   comparison of the pages fails until it is made.
 */
 
-/* As in the app: boxel-ui's reset, then its components, then the host's own
-   (unlayered) rules. */
-@layer reset, boxel;
-
 @font-face {
   font-family: 'IBM Plex Sans';
   font-style: normal;
