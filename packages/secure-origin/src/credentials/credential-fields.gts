@@ -152,7 +152,7 @@ export default class CredentialFields extends Component<Signature> {
       {{/if}}
       {{#each this.fields key='name' as |entry|}}
         {{#if (this.isLayout 'auth')}}
-          <AuthFormField @label={{entry.field.label}}>
+          <AuthFormField @label={{entry.field.label}} as |labelId|>
             <BoxelInput
               @id={{entry.field.id}}
               @type={{entry.field.type}}
@@ -165,6 +165,7 @@ export default class CredentialFields extends Component<Signature> {
               @onBlur={{this.blur entry.name}}
               @onChange={{this.change entry.name}}
               name={{entry.field.inputName}}
+              aria-labelledby={{labelId}}
               {{on 'keydown' this.keydown}}
               {{testAttribute entry.field.testId}}
             />
@@ -179,6 +180,7 @@ export default class CredentialFields extends Component<Signature> {
             @label={{entry.field.label}}
             @tag='label'
             class='profile-field password-settings-field'
+            as |labelId|
           >
             <BoxelInput
               @id={{entry.field.id}}
@@ -192,6 +194,7 @@ export default class CredentialFields extends Component<Signature> {
               @onBlur={{this.blur entry.name}}
               @onChange={{this.change entry.name}}
               name={{entry.field.inputName}}
+              aria-labelledby={{labelId}}
               {{on 'keydown' this.keydown}}
               {{testAttribute entry.field.testId}}
             />
@@ -202,6 +205,7 @@ export default class CredentialFields extends Component<Signature> {
             @tag='label'
             @vertical={{true}}
             class='profile-field'
+            as |labelId|
           >
             <BoxelInput
               @id={{entry.field.id}}
@@ -215,6 +219,7 @@ export default class CredentialFields extends Component<Signature> {
               @onBlur={{this.blur entry.name}}
               @onChange={{this.change entry.name}}
               name={{entry.field.inputName}}
+              aria-labelledby={{labelId}}
               {{on 'keydown' this.keydown}}
               {{testAttribute entry.field.testId}}
             />
