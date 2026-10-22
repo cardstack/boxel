@@ -1,7 +1,33 @@
+const path = require('node:path');
 const {
   babelCompatSupport,
   templateCompatSupport,
 } = require('@embroider/compat/babel');
+const {
+  exportIdentityPlugin,
+} = require('@cardstack/runtime-common/export-identity-plugin');
+
+const baseDir = path.resolve(__dirname, '..', 'base') + path.sep;
+
+// Only base realm modules compiled into the host bundle are tagged, with the
+// identifier the loader gives a bundled base module:
+// `/abs/packages/base/date/day.gts` → `@cardstack/base/date/day`.
+function baseModuleIdentifier(filename) {
+  let file = filename.split('?')[0];
+  if (
+    !file.startsWith(baseDir) ||
+    file.includes(`${path.sep}node_modules${path.sep}`) ||
+    !/\.(gts|ts)$/.test(file)
+  ) {
+    return null;
+  }
+  let name = file
+    .slice(baseDir.length)
+    .replace(/\.(gts|ts)$/, '')
+    .split(path.sep)
+    .join('/');
+  return `@cardstack/base/${name}`;
+}
 
 module.exports = {
   plugins: [
@@ -46,6 +72,7 @@ module.exports = {
       },
     ],
     ...babelCompatSupport(),
+    [exportIdentityPlugin, { moduleIdentifier: baseModuleIdentifier }],
   ],
 
   generatorOpts: {

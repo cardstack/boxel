@@ -6,6 +6,7 @@ import type { Options as EmberTemplatePluginOptions } from 'babel-plugin-ember-t
 //@ts-ignore breaks esbuild for VS Code extension
 import type { ExtendedPluginBuilder } from 'babel-plugin-ember-template-compilation/src/js-utils';
 import { loaderPlugin } from './loader-plugin.ts';
+import { exportIdentityPlugin } from './export-identity-plugin.ts';
 //@ts-ignore ironically no types are available
 import typescriptPlugin from '@babel/plugin-transform-typescript';
 //@ts-ignore no types are available
@@ -49,9 +50,13 @@ const compiler = {
   },
 };
 
+// `moduleIdentifier` is the module's canonical identifier, the form a code ref
+// to one of its exports carries. When given, every exported class is tagged
+// with it (see export-identity-plugin.ts).
 export async function transpileJS(
   content: string,
   debugFilename: string,
+  moduleIdentifier?: string,
 ): Promise<string> {
   const contentIsAllWhitespace = content.match(/^\s*$/);
 
@@ -87,6 +92,9 @@ export async function transpileJS(
       [decoratorTransforms],
       [makeEmberTemplatePlugin, templateOptions],
       loaderPlugin,
+      ...(moduleIdentifier !== undefined
+        ? [[exportIdentityPlugin, { moduleIdentifier }]]
+        : []),
     ],
     highlightCode: false, // Do not output ANSI color codes in error messages so that the client can display them plainly
   });
