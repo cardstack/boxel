@@ -55,6 +55,12 @@ import {
   storePackageName,
   type DeckRealmPackages,
 } from '../lib/deck-realm-packages.ts';
+import {
+  cutDeckVersion,
+  DeckVersionConflictError,
+  DeckVersionRequestError,
+  type DeckVersionCutRequest,
+} from '../lib/deck-version-cut.ts';
 import type { ServeFromRealmDeps } from './serve-from-realm.ts';
 
 type DeckVersionServingDeps = ServeFromRealmDeps & {
@@ -566,6 +572,58 @@ async function realmPackageName(realm: Realm): Promise<string | undefined> {
   }
 }
 
+// Cut a Version of the package at this root from the branch head. Cutting
+// writes the realm's store, so it takes the realm ACL's write.
+async function handleDeckVersionCut(
+  request: Request,
+  target: DeckPackageTarget,
+  deps: DeckVersionServingDeps,
+): Promise<Response> {
+  let authorization = await authorizeWrite(request, target.realm);
+  if (authorization.response) {
+    return authorization.response;
+  }
+  let body: DeckVersionCutRequest;
+  try {
+    body = (await request.json()) as DeckVersionCutRequest;
+  } catch {
+    return new Response('Deck Version cut is not valid JSON', { status: 400 });
+  }
+  let branch = new URL(request.url).searchParams.get('branch') ?? 'main';
+  let actor = await historyActor(request, deps);
+  let cut;
+  try {
+    cut = await cutDeckVersion({
+      realmDir: target.realm.dir,
+      realmRRI: target.packages.realmRRI,
+      packageRRI: target.packageRRI,
+      branch,
+      policy: deps.deckCollaboration!,
+      request: body,
+      ...(actor ? { actor: { id: actor.name } } : {}),
+    });
+  } catch (error) {
+    if (error instanceof DeckVersionConflictError) {
+      return new Response(error.message, { status: 409 });
+    }
+    if (error instanceof DeckVersionRequestError) {
+      return new Response(error.message, { status: 400 });
+    }
+    throw error;
+  }
+  return new Response(JSON.stringify(cut), {
+    status: 201,
+    headers: {
+      'cache-control': 'private, no-store',
+      'content-type': 'application/json',
+      location: new URL(
+        `${target.mutableURL.href.slice(0, -1)}@${cut.version}/`,
+      ).href,
+      'x-boxel-version-rri': cut.versionRRI,
+    },
+  });
+}
+
 async function handleDeckVersionIndexQuery(
   request: Request,
   deps: DeckVersionServingDeps,
@@ -575,15 +633,22 @@ async function handleDeckVersionIndexQuery(
   if (!mutableURL) {
     return null;
   }
-  if (request.method !== 'GET' && request.method !== 'HEAD') {
-    return new Response('Deck Version queries are read-only', {
+  if (
+    request.method !== 'GET' &&
+    request.method !== 'HEAD' &&
+    request.method !== 'POST'
+  ) {
+    return new Response('Unsupported Deck Version method', {
       status: 405,
-      headers: { allow: 'GET, HEAD' },
+      headers: { allow: 'GET, HEAD, POST' },
     });
   }
   let target = await resolveDeckPackage(mutableURL, deps);
   if (!target) {
     return new Response('Not found', { status: 404 });
+  }
+  if (request.method === 'POST') {
+    return await handleDeckVersionCut(request, target, deps);
   }
   let { realm } = target;
   let packageName = storePackageName(target.packageRRI);

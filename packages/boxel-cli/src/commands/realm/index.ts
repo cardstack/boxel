@@ -15,6 +15,7 @@ import { registerRestoreCommand } from './restore.ts';
 import { registerStatusCommand } from './status.ts';
 import { registerSyncCommand } from './sync.ts';
 import { registerUnpublishCommand } from './unpublish.ts';
+import { registerVersionCommand } from './version.ts';
 import { registerWaitForReadyCommand } from './wait-for-ready.ts';
 import { registerWatchCommand } from './watch/index.ts';
 
@@ -39,6 +40,7 @@ export function registerRealmCommand(program: Command): void {
   const sync = registerSyncCommand(realm);
   registerStatusCommand(sync);
   registerUnpublishCommand(realm);
+  registerVersionCommand(realm);
   registerWaitForReadyCommand(realm);
   registerWatchCommand(realm);
 }
