@@ -62,7 +62,7 @@ export function applyStyle(
       (name === 'color-scheme' ? root : body).style.setProperty(name, resolved);
     }
   }
-  // The solid colour behind the frame in the page, when there is one, so
+  // The solid color behind the frame in the page, when there is one, so
   // text here is drawn on an opaque background as the page's own is.
   if (typeof backdrop === 'string' && CSS.supports('color', backdrop)) {
     root.style.setProperty('background-color', backdrop);

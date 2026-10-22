@@ -3,12 +3,13 @@ import { uniqueId } from '@ember/helper';
 
 import cn from '../helpers/cn.ts';
 import { eq, not } from '../helpers/truth-helpers.ts';
-import Label, { type LabelFontSize } from './label.gts';
+import Label from './label.gts';
 
 // boxel-ui's FieldContainer, drawn as a `label` or a `div`. boxel-ui's can't
 // ship on the secure origin (ADR 008 §1.3), so its template and styles are
 // brought here, kept as they are there, but for the variants the secure
-// origin's pages don't draw (inline, centered, with an icon).
+// origin's pages don't draw (inline, centered, with an icon, a small or
+// differently sized label, a field nested in another).
 //
 // Its block is given the id of its label, when it has one, for the field's
 // control to name itself by (`aria-labelledby`). A field drawn as a `label`
@@ -17,9 +18,7 @@ import Label, { type LabelFontSize } from './label.gts';
 export interface Signature {
   Args: {
     fieldId?: string;
-    horizontalLabelSize?: string;
     label?: string;
-    labelFontSize?: LabelFontSize;
     tag?: 'label' | 'div';
     vertical?: boolean;
   };
@@ -34,24 +33,14 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
   {{#let (uniqueId) as |labelId|}}
     {{#if (eq @tag 'label')}}
       <label
-        class={{cn
-          'boxel-field'
-          vertical=@vertical
-          horizontal=(not @vertical)
-          small-label=(eq @horizontalLabelSize 'small')
-        }}
+        class={{cn 'boxel-field' vertical=@vertical horizontal=(not @vertical)}}
         data-test-boxel-field
         data-test-boxel-field-id={{@fieldId}}
         ...attributes
       >
         <div class='label-container'>
           {{#if @label}}
-            <Label
-              id={{labelId}}
-              class='label'
-              @size={{@labelFontSize}}
-              data-test-boxel-field-label
-            >
+            <Label id={{labelId}} class='label' data-test-boxel-field-label>
               {{@label}}
             </Label>
           {{/if}}
@@ -63,24 +52,14 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
       </label>
     {{else}}
       <div
-        class={{cn
-          'boxel-field'
-          vertical=@vertical
-          horizontal=(not @vertical)
-          small-label=(eq @horizontalLabelSize 'small')
-        }}
+        class={{cn 'boxel-field' vertical=@vertical horizontal=(not @vertical)}}
         data-test-boxel-field
         data-test-boxel-field-id={{@fieldId}}
         ...attributes
       >
         <div class='label-container'>
           {{#if @label}}
-            <Label
-              id={{labelId}}
-              class='label'
-              @size={{@labelFontSize}}
-              data-test-boxel-field-label
-            >
+            <Label id={{labelId}} class='label' data-test-boxel-field-label>
               {{@label}}
             </Label>
           {{/if}}
@@ -105,10 +84,6 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
       }
       .label-container {
         align-items: start;
-      }
-
-      .small-label {
-        --boxel-field-label-size: minmax(4rem, 10%);
       }
 
       .label {
@@ -150,14 +125,6 @@ const FieldContainer: TemplateOnlyComponent<Signature> = <template>
 
       .vertical .label {
         grid-column: 2;
-      }
-
-      .boxel-field :deep(.boxel-field .boxel-label:not(.boxel-label--default)) {
-        font-size: var(
-          --boxel-field-label-font-size-small,
-          var(--boxel-font-size-xs)
-        );
-        line-height: var(--boxel-field-label-line-height-small, calc(15 / 11));
       }
     }
   </style>

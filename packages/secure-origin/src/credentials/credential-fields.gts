@@ -26,6 +26,7 @@ interface Field {
   autocomplete: string;
   placeholder?: string;
   testId: string;
+  accessibleName?: string;
   validate?: 'new' | 'confirm';
   validHint?: { text: string; testId: string };
 }
@@ -131,9 +132,9 @@ export default class CredentialFields extends Component<Signature> {
         narrow=this.narrow
       }}
       novalidate
-      data-test-credential-fields-form={{this.layout}}
       {{on 'submit' this.preventSubmit}}
       {{observeSize this.frame}}
+      data-test-credential-fields-form={{this.layout}}
     >
       {{#if this.frame.form.hiddenUsername}}
         {{! Gives a password manager the account a new password belongs to.
@@ -166,6 +167,7 @@ export default class CredentialFields extends Component<Signature> {
               @onChange={{this.change entry.name}}
               name={{entry.field.inputName}}
               aria-labelledby={{labelId}}
+              aria-label={{entry.field.accessibleName}}
               {{on 'keydown' this.keydown}}
               {{testAttribute entry.field.testId}}
             />
@@ -195,6 +197,7 @@ export default class CredentialFields extends Component<Signature> {
               @onChange={{this.change entry.name}}
               name={{entry.field.inputName}}
               aria-labelledby={{labelId}}
+              aria-label={{entry.field.accessibleName}}
               {{on 'keydown' this.keydown}}
               {{testAttribute entry.field.testId}}
             />
@@ -220,6 +223,7 @@ export default class CredentialFields extends Component<Signature> {
               @onChange={{this.change entry.name}}
               name={{entry.field.inputName}}
               aria-labelledby={{labelId}}
+              aria-label={{entry.field.accessibleName}}
               {{on 'keydown' this.keydown}}
               {{testAttribute entry.field.testId}}
             />

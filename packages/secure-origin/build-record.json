@@ -33,7 +33,7 @@
       "bytes": 963
     },
     "credentials.js": {
-      "bytes": 16779,
+      "bytes": 16961,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -43,7 +43,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/credentials/credential-fields.gts",
-          "size": 6088
+          "size": 6262
         },
         {
           "package": "@cardstack/secure-origin",
@@ -63,7 +63,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/credentials.js",
-          "size": 12261
+          "size": 12292
         },
         {
           "package": "@cardstack/secure-origin",
@@ -131,12 +131,8 @@
       ]
     },
     "shared.css": {
-      "bytes": 21389,
+      "bytes": 19858,
       "sources": [
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/2672b6a8df.css"
-        },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/2a4b56d7da.css"
@@ -151,15 +147,19 @@
         },
         {
           "package": "@cardstack/secure-origin",
+          "module": "src/components/51537f9ada.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
           "module": "src/components/6134f21d67.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/components/8bdbff4e39.css"
+          "module": "src/components/8b735c7b1e.css"
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/components/927d417b70.css"
+          "module": "src/components/8bdbff4e39.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -171,7 +171,7 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/components/d2e02754fc.css"
+          "module": "src/components/cb15f443fd.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -184,7 +184,7 @@
       ]
     },
     "shared.js": {
-      "bytes": 273678,
+      "bytes": 272678,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -209,7 +209,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/field-container.gts",
-          "size": 2566
+          "size": 2380
         },
         {
           "package": "@cardstack/secure-origin",
@@ -244,12 +244,12 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/input.gts",
-          "size": 3696
+          "size": 2951
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/label.gts",
-          "size": 593
+          "size": 407
         },
         {
           "package": "@cardstack/secure-origin",
