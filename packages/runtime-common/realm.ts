@@ -1192,6 +1192,16 @@ const GRANTABLE_BYTES = { coarseReadOnly: true, grantableBytes: true } as const;
 // serve extends a name as it does for a reader, so the name a module is
 // imported by reaches it, and the gate judges the module it resolved to. The
 // card+source read reads the name exactly as named, so it reaches no redirect.
+// Whether two JSON texts hold the same value, whatever their whitespace or
+// key order. Text that doesn't parse holds no value to compare.
+function sameJSON(a: string, b: string): boolean {
+  try {
+    return isEqual(JSON.parse(a), JSON.parse(b));
+  } catch {
+    return false;
+  }
+}
+
 function namesGrantableBytes(localPath: LocalPath): boolean {
   return localPath.slice(localPath.lastIndexOf('/') + 1) !== '';
 }
@@ -5177,7 +5187,8 @@ export class Realm {
       }
 
       // The document this write stores, when the write re-serializes a card.
-      // The unchanged-file check below compares the stored file by it.
+      // The unchanged-file check below compares a stored card with it by
+      // JSON value rather than by bytes.
       let serializedCard: LooseSingleCardDocument | undefined;
       if (typeof content === 'string') {
         try {
@@ -5232,25 +5243,16 @@ export class Realm {
         } else if (
           existingFile &&
           serializedCard &&
-          (await this.#storedCardSerializesTo(
-            existingFile.content,
-            url,
-            serializedCard,
-          )) &&
-          // As for an upload below: a re-sent card is how a caller recovers a
-          // write whose index pass never landed or errored, so the stored card
-          // is kept only when the index already describes its bytes.
-          (await this.#indexDescribesFile(
-            url,
-            computeContentHash(existingFile.content),
-          ))
+          sameJSON(existingFile.content, content)
         ) {
-          // A re-serialized card doesn't byte-match a file written in another
-          // spelling — a source checkout's, or one another serializer version
-          // produced — so the stored card is compared by what it serializes
-          // to instead. A stored card that means the same document is kept
-          // byte for byte, and the result below reports its own bytes rather
-          // than the ones this write would have stored.
+          // A stored card can hold exactly the JSON this write stores and
+          // still differ in bytes: a trailing newline, indentation, or keys
+          // in another order, as a source checkout lays them out. None of
+          // that is content, so the stored card is kept byte for byte, and
+          // the result below reports its own bytes rather than the ones this
+          // write would have stored. Any difference in the JSON itself — a
+          // reference spelled another way, a field the definition no longer
+          // declares — is content, and the write goes ahead.
           unchanged = existingFile;
           content = existingFile.content;
         }
@@ -17413,58 +17415,6 @@ export class Realm {
         },
       },
     }) as SingleCardDocument;
-  }
-
-  // Whether a stored card file serializes to `serialized`, the document a
-  // write to the same URL is about to store. A stored file that isn't a card
-  // document, or that no longer serializes (its definition is gone or
-  // broken), is never the same document. Nor is one that names a well-known
-  // realm by URL: serialization writes the realm's prefix (ADR 002 §1.4), so
-  // the write is what makes such a card portable, and it goes ahead.
-  async #storedCardSerializesTo(
-    stored: string,
-    url: URL,
-    serialized: LooseSingleCardDocument,
-  ): Promise<boolean> {
-    let doc: any;
-    try {
-      doc = JSON.parse(stored);
-    } catch {
-      return false;
-    }
-    if (!isCardResource(doc?.data) || this.#namesPrefixRealmByURL(doc)) {
-      return false;
-    }
-    try {
-      let storedSerialized = await this.fileSerialization(
-        { data: merge(doc.data, { meta: { realmURL: this.url } }) },
-        url,
-      );
-      return isEqual(storedSerialized, serialized);
-    } catch {
-      return false;
-    }
-  }
-
-  // Whether any string in `value` is a URL inside a realm this network names
-  // by prefix, such as the base realm's URL or its `https://cardstack.com/base/`
-  // alias.
-  #namesPrefixRealmByURL(value: unknown): boolean {
-    if (typeof value === 'string') {
-      return (
-        /^https?:\/\//.test(value) &&
-        this.#virtualNetwork.unresolveURL(value) !== value
-      );
-    }
-    if (Array.isArray(value)) {
-      return value.some((item) => this.#namesPrefixRealmByURL(item));
-    }
-    if (value && typeof value === 'object') {
-      return Object.values(value).some((item) =>
-        this.#namesPrefixRealmByURL(item),
-      );
-    }
-    return false;
   }
 
   private async fileSerialization(
