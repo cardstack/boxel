@@ -23,6 +23,13 @@ KNOWN_REVISION="${KNOWN_REVISION:-}"
 REQUIRE_REVISIONS="${REQUIRE_REVISIONS:-false}"
 title="$ENVIRONMENT realm sync"
 
+# The push arguments come from the installed boxel-cli's --help, so a missing
+# CLI would read as an old one and the push would send every file.
+command -v boxel > /dev/null || {
+  echo "::error title=$title::boxel isn't on PATH. Run realm-deployment/start after installing @cardstack/boxel-cli."
+  exit 1
+}
+
 revisions=""
 add_revision() {
   case " $revisions " in

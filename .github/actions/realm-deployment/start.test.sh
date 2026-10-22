@@ -135,6 +135,15 @@ succeeded 2
 cli_help "  --no-realm-events"
 REQUIRE_REVISIONS=true run "require-revisions refuses a boxel-cli without --changed-since" 1 "" ""
 
+# PATH without the boxel stub, or any installed boxel. git and the shell
+# utilities come from the system directories.
+mkdir -p "$STUB_DIR/no-boxel"
+ln -s "$STUB_DIR/bin/gh" "$STUB_DIR/no-boxel/gh"
+deployments 3:"$c" 2:"$b"
+succeeded 2
+PATH="$STUB_DIR/no-boxel:/usr/bin:/bin" run "a missing boxel-cli fails before anything is recorded" 1 "" ""
+grep -q "boxel isn't on PATH" "$work/log" || { echo "FAIL: no error for a missing boxel-cli"; failures=$((failures + 1)); }
+
 if [ "$failures" -ne 0 ]; then
   echo "$failures failure(s)"
   exit 1

@@ -122,13 +122,13 @@ jobs:
         run: npm install -g @cardstack/boxel-cli@${{ inputs.boxel-cli-version }}
 
       # Finds the revisions the workspace may hold and records this sync as a
-      # deployment to the environment. The action has to come from this
-      # repository by name: a reusable workflow resolves a `./` action against
-      # the caller's workspace, which doesn't have it.
+      # deployment to the environment. `$/` resolves the action in this
+      # repository at the revision of this workflow the caller runs, where a
+      # `./` path would resolve against the caller's checkout.
       - name: Start the deployment
         if: github.event_name == 'push' || (github.event_name == 'release' && inputs.enable-release-sync)
         id: deployment
-        uses: cardstack/boxel/.github/actions/realm-deployment/start@main
+        uses: $/.github/actions/realm-deployment/start
         with:
           environment: ${{ github.event_name == 'release' && 'production' || 'staging' }}
           realm-url: ${{ github.event_name == 'release' && inputs.production-workspace-url || inputs.staging-workspace-url }}
@@ -282,7 +282,7 @@ jobs:
       # the next sync still compares against its revision.
       - name: Finish the deployment
         if: always() && steps.deployment.outputs.deployment-id
-        uses: cardstack/boxel/.github/actions/realm-deployment/finish@main
+        uses: $/.github/actions/realm-deployment/finish
         with:
           deployment-id: ${{ steps.deployment.outputs.deployment-id }}
           outcome: ${{ github.event_name == 'release' && steps.sync_production.outcome || steps.sync_staging.outcome }}
