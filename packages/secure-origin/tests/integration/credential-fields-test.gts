@@ -278,11 +278,30 @@ module('Integration | credential fields', function (hooks) {
         .hasText('Enter New Password');
     });
 
-    test('a field with no label names none', async function (assert) {
+    test('a field with no label is still named', async function (assert) {
       await renderForm('confirm-password');
       assert
         .dom('[data-test-password-field]')
-        .doesNotHaveAttribute('aria-labelledby');
+        .doesNotHaveAttribute('aria-labelledby')
+        .hasAttribute('aria-label', 'Password');
+    });
+
+    test("an invalid field's error message describes it", async function (assert) {
+      let { receive } = await renderForm('confirm-password');
+      receive({
+        type: 'field-error',
+        field: 'current',
+        message: 'Invalid password',
+      });
+      await settled();
+      let input = document.querySelector('[data-test-password-field]')!;
+      let described = input.getAttribute('aria-describedby');
+      assert.ok(described, 'the input names a description');
+      assert.strictEqual(described, input.getAttribute('aria-errormessage'));
+      assert
+        .dom(document.getElementById(described!))
+        .hasAttribute('data-test-boxel-input-error-message')
+        .hasText('Invalid password');
     });
 
     test('shows the error the app reports for a field', async function (assert) {
@@ -368,7 +387,7 @@ module('Integration | credential fields', function (hooks) {
       // or the label stacked over the input.
       let tracks = () =>
         getComputedStyle(
-          document.querySelector('.password-settings-field')!,
+          document.querySelector('[data-test-boxel-field]')!,
         ).gridTemplateColumns.split(' ').length;
       await settled();
       assert.dom('#credential-fields').hasClass('narrow');
@@ -429,7 +448,7 @@ module('Integration | credential fields', function (hooks) {
 
       applyStyle(doc, [LAYOUT_PROPERTY], {
         properties: {},
-        backdrop: 'not a colour',
+        backdrop: 'not a color',
       });
       assert.strictEqual(root.style.backgroundColor, '', 'no backdrop');
       assert.strictEqual(doc.body.style.width, '', 'no width');

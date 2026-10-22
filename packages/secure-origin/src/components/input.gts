@@ -1,38 +1,37 @@
-import { concat } from '@ember/helper';
 import { on } from '@ember/modifier';
 import { guidFor } from '@ember/object/internals';
 import Component from '@glimmer/component';
 
 import cn from '../helpers/cn.ts';
 import optional from '../helpers/optional.ts';
-import { and, not } from '../helpers/truth-helpers.ts';
 import FailureBordered from './icons/failure-bordered.gts';
 import SuccessBordered from './icons/success-bordered.gts';
 import type { IconComponent } from './icons/types.ts';
 
 // boxel-ui's BoxelInput, for the single-line inputs the secure origin's pages
 // draw. boxel-ui's can't ship on the secure origin (ADR 008 §1.3), so its
-// template and styles are brought here, kept as they are there, but for the
-// kinds of input the pages don't draw (textarea, search, checkbox, color, the
-// large size, the flat bottom and the loading state).
+// template and styles are brought here, kept as they are there, but for what
+// the pages don't draw: other kinds of input (textarea, search, checkbox,
+// color), the large size, the flat bottom, the loading state, helper text, the
+// optional marker, and disabled and read-only inputs.
+//
+// Unlike boxel-ui's, an error message describes the input
+// (`aria-describedby`) as well as being its `aria-errormessage`, which screen
+// readers announce unevenly. A field names its input by its label alone (see
+// FieldContainer), so this is how the error is read with the field.
 export type InputValidationState = 'none' | 'valid' | 'invalid' | 'initial';
 
 export interface Signature {
   Args: {
     autocomplete?: string;
-    disabled?: boolean;
     errorMessage?: string;
-    helperText?: string;
     id?: string;
     onBlur?: (ev: Event) => void;
     onChange?: (ev: Event) => void;
     onFocus?: (ev: Event) => void;
     onInput?: (val: string) => void;
     onKeyPress?: (ev: KeyboardEvent) => void;
-    optional?: boolean;
     placeholder?: string;
-    readonly?: boolean;
-    required?: boolean;
     state?: InputValidationState;
     type?: 'text' | 'password' | 'email' | 'tel' | 'url';
     value?: string | null;
@@ -56,9 +55,6 @@ export default class BoxelInput extends Component<Signature> {
   }
 
   private get validationIcon(): IconComponent | undefined {
-    if (this.args.disabled) {
-      return undefined;
-    }
     switch (this.args.state) {
       case 'valid':
         return SuccessBordered;
@@ -73,6 +69,12 @@ export default class BoxelInput extends Component<Signature> {
     return this.isInvalid && this.args.errorMessage;
   }
 
+  private get errorMessageId() {
+    return this.shouldShowErrorMessage
+      ? `error-message-${this.guid}`
+      : undefined;
+  }
+
   private onInput = (event: Event) => {
     this.args.onInput?.((event.target as HTMLInputElement).value);
   };
@@ -83,9 +85,6 @@ export default class BoxelInput extends Component<Signature> {
 
   <template>
     <div class={{cn 'input-container' has-validation=this.hasValidation}}>
-      {{#if (and (not @required) @optional)}}
-        <div class='optional'>Optional</div>
-      {{/if}}
       <input
         class={{cn
           'boxel-input'
@@ -96,24 +95,13 @@ export default class BoxelInput extends Component<Signature> {
         type={{@type}}
         value={{@value}}
         placeholder={{@placeholder}}
-        required={{@required}}
-        disabled={{@disabled}}
-        readonly={{@readonly}}
         autocomplete={{@autocomplete}}
-        aria-describedby={{if
-          @helperText
-          (concat 'helper-text-' this.guid)
-          false
-        }}
+        aria-describedby={{this.errorMessageId}}
         aria-invalid={{if this.isInvalid 'true'}}
-        aria-errormessage={{if
-          this.shouldShowErrorMessage
-          (concat 'error-message-' this.guid)
-          false
-        }}
+        aria-errormessage={{this.errorMessageId}}
         data-test-boxel-input
         data-test-boxel-input-id={{@id}}
-        data-test-boxel-input-validation-state={{if @disabled false @state}}
+        data-test-boxel-input-validation-state={{@state}}
         {{on 'input' this.onInput}}
         {{on 'blur' (optional @onBlur)}}
         {{on 'keypress' this.onKeyPress}}
@@ -131,18 +119,11 @@ export default class BoxelInput extends Component<Signature> {
       {{/if}}
       {{#if this.shouldShowErrorMessage}}
         <div
-          id={{concat 'error-message-' this.guid}}
+          id={{this.errorMessageId}}
           class='error-message'
           aria-live='polite'
           data-test-boxel-input-error-message
         >{{@errorMessage}}</div>
-      {{/if}}
-      {{#if @helperText}}
-        <div
-          id={{concat 'helper-text-' this.guid}}
-          class='helper-text'
-          data-test-boxel-input-helper-text
-        >{{@helperText}}</div>
       {{/if}}
     </div>
     <style scoped>
@@ -193,14 +174,6 @@ export default class BoxelInput extends Component<Signature> {
             outline-color var(--boxel-transition);
         }
 
-        .boxel-input:disabled {
-          opacity: 0.5;
-        }
-
-        .boxel-input[readonly] {
-          opacity: 0.5;
-        }
-
         .boxel-input:focus-visible {
           outline-color: var(--ring, var(--boxel-highlight));
           border-color: var(--ring, var(--boxel-highlight));
@@ -237,44 +210,15 @@ export default class BoxelInput extends Component<Signature> {
           user-select: none;
         }
 
-        .optional {
-          grid-area: optional;
-          justify-self: end;
-
-          margin-bottom: var(--boxel-sp-xxxs);
-          font-size: var(
-            --boxel-input-optional-font-size,
-            var(--boxel-font-size-xs)
-          );
-          font-style: oblique;
-          letter-spacing: var(--boxel-lsp);
-          opacity: 0.75;
-        }
-
         .error-message {
           grid-area: error;
 
-          margin-top: var(--boxel-sp-xxxs);
+          margin-top: var(--boxel-sp-3xs);
           margin-left: calc(var(--boxel-sp-sm) + 1px);
           color: var(--destructive-ink);
           font-size: var(--boxel-font-size-sm);
           font-weight: 500;
           letter-spacing: var(--boxel-lsp);
-        }
-
-        .helper-text {
-          grid-area: helper;
-
-          margin-top: var(--boxel-sp-xs);
-          margin-left: calc(var(--boxel-sp-sm) + 1px);
-          font-size: var(--boxel-font-size-sm);
-          letter-spacing: var(--boxel-lsp);
-          opacity: 0.75;
-        }
-
-        .boxel-input:disabled ~ .error-message,
-        .boxel-input:disabled ~ .helper-text {
-          display: none;
         }
       }
     </style>

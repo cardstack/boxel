@@ -204,6 +204,9 @@ export const FORMS = {
     fields: [
       {
         name: 'current',
+        // The modal names the field in its prose, not with a label, so the
+        // input is named for assistive technology alone.
+        accessibleName: 'Password',
         type: 'password',
         autocomplete: 'current-password',
         testId: 'password-field',
