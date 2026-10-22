@@ -1,8 +1,14 @@
 /* eslint-env browser */
-// The credential fields the app frames: the inputs of its sign-in,
-// registration, password-reset, change-password and confirm-your-password
-// forms. Card code runs in the app page, so a password typed into that page
-// could be read by any card on it. Typed here, on the secure origin, it can't.
+// The protocol of the credential fields the app frames: the inputs of its
+// sign-in, registration, password-reset, change-password and
+// confirm-your-password forms. Card code runs in the app page, so a password
+// typed into that page could be read by any card on it. Typed here, on the
+// secure origin, it can't.
+//
+// This module decides what each form holds, what the app hears of it and
+// which requests a password goes into. It renders nothing: the components in
+// `src/credentials/` draw the fields from a `CredentialFrame` and report to it
+// what is typed.
 //
 // What a password is sent to, and what goes back:
 //
@@ -35,7 +41,7 @@ import {
 } from './session.js';
 
 const MATRIX_CLIENT_PREFIX = '_matrix/client/v3/';
-const MIN_PASSWORD_LENGTH = 8;
+export const MIN_PASSWORD_LENGTH = 8;
 // A response is checked for the passwords typed here before it goes to the
 // app, so a server that echoed one back couldn't hand it over. A username is
 // no secret, and appears in a response as a matter of course. Passwords
@@ -43,9 +49,12 @@ const MIN_PASSWORD_LENGTH = 8;
 // worth looking for.
 const MIN_REDACTED_LENGTH = 4;
 
-const SVG_NS = 'http://www.w3.org/2000/svg';
-
-const FORMS = {
+// The forms the frame shows, by the name the app gives in `form`. Each names
+// its fields and the one request it may make. A field's `validate` is `new`
+// for a new password and `confirm` for its confirmation; a form that is
+// `stateful` shows each field's validation state, as a BoxelInput given
+// `@state` does.
+export const FORMS = {
   login: {
     layout: 'auth',
     operations: ['login'],
@@ -195,6 +204,9 @@ const FORMS = {
     fields: [
       {
         name: 'current',
+        // The modal names the field in its prose, not with a label, so the
+        // input is named for assistive technology alone.
+        accessibleName: 'Password',
         type: 'password',
         autocomplete: 'current-password',
         testId: 'password-field',
@@ -203,297 +215,318 @@ const FORMS = {
   },
 };
 
-function readConfig() {
+// The page's configuration, which the realm server writes into its markup:
+// the Matrix server a password is sent to, and the app origins the frame may
+// talk to.
+export function readConfig(doc = document) {
   let meta = (name) =>
-    document.querySelector(`meta[name="${name}"]`)?.getAttribute('content') ??
-    '';
+    doc.querySelector(`meta[name="${name}"]`)?.getAttribute('content') ?? '';
   return {
     matrixURL: new URL(meta('boxel-matrix-url')),
     appOrigins: meta('boxel-app-origins').split(/\s+/).filter(Boolean),
   };
 }
 
-let config = readConfig();
-let fragmentParams = new URLSearchParams(window.location.hash.slice(1));
-let params = fragmentParams.has('form')
-  ? fragmentParams
-  : new URL(window.location.href).searchParams;
-let formName = params.get('form');
-let form = Object.hasOwn(FORMS, formName) ? FORMS[formName] : undefined;
-let appOrigin = params.get('origin');
+// The form the frame shows and the app page's origin, read from the frame's
+// URL: from its fragment, or from its query when the fragment names no form.
+// `form` is undefined for a name that isn't in `FORMS`.
+export function readParams(href) {
+  let url = new URL(href);
+  let fragmentParams = new URLSearchParams(url.hash.slice(1));
+  let params = fragmentParams.has('form') ? fragmentParams : url.searchParams;
+  let formName = params.get('form');
+  return {
+    formName,
+    form: Object.hasOwn(FORMS, formName) ? FORMS[formName] : undefined,
+    appOrigin: params.get('origin'),
+  };
+}
 
 // Only an app page on one of the listed origins, framing this one, is ever
 // talked to. `frame-ancestors` already refuses any other page; this keeps the
 // messages to the same set.
-if (
-  form &&
-  appOrigin &&
-  isListedOrigin(appOrigin, config.appOrigins) &&
-  window.parent !== window
-) {
-  start(form);
+export function mayStart({ form, appOrigin, appOrigins, framed }) {
+  return Boolean(
+    form && appOrigin && isListedOrigin(appOrigin, appOrigins) && framed,
+  );
 }
 
-function start(form) {
-  let root = document.documentElement;
-  let formElement = document.getElementById('credential-fields');
-  document.body.classList.add(`layout-${form.layout}`);
+// The frame's side of the conversation with the app page, for one form. It
+// holds what is typed into each field, and decides what the app hears of it
+// and which requests a password goes into. It draws nothing: the frame's
+// components render its fields from it, and report what is typed and left
+// through `input`, `blur` and `enter`. Everything it reaches outside itself
+// is passed in, so it runs, and is tested, without a page.
+//
+// - `parent`: the window that framed this one. A message is answered only
+//   when that window sent it, from `appOrigin`.
+// - `send(message)`: posts a message to `parent`, at `appOrigin`.
+// - `applyStyle(message)`: draws the fields in the styles the app sends.
+// - `measure()`: the height of the fields, as laid out.
+// - `requestSubmit()`: submits the form the fields are in, which lets a
+//   password manager see it go.
+// - `onChange()`: called whenever what the fields show changes.
+// - `rendered()`: resolves once the fields show the last change.
+// - `fetch` and `endSessions`: where the Matrix requests, and the realm
+//   server's request that ends a changed password's sessions, go.
+export class CredentialFrame {
+  /**
+   * @param {{
+   *   form: any,
+   *   appOrigin: string,
+   *   matrixURL: URL,
+   *   parent: unknown,
+   *   send: (message: object) => void,
+   *   applyStyle?: (message: any) => void,
+   *   measure?: () => number,
+   *   requestSubmit?: () => void,
+   *   onChange?: () => void,
+   *   rendered?: () => Promise<unknown>,
+   *   fetch?: (url: URL, init: RequestInit) => Promise<Response>,
+   *   endSessions?: (credentials: { username: string, password: string }) => Promise<void>,
+   * }} options
+   */
+  constructor({
+    form,
+    appOrigin,
+    matrixURL,
+    parent,
+    send,
+    applyStyle = () => {},
+    measure = () => 0,
+    requestSubmit = () => {},
+    onChange = () => {},
+    rendered = () => Promise.resolve(),
+    fetch = globalThis.fetch.bind(globalThis),
+    endSessions = (credentials) =>
+      endSessionsForNewPassword(readRealmServer(), credentials),
+  }) {
+    this.form = form;
+    this.appOrigin = appOrigin;
+    this.matrixURL = matrixURL;
+    this.parent = parent;
+    this.send = send;
+    this.applyStyle = applyStyle;
+    this.measure = measure;
+    this.requestSubmit = requestSubmit;
+    this.onChange = onChange;
+    this.rendered = rendered;
+    this.fetch = fetch;
+    this.endSessions = endSessions;
 
-  // name -> { field, input, content, errorElement, iconElement, hintElement,
-  // error }
-  let fields = new Map();
-  let hiddenUsername;
-  if (form.hiddenUsername) {
-    // Gives a password manager the account a new password belongs to.
-    hiddenUsername = document.createElement('input');
-    hiddenUsername.type = 'text';
-    hiddenUsername.name = 'username';
-    hiddenUsername.autocomplete = 'username';
-    hiddenUsername.hidden = true;
-    hiddenUsername.tabIndex = -1;
-    formElement.append(hiddenUsername);
-  }
-  for (let field of form.fields) {
-    fields.set(field.name, renderField(formElement, form, field));
+    // The username a password manager is given for a new password, when the
+    // form has a hidden username field.
+    this.hiddenUsername = '';
+    // Whether the layout follows a narrow space around the fields, as the
+    // app's `--credential-layout: narrow` says.
+    this.narrow = false;
+    // name -> { field, value, error }
+    this.fields = new Map(
+      form.fields.map((field) => [
+        field.name,
+        { field, value: '', error: undefined },
+      ]),
+    );
+    // Sent only when it changes, so the app page, and any card in it, can't
+    // count keystrokes by it.
+    this.lastState = undefined;
+    // The app clears an error it shows about the fields when one is typed
+    // into. It hears of the first keystroke after the fields were last
+    // submitted or marked invalid, and of none after that, for the same
+    // reason `state` is only sent on a change.
+    this.inputReported = new Set();
+    this.lastHeight = -1;
+    // Requests are made one at a time, in the order they were asked for, so
+    // a form that asks again while one is in flight gets an answer to both.
+    this.queue = Promise.resolve();
   }
 
-  function send(message) {
-    window.parent.postMessage(message, appOrigin);
+  value(name) {
+    return this.fields.get(name)?.value ?? '';
   }
 
-  function value(name) {
-    return fields.get(name)?.input.value ?? '';
+  error(name) {
+    return this.fields.get(name)?.error;
   }
 
-  function isComplete() {
-    for (let entry of fields.values()) {
-      if (!entry.input.value || entry.error) {
+  // Whether a field shows the hint that what is in it is valid: a new
+  // password long enough, or a confirmation that matches it.
+  showsHint(name) {
+    let entry = this.fields.get(name);
+    if (!entry?.field.validHint || !entry.value || entry.error) {
+      return false;
+    }
+    return entry.field.validate === 'new'
+      ? entry.value.length >= MIN_PASSWORD_LENGTH
+      : name === 'confirm' && entry.value === this.value('password');
+  }
+
+  isComplete() {
+    for (let entry of this.fields.values()) {
+      if (!entry.value || entry.error) {
         return false;
       }
     }
     return true;
   }
 
-  // Sent only when it changes, so the app page, and any card in it, can't
-  // count keystrokes by it.
-  let lastState;
-  function sendState() {
-    let filled = {};
-    for (let [name, entry] of fields) {
-      filled[name] = Boolean(entry.input.value);
-    }
-    let state = { type: 'state', filled, complete: isComplete() };
-    let serialized = JSON.stringify(state);
-    if (serialized !== lastState) {
-      lastState = serialized;
-      send(state);
-    }
-    refreshHints();
+  // Once the fields are drawn in the frame's own stylesheets, the app is
+  // told which custom properties to send their values for.
+  ready(customProperties) {
+    this.send({ type: 'ready', properties: customProperties });
+    this.sendState();
   }
 
-  // The app clears an error it shows about the fields when one is typed
-  // into. It hears of the first keystroke after the fields were last
-  // submitted or marked invalid, and of none after that, for the same reason
-  // `state` is only sent on a change.
-  let inputReported = new Set();
-
-  // Shown the way a BoxelInput shows `@state='invalid'` with an
-  // `@errorMessage`: the input marked invalid, the icon and the message added
-  // beside it, all removed again once the error clears.
-  function setError(name, message) {
-    let entry = fields.get(name);
+  input(name, value) {
+    let entry = this.fields.get(name);
     if (!entry) {
       return;
     }
-    entry.error = message || undefined;
-    let { input } = entry;
-    entry.errorElement?.remove();
-    entry.errorElement = undefined;
-    entry.iconElement?.remove();
-    entry.iconElement = undefined;
-    input.removeAttribute('aria-invalid');
-    input.removeAttribute('aria-errormessage');
-    input.classList.toggle('invalid', Boolean(entry.error));
-    if (form.stateful) {
-      input.setAttribute(
-        'data-test-boxel-input-validation-state',
-        entry.error ? 'invalid' : 'initial',
-      );
+    entry.value = String(value);
+    entry.error = undefined;
+    if (!this.inputReported.has(name)) {
+      this.inputReported.add(name);
+      this.send({ type: 'input', field: name });
     }
-    if (!entry.error) {
+    this.sendState();
+    this.onChange();
+  }
+
+  blur(name) {
+    this.validate(name);
+    this.sendState();
+    this.onChange();
+  }
+
+  enter() {
+    this.send({ type: 'submit-request' });
+  }
+
+  setError(name, message) {
+    let entry = this.fields.get(name);
+    if (entry) {
+      entry.error = message || undefined;
+    }
+  }
+
+  validate(name) {
+    let entry = this.fields.get(name);
+    if (!entry) {
       return;
     }
-    input.setAttribute('aria-invalid', 'true');
-    entry.iconElement = document.createElement('div');
-    entry.iconElement.className = 'validation-icon-container';
-    entry.iconElement.append(failureIcon());
-    entry.errorElement = document.createElement('div');
-    entry.errorElement.className = 'error-message';
-    entry.errorElement.id = `error-message-${name}`;
-    entry.errorElement.setAttribute('aria-live', 'polite');
-    entry.errorElement.setAttribute('data-test-boxel-input-error-message', '');
-    entry.errorElement.textContent = entry.error;
-    input.setAttribute('aria-errormessage', entry.errorElement.id);
-    input.after(entry.iconElement, entry.errorElement);
-  }
-
-  function validate(name) {
-    let entry = fields.get(name);
     if (entry.field.validate === 'new') {
-      let password = entry.input.value;
-      if (!password) {
-        setError(name, 'Password is missing');
-      } else if (password.length < MIN_PASSWORD_LENGTH) {
-        setError(name, 'Password must be at least 8 characters long');
+      if (!entry.value) {
+        this.setError(name, 'Password is missing');
+      } else if (entry.value.length < MIN_PASSWORD_LENGTH) {
+        this.setError(name, 'Password must be at least 8 characters long');
       }
     } else if (entry.field.validate === 'confirm') {
-      if (entry.input.value !== value('password')) {
-        setError(name, 'Passwords do not match');
+      if (entry.value !== this.value('password')) {
+        this.setError(name, 'Passwords do not match');
       }
     }
   }
 
-  function refreshHints() {
-    for (let [name, entry] of fields) {
-      let hint = entry.field.validHint;
-      if (!hint) {
-        continue;
-      }
-      let input = entry.input.value;
-      let shown =
-        Boolean(input) &&
-        !entry.error &&
-        (entry.field.validate === 'new'
-          ? input.length >= MIN_PASSWORD_LENGTH
-          : name === 'confirm' && input === value('password'));
-      if (shown && !entry.hintElement) {
-        entry.hintElement = document.createElement('p');
-        entry.hintElement.className = 'validation-hint';
-        entry.hintElement.setAttribute(`data-test-${hint.testId}`, '');
-        entry.hintElement.append(checkMarkIcon(), hint.text);
-        entry.content.append(entry.hintElement);
-      } else if (!shown && entry.hintElement) {
-        entry.hintElement.remove();
-        entry.hintElement = undefined;
-      }
+  sendState() {
+    let filled = {};
+    for (let [name, entry] of this.fields) {
+      filled[name] = Boolean(entry.value);
+    }
+    let state = { type: 'state', filled, complete: this.isComplete() };
+    let serialized = JSON.stringify(state);
+    if (serialized !== this.lastState) {
+      this.lastState = serialized;
+      this.send(state);
     }
   }
 
-  for (let [name, entry] of fields) {
-    entry.input.addEventListener('input', () => {
-      setError(name, undefined);
-      if (!inputReported.has(name)) {
-        inputReported.add(name);
-        send({ type: 'input', field: name });
-      }
-      sendState();
-    });
-    entry.input.addEventListener('blur', () => {
-      validate(name);
-      sendState();
-    });
-    entry.input.addEventListener('keydown', (event) => {
-      if (event.key === 'Enter') {
-        event.preventDefault();
-        send({ type: 'submit-request' });
-      }
-    });
-  }
-  formElement.addEventListener('submit', (event) => event.preventDefault());
-
-  // The page resolves the custom properties these fields' styles use, and
-  // the text styles they inherit, where the frame sits, and sends them.
-  let inheritedProperties = [
-    'color',
-    'color-scheme',
-    'font-family',
-    'font-size',
-    'font-style',
-    'font-weight',
-    'letter-spacing',
-    'line-height',
-    'text-rendering',
-    '-webkit-font-smoothing',
-  ];
-  let customProperties = ['--credential-layout'];
-
-  function applyStyle({ properties, inherited, backdrop, offset, width }) {
-    for (let name of customProperties) {
-      let resolved = properties?.[name];
-      if (typeof resolved === 'string' && resolved.trim() !== '') {
-        root.style.setProperty(name, resolved);
-      } else {
-        root.style.removeProperty(name);
-      }
-    }
-    for (let name of inheritedProperties) {
-      let resolved = inherited?.[name];
-      if (typeof resolved === 'string' && resolved !== '') {
-        (name === 'color-scheme' ? root : document.body).style.setProperty(
-          name,
-          resolved,
-        );
-      }
-    }
-    // The solid colour behind the frame in the page, when there is one, so
-    // text here is drawn on an opaque background as the page's own is.
-    if (typeof backdrop === 'string' && CSS.supports('color', backdrop)) {
-      root.style.backgroundColor = backdrop;
-    } else {
-      root.style.removeProperty('background-color');
-    }
-    // The page puts the frame on the whole pixel at or before where the
-    // fields it stands in for start, which may be part of the way into one.
-    // Moving the content forward by that part, at the width the fields have
-    // in the page, puts every edge and glyph on the pixel the page would have
-    // drawn it on.
-    let exactWidth = Number(width);
-    if (Number.isFinite(exactWidth) && exactWidth > 0) {
-      document.body.style.width = `${exactWidth}px`;
-    } else {
-      document.body.style.removeProperty('width');
-    }
-    for (let [axis, side] of [
-      ['x', 'left'],
-      ['y', 'top'],
-    ]) {
-      let shift = Number(offset?.[axis]);
-      if (Number.isFinite(shift) && Math.abs(shift) < 1) {
-        document.body.style.setProperty(side, `${shift}px`);
-      } else {
-        document.body.style.removeProperty(side);
-      }
-    }
-    document.body.classList.toggle(
-      'narrow',
-      (properties?.['--credential-layout'] ?? '').trim() === 'narrow',
-    );
-    root.classList.add('styled');
-  }
-
-  let lastHeight = -1;
-  function sendSize() {
+  sendSize() {
     // Exact, not rounded: the page lays out around this height, and a
     // fraction of a pixel added here moves everything after the frame.
-    let height = formElement.getBoundingClientRect().height;
-    if (height !== lastHeight) {
-      lastHeight = height;
-      send({ type: 'size', height });
+    let height = this.measure();
+    if (height !== this.lastHeight) {
+      this.lastHeight = height;
+      this.send({ type: 'size', height });
     }
   }
-  new ResizeObserver(sendSize).observe(formElement);
 
-  // Requests are made one at a time, in the order they were asked for, so a
-  // form that asks again while one is in flight gets an answer to both.
-  let queue = Promise.resolve();
-  function perform(id, operation, args) {
-    queue = queue.then(() => performNow(id, operation, args));
+  receive(event) {
+    if (event.source !== this.parent || event.origin !== this.appOrigin) {
+      return;
+    }
+    let message = event.data;
+    if (!message || typeof message !== 'object') {
+      return;
+    }
+    switch (message.type) {
+      case 'style':
+        this.narrow =
+          String(message.properties?.['--credential-layout'] ?? '').trim() ===
+          'narrow';
+        this.applyStyle(message);
+        this.onChange();
+        // Measured once the layout the styles choose is drawn, so the app is
+        // never sent the height of a layout part-way through changing.
+        this.rendered().then(() => this.sendSize());
+        break;
+      case 'context': {
+        let username = String(message.username ?? '');
+        if (this.form.hiddenUsername) {
+          this.hiddenUsername = username;
+        }
+        // A username the page already knows fills the username field in,
+        // and stays editable.
+        let usernameField = this.fields.get('username');
+        if (usernameField && !usernameField.value && username) {
+          usernameField.value = username;
+          this.sendState();
+        }
+        this.onChange();
+        break;
+      }
+      case 'field-error':
+        this.inputReported.delete(String(message.field));
+        this.setError(String(message.field), message.message);
+        this.sendState();
+        this.onChange();
+        break;
+      // Checks every field as leaving it does, and answers once the app's
+      // `state` is up to date. A field the user just left may not have been
+      // reported yet when the app goes to act on its last `state`.
+      case 'validate':
+        for (let [name, entry] of this.fields) {
+          if (entry.value && !entry.error) {
+            this.validate(name);
+          }
+        }
+        this.sendState();
+        this.onChange();
+        this.send({
+          type: 'validated',
+          id: message.id,
+          complete: this.isComplete(),
+        });
+        break;
+      case 'submit':
+        this.perform(message.id, String(message.operation), message.args);
+        break;
+    }
   }
 
-  async function performNow(id, operation, args) {
-    inputReported.clear();
-    if (!form.operations.includes(operation) || !isComplete()) {
-      send({
+  // Resolves once the request is answered, for a caller that waits on it.
+  perform(id, operation, args) {
+    this.queue = this.queue.then(() => this.performNow(id, operation, args));
+    return this.queue;
+  }
+
+  async performNow(id, operation, args) {
+    this.inputReported.clear();
+    if (
+      !this.form.operations.includes(operation) ||
+      !Object.hasOwn(OPERATIONS, operation) ||
+      !this.isComplete()
+    ) {
+      this.send({
         type: 'result',
         id,
         ok: false,
@@ -503,87 +536,24 @@ function start(form) {
       return;
     }
     // Lets a password manager see the form go, as it would for the app's own
-    // form; the submit event itself is cancelled above.
-    formElement.requestSubmit();
+    // form; the submit event itself is cancelled by the form.
+    this.requestSubmit();
     let result;
     try {
-      result = await OPERATIONS[operation](args ?? {});
+      result = await OPERATIONS[operation].call(this, args ?? {});
     } catch (e) {
       result = { ok: false, status: 0, body: { error: String(e?.message) } };
     }
-    send({ type: 'result', id, ...redact(result) });
+    this.send({ type: 'result', id, ...this.redact(result) });
   }
-
-  // Each operation makes its Matrix requests with the passwords filled in
-  // from the fields and the parts that aren't secret taken from the app.
-  const OPERATIONS = {
-    async login() {
-      return await passwordLogin();
-    },
-
-    async 'cli-login'() {
-      return await passwordLogin();
-    },
-
-    async register({ username, auth }) {
-      return await matrixRequest('register', {
-        body: {
-          username: String(username ?? ''),
-          password: value('password'),
-          auth: plainObject(auth),
-        },
-      });
-    },
-
-    // Always signs out the account's other sessions, which is not the app's
-    // to turn off: a session stolen before the change must not outlive it.
-    // The Matrix server signs out the account's devices; its secure sessions
-    // are ended at the realm server, for the account the app names in
-    // `account` (its Matrix id, or the email address a reset was sent to).
-    async 'set-password'({ auth, accessToken, account }) {
-      let result = await matrixRequest('account/password', {
-        accessToken,
-        body: {
-          auth: withPassword(plainObject(auth)),
-          new_password: value('password'),
-          logout_devices: true,
-        },
-      });
-      if (result.ok && typeof account === 'string' && account) {
-        try {
-          await endSessionsForNewPassword(readRealmServer(), {
-            username: account,
-            password: value('password'),
-          });
-        } catch {
-          // The password is changed whatever the answer, so a failure is not
-          // the app's to see; a session the realm server couldn't end runs out
-          // within its week. The app can name any account, but only the new
-          // password, which it never sees, gets a session ended.
-        }
-      }
-      return result;
-    },
-
-    async 'add-threepid'({ auth, accessToken, clientSecret, sid }) {
-      return await matrixRequest('account/3pid/add', {
-        accessToken,
-        body: {
-          auth: withPassword(plainObject(auth)),
-          client_secret: String(clientSecret ?? ''),
-          sid: String(sid ?? ''),
-        },
-      });
-    },
-  };
 
   // Signs in with the username field as a Matrix username, then, if that
   // fails, as an email address. When neither signs in, the username
   // attempt's response is returned.
-  async function passwordLogin() {
-    let password = value('password');
-    let username = value('username');
-    let byUsername = await matrixRequest('login', {
+  async passwordLogin() {
+    let password = this.value('password');
+    let username = this.value('username');
+    let byUsername = await this.matrixRequest('login', {
       body: {
         identifier: { type: 'm.id.user', user: username },
         password,
@@ -593,7 +563,7 @@ function start(form) {
     if (byUsername.ok) {
       return byUsername;
     }
-    let byEmail = await matrixRequest('login', {
+    let byEmail = await this.matrixRequest('login', {
       body: {
         identifier: {
           type: 'm.id.thirdparty',
@@ -609,22 +579,22 @@ function start(form) {
 
   // An interactive-auth dict for the password stage carries the account's
   // current password, which is in a field here, never in the app's dict.
-  function withPassword(auth) {
+  withPassword(auth) {
     if (auth.type === 'm.login.password') {
-      return { ...auth, password: value('current') };
+      return { ...auth, password: this.value('current') };
     }
     return auth;
   }
 
-  async function matrixRequest(path, { body, accessToken }) {
+  async matrixRequest(path, { body, accessToken }) {
     let headers = { 'Content-Type': 'application/json' };
     if (typeof accessToken === 'string' && accessToken) {
       headers.Authorization = `Bearer ${accessToken}`;
     }
     let response;
     try {
-      response = await fetch(
-        new URL(`${MATRIX_CLIENT_PREFIX}${path}`, config.matrixURL),
+      response = await this.fetch(
+        new URL(`${MATRIX_CLIENT_PREFIX}${path}`, this.matrixURL),
         {
           method: 'POST',
           headers,
@@ -645,221 +615,82 @@ function start(form) {
     return { ok: response.ok, status: response.status, body: json };
   }
 
-  function redact(result) {
-    let secrets = [...fields.values()]
+  redact(result) {
+    let secrets = [...this.fields.values()]
       .filter((entry) => entry.field.type === 'password')
-      .map((entry) => entry.input.value)
+      .map((entry) => entry.value)
       .filter((secret) => secret.length >= MIN_REDACTED_LENGTH);
     return redactResponse(result, secrets);
   }
-
-  window.addEventListener('message', (event) => {
-    if (event.source !== window.parent || event.origin !== appOrigin) {
-      return;
-    }
-    let message = event.data;
-    if (!message || typeof message !== 'object') {
-      return;
-    }
-    switch (message.type) {
-      case 'style':
-        applyStyle(message);
-        sendSize();
-        break;
-      case 'context': {
-        let username = String(message.username ?? '');
-        if (hiddenUsername) {
-          hiddenUsername.value = username;
-        }
-        // A username the page already knows fills the username field in,
-        // and stays editable.
-        let usernameField = fields.get('username');
-        if (usernameField && !usernameField.input.value && username) {
-          usernameField.input.value = username;
-          sendState();
-        }
-        break;
-      }
-      case 'field-error':
-        inputReported.delete(String(message.field));
-        setError(String(message.field), message.message);
-        sendState();
-        break;
-      // Checks every field as leaving it does, and answers once the app's
-      // `state` is up to date. A field the user just left may not have been
-      // reported yet when the app goes to act on its last `state`.
-      case 'validate':
-        for (let [name, entry] of fields) {
-          if (entry.input.value && !entry.error) {
-            validate(name);
-          }
-        }
-        sendState();
-        send({ type: 'validated', id: message.id, complete: isComplete() });
-        break;
-      case 'submit':
-        perform(message.id, String(message.operation), message.args);
-        break;
-    }
-  });
-
-  whenStyled().then(() => {
-    customProperties.push(...collectCustomProperties());
-    send({ type: 'ready', properties: customProperties });
-    sendState();
-  });
 }
 
-function whenStyled() {
-  let link = document.querySelector('link[rel="stylesheet"]');
-  if (!link || link.sheet) {
-    return Promise.resolve();
-  }
-  return new Promise((resolve) => {
-    link.addEventListener('load', resolve, { once: true });
-    link.addEventListener('error', resolve, { once: true });
-  });
-}
+// Each request a form may make, by the name `FORMS` lists it under: its
+// Matrix requests, with the passwords filled in from the fields and the parts
+// that aren't secret taken from the app. Each is called on the form's
+// `CredentialFrame`.
+const OPERATIONS = {
+  async login() {
+    return await this.passwordLogin();
+  },
 
-function renderField(formElement, form, field) {
-  let vertical = form.layout !== 'settings';
-  let wrapper = document.createElement('label');
-  wrapper.className = `boxel-field ${vertical ? 'vertical' : 'horizontal'}`;
-  wrapper.setAttribute('data-test-boxel-field', '');
+  async 'cli-login'() {
+    return await this.passwordLogin();
+  },
 
-  let labelContainer = document.createElement('div');
-  labelContainer.className = 'label-container';
-  if (field.label) {
-    let label = document.createElement('div');
-    label.className = 'boxel-label label';
-    label.setAttribute('data-test-boxel-field-label', '');
-    label.textContent = field.label;
-    labelContainer.append(label);
-  }
+  async register({ username, auth }) {
+    return await this.matrixRequest('register', {
+      body: {
+        username: String(username ?? ''),
+        password: this.value('password'),
+        auth: plainObject(auth),
+      },
+    });
+  },
 
-  let content = document.createElement('div');
-  content.className = 'content';
-
-  let container = document.createElement('div');
-  container.className = 'input-container';
-
-  let input = document.createElement('input');
-  input.className = 'boxel-input';
-  input.type = field.type;
-  if (field.inputName) {
-    input.name = field.inputName;
-  }
-  input.autocomplete = field.autocomplete;
-  if (field.id) {
-    input.id = field.id;
-  }
-  if (field.placeholder) {
-    input.placeholder = field.placeholder;
-  }
-  input.setAttribute('data-test-boxel-input', '');
-  if (field.id) {
-    input.setAttribute('data-test-boxel-input-id', field.id);
-  }
-  if (form.stateful) {
-    input.setAttribute('data-test-boxel-input-validation-state', 'initial');
-  }
-  input.setAttribute(`data-test-${field.testId}`, '');
-
-  container.append(input);
-  content.append(container);
-
-  wrapper.append(labelContainer, content);
-  formElement.append(wrapper);
-  return {
-    field,
-    input,
-    content,
-    errorElement: undefined,
-    iconElement: undefined,
-    hintElement: undefined,
-    error: undefined,
-  };
-}
-
-// The custom properties the stylesheet uses, so the page can be asked for
-// exactly those.
-function collectCustomProperties() {
-  let names = new Set();
-  let pattern = /var\(\s*(--[\w-]+)/g;
-  for (let sheet of document.styleSheets) {
-    let rules;
-    try {
-      rules = sheet.cssRules;
-    } catch {
-      continue;
-    }
-    for (let rule of rules) {
-      for (let match of rule.cssText.matchAll(pattern)) {
-        names.add(match[1]);
+  // Always signs out the account's other sessions, which is not the app's to
+  // turn off: a session stolen before the change must not outlive it. The
+  // Matrix server signs out the account's devices; its secure sessions are
+  // ended at the realm server, for the account the app names in `account`
+  // (its Matrix id, or the email address a reset was sent to).
+  async 'set-password'({ auth, accessToken, account }) {
+    let result = await this.matrixRequest('account/password', {
+      accessToken,
+      body: {
+        auth: this.withPassword(plainObject(auth)),
+        new_password: this.value('password'),
+        logout_devices: true,
+      },
+    });
+    if (result.ok && typeof account === 'string' && account) {
+      try {
+        await this.endSessions({
+          username: account,
+          password: this.value('password'),
+        });
+      } catch {
+        // The password is changed whatever the answer, so a failure is not
+        // the app's to see; a session the realm server couldn't end runs out
+        // within its week. The app can name any account, but only the new
+        // password, which it never sees, gets a session ended.
       }
     }
-  }
-  // Defined by the stylesheet itself, from the page's values.
-  for (let local of ['--icon-size', '--icon-space', '--_icon-full-length']) {
-    names.delete(local);
-  }
-  return [...names];
-}
+    return result;
+  },
+
+  async 'add-threepid'({ auth, accessToken, clientSecret, sid }) {
+    return await this.matrixRequest('account/3pid/add', {
+      accessToken,
+      body: {
+        auth: this.withPassword(plainObject(auth)),
+        client_secret: String(clientSecret ?? ''),
+        sid: String(sid ?? ''),
+      },
+    });
+  },
+};
 
 function plainObject(value) {
   return value && typeof value === 'object' && !Array.isArray(value)
     ? JSON.parse(JSON.stringify(value))
     : {};
-}
-
-function svgElement(name, attributes) {
-  let element = document.createElementNS(SVG_NS, name);
-  for (let [key, value] of Object.entries(attributes)) {
-    element.setAttribute(key, value);
-  }
-  return element;
-}
-
-// boxel-ui's FailureBordered icon.
-function failureIcon() {
-  let svg = svgElement('svg', {
-    width: '24',
-    height: '24',
-    viewBox: '0 0 24 24',
-    role: 'presentation',
-    class: 'validation-icon-invalid',
-  });
-  let group = svgElement('g', { fill: 'none' });
-  group.append(
-    svgElement('circle', {
-      cx: '12',
-      cy: '12',
-      r: '10',
-      fill: 'var(--icon-background-color, var(--destructive, red))',
-    }),
-    svgElement('path', {
-      fill: 'var(--icon-foreground-color, #f5f5f5)',
-      d: 'M13.143 12.757h-2.32l-.486-6.855h3.29zM10.3 16.01a1.6 1.6 0 0 1 .427-1.207 1.74 1.74 0 0 1 1.246-.41 1.7 1.7 0 0 1 1.222.419c.304.322.461.756.432 1.198a1.6 1.6 0 0 1-.437 1.182c-.33.303-.77.46-1.217.433a1.7 1.7 0 0 1-1.237-.423 1.58 1.58 0 0 1-.436-1.192',
-    }),
-  );
-  svg.append(group);
-  return svg;
-}
-
-// boxel-ui's CheckMark icon.
-function checkMarkIcon() {
-  let svg = svgElement('svg', {
-    viewBox: '5 6 10.73 8',
-    class: 'validation-hint-icon',
-  });
-  svg.append(
-    svgElement('path', {
-      fill: 'none',
-      'stroke-linecap': 'round',
-      'stroke-linejoin': 'round',
-      'stroke-width': '2',
-      d: 'm14.727 7-6 6L6 10.273',
-    }),
-  );
-  return svg;
 }
