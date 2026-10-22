@@ -47,47 +47,47 @@
       "bytes": 715
     },
     "credentials.js": {
-      "bytes": 280614,
+      "bytes": 280197,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/auth-form-field.gts",
-          "size": 645
+          "size": 570
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/field-container.gts",
-          "size": 2466
+          "size": 2391
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/icons/check-mark.gts",
-          "size": 707
+          "size": 632
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/icons/failure-bordered.gts",
-          "size": 1090
+          "size": 1015
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/icons/success-bordered.gts",
-          "size": 1082
+          "size": 1007
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/input.gts",
-          "size": 3771
+          "size": 3696
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/label.gts",
-          "size": 668
+          "size": 593
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/validation-hint.gts",
-          "size": 624
+          "size": 549
         },
         {
           "package": "@cardstack/secure-origin",
@@ -97,7 +97,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/credentials/credential-fields.gts",
-          "size": 5696
+          "size": 5953
         },
         {
           "package": "@cardstack/secure-origin",
