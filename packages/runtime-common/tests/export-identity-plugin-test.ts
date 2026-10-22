@@ -314,6 +314,64 @@ const tests = Object.freeze({
       `,
     );
   },
+  'tags a class a factory computes for an exported binding, once it exists':
+    async (assert) => {
+      assert.codeEqual(
+        transform(`
+          export const DogStatus = enumField(StringField, { options: ['good'] });
+        `),
+        `
+          export const DogStatus = enumField(StringField, { options: ['good'] });
+          if (typeof DogStatus === 'function' && !Object.prototype.hasOwnProperty.call(DogStatus, Symbol.for('ident'))) Object.defineProperty(DogStatus, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'DogStatus'], configurable: true, writable: true });
+        `,
+      );
+    },
+
+  'tags a computed binding exported through an export list': async (assert) => {
+    assert.codeEqual(
+      transform(`
+        const Status = makeField();
+        export { Status as DogStatus };
+      `),
+      `
+        const Status = makeField();
+        if (typeof Status === 'function' && !Object.prototype.hasOwnProperty.call(Status, Symbol.for('ident'))) Object.defineProperty(Status, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'DogStatus'], configurable: true, writable: true });
+        export { Status as DogStatus };
+      `,
+    );
+  },
+
+  'tags a class a factory computes for the default export': async (assert) => {
+    assert.codeEqual(
+      transform(`
+        export default makeField();
+      `),
+      `
+        const _default = makeField();
+        if (typeof _default === 'function' && !Object.prototype.hasOwnProperty.call(_default, Symbol.for('ident'))) Object.defineProperty(_default, Symbol.for('ident'), { value: ['https://example.com/pets/dog', 'default'], configurable: true, writable: true });
+        export default _default;
+      `,
+    );
+  },
+
+  'leaves exported values that cannot be classes alone': async (assert) => {
+    assert.codeEqual(
+      transform(`
+        export const count = 1;
+        export const label = 'dog';
+        export const bark = () => 'woof';
+        export const config = { loud: true };
+        export default 'dog';
+      `),
+      `
+        export const count = 1;
+        export const label = 'dog';
+        export const bark = () => 'woof';
+        export const config = { loud: true };
+        export default 'dog';
+      `,
+    );
+  },
 } as SharedTests<{}>);
 
 export default tests;

@@ -73,5 +73,21 @@ module(basename(import.meta.filename), function () {
     test('leaves a file untagged when moduleIdentifier returns null', async function (assert) {
       await runSharedTest(exportIdentityPluginTests, assert, {});
     });
+
+    test('tags a class a factory computes for an exported binding, once it exists', async function (assert) {
+      await runSharedTest(exportIdentityPluginTests, assert, {});
+    });
+
+    test('tags a computed binding exported through an export list', async function (assert) {
+      await runSharedTest(exportIdentityPluginTests, assert, {});
+    });
+
+    test('tags a class a factory computes for the default export', async function (assert) {
+      await runSharedTest(exportIdentityPluginTests, assert, {});
+    });
+
+    test('leaves exported values that cannot be classes alone', async function (assert) {
+      await runSharedTest(exportIdentityPluginTests, assert, {});
+    });
   });
 });
