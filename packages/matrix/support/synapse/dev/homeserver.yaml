@@ -54,6 +54,15 @@ rc_joins:
 rc_joins_per_room:
   per_second: 9999
   burst_count: 9999
+# Each user's first sign-in has the realm server's Matrix user create a
+# room, and the realm server looks up profiles without an access token, so
+# neither room creation nor profile lookups are limited here.
+rc_room_creation:
+  per_second: 10000
+  burst_count: 10000
+rc_profile:
+  per_second: 10000
+  burst_count: 10000
 rc_3pid_validation:
   per_second: 1000
   burst_count: 1000
