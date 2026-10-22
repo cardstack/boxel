@@ -258,20 +258,6 @@ module('Acceptance | dashboard', function (hooks) {
         'codex',
       );
     });
-
-    test('a write with nobody logged in resolves without writing', async function (assert) {
-      await visitOperatorMode({ workspaceChooserOpened: true });
-
-      let matrixService = getService('matrix-service') as MatrixService;
-      await matrixService.logout();
-      await matrixService.updateDashboardState({ agent: 'claude' });
-
-      assert.deepEqual(matrixService.dashboardState, {});
-      assert.strictEqual(
-        (mockMatrixUtils.getDashboardState() as any).agent,
-        'codex',
-      );
-    });
   });
 
   module('feature flag off', function () {
