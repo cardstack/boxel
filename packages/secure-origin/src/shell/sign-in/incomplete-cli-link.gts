@@ -1,5 +1,6 @@
-// A CLI sign-in link without a loopback port and state this page may hand a
-// session to (see `cliCallback`).
+// A CLI sign-in without a loopback port and state this page may hand a session
+// to (see `cliCallback`), whether the link lacked them or Google's callback
+// found none it could use.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import MessagePage from './message-page.gts';

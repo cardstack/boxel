@@ -21,6 +21,7 @@ import { asSentence } from '../sign-in-copy.js';
 import { modeURL, startURL } from '../urls.js';
 
 import CliHandoff from './cli-handoff.gts';
+import IncompleteCliLink from './incomplete-cli-link.gts';
 import MessagePage from './message-page.gts';
 import SignedIn from './signed-in.gts';
 
@@ -28,6 +29,7 @@ type State =
   | { name: 'signing-in' }
   | { name: 'failed'; error: string; startAgain: string }
   | { name: 'handing-to-cli'; callback: CliCallback; session: Session }
+  | { name: 'incomplete-cli-link' }
   | { name: 'signed-in' };
 
 export default class GoogleCallback extends Component {
@@ -39,6 +41,8 @@ export default class GoogleCallback extends Component {
         @callback={{this.handoff.callback}}
         @session={{this.handoff.session}}
       />
+    {{else if this.incompleteCliLink}}
+      <IncompleteCliLink />
     {{else if this.failure}}
       <MessagePage @heading='That didn’t work'>
         <div class='error' role='alert' data-test-secure-error>
@@ -119,6 +123,10 @@ export default class GoogleCallback extends Component {
     return this.state.name === 'handing-to-cli' ? this.state : undefined;
   }
 
+  private get incompleteCliLink() {
+    return this.state.name === 'incomplete-cli-link';
+  }
+
   private get failure() {
     return this.state.name === 'failed' ? this.state : undefined;
   }
@@ -145,14 +153,10 @@ export default class GoogleCallback extends Component {
     let { session, resume } = result;
     if (resume?.client === 'cli') {
       // A session signed in for the CLI goes to the CLI's listener or
-      // nowhere: never kept as this window's own.
+      // nowhere: never kept as this window's own. Without a listener there is
+      // nothing to start again here; the CLI makes a new link.
       if (!isCliCallback(resume.cli)) {
-        this.page.state = {
-          name: 'failed',
-          error:
-            'This sign-in link is not complete. Run the command in your terminal again to get a new link.',
-          startAgain: modeURL('sign-in'),
-        };
+        this.page.state = { name: 'incomplete-cli-link' };
         return;
       }
       this.page.state = {

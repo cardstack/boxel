@@ -585,7 +585,7 @@ module('Integration | sign-in', function (hooks) {
       serve(exchanges(SIGNED_IN));
       visitShell('?state=google-state&code=a-code', '/secure/google-callback');
       await render(GoogleCallback);
-      await waitFor('[data-test-secure-error]');
+      await waitFor('[data-test-secure-title]');
       assert.strictEqual(handoffs.length, 0, 'nothing is posted');
       assert.strictEqual(
         localStorage.getItem('boxel-secure-session'),
@@ -593,10 +593,11 @@ module('Integration | sign-in', function (hooks) {
         'nor kept as the window’s own session',
       );
       assert
-        .dom('[data-test-secure-error]')
-        .hasText(
-          'This sign-in link is not complete. Run the command in your terminal again to get a new link.',
-        );
+        .dom('[data-test-secure-title]')
+        .hasText('This sign-in link is not complete');
+      assert
+        .dom('[data-test-secure-start-again]')
+        .doesNotExist('starting again here would sign in the window instead');
     });
 
     test('a failed exchange says so, and starts again where the sign-in began', async function (assert) {

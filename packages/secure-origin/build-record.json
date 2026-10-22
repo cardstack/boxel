@@ -80,43 +80,7 @@
       "sources": [
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/credentials/b38b0caa88.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/global.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/password-reset/51fd00713b.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/password-reset/e567338a09.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/register/9e64bcf389.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/register/c3cc521294.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/sign-in/308a3464c4.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/sign-in/3cd83a5a00.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/sign-in/6d64ed3c4e.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/shell/sign-in/cd2fde4553.css"
+          "module": "src/styles/layers.css"
         }
       ]
     },
@@ -131,27 +95,11 @@
       ]
     },
     "shared.css": {
-      "bytes": 19858,
+      "bytes": 4698,
       "sources": [
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/components/2a4b56d7da.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/2b5d9db39c.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/365822eb1d.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
           "module": "src/components/51537f9ada.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/6134f21d67.css"
         },
         {
           "package": "@cardstack/secure-origin",
@@ -163,39 +111,17 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/components/b832a3ca2d.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/c8a04e9c58.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
           "module": "src/components/cb15f443fd.css"
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/e6384ada8e.css"
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/icons/3a3357bf22.css"
         }
       ]
     },
     "shared.js": {
-      "bytes": 272803,
+      "bytes": 263168,
       "modules": [
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/auth-button.gts",
-          "size": 619
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/auth-container.gts",
-          "size": 1030
-        },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/auth-form-field.gts",
@@ -203,18 +129,8 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/components/button.gts",
-          "size": 1775
-        },
-        {
-          "package": "@cardstack/secure-origin",
           "module": "src/components/field-container.gts",
           "size": 2380
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/icons/boxel-icon.gts",
-          "size": 2020
         },
         {
           "package": "@cardstack/secure-origin",
@@ -228,18 +144,8 @@
         },
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/components/icons/google-color.gts",
-          "size": 1226
-        },
-        {
-          "package": "@cardstack/secure-origin",
           "module": "src/components/icons/success-bordered.gts",
           "size": 1007
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/input-group.gts",
-          "size": 3862
         },
         {
           "package": "@cardstack/secure-origin",
@@ -250,11 +156,6 @@
           "package": "@cardstack/secure-origin",
           "module": "src/components/label.gts",
           "size": 407
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/components/loading-indicator.gts",
-          "size": 1171
         },
         {
           "package": "@cardstack/secure-origin",
@@ -275,11 +176,6 @@
           "package": "@cardstack/secure-origin",
           "module": "src/helpers/truth-helpers.ts",
           "size": 280
-        },
-        {
-          "package": "@cardstack/secure-origin",
-          "module": "src/modifiers/autofocus.ts",
-          "size": 137
         },
         {
           "package": "@cardstack/secure-origin",
@@ -749,8 +645,36 @@
       ]
     },
     "shell.css": {
-      "bytes": 8144,
+      "bytes": 23329,
       "sources": [
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/2a4b56d7da.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/2b5d9db39c.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/365822eb1d.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/6134f21d67.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/b832a3ca2d.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/c8a04e9c58.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/icons/3a3357bf22.css"
+        },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/global.css"
@@ -790,8 +714,48 @@
       ]
     },
     "shell.js": {
-      "bytes": 45637,
+      "bytes": 55388,
       "modules": [
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/auth-button.gts",
+          "size": 619
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/auth-container.gts",
+          "size": 1030
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/button.gts",
+          "size": 1775
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/icons/boxel-icon.gts",
+          "size": 2020
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/icons/google-color.gts",
+          "size": 1226
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/input-group.gts",
+          "size": 3858
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/loading-indicator.gts",
+          "size": 1171
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/modifiers/autofocus.ts",
+          "size": 137
+        },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/cli-handoff.js",
@@ -885,7 +849,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/google-callback.gts",
-          "size": 3523
+          "size": 3634
         },
         {
           "package": "@cardstack/secure-origin",
