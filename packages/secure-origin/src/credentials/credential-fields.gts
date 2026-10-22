@@ -83,13 +83,14 @@ export default class CredentialFields extends Component<Signature> {
     }));
   }
 
-  // A field shows its validation state, as a BoxelInput given `@state` does,
-  // in the forms whose fields the app shows one for.
+  // A field with an error is shown invalid, as a BoxelInput given
+  // `@state='invalid'` is. The forms whose fields the app gives a validation
+  // state show the rest as `initial`; the others give them none.
   private state = (error: string | undefined) => {
-    if (!this.frame.form.stateful) {
-      return undefined;
+    if (error) {
+      return 'invalid';
     }
-    return error ? 'invalid' : 'initial';
+    return this.frame.form.stateful ? 'initial' : undefined;
   };
 
   private input = (name: string) => (value: string) =>
@@ -142,10 +143,10 @@ export default class CredentialFields extends Component<Signature> {
         {{#if (this.isLayout 'auth')}}
           <AuthFormField @label={{entry.field.label}}>
             <BoxelInput
-              id={{entry.field.id}}
+              @id={{entry.field.id}}
               @type={{entry.field.type}}
-              autocomplete={{entry.field.autocomplete}}
-              placeholder={{entry.field.placeholder}}
+              @autocomplete={{entry.field.autocomplete}}
+              @placeholder={{entry.field.placeholder}}
               @value={{entry.value}}
               @state={{this.state entry.error}}
               @errorMessage={{entry.error}}
@@ -168,10 +169,10 @@ export default class CredentialFields extends Component<Signature> {
             class='profile-field password-settings-field'
           >
             <BoxelInput
-              id={{entry.field.id}}
+              @id={{entry.field.id}}
               @type={{entry.field.type}}
-              autocomplete={{entry.field.autocomplete}}
-              placeholder={{entry.field.placeholder}}
+              @autocomplete={{entry.field.autocomplete}}
+              @placeholder={{entry.field.placeholder}}
               @value={{entry.value}}
               @state={{this.state entry.error}}
               @errorMessage={{entry.error}}
@@ -190,10 +191,10 @@ export default class CredentialFields extends Component<Signature> {
             class='profile-field'
           >
             <BoxelInput
-              id={{entry.field.id}}
+              @id={{entry.field.id}}
               @type={{entry.field.type}}
-              autocomplete={{entry.field.autocomplete}}
-              placeholder={{entry.field.placeholder}}
+              @autocomplete={{entry.field.autocomplete}}
+              @placeholder={{entry.field.placeholder}}
               @value={{entry.value}}
               @state={{this.state entry.error}}
               @errorMessage={{entry.error}}

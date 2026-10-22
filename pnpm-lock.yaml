@@ -4390,9 +4390,6 @@ importers:
       ember-qunit:
         specifier: 'catalog:'
         version: 9.1.0(@ember/test-helpers@5.4.3(@babel/core@7.29.7(supports-color@8.1.1))(supports-color@8.1.1))(qunit@2.26.0)(supports-color@8.1.1)
-      ember-resolver:
-        specifier: ^13.0.2
-        version: 13.2.0
       ember-template-lint:
         specifier: 'catalog:'
         version: 7.9.3
