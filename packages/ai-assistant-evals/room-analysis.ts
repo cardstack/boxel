@@ -65,11 +65,12 @@ const TOOL_REQUESTS_KEY = 'app.boxel.toolRequests';
 // commands (packages/catalog/contents/commands).
 const WRITE_TOOL =
   /^(copy-card|copy-card-to-stack|copy-and-edit|copy-source|copy-file-to-realm|download-file-to-realm|patch-card-instance|patch-fields|patch-code|patch-theme|save-card|store-add|write-text-file|write-binary-file|apply-markdown-edit|add-field-to-card-definition|execute-atomic-operations|transform-cards|create-specs|generate-readme-spec|generate-example-cards|generate-thumbnail|migrate-skill|listing-create|listing-generate-example|listing-install|listing-remix|listing-use)(_|$)/;
-// realm.fs writes inside run-realm-code. Every write call counts; the path is
-// recorded only when it is a literal. A copy writes the path in its second
-// argument.
+// Calls inside run-realm-code that change a realm file (the write methods of
+// RealmRunnerCallMethod). Every write call counts; the path is recorded only
+// when it is a literal, and not for a delete. A copy and a download write the
+// path in their second argument.
 const REALM_CODE_WRITE =
-  /realm\.fs\.(?:(?:writeText|replace)\(\s*|copy\(\s*(?:(['"`])[^'"`]*\1|[^,()]+)\s*,\s*)(?:(['"`])([^'"`]+)\2)?/g;
+  /realm\.(?:fs\.(?:(?:writeText|replace|writeBytes|(delete))\(\s*|(?:copy|download)\(\s*(?:(['"`])[^'"`]*\2|[^,()]+)\s*,\s*)|cards\.update\(\s*)(?:(['"`])([^'"`]+)\3)?/g;
 const REALM_SEARCH = /realm\.(cards|entries)\.search\(/g;
 // A realm.* call such as `realm.fs.readText(` or `realm.cards.update(`.
 const REALM_ACTION = /\brealm((?:\.[A-Za-z_$][\w$]*)+)\s*\(/g;
@@ -291,8 +292,8 @@ export function analyzeRoom(
           for (let match of code.matchAll(REALM_CODE_WRITE)) {
             result.realmCodeWrites++;
             result.firstWriteTurn ??= result.turns;
-            if (match[3]) {
-              result.filesWritten.push(match[3]);
+            if (match[4] && !match[1]) {
+              result.filesWritten.push(match[4]);
             }
           }
         }

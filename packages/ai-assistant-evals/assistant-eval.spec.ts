@@ -451,14 +451,16 @@ async function readActivityOnce(page: Page): Promise<Activity> {
   return page.evaluate(() => {
     let q = (sel: string) => document.querySelectorAll(sel).length;
     let settled = q('[data-test-room-settled]') > 0;
-    // The bar also holds the "new messages" button, which stays when the
-    // panel is not scrolled to the end; only its other states mean work is
-    // still pending.
-    let actionBar = Array.from(
-      document.querySelectorAll('[data-test-ai-assistant-action-bar]'),
-    ).filter(
-      (bar) => !bar.querySelector('[data-test-unread-messages-button]'),
-    ).length;
+    // The bar's "new messages" button stays while the panel is not scrolled
+    // to the end, and it takes the place of the bar's other states, the Stop
+    // button among them. Scroll to the last message so the next read sees the
+    // bar's real state; until then the bar counts as busy.
+    let actionBar = q('[data-test-ai-assistant-action-bar]');
+    let unread = q('[data-test-unread-messages-button]') > 0;
+    if (unread) {
+      let messages = document.querySelectorAll('[data-test-message-idx]');
+      messages[messages.length - 1]?.scrollIntoView({ block: 'end' });
+    }
     // Only a call the host is running. A call still streaming ("preparing")
     // is the model writing, which the stall check below watches instead.
     let applying = q('[data-test-apply-state="applying"]');
@@ -539,7 +541,8 @@ async function readActivityOnce(page: Page): Promise<Activity> {
     }
     let busy = [
       settled ? '' : 'room not settled',
-      actionBar ? `${actionBar} action bar` : '',
+      unread ? 'new messages button' : '',
+      actionBar && !unread ? `${actionBar} action bar` : '',
       applying ? `${applying} applying` : '',
       preparing ? `${preparing} preparing` : '',
       loading ? 'session preparation' : '',
@@ -630,6 +633,7 @@ async function waitForIdle(
 ): Promise<{ stoppedBy: RunResult['stoppedBy']; irregularities: string[] }> {
   let idleSince: number | undefined;
   let applyingSince: number | undefined;
+  let hostBusySince: number | undefined;
   let flatSince: number | undefined;
   let lastTextLength = -1;
   let startedAt = Date.now();
@@ -665,6 +669,13 @@ async function waitForIdle(
     } else {
       applyingSince = undefined;
     }
+    // The bot is not generating, but something on the page holds the room
+    // busy. Brief stretches of this are normal host work between turns.
+    if (activity.busy.length && !activity.generating) {
+      hostBusySince ??= now;
+    } else {
+      hostBusySince = undefined;
+    }
     if (activity.irregularities.length > 0) {
       // Something already went wrong. Letting the model carry on only spends
       // more turns on a broken path; stop it and read the room instead.
@@ -691,10 +702,11 @@ async function waitForIdle(
       await stopGeneration(page);
       return {
         stoppedBy: 'wall-clock',
-        // The bot finished, but something on the page still held the room
-        // busy: that is the host, not a model still working.
+        // The bot finished, but something on the page held the room busy for
+        // longer than the host may take: that is the host, not a model still
+        // working. A busy state that only began near the deadline is not.
         irregularities:
-          activity.busy.length && !activity.generating
+          hostBusySince !== undefined && now - hostBusySince > STUCK_APPLYING_MS
             ? [`the room never went idle: ${activity.busy.join(', ')}`]
             : [],
       };
