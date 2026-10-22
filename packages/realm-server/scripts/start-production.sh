@@ -18,6 +18,11 @@ pnpm setup:software-factory-in-deployment
 pnpm setup:boxel-homepage-in-deployment
 pnpm setup:openrouter-in-deployment
 pnpm setup:choreo-gallery-in-deployment
+# The secure origin's pages are served from their build, which the realm
+# server reads once, at startup, and refuses to start without. The image
+# builds them as well; building here keeps the start from depending on how
+# the image was made.
+pnpm build:secure-origin || exit 1
 
 SUBMISSION_REALM_PATH='/persistent/submissions'
 SUBMISSION_REALM_URL="${RESOLVED_SUBMISSION_REALM_URL:-https://app.boxel.ai/submissions/}"

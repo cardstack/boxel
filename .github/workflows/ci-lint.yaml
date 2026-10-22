@@ -93,6 +93,14 @@ jobs:
         if: ${{ !cancelled() }}
         run: pnpm run lint
         working-directory: packages/realm-server
+      - name: Lint Secure Origin
+        # Includes rebuilding the secure origin's pages: the build fails on any
+        # module outside the package's import allowlist, and on any difference
+        # from the committed build-record.json. The tests pin what the
+        # allowlist refuses.
+        if: ${{ !cancelled() }}
+        run: pnpm run lint && pnpm test
+        working-directory: packages/secure-origin
       - name: Lint Realm Test Harness
         if: ${{ !cancelled() }}
         run: pnpm run lint

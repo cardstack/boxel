@@ -1,4 +1,4 @@
-ARG NODE_VERSION=24.17.0
+ARG NODE_VERSION=24.22.1
 FROM node:${NODE_VERSION}-slim
 
 # The collector is a single file that uses nothing beyond the Node runtime and

@@ -53,6 +53,7 @@ import { ModuleCacheCoordinator } from './lib/module-cache-coordination.ts';
 import { JobsFinishedListener } from './lib/jobs-finished-listener.ts';
 import { JobScopedSearchCache } from './job-scoped-search-cache.ts';
 import { startHealthSampler } from './health-sampler.ts';
+import { realmEventDispatcher } from './realm-event-dispatcher.ts';
 import { healthCheckUserAgents } from './middleware/index.ts';
 import {
   isDeployedServerURL,
@@ -151,6 +152,10 @@ const AI_BOT_DELEGATION_SECRET = process.env.AI_BOT_DELEGATION_SECRET;
 // admin/password pair register-matrix-users.ts creates.
 const MATRIX_ADMIN_USERNAME = process.env.MATRIX_ADMIN_USERNAME;
 const MATRIX_ADMIN_PASSWORD = process.env.MATRIX_ADMIN_PASSWORD;
+
+// How long shutdown waits for queued realm events to go out. Kept well inside
+// the grace period a deploy gives a stopping task before it is killed.
+const REALM_EVENT_DRAIN_MS = 10_000;
 
 // The Google client the secure window signs in with: the Matrix server's own,
 // so a user sees no new consent. Both unset, the secure window offers only a
@@ -986,6 +991,16 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
         // still turning while the shutdown above runs, and a check arriving in
         // that window should read a beating heartbeat rather than a frozen one.
         heartbeat.stop();
+        // Queued realm events still need the database to resolve their rooms,
+        // so they get a bounded chance to go out before it closes. Losing one
+        // can leave open tabs showing a realm as still indexing.
+        if (!(await realmEventDispatcher().drain(REALM_EVENT_DRAIN_MS))) {
+          let { queuedEvents, sendsInFlight } =
+            realmEventDispatcher().takeStats();
+          console.warn(
+            `realm events still undelivered at shutdown: ${queuedEvents} queued, ${sendsInFlight} sends in flight`,
+          );
+        }
         queue.destroy(); // warning this is async
         dbAdapter.close(); // warning this is async
         console.log(`realm server on port ${stopPort} has stopped`);

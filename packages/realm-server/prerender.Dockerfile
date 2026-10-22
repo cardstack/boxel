@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM node:24.17.0-slim
+FROM node:24.22.1-slim
 ARG prerender_script
 ENV prerender_script=$prerender_script
 
