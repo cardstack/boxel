@@ -193,10 +193,10 @@ class Embedded extends Component<typeof GalleryDemo> {
       <div
         class='tile-stage'
         data-motion-hold={{this.hold.state}}
-        data-test-tile-stage
         {{restWhenOff}}
         {{wakeOnTouch this.hold}}
         {{ownClicks}}
+        data-test-tile-stage
       >
         {{#each (array this.take) key='@identity'}}
           <MotionConfig @reducedMotion={{this.hold.reducedMotion}}>
@@ -375,8 +375,8 @@ class Fitted extends Component<typeof GalleryDemo> {
   <template>
     <ChoreoRoot
       class='tile {{if this.roomy "is-roomy"}} {{this.fit}}'
-      data-test-demo-tile
       {{this.measure}}
+      data-test-demo-tile
     >
       {{#if this.roomy}}
         {{! the stage is the pointer's: the keyboard and a screen reader go
@@ -385,11 +385,11 @@ class Fitted extends Component<typeof GalleryDemo> {
         <div
           class='tile-stage'
           data-motion-hold={{this.hold.state}}
-          data-test-tile-stage
           {{restWhenOff}}
           {{wakeOnTouch this.hold}}
           {{ownControlClicks}}
           {{pointerOnly}}
+          data-test-tile-stage
         >
           <DemoStage @demo={{this.demo}} @face='tile' @open={{this.open}} />
         </div>
@@ -406,8 +406,8 @@ class Fitted extends Component<typeof GalleryDemo> {
         <a
           class='tile-title'
           href={{@model.id}}
-          data-test-tile-title
           {{on 'click' openThroughHost}}
+          data-test-tile-title
         >{{@model.title}}</a>
         {{#if this.roomy}}
           <span class='tile-lede'>{{@model.lede}}</span>
