@@ -5,6 +5,7 @@ import { tracked } from '@glimmer/tracking';
 import { canonicalRealmIdentifier } from '../lib/realm-utils';
 
 import type NetworkService from './network';
+import type RealmServerService from './realm-server';
 import type SessionService from './session';
 import type { RealmEventContent } from '@cardstack/base/matrix-event';
 
@@ -12,6 +13,7 @@ export default class MessageService extends Service {
   @tracked listenerCallbacks: Map<string, ((ev: RealmEventContent) => void)[]> =
     new Map();
   @service declare private network: NetworkService;
+  @service declare private realmServer: RealmServerService;
   @service declare private session: SessionService;
 
   constructor(...args: ConstructorParameters<typeof Service>) {
@@ -50,6 +52,8 @@ export default class MessageService extends Service {
     let key = this.keyFor(realmURL);
     if (!this.listenerCallbacks.has(key)) {
       this.listenerCallbacks.set(key, []);
+      // A world-readable realm's events arrive in a room of its own.
+      this.realmServer.joinRealmEventRoom(key);
     }
 
     // TODO might want to consider making separate subscription methods so that

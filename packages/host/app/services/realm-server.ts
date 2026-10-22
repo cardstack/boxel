@@ -145,6 +145,12 @@ export default class RealmServerService
   private _ready = new Deferred<void>();
   private eventSubscribers: Map<string, RealmServerEventSubscriber[]> =
     new Map();
+  // A world-readable realm sends its realm events into a room of its own,
+  // which the host joins when something first subscribes to the realm (see
+  // `joinRealmEventRoom`). The realms still to be asked about, and every realm
+  // asked about this session.
+  private realmEventRoomsPending = new Set<string>();
+  private realmEventRoomsRequested = new Set<string>();
 
   constructor(owner: Owner) {
     super(owner);
@@ -178,6 +184,8 @@ export default class RealmServerService
       0,
       this.unreachableRealmServersList.length,
     );
+    this.realmEventRoomsPending.clear();
+    this.realmEventRoomsRequested.clear();
     // Do NOT clear eventSubscribers here: subscriber *wiring* is app-scoped.
     // Services (e.g. BillingService) call subscribeEvent() once in their
     // constructor, for the app's lifetime. Logout is an in-app reset, not a
@@ -696,7 +704,76 @@ export default class RealmServerService
     for (let [realmURL, token] of Object.entries(tokens)) {
       this.realm.getOrCreateRealmResource(realmURL, token);
     }
+    // Realms subscribed to before there was a session to join with.
+    void this.joinRealmEventRoomsTask.perform();
   }
+
+  // Joins the room the given realm sends its realm events into, when it is a
+  // world-readable realm on this realm server; other realms' events arrive in
+  // the user's session room. Joining once is enough: the host stays in the
+  // room, and catches up on what it missed through sync. Realms asked for in
+  // the same turn are asked about together.
+  joinRealmEventRoom(realmIdentifier: string) {
+    let realmURL = ensureTrailingSlash(
+      resolvedRealmURLHref(this.network.virtualNetwork, realmIdentifier),
+    );
+    if (this.realmEventRoomsRequested.has(realmURL)) {
+      return;
+    }
+    this.realmEventRoomsRequested.add(realmURL);
+    this.realmEventRoomsPending.add(realmURL);
+    void this.joinRealmEventRoomsTask.perform();
+  }
+
+  private joinRealmEventRoomsTask = task({ keepLatest: true }, async () => {
+    await rawTimeout(0);
+    // Without a matrix client there's no session to join with. Signing in
+    // runs this again (see `authenticateToAllAccessibleRealms`).
+    let client = this.client;
+    if (!client || this.realmEventRoomsPending.size === 0) {
+      return;
+    }
+    let realms = [...this.realmEventRoomsPending];
+    this.realmEventRoomsPending.clear();
+    try {
+      await this.login();
+      let response = await this.network.fetch(
+        `${this.url.href}_realm-event-rooms`,
+        {
+          method: 'POST',
+          headers: {
+            Accept: SupportedMimeType.JSON,
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${this.token}`,
+          },
+          body: JSON.stringify({ realms }),
+        },
+      );
+      if (!response.ok) {
+        throw new Error(`${response.status} - ${await response.text()}`);
+      }
+      let { rooms } = (await response.json()) as {
+        rooms?: Record<string, string>;
+      };
+      let roomIds = [...new Set(Object.values(rooms ?? {}))];
+      if (roomIds.length === 0) {
+        return;
+      }
+      let { joined_rooms } = await client.getJoinedRooms();
+      let joinedRooms = new Set(joined_rooms ?? []);
+      for (let roomId of roomIds) {
+        if (!joinedRooms.has(roomId)) {
+          await client.joinRoom(roomId);
+        }
+      }
+    } catch (e) {
+      // Asked about again the next time this runs.
+      for (let realm of realms) {
+        this.realmEventRoomsPending.add(realm);
+      }
+      console.warn(`Unable to join the realm event rooms of ${realms}`, e);
+    }
+  });
 
   private async ensureJoinedSessionRoom(tokens: {
     [realmUrl: string]: string;

@@ -7,6 +7,7 @@ import type { PgAdapter } from '@cardstack/postgres';
 import {
   fetchSessionRoom,
   insertPermissions,
+  insertRealmEventRoom,
   upsertSessionRoom,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
@@ -146,6 +147,90 @@ module(basename(import.meta.filename), function (hooks) {
     );
 
     assert.true(true, 'broadcast resolves even if stale room cleanup fails');
+  });
+
+  function recordingMatrixClient() {
+    let sentTo: string[] = [];
+    let matrixClient = {
+      login: async () => undefined,
+      getUserId: () => '@realm_server:localhost',
+      sendEvent: async (roomId: string) => {
+        sentTo.push(roomId);
+        return '$event';
+      },
+    } as unknown as MatrixClient;
+    return { matrixClient, sentTo };
+  }
+
+  test("sends a world-readable realm's event once, into the realm's event room", async function (assert) {
+    await insertUser(
+      dbAdapter,
+      '@alice:localhost',
+      'cus_alice',
+      'alice@example.com',
+    );
+    await upsertSessionRoom(dbAdapter, '@alice:localhost', '!alice:localhost');
+    await insertUser(dbAdapter, '@bob:localhost', 'cus_bob', 'bob@example.com');
+    await upsertSessionRoom(dbAdapter, '@bob:localhost', '!bob:localhost');
+    await insertPermissions(dbAdapter, realmURL, {
+      '*': ['read'],
+      '@alice:localhost': ['read', 'write'],
+    });
+    await insertRealmEventRoom(dbAdapter, realmURL.href, '!events:localhost');
+
+    let { matrixClient, sentTo } = recordingMatrixClient();
+    await new NodeAdapter('/tmp').broadcastRealmEvent(
+      makeEvent(),
+      realmURL.href,
+      matrixClient,
+      dbAdapter,
+    );
+
+    assert.deepEqual(
+      sentTo,
+      ['!events:localhost'],
+      'sent to the realm event room and to no session room',
+    );
+  });
+
+  test('sends nothing for a world-readable realm that has no event room yet', async function (assert) {
+    await insertUser(
+      dbAdapter,
+      '@alice:localhost',
+      'cus_alice',
+      'alice@example.com',
+    );
+    await upsertSessionRoom(dbAdapter, '@alice:localhost', '!alice:localhost');
+    await insertPermissions(dbAdapter, realmURL, { '*': ['read'] });
+
+    let { matrixClient, sentTo } = recordingMatrixClient();
+    await new NodeAdapter('/tmp').broadcastRealmEvent(
+      makeEvent(),
+      realmURL.href,
+      matrixClient,
+      dbAdapter,
+    );
+
+    assert.deepEqual(sentTo, [], 'no room was sent to');
+  });
+
+  test("sends a realm's event to session rooms once it is no longer world-readable", async function (assert) {
+    await insertSessionForAlice();
+    await insertRealmEventRoom(dbAdapter, realmURL.href, '!events:localhost');
+
+    let { matrixClient, sentTo } = recordingMatrixClient();
+    await new NodeAdapter('/tmp').broadcastRealmEvent(
+      makeEvent(),
+      realmURL.href,
+      matrixClient,
+      dbAdapter,
+    );
+
+    assert.deepEqual(
+      sentTo,
+      [staleRoomId],
+      "sent to alice's session room and not to the realm's old event room",
+    );
   });
 });
 

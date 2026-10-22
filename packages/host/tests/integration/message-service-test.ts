@@ -1,3 +1,5 @@
+import { waitUntil } from '@ember/test-helpers';
+
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
@@ -5,7 +7,11 @@ import { baseRealm } from '@cardstack/runtime-common';
 
 import ENV from '@cardstack/host/config/environment';
 
-import { testRealmURL, setupIntegrationTestRealm } from '../helpers';
+import {
+  testRealmURL,
+  setRealmEventRoom,
+  setupIntegrationTestRealm,
+} from '../helpers';
 import { setupMockMatrix } from '../helpers/mock-matrix';
 import { setupRenderingTest } from '../helpers/setup';
 
@@ -92,6 +98,42 @@ module('Integration | message-service | realm subscriptions', function (hooks) {
     } finally {
       unsubscribe();
       virtualNetwork.removeRealmMapping('@test/mapped/');
+    }
+  });
+});
+
+// A world-readable realm sends its realm events into a room of its own, which
+// the host joins when something first subscribes to the realm.
+module('Integration | message-service | realm event rooms', function (hooks) {
+  setupRenderingTest(hooks);
+
+  let mockMatrixUtils = setupMockMatrix(hooks, {
+    loggedInAs: '@testuser:localhost',
+    activeRealms: [baseRealm.url, testRealmURL],
+    autostart: true,
+  });
+
+  hooks.beforeEach(async function () {
+    await setupIntegrationTestRealm({ mockMatrixUtils, contents: {} });
+  });
+
+  test('subscribing to a world-readable realm joins the room its events go to', async function (assert) {
+    let publicRealmURL = 'http://localhost:4205/public/';
+    let roomId = '!public-realm-events:localhost';
+    setRealmEventRoom(publicRealmURL, roomId);
+    let messageService = getService('message-service');
+
+    let unsubscribe = messageService.subscribe(publicRealmURL, () => {});
+    try {
+      await waitUntil(() => mockMatrixUtils.getRoomIds().includes(roomId), {
+        timeoutMessage: `the host did not join ${roomId}`,
+      });
+      assert.ok(
+        mockMatrixUtils.getRoomIds().includes(roomId),
+        'the host joined the realm event room',
+      );
+    } finally {
+      unsubscribe();
     }
   });
 });

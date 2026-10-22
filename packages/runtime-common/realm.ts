@@ -577,7 +577,9 @@ import {
   type PopulateCoordinator,
 } from './definition-lookup.ts';
 import {
+  fetchRealmEventRoom,
   fetchSessionRoom,
+  insertRealmEventRoom,
   upsertSessionRoom,
 } from './db-queries/session-room-queries.ts';
 import { REALMS_LIST_UPDATED_EVENT_TYPE } from './matrix-constants.ts';
@@ -2888,6 +2890,9 @@ export class Realm {
   // `/_federated-index-counts` callers share one aggregate instead of each
   // running the full per-url scan. Nulled once it settles (and on index swap).
   #indexCountsPromise: Promise<RealmIndexCounts> | null = null;
+  // The in-flight creation of this realm's event room, so concurrent callers
+  // on this process create one room between them.
+  #realmEventRoomCreation: Promise<string> | null = null;
   // Cached host routing map, derived from the indexed RealmConfig card.
   // `getHostRoutingMap()` is called on every host-mode index request
   // (serve-index), so re-querying the index each time is wasteful — the map
@@ -3492,6 +3497,39 @@ export class Realm {
     }
 
     return sessionRoom;
+  }
+
+  // The room this realm sends its realm events into while it is
+  // world-readable, created the first time it is asked for. Undefined for a
+  // realm that isn't world-readable, whose events go to the session rooms of
+  // the users it grants.
+  async ensureRealmEventRoom(): Promise<string | undefined> {
+    let { worldReadable, roomId } = await fetchRealmEventRoom(
+      this.#dbAdapter,
+      this.url,
+    );
+    if (!worldReadable) {
+      return undefined;
+    }
+    if (roomId) {
+      return roomId;
+    }
+    if (!this.#realmEventRoomCreation) {
+      this.#realmEventRoomCreation = (async () => {
+        // A caller that read the table before an earlier creation stored its
+        // room arrives here after that creation settled.
+        let stored = await fetchRealmEventRoom(this.#dbAdapter, this.url);
+        if (stored.roomId) {
+          return stored.roomId;
+        }
+        await this.#matrixClient.login();
+        let created = await this.#matrixClient.createRealmEventRoom(this.url);
+        return await insertRealmEventRoom(this.#dbAdapter, this.url, created);
+      })().finally(() => {
+        this.#realmEventRoomCreation = null;
+      });
+    }
+    return await this.#realmEventRoomCreation;
   }
 
   private async readinessCheck(

@@ -1,6 +1,7 @@
 import { Sha256 } from '@aws-crypto/sha256-js';
 import { uint8ArrayToHex } from './index.ts';
 import { REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME } from './realm.ts';
+import { APP_BOXEL_REALM_EVENT_ROOM_TYPE } from './matrix-constants.ts';
 import type { MatrixEvent } from '@cardstack/base/matrix-event';
 
 type JoinedRoomsResponse = { joined_rooms: string[] };
@@ -255,6 +256,52 @@ export class MatrixClient {
       REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME,
     );
 
+    return json.room_id;
+  }
+
+  // The room a world-readable realm sends its realm events into. Any user on
+  // the homeserver may join it, and a member sees only what is sent after
+  // they join. Only this client's user, the realm's, may send in it or change
+  // its state.
+  async createRealmEventRoom(realmURL: string): Promise<string> {
+    let response = await this.request('_matrix/client/v3/createRoom', 'POST', {
+      body: JSON.stringify({
+        preset: 'public_chat',
+        visibility: 'private',
+        name: `Realm events: ${realmURL}`,
+        creation_content: { type: APP_BOXEL_REALM_EVENT_ROOM_TYPE },
+        initial_state: [
+          {
+            type: 'm.room.history_visibility',
+            state_key: '',
+            content: { history_visibility: 'joined' },
+          },
+          {
+            type: 'm.room.retention',
+            state_key: '',
+            content: { max_lifetime: REALM_ROOM_RETENTION_POLICY_MAX_LIFETIME },
+          },
+        ],
+        power_level_content_override: {
+          users_default: 0,
+          events_default: 100,
+          state_default: 100,
+          invite: 100,
+          kick: 100,
+          ban: 100,
+          redact: 100,
+          notifications: { room: 100 },
+        },
+      }),
+    });
+    let json = (await response.json()) as { room_id: string };
+    if (!response.ok) {
+      throw new Error(
+        `Unable to create realm event room for ${realmURL}: status ${
+          response.status
+        } - ${JSON.stringify(json)}`,
+      );
+    }
     return json.room_id;
   }
 

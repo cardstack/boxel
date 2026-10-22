@@ -1,8 +1,9 @@
 // Subscribe to a realm's index events the way the host does.
 //
-// The realm server broadcasts `app.boxel.realm-event` into each user's DM
-// session room over Matrix, and the host relays what arrives there into its
-// live-search resources. A driver that wants to behave like a browser has to
+// The realm server broadcasts `app.boxel.realm-event` over Matrix: a
+// world-readable realm's events into one room for the realm that every host
+// using it joins, and any other realm's into the DM session room of each user
+// it grants. The host relays what arrives into its live-search resources. A driver that wants to behave like a browser has to
 // listen on that channel rather than infer invalidation from its own writes —
 // which is the difference between modelling the fan-out and measuring it.
 //
@@ -71,6 +72,60 @@ export async function joinInvitedRooms({
     joined: Object.keys(body.rooms?.join ?? {}).length + invited.length,
     accepted: invited.length,
   };
+}
+
+// Joins the rooms the given world-readable realms send their realm events
+// into, the way the host does when it first subscribes to a realm. The realm
+// server answers only for world-readable realms, so a realm that isn't joins
+// nothing and its events arrive in the session room. Returns how many rooms
+// were joined.
+export async function joinRealmEventRooms({
+  realmServerUrl,
+  serverToken,
+  matrixUrl,
+  accessToken,
+  realms,
+}: {
+  realmServerUrl: string;
+  serverToken: string;
+  matrixUrl: string;
+  accessToken: string;
+  realms: string[];
+}): Promise<number> {
+  let response = await fetch(
+    `${realmServerUrl.replace(/\/$/, '')}/_realm-event-rooms`,
+    {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        'Content-Type': 'application/json',
+        Authorization: serverToken,
+      },
+      body: JSON.stringify({ realms }),
+    },
+  );
+  if (!response.ok) {
+    throw new Error(`_realm-event-rooms failed: ${response.status}`);
+  }
+  let { rooms } = (await response.json()) as {
+    rooms?: Record<string, string>;
+  };
+  let roomIds = [...new Set(Object.values(rooms ?? {}))];
+  let base = matrixUrl.replace(/\/$/, '');
+  for (let roomId of roomIds) {
+    let join = await fetch(
+      `${base}/_matrix/client/v3/join/${encodeURIComponent(roomId)}`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${accessToken}` },
+        body: '{}',
+      },
+    );
+    if (!join.ok) {
+      throw new Error(`join ${roomId} failed: ${join.status}`);
+    }
+  }
+  return roomIds.length;
 }
 
 export async function initialSyncToken({

@@ -13,6 +13,7 @@ import {
   type ResponseWithNodeStream,
   type TokenClaims,
   clearSessionRoom,
+  fetchRealmEventRoom,
   fetchRealmSessionRooms,
   isRealmServerNotInRoomError,
 } from '@cardstack/runtime-common';
@@ -449,6 +450,40 @@ export class NodeAdapter implements RealmAdapter {
       }
     } catch (e) {
       realmEventsLog.error('Error logging into matrix. Skipping broadcast', e);
+      return;
+    }
+
+    // A world-readable realm's events go once into its own room, which every
+    // host using the realm joins, instead of into the session room of every
+    // user who can read it. Until a host asks for that room it doesn't exist,
+    // and no one can be listening.
+    let realmEventRoom;
+    try {
+      realmEventRoom = await fetchRealmEventRoom(dbAdapter, realmUrl);
+    } catch (e) {
+      realmEventsLog.error('Error looking up the realm event room', e);
+      return;
+    }
+    if (realmEventRoom.worldReadable) {
+      if (!realmEventRoom.roomId) {
+        realmEventsLog.debug(
+          `${realmUrl} has no realm event room yet, skipping broadcast`,
+        );
+        return;
+      }
+      try {
+        await matrixClient.sendEvent(
+          realmEventRoom.roomId,
+          APP_BOXEL_REALM_EVENT_TYPE,
+          eventWithRealmURL,
+        );
+      } catch (e) {
+        realmEventsLog.error(
+          `Unable to send event in realm event room ${realmEventRoom.roomId} for ${realmUrl}`,
+          event,
+          e,
+        );
+      }
       return;
     }
 

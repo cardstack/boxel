@@ -59,6 +59,7 @@ import {
   APP_BOXEL_REALM_EVENT_TYPE,
   APP_BOXEL_REALM_SERVER_EVENT_MSGTYPE,
   APP_BOXEL_REALMS_EVENT_TYPE,
+  APP_BOXEL_REALM_EVENT_ROOM_TYPE,
   APP_BOXEL_REALM_SERVERS_EVENT_TYPE,
   REALMS_LIST_UPDATED_EVENT_TYPE,
   APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE,
@@ -74,6 +75,8 @@ import {
   SLIDING_SYNC_AUTH_ROOM_LIST_NAME,
   SLIDING_SYNC_AUTH_ROOM_TIMELINE_LIMIT,
   SLIDING_SYNC_LIST_RANGE_END,
+  SLIDING_SYNC_REALM_EVENT_ROOM_LIST_NAME,
+  SLIDING_SYNC_REALM_EVENT_ROOM_LIST_RANGE,
   SLIDING_SYNC_TIMEOUT,
   type LLMMode,
   getToolRequests,
@@ -1616,6 +1619,8 @@ export default class MatrixService extends Service {
       ranges: [[0, SLIDING_SYNC_LIST_RANGE_END]],
       filters: {
         is_dm: false,
+        // A world-readable realm's event room isn't a DM either.
+        not_room_types: [APP_BOXEL_REALM_EVENT_ROOM_TYPE],
       },
       timeline_limit: timelineLimit,
       required_state: [['*', '*']],
@@ -1635,6 +1640,19 @@ export default class MatrixService extends Service {
       },
       timeline_limit: SLIDING_SYNC_AUTH_ROOM_TIMELINE_LIMIT,
       required_state: [['*', '*']],
+    });
+    // The rooms world-readable realms send their realm events into. Like the
+    // session rooms they aren't AI rooms, so their events are relayed as realm
+    // events.
+    lists.set(SLIDING_SYNC_REALM_EVENT_ROOM_LIST_NAME, {
+      ranges: [SLIDING_SYNC_REALM_EVENT_ROOM_LIST_RANGE],
+      filters: {
+        room_types: [APP_BOXEL_REALM_EVENT_ROOM_TYPE],
+      },
+      timeline_limit: SLIDING_SYNC_AUTH_ROOM_TIMELINE_LIMIT,
+      // Only the user's own membership, which event handling checks, rather
+      // than every member of a room many users share.
+      required_state: [['m.room.member', '$ME']],
     });
     this.slidingSync = new this.matrixSdkLoader.SlidingSync(
       this.client.baseUrl,

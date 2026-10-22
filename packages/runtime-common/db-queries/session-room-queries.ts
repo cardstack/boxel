@@ -67,15 +67,12 @@ export async function clearSessionRoom(
 }
 
 /**
- * Returns a mapping of matrix user id to session room id for all known sessions
- * that should be notified about changes to the given realm.
+ * Returns a mapping of matrix user id to session room id for the users with
+ * their own read or write permission on the given realm.
  *
- * Includes:
- *  - Users with explicit read/write permissions for this realm.
- *  - All registered users when the realm is world-readable (username = '*'
- *    with read = true). This is intentional: world-readable realms are visible
- *    to everyone, so all users need incremental-index notifications to keep
- *    their UI up to date.
+ * A world-readable realm's events don't go to session rooms; they go to the
+ * realm's event room (see `fetchRealmEventRoom`), so a `'*'` grant adds no one
+ * here.
  */
 export async function fetchRealmSessionRooms(
   dbAdapter: DBAdapter,
@@ -85,21 +82,12 @@ export async function fetchRealmSessionRooms(
     'SELECT u.matrix_user_id, u.session_room_id',
     'FROM users u',
     'WHERE u.session_room_id IS NOT NULL',
-    'AND (',
-    '  EXISTS (',
-    '    SELECT 1 FROM realm_user_permissions',
-    '    WHERE realm_url =',
+    'AND EXISTS (',
+    '  SELECT 1 FROM realm_user_permissions',
+    '  WHERE realm_url =',
     param(realmURL),
-    '    AND username = u.matrix_user_id',
-    '    AND (read = true OR write = true)',
-    '  )',
-    '  OR EXISTS (',
-    '    SELECT 1 FROM realm_user_permissions',
-    '    WHERE realm_url =',
-    param(realmURL),
-    "    AND username = '*'",
-    '    AND read = true',
-    '  )',
+    '  AND username = u.matrix_user_id',
+    '  AND (read = true OR write = true)',
     ')',
   ]);
 
@@ -110,4 +98,60 @@ export async function fetchRealmSessionRooms(
     }
   }
   return result;
+}
+
+/**
+ * Reports whether the given realm is world-readable, and the room its realm
+ * events go to when it has one. A world-readable realm's room is created the
+ * first time a host asks for it, so until then `roomId` is null.
+ */
+export async function fetchRealmEventRoom(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+): Promise<{ worldReadable: boolean; roomId: string | null }> {
+  let [row] = await query(dbAdapter, [
+    'SELECT EXISTS (',
+    '  SELECT 1 FROM realm_user_permissions',
+    '  WHERE realm_url =',
+    param(realmURL),
+    "  AND username = '*'",
+    '  AND read = true',
+    ') AS world_readable,',
+    '(SELECT room_id FROM realm_event_rooms WHERE realm_url =',
+    param(realmURL),
+    ') AS room_id',
+  ]);
+  return {
+    worldReadable: Boolean(row?.world_readable),
+    roomId: (row?.room_id as string | null | undefined) ?? null,
+  };
+}
+
+/**
+ * Stores the given room as the realm's event room, unless the realm already
+ * has one, and returns the room that is stored. When two processes create a
+ * room for the same realm at once, the first stored wins and the other's room
+ * goes unused.
+ */
+export async function insertRealmEventRoom(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+  roomId: string,
+): Promise<string> {
+  let rows = await query(dbAdapter, [
+    'WITH inserted AS (',
+    '  INSERT INTO realm_event_rooms (realm_url, room_id) VALUES (',
+    param(realmURL),
+    ',',
+    param(roomId),
+    '  ) ON CONFLICT (realm_url) DO NOTHING',
+    '  RETURNING room_id',
+    ')',
+    'SELECT room_id FROM inserted',
+    'UNION ALL',
+    'SELECT room_id FROM realm_event_rooms WHERE realm_url =',
+    param(realmURL),
+    'LIMIT 1',
+  ]);
+  return rows[0].room_id as string;
 }

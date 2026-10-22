@@ -51,6 +51,7 @@ import {
   eventCannotMatch,
   initialSyncToken,
   joinInvitedRooms,
+  joinRealmEventRooms,
   streamRealmEvents,
   type RealmEvent,
 } from './lib/realm-events.ts';
@@ -580,10 +581,9 @@ async function modelCall(session: Session): Promise<void> {
   }
 }
 
-// One Matrix long-poll per session, fanned out to that session's reader. The
-// realm broadcasts into each user's own DM session room, so every simulated
-// user needs its own stream — which is also what makes the event volume here
-// comparable to the cohort's.
+// One Matrix long-poll per session, fanned out to that session's reader. Every
+// simulated user reads its own stream, as each browser does, whether the realm
+// broadcasts into each user's DM session room or into one room they all share.
 let subscriptions = new Map<string, ((event: RealmEvent) => void)[]>();
 let subscribeAbort = new AbortController();
 
@@ -610,10 +610,19 @@ function subscribeSession(
           matrixUrl: args.matrixUrl,
           accessToken: session.accessToken,
         });
+        // A world-readable realm's events go to a room of its own instead,
+        // which the host joins when it first subscribes to the realm.
+        joined += await joinRealmEventRooms({
+          realmServerUrl: args.realmServerUrl,
+          serverToken: session.serverToken,
+          matrixUrl: args.matrixUrl,
+          accessToken: session.accessToken,
+          realms: [realmUrl],
+        });
         if (joined === 0) {
           stats.sessionsWithoutRooms++;
           console.error(
-            `  ${session.username} has no realm session room, so it will receive\n` +
+            `  ${session.username} is in no room realm events go to, so it will receive\n` +
               `  no events — a low re-run count would mean nothing.`,
           );
         }

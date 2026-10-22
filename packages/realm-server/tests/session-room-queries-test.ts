@@ -5,8 +5,10 @@ import type { PgAdapter } from '@cardstack/postgres';
 import { insertPermissions } from '@cardstack/runtime-common';
 import {
   clearSessionRoom,
+  fetchRealmEventRoom,
   fetchSessionRoom,
   fetchRealmSessionRooms,
+  insertRealmEventRoom,
   upsertSessionRoom,
 } from '@cardstack/runtime-common/db-queries/session-room-queries';
 import { setupDB, insertUser } from './helpers/index.ts';
@@ -199,8 +201,7 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('returns all users with session rooms when the realm is world-readable', async function (assert) {
-      // Create multiple users with session rooms
+    test('a world-readable grant adds no users', async function (assert) {
       await insertUser(
         dbAdapter,
         '@alice:localhost',
@@ -213,32 +214,6 @@ module(basename(import.meta.filename), function () {
         '!room-alice:localhost',
       );
 
-      await insertUser(
-        dbAdapter,
-        '@bob:localhost',
-        'cus_bob',
-        'bob@example.com',
-      );
-      await upsertSessionRoom(
-        dbAdapter,
-        '@bob:localhost',
-        '!room-bob:localhost',
-      );
-
-      await insertUser(
-        dbAdapter,
-        '@charlie:localhost',
-        'cus_charlie',
-        'charlie@example.com',
-      );
-      await upsertSessionRoom(
-        dbAdapter,
-        '@charlie:localhost',
-        '!room-charlie:localhost',
-      );
-
-      // World-readable realm: username='*' with read=true
-      // No per-user permission rows for alice, bob, or charlie
       await insertPermissions(dbAdapter, realmURL, {
         '*': ['read'],
       });
@@ -247,48 +222,8 @@ module(basename(import.meta.filename), function () {
 
       assert.deepEqual(
         result,
-        {
-          '@alice:localhost': '!room-alice:localhost',
-          '@bob:localhost': '!room-bob:localhost',
-          '@charlie:localhost': '!room-charlie:localhost',
-        },
-        'returns ALL users with session rooms for world-readable realm',
-      );
-    });
-
-    test('world-readable realm still excludes users without session rooms', async function (assert) {
-      await insertUser(
-        dbAdapter,
-        '@alice:localhost',
-        'cus_alice',
-        'alice@example.com',
-      );
-      await upsertSessionRoom(
-        dbAdapter,
-        '@alice:localhost',
-        '!room-alice:localhost',
-      );
-
-      // bob has no session room
-      await insertUser(
-        dbAdapter,
-        '@bob:localhost',
-        'cus_bob',
-        'bob@example.com',
-      );
-
-      await insertPermissions(dbAdapter, realmURL, {
-        '*': ['read'],
-      });
-
-      let result = await fetchRealmSessionRooms(dbAdapter, realmURL.href);
-
-      assert.deepEqual(
-        result,
-        {
-          '@alice:localhost': '!room-alice:localhost',
-        },
-        'excludes users without session rooms even for world-readable realm',
+        {},
+        "a world-readable realm's events go to its own room, not to session rooms",
       );
     });
 
@@ -340,7 +275,7 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('combines explicit permissions and world-readable access', async function (assert) {
+    test('returns only users with their own grant on a world-readable realm', async function (assert) {
       await insertUser(
         dbAdapter,
         '@alice:localhost',
@@ -365,7 +300,6 @@ module(basename(import.meta.filename), function () {
         '!room-bob:localhost',
       );
 
-      // alice has explicit write permission AND the realm is world-readable
       await insertPermissions(dbAdapter, realmURL, {
         '*': ['read'],
         '@alice:localhost': ['read', 'write'],
@@ -373,17 +307,69 @@ module(basename(import.meta.filename), function () {
 
       let result = await fetchRealmSessionRooms(dbAdapter, realmURL.href);
 
-      // Both users should be returned: alice via explicit + world-readable, bob via world-readable
-      assert.strictEqual(Object.keys(result).length, 2, 'returns 2 users');
-      assert.strictEqual(
-        result['@alice:localhost'],
-        '!room-alice:localhost',
-        'alice is included',
+      assert.deepEqual(
+        result,
+        { '@alice:localhost': '!room-alice:localhost' },
+        'alice is included through her own grant, and bob is not',
       );
+    });
+  });
+
+  module('realm event rooms', function (hooks) {
+    let dbAdapter: PgAdapter;
+    const realmURL = new URL('http://127.0.0.1:4444/test/');
+
+    setupDB(hooks, {
+      beforeEach: async (_dbAdapter) => {
+        dbAdapter = _dbAdapter;
+      },
+    });
+
+    test('a realm that is not world-readable has no event room', async function (assert) {
+      await insertPermissions(dbAdapter, realmURL, {
+        '@alice:localhost': ['read', 'write'],
+      });
+
+      assert.deepEqual(await fetchRealmEventRoom(dbAdapter, realmURL.href), {
+        worldReadable: false,
+        roomId: null,
+      });
+    });
+
+    test('a world-readable realm has no event room until one is stored', async function (assert) {
+      await insertPermissions(dbAdapter, realmURL, { '*': ['read'] });
+
+      assert.deepEqual(
+        await fetchRealmEventRoom(dbAdapter, realmURL.href),
+        { worldReadable: true, roomId: null },
+        'no room before one is stored',
+      );
+
+      let stored = await insertRealmEventRoom(
+        dbAdapter,
+        realmURL.href,
+        '!events:localhost',
+      );
+      assert.strictEqual(stored, '!events:localhost', 'the room is stored');
+      assert.deepEqual(
+        await fetchRealmEventRoom(dbAdapter, realmURL.href),
+        { worldReadable: true, roomId: '!events:localhost' },
+        'the stored room is reported',
+      );
+    });
+
+    test('storing a second room for a realm keeps the first', async function (assert) {
+      await insertRealmEventRoom(dbAdapter, realmURL.href, '!first:localhost');
+      let stored = await insertRealmEventRoom(
+        dbAdapter,
+        realmURL.href,
+        '!second:localhost',
+      );
+
       assert.strictEqual(
-        result['@bob:localhost'],
-        '!room-bob:localhost',
-        'bob is included via world-readable access',
+        stored,
+        '!first:localhost',
+        'the room stored first is the one returned',
       );
     });
   });

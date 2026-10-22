@@ -58,6 +58,7 @@ function ensureRealmServerMockState(
       realmPermissions,
       publicReadableRealms: new Map<string, { name: string | null }>(),
       archivedRealms: new Map<string, { archivedAt: string }>(),
+      realmEventRooms: new Map<string, string>(),
       handler,
       ensureSessionRoom: sessionRoomEnsurer,
     };
@@ -125,6 +126,14 @@ export function setRealmArchived(realmURL: string, archived: boolean) {
 // Simulate a trusted realm server going unreachable (or recovering) at its
 // `_realm-auth` endpoint, so boot-assembly graceful-degradation and retry can
 // be exercised deterministically.
+// Makes `/_realm-event-rooms` answer for the given world-readable realm with
+// the given room, the one the host should join for its realm events.
+export function setRealmEventRoom(realmURL: string, roomId: string) {
+  let network = getService('network') as NetworkService;
+  let state = ensureRealmServerMockState(network);
+  state.realmEventRooms.set(ensureTrailingSlash(realmURL), roomId);
+}
+
 export function setRealmAuthFailure(shouldFail: boolean) {
   let network = getService('network') as NetworkService;
   let state = ensureRealmServerMockState(network);

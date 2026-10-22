@@ -2355,6 +2355,7 @@ export function setupMatrixRoom(
   });
 
   let testAuthRoomId: string | undefined;
+  let testRealmEventRoomId: string | undefined;
 
   hooks.beforeEach(async function () {
     await matrixClient.login();
@@ -2388,15 +2389,52 @@ export function setupMatrixRoom(
     }
 
     testAuthRoomId = payload.sessionRoom;
+
+    // A world-readable test realm sends its realm events into a room of its
+    // own instead, which a host joins the way this does.
+    let eventRoomsResponse = await (
+      realmSetup.serverRequest ?? realmSetup.request
+    )
+      .post('/_realm-event-rooms')
+      .set('Accept', 'application/json')
+      .set('Content-Type', 'application/json')
+      .set('Authorization', jwt)
+      .send(JSON.stringify({ realms: [realmSetup.testRealm.url] }));
+    if (eventRoomsResponse.status !== 200) {
+      throw new Error(
+        `Realm server did not answer /_realm-event-rooms: ${eventRoomsResponse.status} ${eventRoomsResponse.text}`,
+      );
+    }
+    testRealmEventRoomId = (
+      eventRoomsResponse.body as { rooms: Record<string, string> }
+    ).rooms[realmSetup.testRealm.url];
+    if (testRealmEventRoomId && !rooms.includes(testRealmEventRoomId)) {
+      await matrixClient.joinRoom(testRealmEventRoomId);
+    }
   });
 
   return {
     matrixClient,
-    // Every event the room received at or after `since`, however many that
-    // is. The comparison is inclusive so an event sent in the same millisecond
-    // the caller recorded its start time still counts.
+    // Every event the realm's events reach this user through at or after
+    // `since`, however many that is, newest first: the session room, and the
+    // realm's event room when it is world-readable. The comparison is
+    // inclusive so an event sent in the same millisecond the caller recorded
+    // its start time still counts.
     getMessagesSince: async function (since: number) {
-      return await matrixClient.roomMessagesSince(testAuthRoomId!, since);
+      let messages = await matrixClient.roomMessagesSince(
+        testAuthRoomId!,
+        since,
+      );
+      if (testRealmEventRoomId) {
+        messages = [
+          ...messages,
+          ...(await matrixClient.roomMessagesSince(
+            testRealmEventRoomId,
+            since,
+          )),
+        ].sort((a, b) => b.origin_server_ts - a.origin_server_ts);
+      }
+      return messages;
     },
   };
 }
