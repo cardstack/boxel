@@ -1,23 +1,196 @@
-// The window, signed in. It shows nothing more: the app asks the realm server
-// whether the window has a session, rather than hearing it from the window.
-import type { TemplateOnlyComponent } from '@ember/component/template-only';
+// The window, signed in. When this tab's sign-in was started by the app with
+// a page to come back to, it hands the sign-in over: a single-use login token,
+// carried to that page by navigating there, which the app redeems for a Matrix
+// session of its own. A hand-off to a program on the user's own machine waits
+// for the user to confirm it. Otherwise the window says it is signed in, and
+// shows nothing more: the app asks the realm server whether the window has a
+// session, rather than hearing it from the window.
+import { on } from '@ember/modifier';
+import type Owner from '@ember/owner';
+import Component from '@glimmer/component';
+import { trackedObject } from '@ember/reactive/collections';
+
+import {
+  appOrigins,
+  forgetReturn,
+  handOffURL,
+  isLoopback,
+  pendingReturn,
+} from '../../security/app-handoff.js';
+import {
+  loginToken,
+  readConfig,
+  storedSession,
+} from '../../security/session.js';
+import AuthButton from '../../components/auth-button.gts';
+import AuthContainer from '../../components/auth-container.gts';
+import LoadingIndicator from '../../components/loading-indicator.gts';
+import { navigation } from '../navigation.js';
+import { asSentence } from '../sign-in-copy.js';
 
 import MessagePage from './message-page.gts';
 
-const SignedIn: TemplateOnlyComponent = <template>
-  <MessagePage @heading='You’re signed in to Boxel'>
-    <p class='info' data-test-secure-signed-in>You can close this window.</p>
-  </MessagePage>
+type State =
+  | { name: 'signed-in' }
+  | { name: 'confirming'; target: string; origin: string }
+  | { name: 'handing-off' }
+  | { name: 'failed'; error: string };
 
-  <style scoped>
-    .info {
-      margin-top: 0;
-      margin-bottom: var(--boxel-sp-sm);
-      letter-spacing: var(--boxel-lsp);
-      line-height: 20px;
-      color: var(--foreground);
+export default class SignedIn extends Component {
+  <template>
+    {{#if this.confirming}}
+      <MessagePage @heading='Continue to {{this.confirming.origin}}?'>
+        <p class='info' data-test-secure-loopback-confirm>
+          A program on this computer at
+          {{this.confirming.origin}}
+          is asking to be signed in to Boxel as you. Continue only if you
+          started this sign-in from it.
+        </p>
+        <div class='button-wrapper'>
+          <AuthButton
+            type='button'
+            @variant='primary'
+            data-test-secure-loopback-continue
+            {{on 'click' this.confirm}}
+          >Continue</AuthButton>
+          <AuthButton
+            type='button'
+            @variant='secondary'
+            data-test-secure-loopback-cancel
+            {{on 'click' this.cancel}}
+          >Cancel</AuthButton>
+        </div>
+      </MessagePage>
+    {{else if this.handingOff}}
+      <AuthContainer>
+        <div class='centered-loading' data-test-secure-handing-off>
+          <span class='loading-title'>Signing you in…</span>
+          <LoadingIndicator class='loading-spinner' />
+        </div>
+      </AuthContainer>
+    {{else if this.failure}}
+      <MessagePage @heading='That didn’t work'>
+        <div class='error' role='alert' data-test-secure-error>
+          {{this.failure.error}}
+        </div>
+        <div class='button-wrapper'>
+          <AuthButton
+            type='button'
+            @variant='secondary'
+            data-test-secure-handoff-retry
+            {{on 'click' this.handOff}}
+          >Try again</AuthButton>
+        </div>
+      </MessagePage>
+    {{else}}
+      <MessagePage @heading='You’re signed in to Boxel'>
+        <p class='info' data-test-secure-signed-in>Key management is coming.</p>
+      </MessagePage>
+    {{/if}}
+
+    <style scoped>
+      .info {
+        margin-top: 0;
+        margin-bottom: var(--boxel-sp-sm);
+        letter-spacing: var(--boxel-lsp);
+        line-height: 20px;
+        color: var(--foreground);
+      }
+      .centered-loading {
+        align-self: center;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: var(--boxel-sp);
+        text-align: center;
+      }
+      .loading-title {
+        font: 600 var(--boxel-font-md);
+        color: var(--foreground);
+      }
+      .loading-spinner {
+        --boxel-loading-indicator-size: var(--boxel-icon-md);
+        --loading-indicator-color: var(--boxel-highlight);
+      }
+      .error {
+        color: var(--boxel-error-100);
+        padding: 0;
+        font: 500 var(--boxel-font-xs);
+        margin: var(--boxel-sp-2xs) auto 0 auto;
+      }
+      .button-wrapper {
+        width: 100%;
+        margin-top: var(--boxel-sp-xl);
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        gap: var(--boxel-sp-sm);
+      }
+    </style>
+  </template>
+
+  private config = readConfig();
+  private target = pendingReturn(appOrigins(this.config));
+  private page = trackedObject<{ state: State }>({
+    state: { name: 'signed-in' },
+  });
+
+  constructor(owner: Owner, args: object) {
+    super(owner, args);
+    if (!this.target) {
+      return;
     }
-  </style>
-</template>;
+    if (isLoopback(this.target)) {
+      this.page.state = {
+        name: 'confirming',
+        target: this.target,
+        origin: new URL(this.target).origin,
+      };
+      return;
+    }
+    this.handOff();
+  }
 
-export default SignedIn;
+  private get confirming() {
+    return this.page.state.name === 'confirming' ? this.page.state : undefined;
+  }
+
+  private get handingOff() {
+    return this.page.state.name === 'handing-off';
+  }
+
+  private get failure() {
+    return this.page.state.name === 'failed' ? this.page.state : undefined;
+  }
+
+  private confirm = () => this.handOff();
+
+  // Declining a loopback hand-off leaves the user signed in here, handing
+  // nothing over.
+  private cancel = () => {
+    forgetReturn();
+    this.page.state = { name: 'signed-in' };
+  };
+
+  private handOff = async () => {
+    let target = this.target;
+    let session = storedSession();
+    if (!target || !session) {
+      this.page.state = { name: 'signed-in' };
+      return;
+    }
+    this.page.state = { name: 'handing-off' };
+    let minted;
+    try {
+      minted = await loginToken(this.config, session);
+    } catch (e: any) {
+      this.page.state = { name: 'failed', error: asSentence(e.message) };
+      return;
+    }
+    forgetReturn();
+    // Replaced, not pushed: Back from the app mustn't land on this page, nor
+    // on the app's address with the spent token in it.
+    navigation.replace(handOffURL(target, minted.loginToken));
+  };
+}

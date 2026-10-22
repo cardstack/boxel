@@ -534,6 +534,12 @@ module(basename(import.meta.filename), function () {
           ),
           `${path}: names the Matrix server its modes talk to`,
         );
+        assert.ok(
+          response.text.includes(
+            `<meta name="boxel-app-origins" content="${realmURL.origin}" />`,
+          ),
+          `${path}: names the app origins a sign-in may be handed back to`,
+        );
       }
     });
 
