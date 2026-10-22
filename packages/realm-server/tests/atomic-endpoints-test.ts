@@ -925,6 +925,221 @@ module(basename(import.meta.filename), function () {
           }
         });
 
+        test('an instance update that stores the same JSON as the stored card leaves its bytes alone', async function (assert) {
+          // Stored as a source checkout lays it out: keys in another order,
+          // a different indent, and a trailing newline. The JSON itself is
+          // what the update stores.
+          let path = 'same-json.json';
+          await testRealm.write(
+            path,
+            JSON.stringify(
+              {
+                data: {
+                  meta: { adoptsFrom: { name: 'Person', module: './person' } },
+                  attributes: { firstName: 'Mango' },
+                  type: 'card',
+                },
+              },
+              null,
+              4,
+            ) + '\n',
+          );
+          let storedBefore = await readDiskSnapshot(testRealmAdapter, path);
+          if (storedBefore.kind !== 'present') {
+            throw new Error(`expected ${path} to be stored`);
+          }
+
+          let writeCalls = 0;
+          let originalWrite = testRealmAdapter.write.bind(testRealmAdapter);
+          testRealmAdapter.write = (async (path, contents) => {
+            writeCalls++;
+            return originalWrite(path, contents);
+          }) as RealmAdapter['write'];
+
+          let update = (data: Record<string, unknown>) =>
+            request
+              .post('/_atomic')
+              .set('Accept', SupportedMimeType.JSONAPI)
+              .set(
+                'Authorization',
+                `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+              )
+              .send(
+                JSON.stringify({
+                  'atomic:operations': [{ op: 'update', href: path, data }],
+                }),
+              );
+
+          try {
+            let sameResponse = await update({
+              type: 'card',
+              attributes: { firstName: 'Mango' },
+              meta: { adoptsFrom: { module: './person', name: 'Person' } },
+            });
+            assert.strictEqual(sameResponse.status, 201);
+            assert.strictEqual(
+              writeCalls,
+              0,
+              'adapter.write not invoked for a card whose JSON is the stored one',
+            );
+            assert.deepEqual(
+              await readDiskSnapshot(testRealmAdapter, path),
+              storedBefore,
+              'stored bytes and lastModified are kept',
+            );
+
+            let changedResponse = await update({
+              type: 'card',
+              attributes: { firstName: 'Papaya' },
+              meta: { adoptsFrom: { module: './person', name: 'Person' } },
+            });
+            assert.strictEqual(changedResponse.status, 201);
+            assert.strictEqual(
+              writeCalls,
+              1,
+              'adapter.write invoked for a card whose JSON changed',
+            );
+            let storedAfter = await readDiskSnapshot(testRealmAdapter, path);
+            assert.strictEqual(
+              storedAfter.kind === 'present'
+                ? JSON.parse(storedAfter.content).data.attributes.firstName
+                : undefined,
+              'Papaya',
+              'the changed card is stored',
+            );
+          } finally {
+            testRealmAdapter.write = originalWrite;
+          }
+        });
+
+        test('an instance update rewrites a stored card whose JSON differs from what it stores', async function (assert) {
+          // Each stored card is written as given and differs from what the
+          // update stores in its JSON, not just its layout: base named by its
+          // URL alias rather than its prefix, a module ref with its
+          // extension, and a field the definition doesn't declare. The
+          // control matches the update's JSON exactly.
+          let sourceFor = (
+            module: string,
+            name: string,
+            attributes: Record<string, unknown>,
+          ) =>
+            JSON.stringify(
+              {
+                data: {
+                  type: 'card',
+                  attributes,
+                  meta: { adoptsFrom: { module, name } },
+                },
+              },
+              null,
+              2,
+            ) + '\n';
+          let stored: Record<string, string> = {
+            'base-by-alias.json': sourceFor(
+              'https://cardstack.com/base/card-api',
+              'CardDef',
+              {},
+            ),
+            'module-with-extension.json': sourceFor('./person.gts', 'Person', {
+              firstName: 'Mango',
+            }),
+            'undeclared-field.json': sourceFor('./person', 'Person', {
+              firstName: 'Mango',
+              formerField: 'stale',
+            }),
+            'control.json': sourceFor('./person', 'Person', {
+              firstName: 'Mango',
+            }),
+          };
+          let updateFor: Record<string, Record<string, unknown>> = {
+            'base-by-alias.json': {
+              type: 'card',
+              attributes: {},
+              meta: {
+                adoptsFrom: {
+                  module: '@cardstack/base/card-api',
+                  name: 'CardDef',
+                },
+              },
+            },
+          };
+          for (let [path, source] of Object.entries(stored)) {
+            await testRealm.write(path, source);
+            updateFor[path] ??= {
+              type: 'card',
+              attributes: { firstName: 'Mango' },
+              meta: { adoptsFrom: { module: './person', name: 'Person' } },
+            };
+          }
+          let controlBefore = await readDiskSnapshot(
+            testRealmAdapter,
+            'control.json',
+          );
+
+          let writtenPaths: string[] = [];
+          let originalWrite = testRealmAdapter.write.bind(testRealmAdapter);
+          testRealmAdapter.write = (async (path, contents) => {
+            writtenPaths.push(path);
+            return originalWrite(path, contents);
+          }) as RealmAdapter['write'];
+
+          try {
+            let response = await request
+              .post('/_atomic')
+              .set('Accept', SupportedMimeType.JSONAPI)
+              .set(
+                'Authorization',
+                `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`,
+              )
+              .send(
+                JSON.stringify({
+                  'atomic:operations': Object.entries(updateFor).map(
+                    ([href, data]) => ({ op: 'update', href, data }),
+                  ),
+                }),
+              );
+            assert.strictEqual(response.status, 201);
+            assert.deepEqual(
+              writtenPaths.sort(),
+              [
+                'base-by-alias.json',
+                'module-with-extension.json',
+                'undeclared-field.json',
+              ],
+              'every card whose JSON differs is rewritten',
+            );
+            let after = async (path: string) => {
+              let snapshot = await readDiskSnapshot(testRealmAdapter, path);
+              return snapshot.kind === 'present'
+                ? JSON.parse(snapshot.content).data
+                : undefined;
+            };
+            assert.strictEqual(
+              (await after('base-by-alias.json'))?.meta.adoptsFrom.module,
+              '@cardstack/base/card-api',
+              'the rewritten card names base by its prefix',
+            );
+            assert.strictEqual(
+              (await after('module-with-extension.json'))?.meta.adoptsFrom
+                .module,
+              './person',
+              'the rewritten card names its module without the extension',
+            );
+            assert.deepEqual(
+              (await after('undeclared-field.json'))?.attributes,
+              { firstName: 'Mango' },
+              'the rewritten card drops the undeclared field',
+            );
+            assert.deepEqual(
+              await readDiskSnapshot(testRealmAdapter, 'control.json'),
+              controlBefore,
+              'the control card keeps its bytes and lastModified',
+            );
+          } finally {
+            testRealmAdapter.write = originalWrite;
+          }
+        });
+
         test('a write that changes nothing announces its index event only to its own writer', async function (assert) {
           let source = `
               import { field, CardDef, contains } from "@cardstack/base/card-api";
