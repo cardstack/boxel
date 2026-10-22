@@ -425,6 +425,11 @@ export interface PushCommandOptions {
   delete?: boolean;
   dryRun?: boolean;
   force?: boolean;
+  /**
+   * False to push without the realm announcing the changes to its
+   * subscribers (see `SyncOptions.realmEvents`).
+   */
+  realmEvents?: boolean;
   atomicBatchSize?: number;
   /**
    * Git revisions the realm's files may hold. Only files that differ from any
@@ -465,6 +470,10 @@ export function registerPushCommand(realm: Command): void {
       (revision: string, previous: string[] = []) => [...previous, revision],
     )
     .option(
+      '--no-realm-events',
+      'Index the pushed changes without announcing them to open tabs, which pick them up on their next load (for deploys)',
+    )
+    .option(
       '--realm-secret-seed',
       'Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
     )
@@ -476,6 +485,7 @@ export function registerPushCommand(realm: Command): void {
           delete?: boolean;
           dryRun?: boolean;
           force?: boolean;
+          realmEvents?: boolean;
           changedSince?: string[];
           realmSecretSeed?: boolean;
         },
@@ -487,6 +497,7 @@ export function registerPushCommand(realm: Command): void {
           delete: options.delete,
           dryRun: options.dryRun,
           force: options.force,
+          realmEvents: options.realmEvents,
           changedSince: options.changedSince,
           realmSecretSeed,
         });
@@ -542,6 +553,7 @@ export async function pushCommand(
         deleteRemote: options.delete,
         dryRun: options.dryRun,
         force: options.force,
+        realmEvents: options.realmEvents,
         atomicBatchSize: options.atomicBatchSize,
         changedSince,
       },

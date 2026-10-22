@@ -20,6 +20,7 @@ interface Args {
     fieldType?: 'linksTo' | 'linksToMany';
   };
   lastInteractedAt?: number;
+  opening?: StackItemOpening;
 }
 
 export type StackItemType = 'card' | 'file';
@@ -84,6 +85,19 @@ export function takesFileDeleteRoute(
   return detectStackItemTypeForTarget(cardOrURL, id, store) === 'file';
 }
 
+// How a card's opening moves focus in the operator-mode stacks, the way a
+// non-modal dialog moves it. An item and its clones share one: a clone
+// continues the same card as it moves stacks or takes its saved id.
+export class StackItemOpening {
+  // What had focus as the card opened, so that closing the card hands focus
+  // back. Held weakly, so it doesn't keep a closed opener's DOM alive.
+  opener: WeakRef<Element> | undefined;
+
+  // A card takes focus on its first render only, as it opens. Cards restored
+  // from the URL start out opened.
+  constructor(public opened = false) {}
+}
+
 let nextInteractionSequence = 0;
 let nextStackItemInstanceId = 0;
 
@@ -103,11 +117,13 @@ export class StackItem {
   type: StackItemType;
   // Monotonic sequence used to identify which item the user most
   // recently touched, for deciding what Escape / Ctrl+E should target.
-  // Bumped on construction (= a new open) AND on every format change
-  // via `markInteracted()`. The format bump is what makes "open A,
-  // open B, edit A, Escape" target A: clicking edit on A is the most
-  // recent interaction even though B was opened more recently.
+  // Bumped on construction (= a new open), and via `markInteracted()` on
+  // every format change and whenever focus enters the item. The format
+  // bump is what makes "open A, open B, edit A, Escape" target A: clicking
+  // edit on A is the most recent interaction even though B was opened more
+  // recently.
   lastInteractedAt: number;
+  readonly opening: StackItemOpening;
   readonly instanceId: string;
   #id: string;
   relationshipContext?:
@@ -127,6 +143,7 @@ export class StackItem {
       useBaseTemplate,
       relationshipContext,
       lastInteractedAt,
+      opening,
     } = args;
 
     this.type = inferStackItemType(type);
@@ -142,6 +159,7 @@ export class StackItem {
     this.useBaseTemplate = useBaseTemplate;
     this.relationshipContext = relationshipContext;
     this.lastInteractedAt = lastInteractedAt ?? ++nextInteractionSequence;
+    this.opening = opening ?? new StackItemOpening();
     this.instanceId = `stack-item-${++nextStackItemInstanceId}`;
   }
 
@@ -163,10 +181,12 @@ export class StackItem {
       type,
       useBaseTemplate,
       lastInteractedAt,
+      opening,
     } = this;
-    // Preserve the original interaction time so clones (id swap on
-    // persist, stack shift on left-neighbor drop) don't masquerade as
-    // a fresh interaction and steal precedence.
+    // Preserve the original interaction time and opening so clones (id swap
+    // on persist, stack shift on left-neighbor drop) don't masquerade as a
+    // fresh interaction and steal precedence, or as a fresh open and take
+    // focus.
     return new StackItem({
       format,
       request,
@@ -176,6 +196,7 @@ export class StackItem {
       relationshipContext,
       useBaseTemplate,
       lastInteractedAt,
+      opening,
       ...args,
     });
   }

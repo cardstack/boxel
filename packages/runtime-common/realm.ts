@@ -424,7 +424,7 @@ import type {
   SharedIndexPass,
 } from './tasks/indexer.ts';
 import { isCodeRef, isRelativePath, moduleFrom } from './code-ref.ts';
-import { merge } from 'lodash-es';
+import { isEqual, merge } from 'lodash-es';
 import { inferContentType } from './infer-content-type.ts';
 import {
   fileContentToText,
@@ -913,6 +913,26 @@ function isSkipIndexWaitRequest(request: Request): boolean {
   return (request.headers.get(SKIP_INDEX_WAIT_HEADER) ?? '').length > 0;
 }
 
+// A write sent with `X-Boxel-Realm-Events: none` lands and is indexed like any
+// other, but announces nothing to the realm's subscribers: no
+// `incremental-index-initiation`, no file `update`, no `incremental` index
+// event, and no `prerender_html` event from the render job its pass spawns
+// (see `IncrementalArgs.realmEvents`). A pass it shares with writes that do
+// announce is announced on their behalf, naming this write among them. It is for writers that replace a realm's content wholesale out of
+// band — a deploy pushing a git tree — where every open tab reacting to the
+// push would reset its loader mid-session for code its user did not ask for.
+// Those tabs pick the new content up on their next load instead.
+//
+// Server-side state is unaffected: byte caches, definition caches and peer
+// replicas are invalidated through their own channels, and the index is as
+// current as for any write. Only the Matrix broadcast is withheld.
+export const REALM_EVENTS_HEADER = 'x-boxel-realm-events';
+function realmEventsSuppressed(request: Request): boolean {
+  return (
+    request.headers.get(REALM_EVENTS_HEADER)?.trim().toLowerCase() === 'none'
+  );
+}
+
 export interface FileRef {
   path: LocalPath;
   content: ReadableStream<Uint8Array> | Readable | Uint8Array | string;
@@ -1192,6 +1212,16 @@ const GRANTABLE_BYTES = { coarseReadOnly: true, grantableBytes: true } as const;
 // serve extends a name as it does for a reader, so the name a module is
 // imported by reaches it, and the gate judges the module it resolved to. The
 // card+source read reads the name exactly as named, so it reaches no redirect.
+// Whether two JSON texts hold the same value, whatever their whitespace or
+// key order. Text that doesn't parse holds no value to compare.
+function sameJSON(a: string, b: string): boolean {
+  try {
+    return isEqual(JSON.parse(a), JSON.parse(b));
+  } catch {
+    return false;
+  }
+}
+
 function namesGrantableBytes(localPath: LocalPath): boolean {
   return localPath.slice(localPath.lastIndexOf('/') + 1) !== '';
 }
@@ -2277,6 +2307,12 @@ export interface WriteOptions {
   // a mixed batch's module flush are what the write's serialization resolves
   // against, so a write cannot proceed without them.
   indexWaitBudgetMs?: number;
+  // When false, the commit broadcasts none of its realm events — the
+  // initiation, the file `update` and the `incremental` index event — while
+  // writing and indexing exactly as it otherwise would. An index pass it
+  // shares with writers that do announce is still announced, by one of them.
+  // Defaults to true. See `REALM_EVENTS_HEADER`.
+  broadcastRealmEvents?: boolean;
   // The matrix user whose request produced this write — the effective user
   // (post assume-user) that `checkPermission` records on the request context
   // as `authenticatedUser`. Tags the resulting incremental index job so read
@@ -3931,6 +3967,10 @@ export class Realm {
       // unless the pass is only a step toward a later one the same write
       // runs; see `CoalescedCaller.announcesPass`.
       announcesPass?: boolean;
+      // False for a caller that asked for no realm events (see
+      // `WriteOptions.broadcastRealmEvents`): it announces neither this pass
+      // nor anything the pass spawns.
+      broadcastRealmEvents?: boolean;
       // See `IncrementalIndexOptions.modulesWithoutSchemaChange`.
       modulesWithoutSchemaChange?: string[];
     },
@@ -3952,7 +3992,9 @@ export class Realm {
     await this.#realmIndexUpdater.updateChanges(changes, {
       clientRequestId: opts?.clientRequestId ?? null,
       ...(opts?.clientAuthored ? { clientAuthored: opts.clientAuthored } : {}),
-      announcesPass: opts?.announcesPass !== false,
+      announcesPass:
+        opts?.announcesPass !== false && opts?.broadcastRealmEvents !== false,
+      realmEvents: opts?.broadcastRealmEvents !== false,
       initiatedBy: opts?.initiatedBy ?? null,
       ...(opts?.deferPrerenderHtml ? { deferPrerenderHtml: true } : {}),
       ...(opts?.carriedPrerenderHtmlChanges?.length
@@ -4018,9 +4060,14 @@ export class Realm {
     changes: IndexChange[],
     opts: {
       clientRequestId?: string | null;
-      // See updateIndexAndCollectInvalidations. This form always announces
-      // the pass as it lands, from `onSettled`.
+      // See updateIndexAndCollectInvalidations. This form announces the pass
+      // as it lands, from `onSettled`, unless the caller asked for no realm
+      // events.
       clientAuthored?: string[];
+      // False for a caller that asked for no realm events (see
+      // `WriteOptions.broadcastRealmEvents`): it neither announces the pass
+      // nor broadcasts the failure of one.
+      broadcastRealmEvents?: boolean;
       initiatedBy?: string | null;
       // Invalidation sets earlier passes of this same write deferred, folded
       // into the prerender_html job this pass spawns.
@@ -4047,7 +4094,8 @@ export class Realm {
     let { settled } = await this.#realmIndexUpdater.enqueueChanges(changes, {
       clientRequestId: opts?.clientRequestId ?? null,
       ...(opts?.clientAuthored ? { clientAuthored: opts.clientAuthored } : {}),
-      announcesPass: true,
+      announcesPass: opts.broadcastRealmEvents !== false,
+      realmEvents: opts.broadcastRealmEvents !== false,
       initiatedBy: opts?.initiatedBy ?? null,
       ...(opts?.carriedPrerenderHtmlChanges?.length
         ? { carriedPrerenderHtmlChanges: opts.carriedPrerenderHtmlChanges }
@@ -4085,7 +4133,10 @@ export class Realm {
         await this.clearRealmIndexCachesAndBroadcast();
         this.broadcastIncrementalInvalidationEvent(
           changes.map(({ url }) => url.href.replace(/\.json$/, '')),
-          { clientRequestId: opts?.clientRequestId ?? null },
+          {
+            clientRequestId: opts?.clientRequestId ?? null,
+            broadcastRealmEvents: opts.broadcastRealmEvents,
+          },
         );
       },
     });
@@ -4110,6 +4161,9 @@ export class Realm {
       // `coalescedWrites` beside the others' when only some of its passes were
       // shared — the rest name it nowhere else.
       ownChanges?: string[];
+      // False for a writer that asked not to announce its write (see
+      // `WriteOptions.broadcastRealmEvents`).
+      broadcastRealmEvents?: boolean;
     },
   ): void {
     // A pass indexed alongside other publishes is announced once, by the
@@ -4118,6 +4172,18 @@ export class Realm {
     // announced that way: one pass nobody else speaks for and the event is
     // still owed, carrying the others' invalidations again along with it.
     let passes = opts?.passes ?? [];
+    // A writer that asked for no realm events joins any pass it shares as a
+    // caller that does not announce it (`CoalescedCaller.announcesPass`), so
+    // it is never the one the others stand down for: a pass it shares with a
+    // writer that does announce is announced by that writer, naming this one
+    // among its coalesced writes, and a pass only such writers share is
+    // announced by nobody.
+    if (opts?.broadcastRealmEvents === false) {
+      this.#log.debug(
+        `not broadcasting index event for ${this.url} (request ${opts?.clientRequestId ?? 'none'}): the writer asked for no realm events`,
+      );
+      return;
+    }
     if (
       passes.length > 0 &&
       passes.every((pass) => pass?.announcedByPeer === true)
@@ -5054,6 +5120,21 @@ export class Realm {
     // nothing — so the two stay distinguishable all the way to the event.
     let clientAuthored: string[] | undefined = options?.clientAuthored;
     let initiatingUser: string | null = options?.initiatingUser ?? null;
+    let broadcastRealmEvents = options?.broadcastRealmEvents !== false;
+    // One initiation for the whole commit, sent as the first file actually
+    // changes, however many files the batch writes, appends to or removes. A
+    // subscriber learns only that the realm is indexing from it — the
+    // completion event says what changed — so one per file would cost every
+    // subscribed room a send per file and tell it nothing more. A commit that
+    // changes nothing sends none.
+    let initiationSent = false;
+    let announceIndexing = (url: URL) => {
+      if (initiationSent || !broadcastRealmEvents) {
+        return;
+      }
+      initiationSent = true;
+      this.sendIndexInitiationEvent(url.href);
+    };
     // The module→instance flush below runs an index pass whose invalidation
     // set is every dependent of the modules written so far — including the
     // instances this very batch is about to write, whose on-disk content at
@@ -5089,6 +5170,7 @@ export class Realm {
         // A deferring pass is the module flush ahead of this write's own
         // pass, which is the one it announces after.
         announcesPass: !opts?.deferPrerenderHtml,
+        broadcastRealmEvents,
         initiatedBy: initiatingUser,
         // The write answers from the index once this lands, so it cannot be
         // settled by a pass that read the file before these bytes did.
@@ -5141,6 +5223,7 @@ export class Realm {
         // to the index ahead of it — nothing about it is serialized — nor
         // stands in for the instance that does. `lastWriteType` is therefore
         // left as the last write that did serialize.
+        announceIndexing(url);
         let written = await this.#writeSplicedUnlocked(path, content);
         results.push(written.result);
         fileMetaRows.push(written.row);
@@ -5176,15 +5259,19 @@ export class Realm {
         urls = [];
       }
 
+      // The document this write stores, when the write re-serializes a card.
+      // The unchanged-file check below compares a stored card with it by
+      // JSON value rather than by bytes.
+      let serializedCard: LooseSingleCardDocument | undefined;
       if (typeof content === 'string') {
         try {
           let doc = JSON.parse(content);
           if (isCardResource(doc.data) && options?.serializeFile) {
-            let serialized = await this.fileSerialization(
+            serializedCard = await this.fileSerialization(
               { data: merge(doc.data, { meta: { realmURL: this.url } }) },
               url,
             );
-            content = JSON.stringify(serialized, null, 2);
+            content = JSON.stringify(serializedCard, null, 2);
           }
         } catch (e: any) {
           if (
@@ -5216,12 +5303,31 @@ export class Realm {
         (stored.size === undefined ||
           stored.size === computeContentSize(content));
       let unchanged: { lastModified: number } | undefined;
-      if (couldMatch && typeof content === 'string') {
+      if (
+        stored &&
+        typeof content === 'string' &&
+        (couldMatch || serializedCard)
+      ) {
         let existingFile = await readFileAsText(path, (p) =>
           this.#adapter.openFile(p),
         );
         if (existingFile?.content === content) {
           unchanged = existingFile;
+        } else if (
+          existingFile &&
+          serializedCard &&
+          sameJSON(existingFile.content, content)
+        ) {
+          // A stored card can hold exactly the JSON this write stores and
+          // still differ in bytes: a trailing newline, indentation, or keys
+          // in another order, as a source checkout lays them out. None of
+          // that is content, so the stored card is kept byte for byte, and
+          // the result below reports its own bytes rather than the ones this
+          // write would have stored. Any difference in the JSON itself — a
+          // reference spelled another way, a field the definition no longer
+          // declares — is content, and the write goes ahead.
+          unchanged = existingFile;
+          content = existingFile.content;
         }
       } else if (
         couldMatch &&
@@ -5274,6 +5380,12 @@ export class Realm {
           contentHash: unchangedHash,
           contentSize: computeContentSize(content),
         });
+        // The module flush above has already run for this file if it was
+        // owed. Recording the file's kind keeps the next instance from
+        // running it again over no URLs, which would replace the flush's
+        // parked prerender set with an empty one and leave the changed
+        // module's dependents unrendered.
+        lastWriteType = currentWriteType ?? lastWriteType;
         continue;
       }
       // From the open above rather than from a read, which a file whose
@@ -5288,7 +5400,7 @@ export class Realm {
       ) {
         modulesWithoutSchemaChange.add(url.href);
       }
-      this.sendIndexInitiationEvent(url.href);
+      announceIndexing(url);
       await this.trackOwnWrite(path);
       let { lastModified } = await this.#adapter.write(path, content);
       (isNewFile ? addedFiles : updatedFiles).push(path);
@@ -5389,9 +5501,10 @@ export class Realm {
     }
 
     // The append leg. Each path gets the same per-file treatment a write does
-    // — the ceiling, the initiation event, the own-write tracking, the
-    // byte-cache drop, the peer notification, and a `realm_file_meta` row —
-    // with two differences, both of which follow from never holding the file.
+    // — the ceiling, the commit's initiation if none has gone out yet, the
+    // own-write tracking, the byte-cache drop, the peer notification, and a
+    // `realm_file_meta` row — with two differences, both of which follow from
+    // never holding the file.
     //
     // The ceiling is applied to what is being added rather than to what the
     // file will hold, and it is the file ceiling whatever the path's
@@ -5411,7 +5524,7 @@ export class Realm {
       let url = this.paths.fileURL(path);
       this.assertWriteSize(content, 'file', path);
       let existed = await this.#adapter.exists(path);
-      this.sendIndexInitiationEvent(url.href);
+      announceIndexing(url);
       await this.trackOwnWrite(path);
       let { lastModified, size } = await this.#adapter.append(path, content);
       this.invalidateCache(path);
@@ -5457,14 +5570,14 @@ export class Realm {
     }
 
     // The removal leg. Each path gets the same per-file treatment a write
-    // does — the initiation event, the own-write tracking that stops the file
-    // watcher from re-reporting this replica's own change, the byte-cache
-    // drop, and the peer notification — and then the whole batch's file
-    // changes are announced together below.
+    // does — the commit's initiation if none has gone out yet, the own-write
+    // tracking that stops the file watcher from re-reporting this replica's
+    // own change, the byte-cache drop, and the peer notification — and then
+    // the whole batch's file changes are announced together below.
     let deleteURLs: URL[] = [];
     for (let path of deletes) {
       let url = this.paths.fileURL(path);
-      this.sendIndexInitiationEvent(url.href);
+      announceIndexing(url);
       await this.trackOwnWrite(path, { isDelete: true });
       await this.#adapter.remove(path);
       this.invalidateCache(path);
@@ -5485,6 +5598,13 @@ export class Realm {
       ) {
         this.invalidateCachedRealmInfo();
       }
+    }
+    if (
+      broadcastRealmEvents &&
+      (addedFiles.length > 0 ||
+        updatedFiles.length > 0 ||
+        removedFiles.length > 0)
+    ) {
       this.broadcastRealmEvent({
         eventName: 'update',
         ...(addedFiles.length ? { added: addedFiles } : {}),
@@ -5559,6 +5679,7 @@ export class Realm {
             invalidatedTypes: invalidatedTypes.value,
             passes,
             ownChanges,
+            broadcastRealmEvents,
           });
           // Announcing what the pass invalidated is the last of the
           // invalidation, so it accumulates into the same stage as the hooks
@@ -5581,6 +5702,7 @@ export class Realm {
             this.enqueueDeferredPrerenderHtml(
               deferredPrerenderHtml,
               initiatingUser,
+              broadcastRealmEvents,
             ),
           );
           answeredAhead = true;
@@ -5619,6 +5741,7 @@ export class Realm {
           {
             clientRequestId,
             ...(clientAuthored ? { clientAuthored } : {}),
+            broadcastRealmEvents,
             initiatedBy: initiatingUser,
             ...(carried.length ? { carriedPrerenderHtmlChanges: carried } : {}),
             modulesWithoutSchemaChange: [...modulesWithoutSchemaChange],
@@ -5647,6 +5770,7 @@ export class Realm {
                   invalidatedTypes: types.value,
                   passes: [...priorPasses, meta.sharedPass],
                   ownChanges,
+                  broadcastRealmEvents,
                 },
               );
             },
@@ -5695,6 +5819,7 @@ export class Realm {
         invalidatedTypes: invalidatedTypes.value,
         passes,
         ownChanges,
+        broadcastRealmEvents,
       });
     }
     // A mixed batch whose instances all turned out to be byte-identical
@@ -5706,6 +5831,7 @@ export class Realm {
       await this.enqueueDeferredPrerenderHtml(
         deferredPrerenderHtml,
         initiatingUser,
+        broadcastRealmEvents,
       );
     }
     return {
@@ -5731,6 +5857,8 @@ export class Realm {
   private async enqueueDeferredPrerenderHtml(
     deferred: DeferredPrerenderHtml | undefined,
     initiatingUser: string | null,
+    // False when the write asked for no realm events.
+    announce = true,
   ): Promise<void> {
     if (!deferred || deferred.changes.length === 0) {
       return;
@@ -5754,6 +5882,7 @@ export class Realm {
         }),
         timeoutSec: INCREMENTAL_INDEX_JOB_TIMEOUT_SEC,
         preWarm: false,
+        announce,
         lane: prerenderHtmlWriterLane(this.url, initiatingUser),
       });
     } catch (e: any) {
@@ -6125,6 +6254,7 @@ export class Realm {
               serializeFile: true,
               waitForIndex,
               initiatingUser: requestContext.authenticatedUser ?? null,
+              broadcastRealmEvents: !realmEventsSuppressed(request),
             });
           } catch (e: any) {
             if (e instanceof CardError) {
@@ -7159,12 +7289,11 @@ export class Realm {
   // Write a file whose content is described as an edit of its own bytes.
   //
   // Everything the byte path does per file it does too, in the same order —
-  // the ceiling, the initiation event, the own-write tracking, the byte-cache
-  // drop and the peer notification — with two differences, both of which
-  // follow from never holding the content. The unchanged-bytes short circuit
-  // is gone: telling whether the result matches what is on disk would mean
-  // reading what is on disk, and an edit that adds items never matches it
-  // anyway. And the fingerprint is assembled from bounded reads of the file
+  // the ceiling, the own-write tracking, the byte-cache drop and the peer
+  // notification — with two differences, both of which follow from never
+  // holding the content. The unchanged-bytes short circuit is gone: telling
+  // whether the result matches what is on disk would mean reading what is on
+  // disk, and an edit that adds items never matches it anyway. And the fingerprint is assembled from bounded reads of the file
   // once it is written, rather than computed from bytes in hand; it is the
   // same value either way, which is what lets a version computed here validate
   // against one computed the other way.
@@ -7179,8 +7308,6 @@ export class Realm {
     row: { path: LocalPath; contentHash?: string; contentSize?: number };
   }> {
     this.assertWriteSize(content, 'card', path);
-    let url = this.paths.fileURL(path);
-    this.sendIndexInitiationEvent(url.href);
     await this.trackOwnWrite(path);
     // The content is assembled beside the file before it is renamed onto it,
     // so a watching realm sees that file appear and vanish. Both are this
@@ -7257,7 +7384,12 @@ export class Realm {
 
   async delete(
     path: LocalPath,
-    options?: { waitForIndex?: boolean; initiatingUser?: string | null },
+    options?: {
+      waitForIndex?: boolean;
+      initiatingUser?: string | null;
+      // See `WriteOptions.broadcastRealmEvents`.
+      broadcastRealmEvents?: boolean;
+    },
   ): Promise<void> {
     await this.#dbAdapter.withFileWriteLocks(this.url, [path], () =>
       this._deleteUnlocked(path, options),
@@ -7266,17 +7398,26 @@ export class Realm {
 
   private async _deleteUnlocked(
     path: LocalPath,
-    options?: { waitForIndex?: boolean; initiatingUser?: string | null },
+    options?: {
+      waitForIndex?: boolean;
+      initiatingUser?: string | null;
+      broadcastRealmEvents?: boolean;
+    },
   ): Promise<void> {
     let url = this.paths.fileURL(path);
-    this.sendIndexInitiationEvent(url.href);
+    let broadcastRealmEvents = options?.broadcastRealmEvents !== false;
+    if (broadcastRealmEvents) {
+      this.sendIndexInitiationEvent(url.href);
+    }
     await this.trackOwnWrite(path, { isDelete: true });
     await this.#adapter.remove(path);
-    this.broadcastRealmEvent({
-      eventName: 'update',
-      removed: [path],
-      realmURL: this.url,
-    });
+    if (broadcastRealmEvents) {
+      this.broadcastRealmEvent({
+        eventName: 'update',
+        removed: [path],
+        realmURL: this.url,
+      });
+    }
     this.invalidateCache(path);
     await this.#notifyFileChange(path);
     // Remove file meta for this path
@@ -7286,12 +7427,16 @@ export class Realm {
       let { invalidations, generation, invalidatedTypes, sharedPass } =
         await this.updateIndexAndCollectInvalidations(
           [{ url, operation: 'delete' }],
-          { initiatedBy: options?.initiatingUser ?? null },
+          {
+            initiatedBy: options?.initiatingUser ?? null,
+            broadcastRealmEvents,
+          },
         );
       this.broadcastIncrementalInvalidationEvent(invalidations, {
         generation,
         invalidatedTypes,
         passes: [sharedPass],
+        broadcastRealmEvents,
       });
     } else {
       // Mirrors the write() waitForIndex:false path: await the durable
@@ -7304,11 +7449,13 @@ export class Realm {
         [{ url, operation: 'delete' }],
         {
           initiatedBy: options?.initiatingUser ?? null,
+          broadcastRealmEvents,
           onSettled: (deferredInvalidations, meta) => {
             this.broadcastIncrementalInvalidationEvent(deferredInvalidations, {
               generation: meta.generation,
               invalidatedTypes: meta.invalidatedTypes,
               passes: [meta.sharedPass],
+              broadcastRealmEvents,
             });
           },
         },
@@ -7339,10 +7486,13 @@ export class Realm {
     let trackPromises: Promise<void>[] = [];
     let removePromises: Promise<void>[] = [];
 
+    // One initiation for the whole removal, as for a batch commit.
+    if (paths.length > 0) {
+      this.sendIndexInitiationEvent(this.paths.fileURL(paths[0]).href);
+    }
     for (let path of paths) {
       let url = this.paths.fileURL(path);
       urls.push(url);
-      this.sendIndexInitiationEvent(url.href);
       trackPromises.push(this.trackOwnWrite(path, { isDelete: true }));
       removePromises.push(this.#adapter.remove(path));
       this.invalidateCache(path);
@@ -11598,6 +11748,7 @@ export class Realm {
           clientRequestId: request.headers.get('X-Boxel-Client-Request-Id'),
           actor: requestContext.authenticatedUser ?? undefined,
           waitForIndex: false,
+          broadcastRealmEvents: !realmEventsSuppressed(request),
         },
       );
     } catch (err: unknown) {
@@ -11971,6 +12122,7 @@ export class Realm {
     await this.delete(handle.path, {
       waitForIndex: false,
       initiatingUser: requestContext.authenticatedUser ?? null,
+      broadcastRealmEvents: !realmEventsSuppressed(request),
     });
     return createResponse({
       body: null,
@@ -16958,6 +17110,7 @@ export class Realm {
       deferPrerenderHtml: false,
       carriedPrerenderHtmlChanges: [],
       readsOwnWrite: false,
+      realmEvents: true,
     };
     let job = await this.#queue.publish({
       jobType: 'incremental-index',

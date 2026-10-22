@@ -228,6 +228,12 @@ export function setupInteractSubmodeTests(
             this.args.saveCard?.(pet.id);
           }
         };
+        viewPet = () => {
+          let pet = this.args.model.pet;
+          if (pet) {
+            this.args.viewCard?.(pet);
+          }
+        };
         <template>
           <h2 data-test-person={{@model.firstName}}>
             <@fields.firstName />
@@ -250,6 +256,9 @@ export function setupInteractSubmodeTests(
             {{on 'click' this.updateAndSavePet}}
           >
             Update and Save Pet
+          </button>
+          <button data-test-view-pet {{on 'click' this.viewPet}}>
+            View Pet
           </button>
           <style scoped>
             .pet-container {
