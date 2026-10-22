@@ -947,6 +947,33 @@ module('Acceptance | interact submode | single stack tests', function (hooks) {
         .isFocused('the card on top has focus');
     });
 
+    test('restoring the stacks from a URL change focuses the card on top, not the opener of a card it removes', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      });
+      let opener = document.createElement('button');
+      document.querySelector('#ember-testing')?.append(opener);
+      await focus(opener);
+
+      let operatorModeStateService = getService('operator-mode-state-service');
+      operatorModeStateService.addItemToStack(
+        operatorModeStateService.createStackItem(`${testRealmURL}Pet/mango`, 0),
+      );
+      await settled();
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Pet/mango"]`)
+        .isFocused();
+
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],
+      });
+
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
+        .isFocused('the restored card on top has focus');
+      opener.remove();
+    });
+
     test('a card opened into a new neighbor stack from the search sheet takes focus', async function (assert) {
       await visitOperatorMode({
         stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],

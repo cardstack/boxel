@@ -81,21 +81,28 @@ function openStackItem(
   });
 }
 
+interface Leaving {
+  item: StackItem;
+  // The stack the item is in.
+  stack: StackItem[];
+  // The state's stacks as the item rendered.
+  stacks: StackItem[][];
+}
+
 // The items that left the page in the current render while focus was lost,
 // waiting for focus to be handed back.
-let leftWithFocusLost: { item: StackItem; stack: StackItem[] }[] = [];
+let leftWithFocusLost: Leaving[] = [];
 
 // As a stack item leaves the page, focus that went with it is handed back,
 // once for everything that left in the same render.
 function leaveStackItem(
-  item: StackItem,
-  stack: StackItem[],
+  leaving: Leaving,
   operatorModeStateService: OperatorModeStateService,
 ) {
   if (focusedElement()) {
     return;
   }
-  leftWithFocusLost.push({ item, stack });
+  leftWithFocusLost.push(leaving);
   if (leftWithFocusLost.length === 1) {
     schedule('afterRender', () => handBackFocus(operatorModeStateService));
   }
@@ -113,12 +120,16 @@ function handBackFocus(operatorModeStateService: OperatorModeStateService) {
     return;
   }
   let stacks = operatorModeStateService.state?.stacks ?? [];
-  for (let { item } of left) {
+  for (let { item, stacks: renderedIn } of left) {
     // A clone that continues the card (moving stacks, or taking its saved id)
-    // shares its opening; the card hasn't closed.
-    let closed = !stacks.some((items) =>
-      items.some((other) => other.opening === item.opening),
-    );
+    // shares its opening; the card hasn't closed. Nor has a card whose stacks
+    // were replaced as a whole, as restoring them from the URL does: every
+    // item is rebuilt, and the stacks restored have their own card on top.
+    let closed =
+      renderedIn === stacks &&
+      !stacks.some((items) =>
+        items.some((other) => other.opening === item.opening),
+      );
     if (closed && focusIfConnected(item.opening.opener?.deref())) {
       return;
     }
@@ -141,14 +152,13 @@ function handBackFocus(operatorModeStateService: OperatorModeStateService) {
 // as the arguments it read change, is neither.
 export default class FollowFocus extends Modifier<Signature> {
   @service declare private operatorModeStateService: OperatorModeStateService;
-  #item: StackItem | undefined;
-  #stack: StackItem[] = [];
+  #leaving: Leaving | undefined;
 
   constructor(owner: Owner, args: ArgsFor<Signature>) {
     super(owner, args);
     registerDestructor(this, () => {
-      if (this.#item) {
-        leaveStackItem(this.#item, this.#stack, this.operatorModeStateService);
+      if (this.#leaving) {
+        leaveStackItem(this.#leaving, this.operatorModeStateService);
       }
     });
   }
@@ -158,8 +168,11 @@ export default class FollowFocus extends Modifier<Signature> {
     _positional: [],
     { item, stack, isTopCard }: NamedArgs<Signature>,
   ) {
-    this.#item = item;
-    this.#stack = stack;
+    this.#leaving ??= {
+      item,
+      stack,
+      stacks: this.operatorModeStateService.state.stacks,
+    };
     openStackItem(element, item, isTopCard);
   }
 }
