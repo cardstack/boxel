@@ -235,12 +235,6 @@ export class GuidePage extends Component<Signature> {
         }
       }
 
-      .guide-nav a:focus-visible,
-      .guide-nav-toggle:focus-visible {
-        outline: 2px solid var(--ring);
-        outline-offset: 2px;
-      }
-
       /* The guide's Markdown in the gallery's type and palette, through the
          renderer's styling contract. Code blocks keep a dark surface in
          either theme: the renderer sets their text light. */
