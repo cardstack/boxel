@@ -50,7 +50,9 @@ module('Acceptance | dashboard', function (hooks) {
     });
   });
 
-  module('state', function () {
+  module('state', function (hooks) {
+    setupFeatureFlag(hooks, 'DASHBOARD_V2');
+
     test('loads the stored state at login', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
 
@@ -59,6 +61,15 @@ module('Acceptance | dashboard', function (hooks) {
         agent: 'codex',
         agentSetup: { codex: 2 },
       });
+    });
+
+    test('a failed read at login leaves the state empty', async function (assert) {
+      mockMatrixUtils.setDashboardStateReadError(new Error('server down'));
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      let matrixService = getService('matrix-service') as MatrixService;
+      assert.deepEqual(matrixService.dashboardState, {});
+      assert.dom('[data-test-dashboard]').exists('login still completes');
     });
 
     test('drops stored fields that do not match the current shape', async function (assert) {
@@ -75,6 +86,16 @@ module('Acceptance | dashboard', function (hooks) {
       assert.deepEqual(matrixService.dashboardState, {
         agentSetup: { claude: 2 },
       });
+
+      await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+        agentSetup: { clippy: 5 },
+      });
+      await settled();
+      assert.deepEqual(
+        matrixService.dashboardState,
+        {},
+        'agentSetup with no valid entry is dropped like any other invalid field',
+      );
     });
 
     test('follows writes made in another tab', async function (assert) {
@@ -172,6 +193,40 @@ module('Acceptance | dashboard', function (hooks) {
       });
     });
 
+    test("an earlier write's late echo does not revert a later write", async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      let matrixService = getService('matrix-service') as MatrixService;
+      mockMatrixUtils.holdDashboardEchoes();
+      await matrixService.updateDashboardState({ agentSetup: { claude: 1 } });
+      await matrixService.updateDashboardState({ agentSetup: { claude: 2 } });
+      assert.strictEqual(matrixService.dashboardState.agentSetup?.claude, 2);
+
+      await mockMatrixUtils.releaseDashboardEcho(0);
+      assert.strictEqual(
+        matrixService.dashboardState.agentSetup?.claude,
+        2,
+        'the first write echoing after the second is ignored',
+      );
+
+      await mockMatrixUtils.setDashboardStateFromAnotherDevice({
+        agentSetup: { claude: 2, grok: 1 },
+      });
+      await settled();
+      assert.deepEqual(
+        matrixService.dashboardState.agentSetup,
+        { claude: 2, grok: 1 },
+        "another tab's write still applies while an echo is pending",
+      );
+
+      await mockMatrixUtils.releaseDashboardEcho(1);
+      assert.deepEqual(
+        matrixService.dashboardState.agentSetup,
+        { codex: 2, claude: 2 },
+        "the second write's own echo applies as the sync order has it",
+      );
+    });
+
     test('a failed write does not block later writes', async function (assert) {
       await visitOperatorMode({ workspaceChooserOpened: true });
 
@@ -203,6 +258,20 @@ module('Acceptance | dashboard', function (hooks) {
         'codex',
       );
     });
+
+    test('a write with nobody logged in resolves without writing', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      let matrixService = getService('matrix-service') as MatrixService;
+      await matrixService.logout();
+      await matrixService.updateDashboardState({ agent: 'claude' });
+
+      assert.deepEqual(matrixService.dashboardState, {});
+      assert.strictEqual(
+        (mockMatrixUtils.getDashboardState() as any).agent,
+        'codex',
+      );
+    });
   });
 
   module('feature flag off', function () {
@@ -211,6 +280,13 @@ module('Acceptance | dashboard', function (hooks) {
 
       assert.dom('[data-test-workspace-chooser]').exists();
       assert.dom('[data-test-dashboard]').doesNotExist();
+    });
+
+    test('the stored state is not read at login', async function (assert) {
+      await visitOperatorMode({ workspaceChooserOpened: true });
+
+      let matrixService = getService('matrix-service') as MatrixService;
+      assert.deepEqual(matrixService.dashboardState, {});
     });
   });
 

@@ -1,5 +1,5 @@
 import type Owner from '@ember/owner';
-import { waitUntil } from '@ember/test-helpers';
+import { settled, waitUntil } from '@ember/test-helpers';
 
 import type { RealmAction } from '@cardstack/runtime-common';
 import {
@@ -114,6 +114,29 @@ export class MockUtils {
 
   getDashboardState = () => {
     return this.testState.opts?.dashboardState;
+  };
+
+  // Makes the server's next reads of the dashboard key fail.
+  setDashboardStateReadError = (error: Error) => {
+    this.testState.opts!.dashboardStateReadError = error;
+  };
+
+  // Holds the sync echoes of this tab's dashboard writes until
+  // releaseDashboardEcho delivers them, so a test can deliver them late or
+  // out of order.
+  holdDashboardEchoes = () => {
+    this.testState.opts!.heldDashboardEchoes = [];
+  };
+
+  // Delivers the held echo of the `index`th write made since
+  // holdDashboardEchoes, as /sync would.
+  releaseDashboardEcho = async (index: number) => {
+    let echo = this.testState.opts!.heldDashboardEchoes![index];
+    if (!echo) {
+      throw new Error(`no held dashboard echo at ${index}`);
+    }
+    echo();
+    await settled();
   };
 
   // Writes the dashboard key as another tab or device would, and syncs it to

@@ -117,6 +117,9 @@ export class MockClient implements ExtendedClient {
         realms: this.sdkOpts.catalogRealms ?? [],
       } as unknown as K;
     } else if (_eventType === APP_BOXEL_DASHBOARD_EVENT_TYPE) {
+      if (this.sdkOpts.dashboardStateReadError) {
+        throw this.sdkOpts.dashboardStateReadError;
+      }
       return (this.sdkOpts.dashboardState ?? null) as unknown as K;
     }
     return null;
@@ -302,19 +305,25 @@ export class MockClient implements ExtendedClient {
       );
     }
     this.sdkOpts.dashboardState = data as any;
-    waitForPromise(
-      new Promise<void>((resolve) =>
-        setTimeout(() => {
-          this.emitEvent(
-            new MatrixEvent({
-              type: type as string,
-              content: data as unknown as Record<string, unknown>,
-            }),
-          );
-          resolve();
+    let echo = () =>
+      this.emitEvent(
+        new MatrixEvent({
+          type: type as string,
+          content: data as unknown as Record<string, unknown>,
         }),
-      ),
-    );
+      );
+    if (this.sdkOpts.heldDashboardEchoes) {
+      this.sdkOpts.heldDashboardEchoes.push(echo);
+    } else {
+      waitForPromise(
+        new Promise<void>((resolve) =>
+          setTimeout(() => {
+            echo();
+            resolve();
+          }),
+        ),
+      );
+    }
     return Promise.resolve({});
   }
 

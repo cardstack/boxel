@@ -538,13 +538,15 @@ export default class SubmodeLayout extends Component<Signature> {
             </button>
           </div>
           {{#if this.workspaceChooserOpened}}
-            {{#if this.isDashboardV2Enabled}}
-              <Dashboard />
-            {{else}}
-              <WorkspaceChooser
-                @topBarCenterElement={{this.topBarCenterElement}}
-              />
-            {{/if}}
+            <div class='workspace-overlay'>
+              {{#if this.isDashboardV2Enabled}}
+                <Dashboard />
+              {{else}}
+                <WorkspaceChooser
+                  @topBarCenterElement={{this.topBarCenterElement}}
+                />
+              {{/if}}
+            </div>
           {{/if}}
 
           {{yield
@@ -630,6 +632,16 @@ export default class SubmodeLayout extends Component<Signature> {
     />
 
     <style scoped>
+      /* Covers the stacks with whichever of the workspace chooser and the
+         dashboard is shown; the child fills it. */
+      .workspace-overlay {
+        display: grid;
+        position: absolute;
+        height: 100%;
+        width: 100%;
+        background-color: var(--boxel-800);
+        z-index: var(--host-workspace-chooser-z-index);
+      }
       .submode-layout {
         --submode-bar-item-border-radius: var(--boxel-border-radius);
         --boxel-icon-button-width: var(--container-button-size);

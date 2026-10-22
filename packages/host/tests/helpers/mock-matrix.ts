@@ -38,6 +38,11 @@ export interface Config {
   catalogRealms?: string[];
   // The user's `app.boxel.dashboard` account data, as stored on the server.
   dashboardState?: unknown;
+  // Thrown by the server's read of `app.boxel.dashboard`.
+  dashboardStateReadError?: Error;
+  // While set, sync echoes of raw dashboard writes are held here, in write
+  // order, until a test releases them.
+  heldDashboardEchoes?: (() => void)[];
   loginFlowsResponse?: { flows: import('matrix-js-sdk').LoginFlow[] };
   ssoLoginUrl?: string;
   loginWithTokenInterceptor?: (

@@ -47,6 +47,7 @@ import {
 import { getPromptParts } from '@cardstack/runtime-common/ai';
 import {
   type AppBoxelDashboardContent,
+  dashboardContentKey,
   mergeDashboardContent,
   parseDashboardContent,
 } from '@cardstack/runtime-common/dashboard-state';
@@ -554,9 +555,22 @@ export default class MatrixService extends Service {
               );
               break;
             // Onboarding and agent setup progress follow the user across tabs.
-            case APP_BOXEL_DASHBOARD_EVENT_TYPE:
+            case APP_BOXEL_DASHBOARD_EVENT_TYPE: {
+              // The echo of this tab's own write is already shown. When a
+              // later write of this tab has been shown since, the echo is
+              // stale and would step the state back until the later echo
+              // follows. Anything else is another tab's write.
+              let key = dashboardContentKey(e.event.content);
+              let index = this.dashboardEchoesPending.indexOf(key);
+              if (index >= 0) {
+                this.dashboardEchoesPending.splice(0, index + 1);
+                if (this.dashboardEchoesPending.length > 0) {
+                  break;
+                }
+              }
               this.dashboardState = parseDashboardContent(e.event.content);
               break;
+            }
           }
         },
       ],
@@ -1216,13 +1230,32 @@ export default class MatrixService extends Service {
   // queued before it. They don't go through the sync store or wait for their
   // sync echo, which resolves on any event of the type and never arrives if
   // sync stops. A write from another tab can still be overwritten: account
-  // data has no compare-and-set. An earlier write's echo can arrive after a
-  // later write has been shown, showing the earlier value until the later
-  // write's echo follows.
+  // data has no compare-and-set.
   private dashboardWrites: Promise<unknown> = Promise.resolve();
   // Bumped by resetState() so a write queued before logout never lands in
   // the next session.
   private dashboardSession = 0;
+  // The content of each write of this tab whose sync echo hasn't arrived, in
+  // write order, so the account-data listener can tell a stale echo of an
+  // earlier write from another tab's write.
+  private dashboardEchoesPending: string[] = [];
+
+  // Nothing renders the state while the flag is off, so no request is made.
+  // A failed read must not keep the user from logging in: the state starts
+  // empty and the next sync echo or write fills it.
+  private async fetchDashboardStateAtBoot(): Promise<unknown> {
+    if (!ENV.featureFlags?.DASHBOARD_V2) {
+      return null;
+    }
+    try {
+      return await this.client.getAccountDataFromServer(
+        APP_BOXEL_DASHBOARD_EVENT_TYPE,
+      );
+    } catch (e) {
+      console.error('Failed to read app.boxel.dashboard account data', e);
+      return null;
+    }
+  }
 
   // Applies `change` to the stored dashboard state: an object of fields to
   // set, or a function from the stored state to those fields.
@@ -1237,9 +1270,13 @@ export default class MatrixService extends Service {
     let userId = this._client?.getUserId();
     // The client of the session this write was queued in, or nothing once that
     // session has ended: logged out, or switched to another account, which logs
-    // in on the same client before logging the old account out.
+    // in on the same client before logging the old account out. With nobody
+    // logged in there is no session, so the write is dropped like one whose
+    // session ended.
     let sessionClient = () =>
-      session === this.dashboardSession && this._client?.getUserId() === userId
+      userId &&
+      session === this.dashboardSession &&
+      this._client?.getUserId() === userId
         ? this._client
         : undefined;
     let write = this.dashboardWrites.then(async () => {
@@ -1267,6 +1304,7 @@ export default class MatrixService extends Service {
         // Shown right away; the account-data listener then applies whatever
         // syncs after it, including a newer write from another tab.
         if (sessionClient()) {
+          this.dashboardEchoesPending.push(dashboardContentKey(next));
           this.dashboardState = parseDashboardContent(next);
         }
       } catch (e) {
@@ -1404,7 +1442,7 @@ export default class MatrixService extends Service {
           this.client.getAccountDataFromServer(
             APP_BOXEL_CATALOG_REALMS_EVENT_TYPE,
           ) as Promise<{ realms: string[] } | null>,
-          this.client.getAccountDataFromServer(APP_BOXEL_DASHBOARD_EVENT_TYPE),
+          this.fetchDashboardStateAtBoot(),
         ]);
         this.workspaceFavorites = favoritesData?.favorites ?? [];
         this.dashboardState = parseDashboardContent(dashboardData);
@@ -2652,6 +2690,7 @@ export default class MatrixService extends Service {
     this.dashboardState = {};
     this.dashboardSession++;
     this.dashboardWrites = Promise.resolve();
+    this.dashboardEchoesPending = [];
     this._currentRoomId = undefined;
     this._isInitializingNewUser = false;
     if (isTesting() && this.session.isAuthenticated) {

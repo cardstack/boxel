@@ -1,3 +1,5 @@
+import { isPlainObject } from './is-plain-object.ts';
+
 // The content of the app.boxel.dashboard account-data key. Fields are only
 // ever added: a field whose meaning changes gets a new name, so every version
 // of the app can read and write what any other stored.
@@ -34,11 +36,18 @@ export function parseDashboardContent(
   if (isPlainObject(content.agentSetup)) {
     let agentSetup: Partial<Record<DashboardAgent, number>> = {};
     for (let [agent, done] of Object.entries(content.agentSetup)) {
-      if (isDashboardAgent(agent) && Number.isInteger(done) && done >= 0) {
-        agentSetup[agent] = done as number;
+      if (
+        isDashboardAgent(agent) &&
+        typeof done === 'number' &&
+        Number.isInteger(done) &&
+        done >= 0
+      ) {
+        agentSetup[agent] = done;
       }
     }
-    parsed.agentSetup = agentSetup;
+    if (Object.keys(agentSetup).length > 0) {
+      parsed.agentSetup = agentSetup;
+    }
   }
   return parsed;
 }
@@ -62,12 +71,26 @@ export function mergeDashboardContent(
   return next;
 }
 
-function isDashboardAgent(value: unknown): value is DashboardAgent {
-  return (DASHBOARD_AGENTS as readonly unknown[]).includes(value);
+// Identifies stored content regardless of key order, which a round trip
+// through the homeserver doesn't preserve.
+export function dashboardContentKey(content: unknown): string {
+  return JSON.stringify(sortKeys(content));
 }
 
-// Kept here rather than imported, so this module stays dependency-free for
-// every package that reads it.
-function isPlainObject(value: unknown): value is Record<string, any> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+function sortKeys(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(sortKeys);
+  }
+  if (!isPlainObject(value)) {
+    return value;
+  }
+  return Object.fromEntries(
+    Object.keys(value)
+      .sort()
+      .map((key) => [key, sortKeys(value[key])]),
+  );
+}
+
+function isDashboardAgent(value: unknown): value is DashboardAgent {
+  return (DASHBOARD_AGENTS as readonly unknown[]).includes(value);
 }
