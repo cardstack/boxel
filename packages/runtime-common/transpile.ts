@@ -50,6 +50,13 @@ const compiler = {
   },
 };
 
+// The version of what `transpileJS` makes from a given source. Compiled modules
+// are cached, and served with validators, by their source alone, so a change
+// that makes the same source compile differently must bump this, or output
+// from before the change outlives it. Version 2 tags exported classes with
+// their identity.
+export const TRANSPILE_VERSION = 2;
+
 // `moduleIdentifier` is the module's canonical identifier, the form a code ref
 // to one of its exports carries. When given, every exported class is tagged
 // with it (see export-identity-plugin.ts).

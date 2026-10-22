@@ -435,7 +435,7 @@ import {
   getFileWithFallbacks,
   type TextFileRef,
 } from './stream.ts';
-import { transpileJS } from './transpile.ts';
+import { TRANSPILE_VERSION, transpileJS } from './transpile.ts';
 import { moduleSchemaChanged } from './module-schema-change.ts';
 import { recordModuleCompile } from './module-compile-stats.ts';
 import type {
@@ -1272,7 +1272,10 @@ const LANE_DIAGNOSTIC_BUDGET_MS = 1_000;
 // previous generation, and the index event that follows the swap refreshes
 // live clients.
 const READ_INDEX_DRAIN_BUDGET_MS = 10_000;
-const MODULE_ETAG_VARIANT = 'module';
+// Carries the transpiler version, so compiled output stored or cached under an
+// earlier version no longer matches the validator a request builds and is
+// compiled over.
+const MODULE_ETAG_VARIANT = `module-v${TRANSPILE_VERSION}`;
 
 // A compile this long holds up every other request the process has, so it is
 // logged at info rather than debug.

@@ -146,6 +146,25 @@ module(basename(import.meta.filename), function () {
         );
       });
 
+      test('a served module tags the classes it exports with their identity', async function (assert) {
+        await testRealm.write(
+          'serve-identity.gts',
+          cardSource('ServeIdentity'),
+        );
+
+        let response = await request
+          .get('/serve-identity.gts')
+          .set('Accept', SupportedMimeType.All);
+
+        assert.strictEqual(response.status, 200, 'HTTP 200 status');
+        assert.true(
+          response.text.includes(
+            `static [Symbol.for("ident")] = ["${testRealmHref}serve-identity", "ServeIdentity"];`,
+          ),
+          'the class carries the module URL without its extension and its export name',
+        );
+      });
+
       test('the source route serves the same module as stored text under its own validator', async function (assert) {
         await testRealm.write(
           'serve-variants.gts',
