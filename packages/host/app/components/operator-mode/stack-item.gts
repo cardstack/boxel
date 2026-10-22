@@ -1252,10 +1252,15 @@ export default class OperatorModeStackItem extends Component<Signature> {
           margin-top var(--boxel-transition),
           width var(--boxel-transition);
       }
-      /* the card takes focus as it opens, to carry the keyboard into it, and
-         as it is clicked; it is no control, so it draws no ring */
+      /* the card takes focus as it opens, as focus is handed back to it, and
+         as it is clicked. A ring shows where the keyboard brought focus, so a
+         keyboard user can see where it is; a click draws none */
       .item:focus {
         outline: none;
+      }
+      .item:focus-visible {
+        outline: 2px solid var(--ring, var(--boxel-highlight));
+        outline-offset: -2px;
       }
       .item.opening-animation {
         animation: scaleIn 0.2s forwards;
