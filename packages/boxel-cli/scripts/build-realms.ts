@@ -105,16 +105,18 @@ function shouldSkip(name: string): boolean {
 // The patterns an ignore file may use, read as rsync reads them: `name/`
 // leaves out every directory of that name, and any other pattern leaves out
 // every file or directory whose name it matches, with `*` matching within a
-// name. Anything else is refused rather than read some other way.
+// name. Lines starting `#` or `;` are comments, as they are to rsync. Anything
+// else, rsync's `+ ` and `- ` rule prefixes among it, is refused rather than
+// read some other way.
 function readIgnorePatterns(file: string): ((path: string) => boolean)[] {
   return readFileSync(file, 'utf8')
     .split('\n')
     .map((line) => line.trim())
-    .filter((line) => line !== '' && !line.startsWith('#'))
+    .filter((line) => line !== '' && !/^[#;]/.test(line))
     .map((pattern) => {
       let dirOnly = pattern.endsWith('/');
       let name = dirOnly ? pattern.slice(0, -1) : pattern;
-      if (name === '' || /[/!?[\]\\]/.test(name)) {
+      if (name === '' || /^[+-] /.test(name) || /[/!?[\]\\]/.test(name)) {
         throw new Error(
           `Unsupported pattern "${pattern}" in ${file}: build-realms reads ` +
             'only `name`, `*.ext`-style and `dir/` patterns.',
