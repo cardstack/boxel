@@ -52,7 +52,6 @@ import {
 import runRealmCode from '../lib/realm-runner/runner';
 import { canonicalRealmIdentifier } from '../lib/realm-utils';
 import { loadSkillSource } from '../lib/skill-tools';
-import { catalogRealmURL } from '../lib/utils';
 import {
   captureDeadline,
   captureForAgent,
@@ -2639,7 +2638,6 @@ export default class RunRealmCodeTool extends HostBaseTool<
   ): string[] | undefined {
     let events = this.matrixService.roomResources.get(roomId)?.events ?? [];
     if (
-      !catalogRealmURL ||
       sessionSkillFeatures(events, this.matrixService.aiBotUserId).includes(
         'catalog-reuse',
       )
@@ -2647,7 +2645,12 @@ export default class RunRealmCodeTool extends HostBaseTool<
       return realms;
     }
     let { virtualNetwork } = this.network;
-    let catalog = canonicalRealmIdentifier(virtualNetwork, catalogRealmURL);
+    // Named by its prefix, which every build registers: a test build clears
+    // the catalog's URL but keeps the prefix.
+    let catalog = canonicalRealmIdentifier(
+      virtualNetwork,
+      '@cardstack/catalog/',
+    );
     return (
       realms?.length ? realms : this.realmServer.availableRealmIdentifiers
     ).filter(
