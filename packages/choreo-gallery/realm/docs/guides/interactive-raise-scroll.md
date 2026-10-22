@@ -43,4 +43,4 @@ Read the implementation: [`choreo.gts`](https://github.com/cardstack/boxel/blob/
 
 ---
 
-[← Holds, Waits, and Standing Steps](interactive-holds.md) · [All guides](README.md) · [Text Delivery and Stagger →](interactive-delivery.md)
+[← Holds, Waits, and Standing Steps](interactive-holds) · [All guides](README) · [Text Delivery and Stagger →](interactive-delivery)

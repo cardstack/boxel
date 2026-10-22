@@ -48,7 +48,7 @@ module('Moving marker', function (hooks) {
 });
 ```
 
-Replace `my-app` with your application's module prefix. This example tests the marker from [Animating an Element](core-elements.md). For production components, add `data-test-*` attributes so test selectors remain stable as markup changes.
+Replace `my-app` with your application's module prefix. This example tests the marker from [Animating an Element](core-elements). For production components, add `data-test-*` attributes so test selectors remain stable as markup changes.
 
 ## Testing Interruptions
 
@@ -64,4 +64,4 @@ A passing endpoint assertion should accompany, rather than replace, checks of th
 
 ---
 
-[← Gestures and Scroll](core-input.md) · [All guides](README.md) · [Diagnose Motion Problems →](core-troubleshooting.md)
+[← Gestures and Scroll](core-input) · [All guides](README) · [Diagnose Motion Problems →](core-troubleshooting)

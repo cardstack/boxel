@@ -41,4 +41,4 @@ Read the implementation: [`types.ts`](https://github.com/cardstack/boxel/blob/ma
 
 ---
 
-[← Targets, Styles, and Property Ownership](core-targets.md) · [All guides](README.md) · [Tweens, Easing, and Keyframes →](core-tweens.md)
+[← Targets, Styles, and Property Ownership](core-targets) · [All guides](README) · [Tweens, Easing, and Keyframes →](core-tweens)

@@ -15,7 +15,9 @@
  * - clicking each tile opens its demo, and Back returns to the grid;
  * - the 3D Gallery link opens the widget room, and the room renders with no
  *   engine issue;
- * - every guide renders, with a live demo for each card it embeds.
+ * - every guide's page renders in the gallery's frame, in each theme, with
+ *   the guides' sections, its pager, a live demo for each card it embeds, no
+ *   file chrome, and no "Read the guide →" leading back to itself.
  *
  * On every page, any console error, uncaught exception, failed request, or
  * response of 400 or more from the site fails the check, except the known
@@ -80,9 +82,15 @@ const demos = paths
   .map((p) => p.slice('demos/'.length, -'.json'.length))
   .filter((slug) => !only || only.includes(slug))
   .sort();
+// A guide's page is the card beside its Markdown: `docs/guides/core-start` for
+// `docs/guides/core-start.md`. The index, `README`, has one too.
 const guides = only
   ? []
-  : paths.filter((p) => /^docs\/guides\/[^/]+\.md$/.test(p)).sort();
+  : paths
+      .filter((p) => /^docs\/guides\/[^/]+\.json$/.test(p))
+      .map((p) => p.slice('docs/guides/'.length, -'.json'.length))
+      .filter((slug) => paths.includes(`docs/guides/${slug}.md`))
+      .sort();
 const allDemoCount = paths.filter((p) => /^demos\/[^/]+\.json$/.test(p)).length;
 
 const browser = await chromium.launch({
@@ -245,6 +253,64 @@ async function expectTheme(page, theme, problems) {
   }
 }
 
+// A guide's page: its heading, the guides' sections beside it with the guide
+// marked as the one being read, the pager, its embedded demos, and none of the
+// host's file chrome.
+async function expectGuide(page, slug, embeds, problems) {
+  await goLive(page, new URL(`docs/guides/${slug}`, site).href);
+  let article = page.locator('[data-test-guide-article]');
+  let rendered = await article
+    .locator('h1')
+    .first()
+    .waitFor({ timeout: TIMEOUT })
+    .then(() => true)
+    .catch(() => false);
+  if (!rendered) {
+    // Host mode shows "Loading card…" until the page's card loads.
+    let loading = await page.getByText('Loading card…').isVisible();
+    problems.push(
+      loading
+        ? `the host never loaded the guide: it still shows "Loading card…" after ${TIMEOUT / 1000} s`
+        : `the guide shows no heading after ${TIMEOUT / 1000} s`,
+    );
+    return;
+  }
+  let sections = await page.locator('[data-test-guide-section]').count();
+  if (sections === 0) {
+    problems.push("the guides' sections are missing");
+  }
+  let current = await page
+    .locator('[data-test-guide-nav] [aria-current="page"]')
+    .count();
+  if (current !== 1) {
+    problems.push(`${current} navigation links mark the guide as current`);
+  }
+  if (slug !== 'README' && !(await article.getByText('All guides').count())) {
+    problems.push('the pager is missing');
+  }
+  if (
+    await page
+      .locator('[data-test-file-isolated], [data-test-file-download]')
+      .count()
+  ) {
+    problems.push('the page shows the file view');
+  }
+  if (await article.locator(`a[data-demo-guide="${slug}"]`).count()) {
+    problems.push('an embedded demo links back to this guide');
+  }
+  if (embeds > 0) {
+    let live = article.locator('[data-choreo-site]');
+    await live
+      .nth(embeds - 1)
+      .waitFor({ timeout: TIMEOUT })
+      .catch(() => {});
+    let count = await live.count();
+    if (count < embeds) {
+      problems.push(`${count} live demos for ${embeds} embedded cards`);
+    }
+  }
+}
+
 async function expectGrid(page) {
   await page
     .locator('[data-gallery-tile]')
@@ -263,6 +329,10 @@ for (let theme of themes) {
       if (tiles !== allDemoCount) {
         problems.push(`${tiles} tiles for ${allDemoCount} demos`);
       }
+      await expectTheme(page, theme, problems);
+    });
+    await onPage(context, `guides index (${theme})`, async (page, problems) => {
+      await expectGuide(page, 'README', 0, problems);
       await expectTheme(page, theme, problems);
     });
   }
@@ -350,37 +420,11 @@ if (!only) {
   });
 }
 
-for (let guide of guides) {
-  let embeds = (await source(guide)).match(/::card\[/g)?.length ?? 0;
-  await onPage(context, `guide ${guide}`, async (page, problems) => {
-    await goLive(page, new URL(guide, site).href);
-    let rendered = await page
-      .locator('h1')
-      .first()
-      .waitFor({ timeout: TIMEOUT })
-      .then(() => true)
-      .catch(() => false);
-    if (!rendered) {
-      // Host mode shows "Loading card…" until the page's card or file loads.
-      let loading = await page.getByText('Loading card…').isVisible();
-      problems.push(
-        loading
-          ? `the host never loaded the guide: it still shows "Loading card…" after ${TIMEOUT / 1000} s`
-          : `the guide shows no heading after ${TIMEOUT / 1000} s`,
-      );
-      return;
-    }
-    if (embeds > 0) {
-      let live = page.locator('[data-choreo-site]');
-      await live
-        .nth(embeds - 1)
-        .waitFor({ timeout: TIMEOUT })
-        .catch(() => {});
-      let count = await live.count();
-      if (count < embeds) {
-        problems.push(`${count} live demos for ${embeds} embedded cards`);
-      }
-    }
+for (let slug of guides) {
+  let embeds =
+    (await source(`docs/guides/${slug}.md`)).match(/::card\[/g)?.length ?? 0;
+  await onPage(context, `guide ${slug}`, async (page, problems) => {
+    await expectGuide(page, slug, embeds, problems);
   });
 }
 

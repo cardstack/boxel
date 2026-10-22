@@ -43,4 +43,4 @@ Read the implementation: [`motion-config.gts`](https://github.com/cardstack/boxe
 
 ---
 
-[← Scroll Progress and Viewport Observation](core-scroll.md) · [All guides](README.md) · [Page Transitions and Live Crossings →](core-page-transitions.md)
+[← Scroll Progress and Viewport Observation](core-scroll) · [All guides](README) · [Page Transitions and Live Crossings →](core-page-transitions)

@@ -45,4 +45,4 @@ Read the implementation: [`types.ts`](https://github.com/cardstack/boxel/blob/ma
 
 ---
 
-[← Changesets, Sprites, and Queries](interactive-queries.md) · [All guides](README.md) · [Gates, Advance, and Retreat →](interactive-gates.md)
+[← Changesets, Sprites, and Queries](interactive-queries) · [All guides](README) · [Gates, Advance, and Retreat →](interactive-gates)

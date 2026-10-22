@@ -41,4 +41,4 @@ Nesting does not automatically synchronize clocks. When a parent film needs to d
 
 ---
 
-[← Tethers and Connector Geometry](interactive-tethers.md) · [All guides](README.md) · [Live Scene Crossings →](interactive-crossings.md)
+[← Tethers and Connector Geometry](interactive-tethers) · [All guides](README) · [Live Scene Crossings →](interactive-crossings)

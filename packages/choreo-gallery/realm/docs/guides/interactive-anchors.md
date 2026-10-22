@@ -54,4 +54,4 @@ Read the implementation: [`anchors.ts`](https://github.com/cardstack/boxel/blob/
 
 ---
 
-[← Gates, Advance, and Retreat](interactive-gates.md) · [All guides](README.md) · [Tween and Spring Steps →](interactive-property-steps.md)
+[← Gates, Advance, and Retreat](interactive-gates) · [All guides](README) · [Tween and Spring Steps →](interactive-property-steps)

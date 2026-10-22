@@ -189,13 +189,14 @@ class Embedded extends Component<typeof GalleryDemo> {
   }
 
   <template>
-    <ChoreoRoot class='tile'>
+    <ChoreoRoot class='tile' data-test-demo-tile>
       <div
         class='tile-stage'
         data-motion-hold={{this.hold.state}}
         {{restWhenOff}}
         {{wakeOnTouch this.hold}}
         {{ownClicks}}
+        data-test-tile-stage
       >
         {{#each (array this.take) key='@identity'}}
           <MotionConfig @reducedMotion={{this.hold.reducedMotion}}>
@@ -205,7 +206,7 @@ class Embedded extends Component<typeof GalleryDemo> {
       </div>
       <div class='tile-meta'>
         <span class='tile-group'>{{@model.group}}</span>
-        <span class='tile-title'>{{@model.title}}</span>
+        <span class='tile-title' data-test-tile-title>{{@model.title}}</span>
         <span class='tile-lede'>{{@model.lede}}</span>
         <span class='tile-links' {{ownClicks}}>
           <MotionToggle @hold={{this.hold}} />
@@ -375,6 +376,7 @@ class Fitted extends Component<typeof GalleryDemo> {
     <ChoreoRoot
       class='tile {{if this.roomy "is-roomy"}} {{this.fit}}'
       {{this.measure}}
+      data-test-demo-tile
     >
       {{#if this.roomy}}
         {{! the stage is the pointer's: the keyboard and a screen reader go
@@ -383,11 +385,11 @@ class Fitted extends Component<typeof GalleryDemo> {
         <div
           class='tile-stage'
           data-motion-hold={{this.hold.state}}
-          data-test-tile-stage
           {{restWhenOff}}
           {{wakeOnTouch this.hold}}
           {{ownControlClicks}}
           {{pointerOnly}}
+          data-test-tile-stage
         >
           <DemoStage @demo={{this.demo}} @face='tile' @open={{this.open}} />
         </div>
@@ -405,6 +407,7 @@ class Fitted extends Component<typeof GalleryDemo> {
           class='tile-title'
           href={{@model.id}}
           {{on 'click' openThroughHost}}
+          data-test-tile-title
         >{{@model.title}}</a>
         {{#if this.roomy}}
           <span class='tile-lede'>{{@model.lede}}</span>

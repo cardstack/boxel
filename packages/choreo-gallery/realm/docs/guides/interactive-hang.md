@@ -24,8 +24,8 @@ Follow derives companion movement from the driven puck rather than guessing an i
 
 Try Rubber hang and Decisive release while keeping the release gesture as similar as possible. These presets alter the transition response; the gesture still carries the evidence used to choose the outcome. Reset between comparisons when existing pucks would change the game's result.
 
-Read [derived following](interactive-follow.md) for companion values, [anchors](interactive-anchors.md) for destinations, and [drag handles](core-drag-handles.md) when the gesture starts from a dedicated control.
+Read [derived following](interactive-follow) for companion values, [anchors](interactive-anchors) for destinations, and [drag handles](core-drag-handles) when the gesture starts from a dedicated control.
 
 ---
 
-[← Keeping Simulation and Choreography Separate](interactive-drift.md) · [All guides](README.md) · [Spatial & 3D Choreo →](spatial-start.md)
+[← Keeping Simulation and Choreography Separate](interactive-drift) · [All guides](README) · [Spatial & 3D Choreo →](spatial-start)

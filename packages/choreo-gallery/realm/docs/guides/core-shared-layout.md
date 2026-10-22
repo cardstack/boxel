@@ -22,10 +22,10 @@ The marker's transition is a named source variable. Jelly tab exaggerates settle
 
 This small demo deliberately isolates the marker. It does not animate a content panel or demonstrate a tab keyboard controller. If you extend it into a production tab interface, add the appropriate tab roles, focus behaviour and arrow-key navigation along with the content relationships.
 
-When panels must remain alive while leaving, use [Presence](core-presence.md). Preserve the outgoing panel's own data during exit instead of reading the newly selected tab's content. The marker's geometry and the panel's lifetime are different concerns, and keeping them separate makes both easier to reason about.
+When panels must remain alive while leaving, use [Presence](core-presence). Preserve the outgoing panel's own data during exit instead of reading the newly selected tab's content. The marker's geometry and the panel's lifetime are different concerns, and keeping them separate makes both easier to reason about.
 
-Compare [layout animation](core-layout.md) when the same node changes its own box, and [cross-region movement](interactive-regions.md) when an item is transferred between Choreo scenes.
+Compare [layout animation](core-layout) when the same node changes its own box, and [cross-region movement](interactive-regions) when an item is transferred between Choreo scenes.
 
 ---
 
-[← Reordering a Wrapped Grid](core-reorder-grid.md) · [All guides](README.md) · [Revealing Data on Arrival →](core-reveal.md)
+[← Reordering a Wrapped Grid](core-reorder-grid) · [All guides](README) · [Revealing Data on Arrival →](core-reveal)

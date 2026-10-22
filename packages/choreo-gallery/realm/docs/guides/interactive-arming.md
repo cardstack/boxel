@@ -45,4 +45,4 @@ Read the implementation: [`arming.ts`](https://github.com/cardstack/boxel/blob/m
 
 ---
 
-[← Live Scene Crossings](interactive-crossings.md) · [All guides](README.md) · [The Run and Interruption →](interactive-run.md)
+[← Live Scene Crossings](interactive-crossings) · [All guides](README) · [The Run and Interruption →](interactive-run)

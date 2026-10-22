@@ -37,4 +37,4 @@ Read the implementation: [`types.ts`](https://github.com/cardstack/boxel/blob/ma
 
 ---
 
-[← The Camera3D Renderer Contract](spatial-camera3d.md) · [All guides](README.md) · [Plane Coordinates and Hit Testing →](spatial-coordinates.md)
+[← The Camera3D Renderer Contract](spatial-camera3d) · [All guides](README) · [Plane Coordinates and Hit Testing →](spatial-coordinates)

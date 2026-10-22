@@ -174,6 +174,15 @@ const MarkdownContentShell: TemplateOnlyComponent<Signature> = <template>
         );
       }
 
+      /* Reading measure: `--markdown-prose-max-width` caps the width of the
+         render's own text blocks (paragraphs, lists, headings) while its
+         embeds, code, tables and blockquotes keep the full width. The rule
+         reaches only the render's top-level blocks, so an embedded card's
+         text is never capped. Unset, nothing is capped. */
+      .markdown-content > :deep(:is(p, ul, ol, h1, h2, h3, h4, h5, h6)) {
+        max-width: var(--markdown-prose-max-width, none);
+      }
+
       /* Bold */
       .markdown-content :deep(strong),
       .markdown-content :deep(b) {

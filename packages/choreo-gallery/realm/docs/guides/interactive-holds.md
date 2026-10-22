@@ -41,4 +41,4 @@ Read the implementation: [`choreo.gts`](https://github.com/cardstack/boxel/blob/
 
 ---
 
-[← Measured Movement, Size, and Paths](interactive-move.md) · [All guides](README.md) · [Elevation and Directed Scrolling →](interactive-raise-scroll.md)
+[← Measured Movement, Size, and Paths](interactive-move) · [All guides](README) · [Elevation and Directed Scrolling →](interactive-raise-scroll)

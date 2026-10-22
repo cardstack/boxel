@@ -50,4 +50,4 @@ Read the implementation: [`activity.ts`](https://github.com/cardstack/boxel/blob
 
 ---
 
-[← Host Adapters and the Render Pipeline](core-host.md) · [All guides](README.md) · [Testing Geometry, Identity, and Cleanup →](core-test-geometry.md)
+[← Host Adapters and the Render Pipeline](core-host) · [All guides](README) · [Testing Geometry, Identity, and Cleanup →](core-test-geometry)

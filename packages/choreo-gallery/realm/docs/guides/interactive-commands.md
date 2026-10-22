@@ -45,4 +45,4 @@ Read the implementation: [`types.ts`](https://github.com/cardstack/boxel/blob/ma
 
 ---
 
-[← The Run and Interruption](interactive-run.md) · [All guides](README.md) · [Creating Composite Steps →](interactive-composites.md)
+[← The Run and Interruption](interactive-run) · [All guides](README) · [Creating Composite Steps →](interactive-composites)

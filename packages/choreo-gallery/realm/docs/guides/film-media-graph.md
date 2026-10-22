@@ -40,4 +40,4 @@ Read the implementation: [`nodes.gts`](https://github.com/cardstack/boxel/blob/m
 
 ---
 
-[← Clip Windows, Lanes, and Source Time](film-clips.md) · [All guides](README.md) · [Joins and Transition Presentations →](film-joins.md)
+[← Clip Windows, Lanes, and Source Time](film-clips) · [All guides](README) · [Joins and Transition Presentations →](film-joins)

@@ -56,7 +56,7 @@ A role names a group; an ID names an individual. Neither replaces your applicati
 
 Use a single modifier for an independent element and layout animation for a simple position change. Reach for Choreo when ordering or relationships between elements become part of the interaction.
 
-The [sequence demo](../../demos/sequence) makes that ordering visible. Continue with [Writing a Timeline](interactive-timelines.md) to connect departures, movement, and arrivals.
+The [sequence demo](../../demos/sequence) makes that ordering visible. Continue with [Writing a Timeline](interactive-timelines) to connect departures, movement, and arrivals.
 
 ## API Coverage
 
@@ -66,4 +66,4 @@ Read the implementation: [`choreo.gts`](https://github.com/cardstack/boxel/blob/
 
 ---
 
-[← Responding to Scroll Direction](core-header.md) · [All guides](README.md) · [Writing a Timeline →](interactive-timelines.md)
+[← Responding to Scroll Direction](core-header) · [All guides](README) · [Writing a Timeline →](interactive-timelines)

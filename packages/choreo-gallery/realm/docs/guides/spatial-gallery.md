@@ -26,8 +26,8 @@ Test the overview separately from the close-up. A room can be smooth with one ac
 
 Write the explanation before assigning camera stops. Describe what's worth watching, then trigger the action that demonstrates it. Use one transport to coordinate the camera, pointer, overlays, and narration.
 
-See [Narration and Overlays](film-audio.md) for separate audio clips and [Recording and Deployment](film-delivery.md) for the final delivery checks.
+See [Narration and Overlays](film-audio) for separate audio clips and [Recording and Deployment](film-delivery) for the final delivery checks.
 
 ---
 
-[← Keeping the Interface Live](spatial-dom.md) · [All guides](README.md) · [Framing and Aiming a DOM Camera →](spatial-frame.md)
+[← Keeping the Interface Live](spatial-dom) · [All guides](README) · [Framing and Aiming a DOM Camera →](spatial-frame)

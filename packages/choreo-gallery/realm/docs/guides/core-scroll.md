@@ -42,4 +42,4 @@ Read the implementation: [`scroll.ts`](https://github.com/cardstack/boxel/blob/m
 
 ---
 
-[← Reordering Lists and Grids](core-reorder.md) · [All guides](README.md) · [Motion Configuration and Reduced Motion →](core-config.md)
+[← Reordering Lists and Grids](core-reorder) · [All guides](README) · [Motion Configuration and Reduced Motion →](core-config)

@@ -88,7 +88,7 @@ import { motion, styles } from 'glimmer-motion';
 
 A bound HTML `style` attribute can overwrite the transform that Motion is updating. Keep ordinary typography in CSS and motion-owned values in the modifier.
 
-Try the [keyframes demo](../../demos/keyframes), then explore [input and gestures](core-input.md).
+Try the [keyframes demo](../../demos/keyframes), then explore [input and gestures](core-input).
 
 ## Separating the Responsibilities
 
@@ -104,4 +104,4 @@ Read the implementation: [`motion.ts`](https://github.com/cardstack/boxel/blob/m
 
 ---
 
-[← Build Your First Choreo Application](core-first-app.md) · [All guides](README.md) · [Entering and Leaving →](core-presence.md)
+[← Build Your First Choreo Application](core-first-app) · [All guides](README) · [Entering and Leaving →](core-presence)

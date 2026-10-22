@@ -62,7 +62,7 @@ This excerpt assumes `motion` is imported in the component. Only one representat
 
 Wrap related layout participants in `LayoutGroup` when they need to measure a shared layout change together. A filtered grid is a common example: the remaining cards move to their new positions while their real content stays mounted.
 
-For a destination that represents a place, such as a trash bin, use [a beacon](interactive-beacons.md). Shared identity means “the same item appears here”; a beacon means “move this item here.”
+For a destination that represents a place, such as a trash bin, use [a beacon](interactive-beacons). Shared identity means “the same item appears here”; a beacon means “move this item here.”
 
 ## Checking the Measurement Boundary
 
@@ -76,4 +76,4 @@ Read the implementation: [`layout.ts`](https://github.com/cardstack/boxel/blob/m
 
 ---
 
-[← Entering and Leaving](core-presence.md) · [All guides](README.md) · [Gestures and Scroll →](core-input.md)
+[← Entering and Leaving](core-presence) · [All guides](README) · [Gestures and Scroll →](core-input)

@@ -47,4 +47,4 @@ Read the implementation: [`view-transition.ts`](https://github.com/cardstack/box
 
 ---
 
-[← Motion Configuration and Reduced Motion](core-config.md) · [All guides](README.md) · [Slow Motion and Playback Rate →](core-tempo.md)
+[← Motion Configuration and Reduced Motion](core-config) · [All guides](README) · [Slow Motion and Playback Rate →](core-tempo)

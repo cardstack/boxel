@@ -24,8 +24,8 @@ Scroll down far enough to hide the header, reverse slightly, then reverse decisi
 
 Keep the document position stable when the header changes. If the header's removal also changes layout height, the resulting scroll delta can feed back into the state machine. The example translates the header visually instead of using its disappearance to resize the content.
 
-For continuous layer movement, compare [scroll progress](core-scroll.md). For discrete row entrances, compare [revealing data](core-reveal.md). All three consume scroll-related information, but their state and timing responsibilities differ.
+For continuous layer movement, compare [scroll progress](core-scroll). For discrete row entrances, compare [revealing data](core-reveal). All three consume scroll-related information, but their state and timing responsibilities differ.
 
 ---
 
-[← Revealing Data on Arrival](core-reveal.md) · [All guides](README.md) · [Understanding a Choreo Scene →](interactive-start.md)
+[← Revealing Data on Arrival](core-reveal) · [All guides](README) · [Understanding a Choreo Scene →](interactive-start)
