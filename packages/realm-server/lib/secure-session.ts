@@ -176,6 +176,22 @@ function adminCreds(deps: SecureSessionDeps) {
   };
 }
 
+// Whether this server can sign anyone in on the secure origin: every sign-in
+// drives the Matrix server's admin API, so without its credentials each one
+// answers 503.
+export function secureSignInConfigured({
+  matrixURL,
+  matrixAdminUsername,
+  matrixAdminPassword,
+}: {
+  matrixURL: URL;
+  matrixAdminUsername?: string;
+  matrixAdminPassword?: string;
+}): boolean {
+  return resolveAdminCreds(matrixURL, matrixAdminUsername, matrixAdminPassword)
+    .ok;
+}
+
 // The realm server's own Matrix client signs in on first use.
 async function ensureLoggedIn(matrixClient: MatrixClient): Promise<void> {
   if (!matrixClient.isLoggedIn()) {

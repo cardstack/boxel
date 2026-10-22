@@ -17,6 +17,7 @@ import {
   matrixServerName,
   mintLoginToken,
   SecureSessionError,
+  secureSignInConfigured,
   signInWithGoogle,
   signInWithPassword,
   type SecureSessionClient,
@@ -384,11 +385,13 @@ export function handleEndWindowSessions({
 // GET /_secure-origin: where this realm server's secure origin is, for a
 // client outside the browser that has to send the user there, as the CLI does
 // to sign in, the name of the Matrix server its accounts are on, which the
-// secure origin's account creation shows usernames with, and that its pages
-// sign a CLI profile in.
+// secure origin's account creation shows usernames with, and whether its
+// pages can sign a CLI profile in.
 export function handleSecureOriginInfo({
   secureOriginURL,
   matrixClient,
+  matrixAdminUsername,
+  matrixAdminPassword,
 }: CreateRoutesArgs): Handler {
   return async function (ctxt: Koa.Context, _next: Koa.Next) {
     if (!secureOriginURL) {
@@ -407,9 +410,14 @@ export function handleSecureOriginInfo({
           url: secureOriginURL.href,
           matrixServerName: await matrixServerName({ matrixClient }),
           // Its `cli-auth` page signs a CLI profile in, handing the CLI a
-          // Matrix login token. A CLI that finds this missing signs in on the
+          // Matrix login token, whenever this server can sign anyone in
+          // there. A CLI that finds this false or missing signs in on the
           // host app's own page instead.
-          cliAuth: true,
+          cliAuth: secureSignInConfigured({
+            matrixURL: matrixClient.matrixURL,
+            matrixAdminUsername,
+            matrixAdminPassword,
+          }),
         },
       },
     });

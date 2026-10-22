@@ -42,6 +42,7 @@ import {
   registerUser,
 } from '../synapse.ts';
 import { keepsMethodAndPathOnly } from '../lib/request-telemetry.ts';
+import { secureSignInConfigured } from '../lib/secure-session.ts';
 import type { RealmHttpServer as Server } from '../server.ts';
 import {
   installSecretsKeyring,
@@ -1844,6 +1845,22 @@ module(basename(import.meta.filename), function () {
         runSecureSessionsMigration(),
         /readonly_member_for_secure_sessions can read secure_sessions/,
         'the migration names the role that can still read it',
+      );
+    });
+
+    test("the CLI is told the secure origin can't sign it in without the Matrix server's admin credentials", function (assert) {
+      let matrixURL = new URL('https://matrix.example.test/');
+      assert.false(secureSignInConfigured({ matrixURL }));
+      assert.false(
+        secureSignInConfigured({ matrixURL, matrixAdminUsername: 'admin' }),
+        'nor with only one of them',
+      );
+      assert.true(
+        secureSignInConfigured({
+          matrixURL,
+          matrixAdminUsername: 'admin',
+          matrixAdminPassword: 'a-password',
+        }),
       );
     });
 
