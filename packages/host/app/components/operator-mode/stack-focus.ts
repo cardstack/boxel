@@ -53,6 +53,10 @@ function escapeTarget(topItems: StackItem[]): StackItem | undefined {
     : undefined;
 }
 
+// Focus moves once the render is done. Focusing an element fires blur and
+// focusout on the one that had focus, and a handler there may change state
+// the render has already read.
+
 // As a stack item first renders, a card that is opening records what had
 // focus, and takes focus itself when it opens on top of its stack.
 function openStackItem(
@@ -67,17 +71,22 @@ function openStackItem(
   opening.opened = true;
   let active = focusedElement();
   opening.opener = active ? new WeakRef(active) : undefined;
-  if (isTopCard() && !keepsFocus(active)) {
-    element.focus({ preventScroll: true });
+  if (keepsFocus(active)) {
+    return;
   }
+  schedule('afterRender', () => {
+    if (element.isConnected && isTopCard()) {
+      element.focus({ preventScroll: true });
+    }
+  });
 }
 
-// As a stack item leaves the page, focus that went with it is handed back.
-// A card that closed hands it to what opened the card, when that is still on
-// the page and not covered by another card. Otherwise, once the stacks have
-// rendered, it goes to the card on top of the item's stack, or to the top
-// card Escape acts on when that stack has gone. Focus the user has put
-// elsewhere stays where it is.
+// The items that left the page in the current render while focus was lost,
+// waiting for focus to be handed back.
+let leftWithFocusLost: { item: StackItem; stack: StackItem[] }[] = [];
+
+// As a stack item leaves the page, focus that went with it is handed back,
+// once for everything that left in the same render.
 function leaveStackItem(
   item: StackItem,
   stack: StackItem[],
@@ -86,32 +95,45 @@ function leaveStackItem(
   if (focusedElement()) {
     return;
   }
-  let stacks = operatorModeStateService.state?.stacks ?? [];
-  // A clone that continues the card (moving stacks, or taking its saved id)
-  // shares its opening; the card hasn't closed.
-  let closed = !stacks.some((items) =>
-    items.some((other) => other.opening === item.opening),
-  );
-  if (closed && focusIfConnected(item.opening.opener?.deref())) {
+  leftWithFocusLost.push({ item, stack });
+  if (leftWithFocusLost.length === 1) {
+    schedule('afterRender', () => handBackFocus(operatorModeStateService));
+  }
+}
+
+// A card that closed hands focus to what opened it, when that is still on the
+// page and not covered by another card. Otherwise focus goes to the card on
+// top of a stack an item left, or to the top card Escape acts on when those
+// stacks have gone. Focus the user has put elsewhere, or that a card opening
+// in the same render has taken, stays where it is.
+function handBackFocus(operatorModeStateService: OperatorModeStateService) {
+  let left = leftWithFocusLost;
+  leftWithFocusLost = [];
+  if (focusedElement()) {
     return;
   }
-  // Scheduled, so that every item leaving in the same render gets to hand
-  // focus to its opener first.
-  schedule('afterRender', () => {
-    if (focusedElement()) {
+  let stacks = operatorModeStateService.state?.stacks ?? [];
+  for (let { item } of left) {
+    // A clone that continues the card (moving stacks, or taking its saved id)
+    // shares its opening; the card hasn't closed.
+    let closed = !stacks.some((items) =>
+      items.some((other) => other.opening === item.opening),
+    );
+    if (closed && focusIfConnected(item.opening.opener?.deref())) {
       return;
     }
-    let stacks = operatorModeStateService.state?.stacks ?? [];
-    let target =
-      stacks.includes(stack) && stack.length > 0
-        ? stack[stack.length - 1]
-        : escapeTarget(operatorModeStateService.topMostStackItems());
-    if (target) {
-      focusIfConnected(
-        document.querySelector(`[data-stack-item="${target.instanceId}"]`),
-      );
-    }
-  });
+  }
+  let stack = left
+    .map(({ stack }) => stack)
+    .find((stack) => stacks.includes(stack) && stack.length > 0);
+  let target = stack
+    ? stack[stack.length - 1]
+    : escapeTarget(operatorModeStateService.topMostStackItems());
+  if (target) {
+    focusIfConnected(
+      document.querySelector(`[data-stack-item="${target.instanceId}"]`),
+    );
+  }
 }
 
 // Applied to a stack item's root. The item opens as the modifier first runs,
