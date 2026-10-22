@@ -221,13 +221,6 @@ class RealmPusher extends RealmSyncBase {
           newManifest.files[rel] = hash;
         }
       }
-      // A request that got no answer may have been written. Recording these
-      // with a hash no file has keeps them known to the manifest, so the next
-      // push re-sends them as updates where the realm has them, instead of as
-      // adds the realm would refuse with 409.
-      for (const rel of result.unanswered) {
-        newManifest.files[rel] = '';
-      }
 
       if (result.error) {
         uploadFailed = true;
@@ -294,12 +287,14 @@ class RealmPusher extends RealmSyncBase {
     }
 
     // Refresh mtimes and save the manifest even on partial failure —
-    // newManifest.files only contains files the server actually wrote
-    // (unchanged carry-overs + succeeded uploads), so persisting it
-    // is always safe and avoids re-uploading text files that landed.
+    // newManifest.files holds the files the server wrote (unchanged
+    // carry-overs + succeeded uploads) with their hashes, so persisting it
+    // avoids re-uploading text files that landed.
     if (!this.options.dryRun && filesToUpload.size > 0) {
+      let remoteNow: Set<string> = new Set(initialRemoteFiles.keys());
       try {
         const freshMtimes = await this.getRemoteMtimes();
+        remoteNow = new Set(freshMtimes.keys());
         for (const rel of Object.keys(newManifest.files)) {
           const mtime = freshMtimes.get(rel);
           if (mtime !== undefined) {
@@ -308,6 +303,16 @@ class RealmPusher extends RealmSyncBase {
         }
       } catch (error) {
         console.warn('Could not refresh remote mtimes after upload:', error);
+      }
+      // A file this push didn't confirm writing (rejected, never sent, or in
+      // a request that got no answer) is recorded with a hash no file has
+      // when the realm has it, so the next push re-sends it as an update
+      // rather than an add the realm would refuse. One the realm doesn't
+      // have stays out of the manifest and goes as an add.
+      for (const rel of filesToUpload.keys()) {
+        if (newManifest.files[rel] === undefined && remoteNow.has(rel)) {
+          newManifest.files[rel] = '';
+        }
       }
     }
 

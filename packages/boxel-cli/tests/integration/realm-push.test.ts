@@ -742,6 +742,60 @@ describe('realm push (integration)', () => {
     expect(await fetchRemoteFile(realmUrl, 'c.md')).toBe('# C\n');
   });
 
+  it('keeps the files a rejected request stopped retryable', async () => {
+    let realmUrl = await createTestRealm();
+    let localDir = makeLocalDir();
+    for (let name of ['a', 'b', 'c']) {
+      writeLocalFile(localDir, `${name}.md`, `# ${name} 1\n`);
+    }
+    let first = await runPush(localDir, realmUrl);
+    expect(first.ok, first.stderr).toBe(true);
+    for (let name of ['a', 'b', 'c']) {
+      writeLocalFile(localDir, `${name}.md`, `# ${name} 2\n`);
+    }
+    writeLocalFile(localDir, 'd.md', '# d 1\n');
+
+    // The first request is refused, so nothing after it is sent.
+    let profileManager = reloadProfile(home);
+    let realFetch = profileManager.authedRealmFetch.bind(profileManager);
+    let fetchSpy = vi
+      .spyOn(profileManager, 'authedRealmFetch')
+      .mockImplementation(async (input, init) => {
+        let url = typeof input === 'string' ? input : (input as URL).href;
+        if (init?.method === 'POST' && url.includes('/_atomic')) {
+          return new Response('Unavailable', { status: 503 });
+        }
+        return realFetch(input, init);
+      });
+    let exitSpy = vi
+      .spyOn(process, 'exit')
+      .mockImplementation((() => undefined as never) as never);
+
+    try {
+      await pushCommand(localDir, realmUrl, {
+        profileManager,
+        atomicBatchSize: 2,
+      });
+    } finally {
+      fetchSpy.mockRestore();
+      exitSpy.mockRestore();
+    }
+
+    // Files the realm has stay known; the new file the realm doesn't have
+    // stays out, so the next push adds it.
+    let files = readManifest(localDir).files;
+    expect(Object.keys(files).sort()).toEqual(['a.md', 'b.md', 'c.md']);
+
+    let res = await runPush(localDir, realmUrl);
+    expect(res.ok, res.stderr).toBe(true);
+    for (let name of ['a', 'b', 'c']) {
+      expect(await fetchRemoteFile(realmUrl, `${name}.md`)).toBe(
+        `# ${name} 2\n`,
+      );
+    }
+    expect(await fetchRemoteFile(realmUrl, 'd.md')).toBe('# d 1\n');
+  });
+
   it('re-pushes a file that was deleted on the realm out-of-band', async () => {
     let realmUrl = await createTestRealm();
     let localDir = makeLocalDir();
