@@ -98,11 +98,36 @@ export class MockSlidingSync extends SlidingSync {
       return;
     }
 
+    // The room is reported in the list whose room-type filters admit it, as
+    // the homeserver would: a typed room goes to the list that asks for its
+    // type, and to the AI room list only when that list doesn't exclude it.
+    let roomType = (() => {
+      try {
+        return serverState?.getRoomState?.(roomId, 'm.room.create', '')?.content
+          ?.type as string | undefined;
+      } catch {
+        return undefined;
+      }
+    })();
+    let listKey =
+      (roomType &&
+        Object.keys(this._lists).find((key) =>
+          this._lists[key]?.filters?.room_types?.includes(roomType),
+        )) ||
+      'ai-room';
+    if (
+      listKey === 'ai-room' &&
+      roomType &&
+      this._lists['ai-room']?.filters?.not_room_types?.includes(roomType)
+    ) {
+      return;
+    }
+
     // Create a mock sliding sync response that includes the new room
     let mockResponse = {
       pos: String(Date.now()),
       lists: {
-        ['ai-room']: {
+        [listKey]: {
           count: 1,
           ops: [
             {
