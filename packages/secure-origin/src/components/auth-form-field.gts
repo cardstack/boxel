@@ -3,13 +3,14 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 import FieldContainer from './field-container.gts';
 
 // The host's AuthFormField, which the sign-in, registration and
-// password-reset pages wrap each field in.
+// password-reset pages wrap each field in. Its block is given its label's id,
+// as FieldContainer's is.
 interface Signature {
   Element: HTMLElement;
   Args: {
     label?: string;
   };
-  Blocks: { default: [] };
+  Blocks: { default: [labelId: string | undefined] };
 }
 
 const AuthFormField: TemplateOnlyComponent<Signature> = <template>
@@ -19,8 +20,9 @@ const AuthFormField: TemplateOnlyComponent<Signature> = <template>
     @vertical={{true}}
     class='auth-form-field'
     ...attributes
+    as |labelId|
   >
-    {{yield}}
+    {{yield labelId}}
   </FieldContainer>
 
   <style scoped>
