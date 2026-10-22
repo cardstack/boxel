@@ -306,24 +306,63 @@ export class DialPanel extends Component<Signature> {
          keeps the layering intact — a hovered row is still a step above its
          surface, a groove is still a step below it. */
       .choreo-site[data-theme='light'] .dialkit-root {
-        --dial-surface: rgba(33, 29, 24, 0.06);
-        --dial-surface-hover: rgba(33, 29, 24, 0.1);
-        --dial-surface-active: rgba(33, 29, 24, 0.13);
-        --dial-surface-subtle: rgba(33, 29, 24, 0.08);
-        --dial-text-root: #211d18;
-        --dial-text-section: rgba(33, 29, 24, 0.72);
-        --dial-text-label: rgba(33, 29, 24, 0.72);
-        --dial-text-focus: #211d18;
-        --dial-text-primary: rgba(33, 29, 24, 0.95);
-        --dial-text-secondary: rgba(33, 29, 24, 0.62);
-        --dial-text-tertiary: rgba(33, 29, 24, 0.42);
-        --dial-border: rgba(33, 29, 24, 0.12);
-        --dial-border-hover: rgba(33, 29, 24, 0.2);
-        --dial-glass-bg: #f7f3ec;
-        --dial-dropdown-bg: #efe9df;
-        --dial-shadow: 0 8px 28px rgba(33, 29, 24, 0.14);
-        --dial-shadow-collapsed: 0 4px 14px rgba(33, 29, 24, 0.1);
-        --dial-shadow-dropdown: 0 8px 22px rgba(33, 29, 24, 0.14);
+        --dial-surface: color-mix(in srgb, var(--foreground) 6%, transparent);
+        --dial-surface-hover: color-mix(
+          in srgb,
+          var(--foreground) 10%,
+          transparent
+        );
+        --dial-surface-active: color-mix(
+          in srgb,
+          var(--foreground) 13%,
+          transparent
+        );
+        --dial-surface-subtle: color-mix(
+          in srgb,
+          var(--foreground) 8%,
+          transparent
+        );
+        --dial-text-root: var(--foreground);
+        --dial-text-section: color-mix(
+          in srgb,
+          var(--foreground) 72%,
+          transparent
+        );
+        --dial-text-label: color-mix(
+          in srgb,
+          var(--foreground) 72%,
+          transparent
+        );
+        --dial-text-focus: var(--foreground);
+        --dial-text-primary: color-mix(
+          in srgb,
+          var(--foreground) 95%,
+          transparent
+        );
+        --dial-text-secondary: color-mix(
+          in srgb,
+          var(--foreground) 62%,
+          transparent
+        );
+        --dial-text-tertiary: color-mix(
+          in srgb,
+          var(--foreground) 42%,
+          transparent
+        );
+        --dial-border: color-mix(in srgb, var(--foreground) 12%, transparent);
+        --dial-border-hover: color-mix(
+          in srgb,
+          var(--foreground) 20%,
+          transparent
+        );
+        --dial-glass-bg: var(--card);
+        --dial-dropdown-bg: var(--canvas);
+        --dial-shadow: 0 8px 28px
+          color-mix(in srgb, var(--foreground) 14%, transparent);
+        --dial-shadow-collapsed: 0 4px 14px
+          color-mix(in srgb, var(--foreground) 10%, transparent);
+        --dial-shadow-dropdown: 0 8px 22px
+          color-mix(in srgb, var(--foreground) 14%, transparent);
       }
 
       .dial-spike :deep(.dialkit-folder-header) {
