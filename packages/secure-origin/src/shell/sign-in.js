@@ -19,7 +19,7 @@ import {
   signOut,
   storedSession,
   storeSession,
-} from './session.js';
+} from '../security/session.js';
 import { signInFailed } from './sign-in-copy.js';
 import {
   authButton,
