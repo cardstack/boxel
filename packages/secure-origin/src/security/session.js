@@ -409,3 +409,35 @@ export async function mintKeyWriteTicket(config, { action, keyId }) {
   });
   return json.data.attributes;
 }
+
+// How long handing a sign-in over keeps waiting while the Matrix server
+// refuses a second login token for the user within its minute.
+const LOGIN_TOKEN_RETRY_MS = 65 * 1000;
+
+// A single-use Matrix login token for the user `session` is signed in as: the
+// hand-off that signs the app, or the CLI, in to Matrix. The secure session
+// itself stays here. The Matrix server mints one login token per user a
+// minute, so a sign-in handed over again within the minute waits for the
+// next, as long as the server says to.
+export async function loginToken(config, session) {
+  let deadline = Date.now() + LOGIN_TOKEN_RETRY_MS;
+  for (;;) {
+    try {
+      let json = await request(
+        new URL('_secure-session/login-token', config.realmServerURL),
+        { token: session.token },
+      );
+      return json.data.attributes;
+    } catch (e) {
+      let wait = e.retryAfterMs;
+      if (
+        e.status !== 429 ||
+        wait === undefined ||
+        Date.now() + wait > deadline
+      ) {
+        throw e;
+      }
+      await new Promise((resolve) => setTimeout(resolve, wait));
+    }
+  }
+}

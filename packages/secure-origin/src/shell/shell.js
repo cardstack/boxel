@@ -14,6 +14,7 @@ import CliAuthPage from './sign-in/cli-auth-page.gts';
 import CliSignInPage from './sign-in/cli-sign-in-page.gts';
 import GoogleCallback from './sign-in/google-callback.gts';
 import SignInPage from './sign-in/sign-in-page.gts';
+import SignOutPage from './sign-in/sign-out-page.gts';
 import { registerMode, verifyEmailMode } from './register/modes.ts';
 import {
   forgotPasswordMode,
@@ -30,6 +31,7 @@ const modes = {
   'sign-in': component(SignInPage),
   'cli-sign-in': component(CliSignInPage),
   'cli-auth': component(CliAuthPage),
+  'sign-out': component(SignOutPage),
   register: registerMode,
   'verify-email': verifyEmailMode,
   'forgot-password': forgotPasswordMode,
