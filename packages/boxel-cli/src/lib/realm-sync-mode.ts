@@ -15,6 +15,7 @@ export interface DeckRealmSyncMode {
   realmRRI: string;
   protocol: 'deck-r0';
   sync: 'content-addressed';
+  history: 'jj';
 }
 
 export type RealmSyncMode = LegacyRealmSyncMode | DeckRealmSyncMode;
@@ -32,6 +33,7 @@ function isDeckCapabilities(value: unknown): value is {
   realmRRI: string;
   protocol: 'deck-r0';
   sync: 'content-addressed';
+  history: 'jj';
 } {
   let capability = value as Record<string, unknown>;
   return (
@@ -42,7 +44,8 @@ function isDeckCapabilities(value: unknown): value is {
     capability.realmRRI.startsWith('@') &&
     capability.realmRRI.endsWith('/') &&
     capability.protocol === 'deck-r0' &&
-    capability.sync === 'content-addressed'
+    capability.sync === 'content-addressed' &&
+    capability.history === 'jj'
   );
 }
 
@@ -81,6 +84,7 @@ export async function detectRealmSyncMode(
     realmRRI: capability.realmRRI,
     protocol: capability.protocol,
     sync: capability.sync,
+    history: capability.history,
   };
 }
 
@@ -138,6 +142,16 @@ export async function readDeckTreeFile(options: {
   return bytes;
 }
 
+// Files the realm changed since this workspace's base, reported by a
+// per-file update that wrote nothing.
+export class DeckPathConflictError extends Error {
+  readonly paths: string[];
+  constructor(paths: string[]) {
+    super(`changed on the realm since your last sync: ${paths.join(', ')}`);
+    this.paths = paths;
+  }
+}
+
 export async function publishDeckBranchUpdate(options: {
   realmURL: string;
   branchName: string;
@@ -156,6 +170,21 @@ export async function publishDeckBranchUpdate(options: {
     body: JSON.stringify(options.body),
   });
   if (!response.ok) {
+    if (response.status === 409) {
+      let conflicts: unknown;
+      try {
+        conflicts = ((await response.json()) as { conflicts?: unknown })
+          .conflicts;
+      } catch {
+        conflicts = undefined;
+      }
+      if (
+        Array.isArray(conflicts) &&
+        conflicts.every((path) => typeof path === 'string')
+      ) {
+        throw new DeckPathConflictError(conflicts);
+      }
+    }
     throw new Error(
       response.status === 409
         ? `Deck branch ${options.branchName} moved; pull or sync before publishing`

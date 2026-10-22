@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -14,6 +14,11 @@ import {
   type DeckBranchSnapshot,
 } from '../../src/lib/deck-workspace-state.ts';
 import type { RealmAuthenticator } from '../../src/lib/realm-authenticator.ts';
+import {
+  applyDeckUpdate,
+  refuseDeckUpdate,
+  type FakeDeckUpdate,
+} from '../helpers/deck-branch-update.ts';
 
 function snapshot(
   content: Record<string, string>,
@@ -43,6 +48,7 @@ class TeamRealm implements RealmAuthenticator {
   branch: DeckBranchSnapshot;
   content: Record<string, string>;
   posts = 0;
+  beforeNextPost: (() => void) | undefined;
 
   constructor(content: Record<string, string>) {
     this.content = content;
@@ -59,27 +65,18 @@ class TeamRealm implements RealmAuthenticator {
       return new Response(JSON.stringify(this.branch));
     }
     if (url.pathname.endsWith('/.deck/branch') && request.method === 'POST') {
-      let update = (await request.json()) as {
-        expected: { refGeneration: number };
-        operations: Array<{
-          path: string;
-          sha256: string | null;
-          contentBase64?: string;
-        }>;
-      };
-      if (update.expected.refGeneration !== this.branch.refGeneration) {
-        return new Response('moved', { status: 409 });
-      }
+      let race = this.beforeNextPost;
+      this.beforeNextPost = undefined;
+      race?.();
+      let update = (await request.json()) as FakeDeckUpdate;
+      let refused = refuseDeckUpdate(
+        this.content,
+        this.branch.refGeneration,
+        update,
+      );
+      if (refused) return refused;
       this.posts++;
-      for (let operation of update.operations) {
-        if (operation.sha256 === null) delete this.content[operation.path];
-        else {
-          this.content[operation.path] = Buffer.from(
-            operation.contentBase64!,
-            'base64',
-          ).toString();
-        }
-      }
+      applyDeckUpdate(this.content, update);
       this.branch = snapshot(this.content, this.branch.refGeneration + 1);
       return new Response(JSON.stringify(this.branch));
     }
@@ -140,7 +137,77 @@ describe('synchronizing an exact Deck branch', () => {
     expect(realm.branch.refGeneration).toBe(3);
   });
 
-  it('publishes nothing when both developers changed the same bytes', async () => {
+  it('skips and reports a file both developers changed, and syncs the rest', async () => {
+    let realm = new TeamRealm({
+      'importmap.json': '{"imports":{}}',
+      'theme/tokens.json': 'theme v1',
+      'controls/known-date.gts': 'known date v1',
+    });
+    let [mina, kim] = await Promise.all([workspace(realm), workspace(realm)]);
+    await writeFile(join(mina, 'theme/tokens.json'), 'mina theme');
+    await writeFile(join(kim, 'theme/tokens.json'), 'kim theme');
+    await writeFile(join(kim, 'controls/known-date.gts'), 'kim known date');
+    await pushDeckBranch({
+      realmURL: 'https://realm.example/pretui/',
+      localDir: mina,
+      authenticator: realm,
+    });
+
+    let result = await syncDeckBranch({
+      realmURL: 'https://realm.example/pretui/',
+      branchName: 'main',
+      localDir: kim,
+      authenticator: realm,
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.conflicts).toEqual(['theme/tokens.json']);
+    expect(result.pushed).toEqual(['controls/known-date.gts']);
+    expect(realm.content['theme/tokens.json']).toBe('mina theme');
+    expect(realm.content['controls/known-date.gts']).toBe('kim known date');
+    expect(await readFile(join(kim, 'theme/tokens.json'), 'utf8')).toBe(
+      'kim theme',
+    );
+
+    // Still a conflict next time: the skipped file kept its old base.
+    let again = await syncDeckBranch({
+      realmURL: 'https://realm.example/pretui/',
+      branchName: 'main',
+      localDir: kim,
+      authenticator: realm,
+    });
+    expect(again.conflicts).toEqual(['theme/tokens.json']);
+  });
+
+  it("--prefer-local publishes the local file on top of the realm's", async () => {
+    let realm = new TeamRealm({
+      'importmap.json': '{"imports":{}}',
+      'theme/tokens.json': 'theme v1',
+    });
+    let [mina, kim] = await Promise.all([workspace(realm), workspace(realm)]);
+    await writeFile(join(mina, 'theme/tokens.json'), 'mina theme');
+    await writeFile(join(kim, 'theme/tokens.json'), 'kim theme');
+    await pushDeckBranch({
+      realmURL: 'https://realm.example/pretui/',
+      localDir: mina,
+      authenticator: realm,
+    });
+
+    let result = await syncDeckBranch({
+      realmURL: 'https://realm.example/pretui/',
+      branchName: 'main',
+      localDir: kim,
+      authenticator: realm,
+      strategy: 'prefer-local',
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.conflicts).toEqual([]);
+    expect(result.pushed).toEqual(['theme/tokens.json']);
+    expect(realm.content['theme/tokens.json']).toBe('kim theme');
+  });
+
+  it("--prefer-remote takes the realm's file and publishes nothing for it", async () => {
     let realm = new TeamRealm({
       'importmap.json': '{"imports":{}}',
       'theme/tokens.json': 'theme v1',
@@ -160,11 +227,40 @@ describe('synchronizing an exact Deck branch', () => {
       branchName: 'main',
       localDir: kim,
       authenticator: realm,
+      strategy: 'prefer-remote',
     });
 
-    expect(result.error).toMatch(/content conflict/);
-    expect(result.conflicts).toEqual(['theme/tokens.json']);
+    expect(result.error).toBeUndefined();
+    expect(result.pulled).toEqual(['theme/tokens.json']);
     expect(realm.posts).toBe(postsAfterMina);
-    expect(realm.content['theme/tokens.json']).toBe('mina theme');
+    expect(await readFile(join(kim, 'theme/tokens.json'), 'utf8')).toBe(
+      'mina theme',
+    );
+  });
+
+  it('reads again when the realm changes a pushed file between read and publish', async () => {
+    let realm = new TeamRealm({
+      'importmap.json': '{"imports":{}}',
+      'theme/tokens.json': 'theme v1',
+    });
+    let kim = await workspace(realm);
+    await writeFile(join(kim, 'theme/tokens.json'), 'kim theme');
+    // A host save lands after kim's read but before kim's publish.
+    realm.beforeNextPost = () => {
+      realm.content['theme/tokens.json'] = 'host theme';
+      realm.branch = snapshot(realm.content, realm.branch.refGeneration + 1);
+    };
+
+    let result = await syncDeckBranch({
+      realmURL: 'https://realm.example/pretui/',
+      branchName: 'main',
+      localDir: kim,
+      authenticator: realm,
+      strategy: 'prefer-local',
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.pushed).toEqual(['theme/tokens.json']);
+    expect(realm.content['theme/tokens.json']).toBe('kim theme');
   });
 });

@@ -46,6 +46,7 @@ describe('realm synchronization mode', () => {
               realmRRI: '@cardstack/pretui/',
               protocol: 'deck-r0',
               sync: 'content-addressed',
+              history: 'jj',
             }),
             { headers: { 'content-type': 'application/json' } },
           ),
@@ -57,6 +58,7 @@ describe('realm synchronization mode', () => {
       realmRRI: '@cardstack/pretui/',
       protocol: 'deck-r0',
       sync: 'content-addressed',
+      history: 'jj',
     });
   });
 

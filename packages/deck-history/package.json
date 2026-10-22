@@ -1,0 +1,31 @@
+{
+  "name": "@cardstack/deck-history",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Client for deckd, the jj-backed every-save History of a Deck realm",
+  "exports": {
+    "./backend": "./src/backend.ts",
+    "./deckd": "./src/deckd.ts"
+  },
+  "scripts": {
+    "test": "node tests/index.ts",
+    "lint": "pnpm run lint:js && pnpm run lint:types",
+    "lint:js": "eslint . --ext .ts",
+    "lint:fix": "eslint . --ext .ts --fix",
+    "lint:types": "ember-tsc --noEmit"
+  },
+  "devDependencies": {
+    "@glint/ember-tsc": "catalog:",
+    "@types/node": "catalog:",
+    "@types/qunit": "catalog:",
+    "@typescript-eslint/eslint-plugin": "catalog:",
+    "@typescript-eslint/parser": "catalog:",
+    "eslint": "catalog:",
+    "qunit": "catalog:",
+    "typescript": "catalog:"
+  },
+  "dependencies": {
+    "@cardstack/deck": "workspace:*"
+  }
+}

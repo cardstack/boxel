@@ -20,6 +20,11 @@ import {
   type DeckBranchSnapshot,
 } from '../../src/lib/deck-workspace-state.ts';
 import type { RealmAuthenticator } from '../../src/lib/realm-authenticator.ts';
+import {
+  applyDeckUpdate,
+  refuseDeckUpdate,
+  type FakeDeckUpdate,
+} from '../helpers/deck-branch-update.ts';
 
 const REALM_URL = 'https://realm.example/pretui/';
 
@@ -75,6 +80,7 @@ class TeamRealm implements RealmAuthenticator {
               realmRRI: '@cardstack/pretui/',
               protocol: 'deck-r0',
               sync: 'content-addressed',
+              history: 'jj',
             }),
           )
         : new Response('not found', { status: 404 });
@@ -88,27 +94,15 @@ class TeamRealm implements RealmAuthenticator {
       return new Response(JSON.stringify(this.branch));
     }
     if (url.pathname.endsWith('/.deck/branch') && request.method === 'POST') {
-      let update = (await request.json()) as {
-        expected: { refGeneration: number };
-        operations: Array<{
-          path: string;
-          sha256: string | null;
-          contentBase64?: string;
-        }>;
-      };
-      if (update.expected.refGeneration !== this.branch.refGeneration) {
-        return new Response('moved', { status: 409 });
-      }
+      let update = (await request.json()) as FakeDeckUpdate;
+      let refused = refuseDeckUpdate(
+        this.content,
+        this.branch.refGeneration,
+        update,
+      );
+      if (refused) return refused;
       this.posts++;
-      for (let operation of update.operations) {
-        if (operation.sha256 === null) delete this.content[operation.path];
-        else {
-          this.content[operation.path] = Buffer.from(
-            operation.contentBase64!,
-            'base64',
-          ).toString();
-        }
-      }
+      applyDeckUpdate(this.content, update);
       this.branch = snapshot(this.content, this.branch.refGeneration + 1);
       return new Response(JSON.stringify(this.branch));
     }
@@ -203,7 +197,7 @@ describe('watching an exact Deck branch', () => {
     expect(realm.content['theme/tokens.json']).toBe('theme v2');
   });
 
-  it('reports same-file conflicts and sends no conditional write', async () => {
+  it('skips and reports same-file conflicts and sends no write for them', async () => {
     let realm = new TeamRealm({ 'theme/tokens.json': 'theme v1' });
     let [watchedDir, teammateDir] = await Promise.all([
       localWorkspace(realm),
@@ -227,7 +221,7 @@ describe('watching an exact Deck branch', () => {
     expect(await watcher.poll()).toBe(true);
     let result = await flush(watcher);
     watcher.shutdown();
-    expect(result.error).toMatch(/content conflict/);
+    expect(result.error).toBeUndefined();
     expect(result.skipped).toEqual(['theme/tokens.json']);
     expect(realm.posts).toBe(postsBeforeConflict);
     expect(realm.content['theme/tokens.json']).toBe('theirs');

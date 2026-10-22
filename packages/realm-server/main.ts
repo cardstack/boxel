@@ -21,6 +21,7 @@ import {
   markRealmPublishable,
 } from '@cardstack/runtime-common';
 import { NodeAdapter } from './node-realm.ts';
+import { deckSaveRecorder } from './lib/deck-save-history.ts';
 import yargs from 'yargs';
 import { RealmServer } from './server.ts';
 import * as Sentry from '@sentry/node';
@@ -787,7 +788,15 @@ const reportHostShellToManager = async (dbAdapter: PgAdapter) => {
           `the disk_id of ${row.url} does not resolve to a directory under the realms root`,
         );
       }
-      const reconciledAdapter = new NodeAdapter(diskPath, ENABLE_FILE_WATCHER);
+      // Host saves to a source realm with Deck enabled are committed to its
+      // History: debounced, then sealed by deckd.
+      const reconciledAdapter = new NodeAdapter(
+        diskPath,
+        ENABLE_FILE_WATCHER,
+        row.kind === 'source'
+          ? deckSaveRecorder({ realmDir: diskPath })
+          : undefined,
+      );
       let fullIndexOnStartup = resolveFullIndexOnStartup(
         row.kind,
         FULL_INDEX_ON_STARTUP_OVERRIDE,

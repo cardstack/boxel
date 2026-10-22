@@ -13,6 +13,10 @@ import {
   resolveVersionSpec,
 } from '@cardstack/deck/node';
 import { readTree, readTreeFile } from '@cardstack/deck/object-store';
+import type {
+  HistoryActor,
+  HistoryBackend,
+} from '@cardstack/deck-history/backend';
 import type { Realm, ResponseWithNodeStream } from '@cardstack/runtime-common';
 import {
   SupportedMimeType,
@@ -25,6 +29,8 @@ import {
   fetchRequestFromContext,
   setContextResponse,
 } from '../middleware/index.ts';
+import { AuthenticationError } from '@cardstack/runtime-common/router';
+import { retrieveUserSessionClaim } from '../utils/jwt.ts';
 import { findOrMountRealm } from '../lib/realm-routing.ts';
 import {
   buildDeckVersionIndex,
@@ -37,13 +43,24 @@ import {
 import { openDeckRepositoryProtocol } from '../lib/deck-repository-protocol.ts';
 import {
   DeckBranchContentConflictError,
+  DeckBranchPathConflictError,
   updateDeckBranchContent,
   type DeckBranchUpdateRequest,
 } from '../lib/deck-branch-content-update.ts';
+import {
+  readDeckBranchHistory,
+  restoreDeckBranchHistory,
+  type DeckHistoryRestoreRequest,
+} from '../lib/deck-branch-history.ts';
 import type { ServeFromRealmDeps } from './serve-from-realm.ts';
 
 type DeckVersionServingDeps = ServeFromRealmDeps & {
   deckCollaboration?: DeckCollaborationPolicy;
+  deckHistory: HistoryBackend;
+  // Host saves still waiting out their debounce, taken so a write commits
+  // them first. See deck-save-history.ts.
+  takePendingHostSaves?: (realmDir: string) => string | undefined;
+  realmSecretSeed?: string;
   resolveRealm?: (url: URL) => Promise<Realm | undefined>;
   readVersionFile?: (
     storeDir: string,
@@ -56,6 +73,31 @@ type DeckVersionServingDeps = ServeFromRealmDeps & {
 const CAPABILITIES_PATH = '.deck/capabilities';
 const BRANCH_PATH = '.deck/branch';
 const TREE_FILE_PATH = '.deck/tree-file';
+const HISTORY_PATH = '.deck/history';
+
+// Who a History Step is attributed to: the user of the session the realm ACL
+// already admitted to write, verified as realm-server routes verify a session
+// they act on as its user (signature, expiry, revocation, never a delegated
+// session). A credential that is not such a session leaves the Step
+// unattributed rather than trusting a client-authored identity.
+async function historyActor(
+  request: Request,
+  deps: DeckVersionServingDeps,
+): Promise<HistoryActor | undefined> {
+  let authorization = request.headers.get('authorization');
+  if (!authorization || !deps.realmSecretSeed) return undefined;
+  try {
+    let session = await retrieveUserSessionClaim(
+      authorization,
+      deps.realmSecretSeed,
+      deps.dbAdapter,
+    );
+    return { name: session.user };
+  } catch (error) {
+    if (error instanceof AuthenticationError) return undefined;
+    throw error;
+  }
+}
 
 function mutableRealmURLForCapabilities(url: URL): URL | undefined {
   if (!url.pathname.endsWith(CAPABILITIES_PATH)) {
@@ -110,6 +152,7 @@ async function handleDeckCapabilitiesRequest(
     realmRRI,
     protocol: 'deck-r0',
     sync: 'content-addressed',
+    history: 'jj',
   });
   return new Response(request.method === 'HEAD' ? null : body, {
     headers: {
@@ -187,9 +230,18 @@ async function handleDeckBranchRequest(
         realmRRI,
         branch,
         policy: deps.deckCollaboration!,
+        history: deps.deckHistory,
+        actor: await historyActor(request, deps),
         request: update,
+        takePendingHostSaves: deps.takePendingHostSaves,
       });
     } catch (error) {
+      if (error instanceof DeckBranchPathConflictError) {
+        return new Response(JSON.stringify({ conflicts: error.paths }), {
+          status: 409,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
       if (
         error instanceof DeckBranchContentConflictError ||
         error instanceof RefConflictError ||
@@ -234,6 +286,7 @@ async function handleDeckBranchRequest(
     treeHash,
     lockHash: snapshot.repository.lockHash,
     refGeneration: snapshot.head.generation,
+    historyHead: snapshot.head.historyHead,
     checkpointHash: snapshot.head.latestCheckpointHash,
     files,
   });
@@ -308,6 +361,102 @@ async function handleDeckTreeFileRequest(
   ) as ResponseWithNodeStream;
   if (request.method === 'GET') response.nodeStream = Readable.from(bytes);
   return response;
+}
+
+async function handleDeckHistoryRequest(
+  request: Request,
+  deps: DeckVersionServingDeps,
+): Promise<Response | null> {
+  let requestURL = new URL(request.url);
+  if (!requestURL.pathname.endsWith(HISTORY_PATH)) return null;
+  let mutableURL = new URL(requestURL);
+  mutableURL.pathname = requestURL.pathname.slice(0, -HISTORY_PATH.length);
+  mutableURL.search = '';
+  mutableURL.hash = '';
+  if (request.method !== 'GET' && request.method !== 'POST') {
+    return new Response('Unsupported Deck History method', {
+      status: 405,
+      headers: { allow: 'GET, POST' },
+    });
+  }
+  let branch = requestURL.searchParams.get('branch') ?? 'main';
+  let realm = await (deps.resolveRealm
+    ? deps.resolveRealm(mutableURL)
+    : findOrMountRealm(mutableURL, deps));
+  let packageName = realm ? await realmPackageName(realm) : undefined;
+  let realmRRI = packageName ? `@${packageName}/` : undefined;
+  if (
+    !realm?.dir ||
+    !realmRRI ||
+    !hasDeckCollaboration(deps.deckCollaboration, realmRRI)
+  ) {
+    return new Response('Not found', { status: 404 });
+  }
+  let authorization =
+    request.method === 'POST'
+      ? await authorizeWrite(request, realm)
+      : await authorizeRead(request, realm);
+  if (authorization.response) return authorization.response;
+  try {
+    if (request.method === 'GET') {
+      let rawLimit = requestURL.searchParams.get('limit');
+      let limit = rawLimit === null ? 100 : Number(rawLimit);
+      if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000) {
+        return new Response('History limit must be an integer from 1 to 1000', {
+          status: 400,
+        });
+      }
+      let snapshot = await readDeckBranchHistory({
+        realmDir: realm.dir,
+        realmRRI,
+        branch,
+        policy: deps.deckCollaboration!,
+        history: deps.deckHistory,
+        limit,
+      });
+      return Response.json(snapshot, {
+        headers: { 'cache-control': 'private, no-store' },
+      });
+    }
+    let body: DeckHistoryRestoreRequest;
+    try {
+      body = (await request.json()) as DeckHistoryRestoreRequest;
+    } catch {
+      return new Response('Deck History restore is not valid JSON', {
+        status: 400,
+      });
+    }
+    let restored = await restoreDeckBranchHistory({
+      realmDir: realm.dir,
+      realmRRI,
+      branch,
+      policy: deps.deckCollaboration!,
+      history: deps.deckHistory,
+      actor: await historyActor(request, deps),
+      request: body,
+      takePendingHostSaves: deps.takePendingHostSaves,
+    });
+    return Response.json({
+      schema: 'boxel-deck-history-restore-result-v1',
+      restored: restored.restored,
+      repositoryHash: restored.head.repositoryHash,
+      historyHead: restored.head.historyHead,
+      refGeneration: restored.head.generation,
+      treeHash: restored.treeHash,
+    });
+  } catch (error) {
+    if (
+      error instanceof DeckBranchContentConflictError ||
+      error instanceof RefConflictError ||
+      error instanceof RefBusyError
+    ) {
+      return new Response('Branch moved since it was read', { status: 409 });
+    }
+    if (error instanceof Error && !error.message.startsWith('missing ')) {
+      return new Response(error.message, { status: 400 });
+    }
+    throw error;
+  }
 }
 
 const VERSIONS_PATH = '.deck/versions';
@@ -488,6 +637,10 @@ export async function handleDeckVersionRequest(
   request: Request,
   deps: DeckVersionServingDeps,
 ): Promise<Response | null> {
+  let history = await handleDeckHistoryRequest(request, deps);
+  if (history) {
+    return history;
+  }
   let treeFile = await handleDeckTreeFileRequest(request, deps);
   if (treeFile) {
     return treeFile;
