@@ -294,8 +294,16 @@ module('Integration | credential fields', function (hooks) {
 
     test('Enter in a field asks the app to submit', async function (assert) {
       let { sent } = await renderForm('login');
+      let before = sent.length;
       await triggerKeyEvent('[data-test-password-field]', 'keydown', 'Enter');
-      assert.deepEqual(sent.at(-1), { type: 'submit-request' });
+      // The fields may also report their size or state meanwhile; Enter
+      // sends one submit-request and makes no request of its own.
+      let requests = sent
+        .slice(before)
+        .filter((message) =>
+          ['submit-request', 'result'].includes(message.type),
+        );
+      assert.deepEqual(requests, [{ type: 'submit-request' }]);
     });
 
     test('a username the app knows fills in the username field', async function (assert) {
