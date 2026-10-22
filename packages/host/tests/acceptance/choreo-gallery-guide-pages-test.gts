@@ -109,7 +109,7 @@ module('Acceptance | Choreo gallery | guide pages', function (hooks) {
     await waitFor('[data-guide-section]', { timeout: 15_000 });
 
     let titles = [
-      ...document.querySelectorAll('[data-guide-section] .guide-section-title'),
+      ...document.querySelectorAll('[data-test-guide-section-title]'),
     ].map((title) => title.textContent!.replace(/\s+/g, ' ').trim());
     assert.deepEqual(
       titles,
@@ -163,17 +163,20 @@ module('Acceptance | Choreo gallery | guide pages', function (hooks) {
 
   test('an embedded demo is live, and links its guide unless it is the one being read', async function (assert) {
     await visit('/test/docs/guides/core-start');
-    await waitFor(`${article} .markdown-bfm-card-slot--block .tile`, {
-      timeout: 15_000,
-    });
+    await waitFor(
+      `${article} .markdown-bfm-card-slot--block [data-test-demo-tile]`,
+      {
+        timeout: 15_000,
+      },
+    );
     assert
-      .dom(`${article} .markdown-bfm-card-slot--block .tile-title`)
+      .dom(`${article} .markdown-bfm-card-slot--block [data-test-tile-title]`)
       .hasText('Enter', 'core-start embeds the enter demo');
     assert
-      .dom(`${article} .markdown-bfm-card-slot--block .tile-stage`)
+      .dom(`${article} .markdown-bfm-card-slot--block [data-test-tile-stage]`)
       .exists('with its live stage');
     assert
-      .dom(`${article} .guide-link`)
+      .dom(`${article} [data-test-guide-link]`)
       .hasAttribute(
         'href',
         guide('core-targets'),
@@ -181,14 +184,17 @@ module('Acceptance | Choreo gallery | guide pages', function (hooks) {
       );
 
     await visit('/test/docs/guides/core-presence');
-    await waitFor(`${article} .markdown-bfm-card-slot--block .tile`, {
-      timeout: 15_000,
-    });
+    await waitFor(
+      `${article} .markdown-bfm-card-slot--block [data-test-demo-tile]`,
+      {
+        timeout: 15_000,
+      },
+    );
     assert
-      .dom(`${article} .markdown-bfm-card-slot--block .tile-title`)
+      .dom(`${article} .markdown-bfm-card-slot--block [data-test-tile-title]`)
       .hasText('Presence', 'core-presence embeds the presence demo');
     assert
-      .dom(`${article} .guide-link`)
+      .dom(`${article} [data-test-guide-link]`)
       .doesNotExist('its guide is this one, so there is no link back to it');
   });
 

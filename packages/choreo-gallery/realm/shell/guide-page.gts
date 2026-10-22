@@ -86,7 +86,7 @@ export class GuidePage extends Component<Signature> {
               >All guides</a>
               {{#each @sections as |part|}}
                 <section class='guide-section' data-guide-section>
-                  <p class='guide-section-title'>
+                  <p class='guide-section-title' data-test-guide-section-title>
                     {{#if part.number}}
                       <span class='guide-section-number'>{{part.number}}</span>
                     {{/if}}

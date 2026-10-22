@@ -193,7 +193,7 @@ module('Integration | Choreo gallery | guides and the lab', function (hooks) {
 
     await render(
       <template>
-        <div class='own'>
+        <div data-test-own-guide>
           <InGuide @slug={{own}}>
             <MarkdownTemplate
               @content={{content}}
@@ -202,7 +202,7 @@ module('Integration | Choreo gallery | guides and the lab', function (hooks) {
             />
           </InGuide>
         </div>
-        <div class='other'>
+        <div data-test-other-guide>
           <InGuide @slug={{other}}>
             <MarkdownTemplate
               @content={{content}}
@@ -213,18 +213,26 @@ module('Integration | Choreo gallery | guides and the lab', function (hooks) {
         </div>
       </template>,
     );
-    await waitFor('.own .markdown-bfm-card-slot--block .tile', {
-      timeout: 10_000,
-    });
-    await waitFor('.other .markdown-bfm-card-slot--block .tile', {
-      timeout: 10_000,
-    });
+    await waitFor(
+      '[data-test-own-guide] .markdown-bfm-card-slot--block [data-test-demo-tile]',
+      {
+        timeout: 10_000,
+      },
+    );
+    await waitFor(
+      '[data-test-other-guide] .markdown-bfm-card-slot--block [data-test-demo-tile]',
+      {
+        timeout: 10_000,
+      },
+    );
 
     assert
-      .dom('.own .tile .guide-link')
+      .dom('[data-test-own-guide] [data-test-demo-tile] [data-test-guide-link]')
       .doesNotExist('in its own guide it does not link the page being read');
     assert
-      .dom('.other .tile .guide-link')
+      .dom(
+        '[data-test-other-guide] [data-test-demo-tile] [data-test-guide-link]',
+      )
       .hasAttribute('href', guideURL(own), 'in another guide it links its own');
   });
 

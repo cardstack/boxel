@@ -36,6 +36,7 @@ export class GuideLink extends Component<Signature> {
         href={{this.href}}
         class='guide-link'
         data-demo-guide={{this.guide}}
+        data-test-guide-link
         ...attributes
       >Read the guide <span aria-hidden='true'>→</span></a>
     {{/if}}
