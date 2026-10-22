@@ -274,10 +274,17 @@ jobs:
 
           # Skips files unchanged against every revision the workspace may
           # hold. With none, every file goes up.
+          # A boxel-cli without --changed-since rejects it, so that one sends
+          # every file.
           changed_since=()
-          for revision in $REVISIONS; do
-            changed_since+=(--changed-since "$revision")
-          done
+          push_help=$(boxel realm push --help 2>&1 || true)
+          if grep -q -- '--changed-since' <<< "$push_help"; then
+            for revision in $REVISIONS; do
+              changed_since+=(--changed-since "$revision")
+            done
+          elif [ -n "$REVISIONS" ]; then
+            echo "::notice::This boxel-cli has no --changed-since, so every file goes up."
+          fi
 
           set +e
           OUTPUT=$(boxel realm push . "${WORKSPACE_URL}" --delete "${changed_since[@]}" 2>&1)
@@ -326,10 +333,17 @@ jobs:
 
           # Skips files unchanged against every revision the workspace may
           # hold. With none, every file goes up.
+          # A boxel-cli without --changed-since rejects it, so that one sends
+          # every file.
           changed_since=()
-          for revision in $REVISIONS; do
-            changed_since+=(--changed-since "$revision")
-          done
+          push_help=$(boxel realm push --help 2>&1 || true)
+          if grep -q -- '--changed-since' <<< "$push_help"; then
+            for revision in $REVISIONS; do
+              changed_since+=(--changed-since "$revision")
+            done
+          elif [ -n "$REVISIONS" ]; then
+            echo "::notice::This boxel-cli has no --changed-since, so every file goes up."
+          fi
 
           set +e
           OUTPUT=$(boxel realm push . "${WORKSPACE_URL}" --delete "${changed_since[@]}" 2>&1)
