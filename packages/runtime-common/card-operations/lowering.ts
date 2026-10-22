@@ -1,3 +1,4 @@
+import { isPlainObject } from '../is-plain-object.ts';
 import { codeRefForDef, isResolvedCodeRef, type CodeRef } from '../code-ref.ts';
 import { getImmediateFieldDef } from '../definitions.ts';
 import type { Definition, FieldDefinition } from '../definitions.ts';
@@ -1954,10 +1955,6 @@ function lowerItem(
 }
 
 // ---------------------------------------------------------------------------
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 function describeDefinition(
   definition: Pick<Definition, 'displayName' | 'codeRef'>,

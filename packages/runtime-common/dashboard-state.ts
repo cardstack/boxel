@@ -1,3 +1,5 @@
+import { isPlainObject } from './is-plain-object.ts';
+
 // The content of the app.boxel.dashboard account-data key. Fields are only
 // ever added: a field whose meaning changes gets a new name, so every version
 // of the app can read and write what any other stored.
@@ -91,10 +93,4 @@ function sortKeys(value: unknown): unknown {
 
 function isDashboardAgent(value: unknown): value is DashboardAgent {
   return (DASHBOARD_AGENTS as readonly unknown[]).includes(value);
-}
-
-// Kept here rather than imported, so this module stays dependency-free for
-// every package that reads it.
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
