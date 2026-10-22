@@ -133,6 +133,7 @@ Push local files to a Boxel realm
 - `--delete` — Delete remote files that do not exist locally
 - `--dry-run` — Show what would be done without making changes
 - `--force` — Upload all files, even if unchanged
+- `--changed-since <revision>` — Upload only files that differ from this git revision (one the realm already holds), plus files git does not track and files missing from the realm, instead of comparing against the sync manifest. Repeat it to name every revision the realm may hold part of, such as one a failed sync stopped partway through; a file is skipped only when it matches all of them. A file edited directly on the realm stays as it is until it changes in git. The local directory must be a git checkout whose history reaches each revision
 - `--no-realm-events` — Index the pushed changes without announcing them to open tabs, which pick them up on their next load (for deploys)
 - `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
 

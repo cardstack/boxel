@@ -172,7 +172,9 @@ Manual Deploy [boxel] starts a run of
 which signs in as `choreo_gallery_writer` and runs
 [`scripts/republish.sh`](scripts/republish.sh). It reads the writer's password
 from the SSM parameter `/<environment>/boxel/choreo_gallery_writer_pw`, through
-the AWS role the deploy uses. The script:
+the `boxel-choreo-republish` AWS role (`configs/boxel-choreo-republish` in
+cardstack/infra). That role can read only that parameter, and only a run on
+this repository's `main` branch can assume it. The script:
 
 1. waits until the realm has indexed the files the deploy changed;
 2. publishes with `boxel realm publish`, which refuses to publish if a gallery
@@ -187,9 +189,9 @@ waits for it nor fails with it, and the next deploy doesn't queue behind it. A
 republish that fails leaves the previous copy serving and turns only its own
 run red. The script never unpublishes the site.
 
-To republish without a deploy, run "Republish the Choreo gallery" from the
-repository's Actions tab. Or sign in as the writer and run the script yourself
-(it needs the Boxel CLI on your `PATH`):
+To republish without a deploy, run "Republish the Choreo gallery" on `main`
+from the repository's Actions tab. Or sign in as the writer and run the script
+yourself (it needs the Boxel CLI on your `PATH`):
 
 ```sh
 boxel profile add --user @choreo_gallery_writer:boxel.ai
