@@ -2,6 +2,7 @@ import {
   canonicalRRIImportMap,
   isExactVersionRRI,
   isRRI,
+  parseRRI,
   resolveRRI,
   type RRIImportMap,
 } from '@cardstack/deck';
@@ -101,6 +102,48 @@ export class DeckPackageResolver {
 }
 
 /**
+ * What Deck needs from the network boundary: resolving and unresolving
+ * identifiers, and registering a prefix. Deck depends on this, not on how the
+ * boundary is built.
+ */
+export interface DeckRoutes {
+  resolveImport(moduleIdentifier: string): string;
+  unresolveURL(url: string): string;
+  toURLHref(identifier: string): string;
+  addRealmMapping(prefix: string, targetURL: string): void;
+  knownRealms(): Iterable<string>;
+}
+
+/**
+ * Make an exact Version RRI resolvable by registering its root as a prefix.
+ *
+ * The realm server serves an exact Version of a package next to the package
+ * itself: the package mapped at `.../acme/ui/` has Version 3.4.2 at
+ * `.../acme/ui@3.4.2/`. Registering `@acme/ui@3.4.2/` as an ordinary prefix
+ * lets the network resolve it with no Deck-specific code, and lets a module
+ * served from there be identified by its exact RRI. Nothing happens when the
+ * root is already registered, or when the package itself is not mapped; the
+ * network then reports the unresolvable RRI as it would any other.
+ */
+export function routeVersion(routes: DeckRoutes, identifier: string): void {
+  if (!isExactVersionRRI(identifier)) {
+    return;
+  }
+  let { scope, name, version } = parseRRI(identifier);
+  let versionRoot = `@${scope}/${name}@${version}/`;
+  let packageRoot = `@${scope}/${name}/`;
+  let known = new Set(routes.knownRealms());
+  if (known.has(versionRoot) || !known.has(packageRoot)) {
+    return;
+  }
+  let packageURL = routes.toURLHref(packageRoot);
+  routes.addRealmMapping(
+    versionRoot,
+    `${packageURL.replace(/\/$/, '')}@${version}/`,
+  );
+}
+
+/**
  * The Loader's `resolveImport`, with Deck consulted first.
  *
  * The importer arrives as whatever identifier the Loader holds; the network
@@ -110,15 +153,14 @@ export class DeckPackageResolver {
  */
 export function resolveImportThroughDeck(
   resolver: DeckPackageResolver,
-  network: {
-    resolveImport(moduleIdentifier: string): string;
-    unresolveURL(url: string): string;
-  },
+  routes: DeckRoutes,
 ): (moduleIdentifier: string, relativeTo?: string) => string {
   return (moduleIdentifier, relativeTo) => {
-    let importer = relativeTo ? network.unresolveURL(relativeTo) : undefined;
+    let importer = relativeTo ? routes.unresolveURL(relativeTo) : undefined;
     let resolved = resolver.resolve(moduleIdentifier, importer);
-    return network.resolveImport(resolved ?? moduleIdentifier);
+    let identifier = resolved ?? moduleIdentifier;
+    routeVersion(routes, identifier);
+    return routes.resolveImport(identifier);
   };
 }
 

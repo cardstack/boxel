@@ -1,7 +1,12 @@
 import QUnit from 'qunit';
 const { module, test } = QUnit;
 import { basename } from 'path';
-import { RealmPaths, VirtualNetwork } from '@cardstack/runtime-common';
+import {
+  Loader,
+  RealmPaths,
+  VirtualNetwork,
+  type MappingChange,
+} from '@cardstack/runtime-common';
 import { ri, rri } from '@cardstack/runtime-common';
 import type { SingleCardDocument } from '@cardstack/runtime-common';
 import { relativizeDocument } from '@cardstack/runtime-common/realm-index-query-engine';
@@ -790,6 +795,80 @@ module(basename(import.meta.filename), function () {
       let response = await baseVN.fetch('@cardstack/base/card-api');
       assert.strictEqual(response.status, 200);
       assert.strictEqual(interceptedUrl, 'http://localhost:4201/base/card-api');
+    });
+  });
+  module('realm-mapping changes', function () {
+    test('registering a mapping that is already in place tells no one', function (assert) {
+      let network = new VirtualNetwork();
+      network.addRealmMapping('@acme/ui/', 'https://realms.example/acme/ui/');
+      let changes: MappingChange[] = [];
+      network.onMappingChange((change) => changes.push(change));
+      network.addRealmMapping('@acme/ui/', 'https://realms.example/acme/ui');
+      assert.deepEqual(changes, []);
+    });
+
+    test('a new prefix is reported as added, a replaced one as changed', function (assert) {
+      let network = new VirtualNetwork();
+      let changes: MappingChange[] = [];
+      network.onMappingChange((change) => changes.push(change));
+      network.addRealmMapping('@acme/ui/', 'https://realms.example/acme/ui/');
+      network.addRealmMapping(
+        '@acme/ui/',
+        'https://elsewhere.example/acme/ui/',
+      );
+      assert.deepEqual(changes, [
+        {
+          kind: 'added',
+          prefix: '@acme/ui/',
+          target: 'https://realms.example/acme/ui/',
+        },
+        { kind: 'changed' },
+      ]);
+    });
+
+    function makeLoader() {
+      let network = new VirtualNetwork();
+      let fetch: typeof globalThis.fetch = async (input) => {
+        let url = input instanceof Request ? input.url : input.toString();
+        return new Response(`export const at = ${JSON.stringify(url)};`, {
+          headers: { 'content-type': 'text/javascript' },
+        });
+      };
+      let loader = new Loader(fetch, network.resolveImport, {
+        virtualNetwork: network,
+      });
+      return { loader, network };
+    }
+
+    test('the loader keeps its modules when an added prefix cannot change their keys', async function (assert) {
+      let { loader, network } = makeLoader();
+      let before = await loader.import<object>(
+        'https://realms.example/acme/app/index.js',
+      );
+      network.addRealmMapping(
+        '@acme/ui@3.4.2/',
+        'https://realms.example/acme/ui@3.4.2/',
+      );
+      let after = await loader.import<object>(
+        'https://realms.example/acme/app/index.js',
+      );
+      assert.strictEqual(after, before, 'the same module instance is reused');
+    });
+
+    test('the loader discards its modules when an added prefix covers one of them', async function (assert) {
+      let { loader, network } = makeLoader();
+      let before = await loader.import<object>(
+        'https://realms.example/acme/app/index.js',
+      );
+      network.addRealmMapping('@acme/app/', 'https://realms.example/acme/app/');
+      let after = await loader.import<object>(
+        'https://realms.example/acme/app/index.js',
+      );
+      assert.notStrictEqual(
+        after,
+        before,
+        'the module is evaluated again under its new key',
+      );
     });
   });
 });

@@ -191,6 +191,9 @@ export default class LoaderService extends Service {
       this.network.virtualNetwork,
     );
     let loader = new Loader(fetch, this.network.resolveImport, {
+      prepareModuleResolution: (moduleURL, response) =>
+        this.network.dynamicRRIResolution.prepare(moduleURL, response),
+      onResolutionChange: this.network.subscribeResolutionChange,
       // Route the loader's transient-5xx retry backoff sleep through
       // scheduleNativeTimeout so it bypasses the render-timer-stub during
       // prerender. Outside prerender this falls back to the native
@@ -226,6 +229,7 @@ export default class LoaderService extends Service {
     clearFetchCache();
     clearInjectedScopedCSS();
     clearKnownFileMetaUrls();
+    this.network.invalidateDynamicRRIResolution();
   }
 }
 

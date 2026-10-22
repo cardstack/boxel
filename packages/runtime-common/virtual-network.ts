@@ -27,6 +27,12 @@ export interface ResponseWithNodeStream extends Response {
 
 export type Handler = (req: Request) => Promise<Response | null>;
 
+// What a realm-mapping change did. `added` is a prefix that had no mapping
+// before; every other change, including replacing a mapping, is `changed`.
+export type MappingChange =
+  | { kind: 'added'; prefix: string; target: string }
+  | { kind: 'changed' };
+
 export class VirtualNetwork {
   private handlers: Handler[] = [];
   private urlMappings: [string, string][] = [];
@@ -87,7 +93,7 @@ export class VirtualNetwork {
   // form a mapping produces (e.g. the Loader's module cache) subscribe here to
   // discard those entries when the mapping set changes — the RRI→URL
   // relationship is only stable between changes.
-  private mappingChangeListeners = new Set<() => void>();
+  private mappingChangeListeners = new Set<(change: MappingChange) => void>();
 
   constructor(
     nativeFetch = createEnvironmentAwareFetch(),
@@ -111,8 +117,10 @@ export class VirtualNetwork {
 
   private scheduleFetchTimer: (callback: () => void, ms: number) => unknown;
 
-  // Subscribe to realm-mapping changes; returns an unsubscribe function.
-  onMappingChange(listener: () => void): () => void {
+  // Subscribe to realm-mapping changes; returns an unsubscribe function. The
+  // listener is told when a change only added a prefix nothing was mapped
+  // under, so it can keep what that addition cannot affect.
+  onMappingChange(listener: (change: MappingChange) => void): () => void {
     this.mappingChangeListeners.add(listener);
     return () => this.mappingChangeListeners.delete(listener);
   }
@@ -171,9 +179,9 @@ export class VirtualNetwork {
     this.realURLHrefCache.clear();
   }
 
-  private notifyMappingChange() {
+  private notifyMappingChange(change: MappingChange = { kind: 'changed' }) {
     for (let listener of this.mappingChangeListeners) {
-      listener();
+      listener(change);
     }
   }
 
@@ -343,13 +351,23 @@ export class VirtualNetwork {
   private addPrefixMapping(prefix: string, targetURL: string): void {
     let normalizedId = ensureTrailingSlash(prefix);
     let normalizedTarget = ensureTrailingSlash(targetURL);
+    let previousTarget = this.realmMappings.get(normalizedId);
+    // Registering a mapping that is already in place changes nothing, so it
+    // tells no one: a listener would otherwise discard caches over a no-op.
+    if (previousTarget === normalizedTarget) {
+      return;
+    }
     this.realmMappings.set(normalizedId, normalizedTarget);
     this.clearURLCaches();
     this.addImportMap(
       normalizedId,
       (rest) => new URL(rest, normalizedTarget).href,
     );
-    this.notifyMappingChange();
+    this.notifyMappingChange(
+      previousTarget
+        ? { kind: 'changed' }
+        : { kind: 'added', prefix: normalizedId, target: normalizedTarget },
+    );
   }
 
   /**
