@@ -304,7 +304,9 @@ export async function runTestsLocally(
     };
   }
 
-  let { baseDir, skillsDir } = resolveBundledRealms(options.bundledRealmsDir);
+  let { baseDir, skillsDir, pretuiDir } = resolveBundledRealms(
+    options.bundledRealmsDir,
+  );
 
   try {
     let { qunitResults, durationMs } = await runQunitInBrowser({
@@ -321,6 +323,7 @@ export async function runTestsLocally(
         { prefix: 'workspace', root: workspaceDir },
         { prefix: 'base', root: baseDir },
         { prefix: 'skills', root: skillsDir },
+        { prefix: 'pretui', root: pretuiDir },
       ],
     });
 
@@ -370,13 +373,15 @@ function walkTestFiles(workspaceDir: string): string[] {
 function resolveBundledRealms(override: string | undefined): {
   baseDir: string;
   skillsDir: string;
+  pretuiDir: string;
 } {
-  // Explicit override (tests): expect a directory containing `base/` and
-  // `skills/` subdirs.
+  // Explicit override (tests): expect a directory containing `base/`,
+  // `skills/` and `pretui/` subdirs.
   if (override) {
     return {
       baseDir: join(override, 'base'),
       skillsDir: join(override, 'skills'),
+      pretuiDir: join(override, 'pretui'),
     };
   }
   // Use `__dirname` (not `import.meta.dirname`) here: this module is re-exported
@@ -391,6 +396,7 @@ function resolveBundledRealms(override: string | undefined): {
     return {
       baseDir: join(bundled, 'base'),
       skillsDir: join(bundled, 'skills'),
+      pretuiDir: join(bundled, 'pretui'),
     };
   }
   // Monorepo dev fallback: read from sibling packages directly so
@@ -399,6 +405,7 @@ function resolveBundledRealms(override: string | undefined): {
   let packagesDir = resolve(cliRoot, '..');
   let baseDir = join(packagesDir, 'base');
   let skillsDir = join(packagesDir, 'skills-realm', 'contents');
+  let pretuiDir = join(packagesDir, 'pretui');
   if (!dirExists(baseDir)) {
     throw new Error(
       `Could not locate base realm: ${bundled}/base does not exist ` +
@@ -406,7 +413,7 @@ function resolveBundledRealms(override: string | undefined): {
         'in packages/boxel-cli to populate the bundled realms.',
     );
   }
-  return { baseDir, skillsDir };
+  return { baseDir, skillsDir, pretuiDir };
 }
 
 function dirExists(path: string): boolean {
@@ -673,6 +680,9 @@ function buildQunitTestPageHtml(opts: {
         }
         if (config.resolvedSkillsRealmURL) {
           config.resolvedSkillsRealmURL = `${browserOrigin}/skills/`;
+        }
+        if (config.resolvedPretuiRealmURL) {
+          config.resolvedPretuiRealmURL = `${browserOrigin}/pretui/`;
         }
         if (config.resolvedOpenRouterRealmURL) {
           config.resolvedOpenRouterRealmURL = `${browserOrigin}/openrouter/`;
