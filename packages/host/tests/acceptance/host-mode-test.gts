@@ -1170,9 +1170,12 @@ module('Acceptance | host mode tests', function (hooks) {
         content.clientWidth -
         parseFloat(style.paddingLeft) -
         parseFloat(style.paddingRight);
+      // offsetWidth rounds to whole pixels while the gutter is fractional,
+      // so compare unrounded widths with a sub-pixel allowance
+      let cardWidth = card.getBoundingClientRect().width;
       assert.ok(
-        card.offsetWidth <= innerWidth,
-        `the card stays inside host mode's gutter (${card.offsetWidth} of ${innerWidth})`,
+        cardWidth <= innerWidth + 0.5,
+        `the card stays inside host mode's gutter (${cardWidth} of ${innerWidth})`,
       );
     } finally {
       testRoot.style.width = originalWidth;
