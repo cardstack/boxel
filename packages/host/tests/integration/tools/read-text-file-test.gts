@@ -86,7 +86,7 @@ module('Integration | tools | read-text-file', function (hooks) {
 
     assert.strictEqual(
       result.content,
-      `import Component from '@glimmer/component';\nexport default class TestComponent extends Component {}`,
+      `import Component from '@glimmer/component';\nexport default class TestComponent extends Component {\n  static [Symbol.for("ident")] = ["${testRealmURL}component", "default"];\n}`,
     );
   });
 

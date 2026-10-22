@@ -294,6 +294,13 @@ function bundledIdentityFor(
           name: exportName,
         });
       }
+      if (
+        typeof exported === 'function' &&
+        bundledIdentities.get(exported)?.module ===
+          `@cardstack/base/${moduleName}`
+      ) {
+        recordExportName(exported, exportName);
+      }
     }
   }
   return bundledIdentities.get(value);
@@ -304,20 +311,62 @@ function bundledIdentityFor(
 // is validated against `identify()`, a disagreement between the two throws.
 // The tag is read as an own property: a subclass inherits its parent's static
 // members, and an inherited tag names the parent, not the subclass.
+//
+// Two differences are not disagreements:
+// - The module spelled differently: an RRI prefix, a URL alias and the real
+//   URL all name one module. `identify()` answers in the spelling the module
+//   was imported under, which a prefix registered after the module was
+//   compiled, or an alias the importer used, can make differ from the tag's.
+// - A class its module exports under several names: `identify()` takes the
+//   first in key order, the tag the first in source order. Either is a name
+//   the module exports the class under.
 const identityTagKey = Symbol.for(exportIdentitySymbolKey);
+
+// Every name the module `identify()` credits with a class exports it under.
+const exportNames = new WeakMap<Function, Set<string>>();
+
+function recordExportName(value: Function, name: string): void {
+  let names = exportNames.get(value);
+  if (!names) {
+    names = new Set();
+    exportNames.set(value, names);
+  }
+  names.add(name);
+}
+
+// The real URL a spelling of a module resolves to, or undefined for one that
+// resolves to none (a prefix nothing registered), which then matches nothing.
+function realURLHref(
+  virtualNetwork: VirtualNetwork,
+  moduleIdentifier: string,
+): string | undefined {
+  try {
+    return virtualNetwork.toRealURLHref(moduleIdentifier);
+  } catch {
+    return undefined;
+  }
+}
 
 function assertMatchesIdentityTag(
   value: Function,
   identity: { module: string; name: string } | undefined,
+  virtualNetwork: VirtualNetwork | undefined,
 ): void {
   let tag = Object.getOwnPropertyDescriptor(value, identityTagKey)?.value as
     | [string, string]
     | undefined;
-  if (
-    tag &&
-    identity &&
-    (identity.module !== tag[0] || identity.name !== tag[1])
-  ) {
+  if (!tag || !identity) {
+    return;
+  }
+  let [module, name] = tag;
+  let sameModule =
+    identity.module === module ||
+    (virtualNetwork !== undefined &&
+      realURLHref(virtualNetwork, identity.module) ===
+        (realURLHref(virtualNetwork, module) ?? null));
+  let sameName =
+    identity.name === name || (exportNames.get(value)?.has(name) ?? false);
+  if (!sameModule || !sameName) {
     throw new Error(
       `class ${value.name} is tagged ${tag[0]}#${tag[1]} but identify() says ${identity.module}#${identity.name}`,
     );
@@ -611,14 +660,14 @@ export class Loader {
     // A bundled base class reached only from inside another module's chunk
     // has no loader that recorded it; the bundled registry is all there is.
     let identity = bundledIdentityFor(value);
-    assertMatchesIdentityTag(value, identity);
+    assertMatchesIdentityTag(value, identity, undefined);
     return identity;
   }
 
   identify(value: unknown): { module: string; name: string } | undefined {
     if (typeof value === 'function') {
       let identity = bundledIdentityFor(value) ?? this.identities.get(value);
-      assertMatchesIdentityTag(value, identity);
+      assertMatchesIdentityTag(value, identity, this.virtualNetwork);
       return identity;
     } else {
       return undefined;
@@ -1441,6 +1490,12 @@ export class Loader {
           name: propName,
         });
         Loader.loaders.set(exportedEntity, this);
+      }
+      if (
+        typeof exportedEntity === 'function' &&
+        this.identities.get(exportedEntity)?.module === moduleId
+      ) {
+        recordExportName(exportedEntity, propName);
       }
     }
   }
