@@ -72,8 +72,9 @@ on:
         description: |
           Version spec for `npm install -g @cardstack/boxel-cli`.
           Default `latest` follows the most recent published version.
-          Staging and production syncs pass `realm push --changed-since`,
-          so the version has to support it.
+          Staging and production syncs pass `realm push --changed-since`
+          and `--no-realm-events` when this version lists them. An older
+          version sends every file and announces the push to open tabs.
         type: string
         default: latest
     secrets:
@@ -293,6 +294,9 @@ jobs:
           realm_events=()
           if grep -q -- '--no-realm-events' <<< "$push_help"; then
             realm_events+=(--no-realm-events)
+            echo "Pushing with --no-realm-events: open tabs pick the changes up on their next load."
+          else
+            echo "::notice::This boxel-cli has no --no-realm-events, so the push is announced to open tabs."
           fi
 
           set +e
@@ -361,6 +365,9 @@ jobs:
           realm_events=()
           if grep -q -- '--no-realm-events' <<< "$push_help"; then
             realm_events+=(--no-realm-events)
+            echo "Pushing with --no-realm-events: open tabs pick the changes up on their next load."
+          else
+            echo "::notice::This boxel-cli has no --no-realm-events, so the push is announced to open tabs."
           fi
 
           set +e
