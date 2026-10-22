@@ -567,13 +567,16 @@ module(basename(import.meta.filename), function () {
         'sign-in-form.gts',
         'cli-handoff.js',
         'urls.js',
-        'plain-pages.js',
         'sign-in-copy.js',
-        'register.js',
-        'password-reset.js',
-        'password-fields.js',
+        'register.gts',
+        'verify-email.gts',
+        'registration.ts',
+        'forgot-password.gts',
+        'reset-password.gts',
+        'reset-link.ts',
+        'new-password-fields.gts',
+        'input-group.gts',
         'matrix.js',
-        'dom.js',
       ]) {
         assert.ok(
           shellModules.some((module) => module.endsWith(`/${name}`)),
@@ -651,8 +654,7 @@ module(basename(import.meta.filename), function () {
       // The pages draw the app's logo, Google's "G", the check mark and the
       // loading indicator from boxel-ui's icon components' paths, copied in,
       // since the page's policy loads no markup from elsewhere. Every path
-      // boxel-ui draws them with is in each copy: the package's components,
-      // and `dom.js` for the plain pages.
+      // boxel-ui draws them with is in the package's component for it.
       let icons = join(
         dirname(
           createRequire(import.meta.url).resolve(
@@ -663,16 +665,10 @@ module(basename(import.meta.filename), function () {
         'icons',
       );
       let copies: Record<string, string[]> = {
-        'boxel-icon.gts': [
-          'src/shell/dom.js',
-          'src/components/icons/boxel-icon.gts',
-        ],
+        'boxel-icon.gts': ['src/components/icons/boxel-icon.gts'],
         'google-color.gts': ['src/components/icons/google-color.gts'],
-        'check-mark.gts': ['src/shell/dom.js'],
-        'loading-indicator.gts': [
-          'src/shell/dom.js',
-          'src/components/loading-indicator.gts',
-        ],
+        'check-mark.gts': ['src/components/icons/check-mark.gts'],
+        'loading-indicator.gts': ['src/components/loading-indicator.gts'],
       };
       for (let [icon, files] of Object.entries(copies)) {
         let paths = [

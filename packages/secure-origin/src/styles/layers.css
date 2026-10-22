@@ -1,9 +1,8 @@
 /*
   The order of the pages' cascade layers, as the app orders them (boxel-ui's
   `global.css`): the reset beneath boxel-ui's components, and each tier of
-  component above the one it wraps. `boxel` holds `shell.css`'s copies of
-  boxel-ui's component rules, for the pages it still draws. Every entry
-  imports this first, and the build links it ahead of every other stylesheet
-  (`build/layer-order.ts`), so it is the first to name any layer.
+  component above the one it wraps. Every entry imports this first, and the
+  build links it ahead of every other stylesheet (`build/layer-order.ts`), so
+  it is the first to name any layer.
 */
-@layer reset, boxel, boxelComponentL1, boxelComponentL2;
+@layer reset, boxelComponentL1, boxelComponentL2;

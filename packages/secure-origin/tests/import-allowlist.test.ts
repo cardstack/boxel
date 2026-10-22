@@ -60,7 +60,7 @@ test('only the bundler modules named may ship', () => {
 test("a stylesheet's relative url() inside the package may be built", () => {
   assert.equal(
     stylesheetRefusal(
-      join(PACKAGE_ROOT, 'src/shell/shell.css'),
+      join(PACKAGE_ROOT, 'src/shell/global.css'),
       "src: url('./IBMPlexSansVar-Roman.woff2') format('woff2');",
     ),
     undefined,
@@ -70,7 +70,7 @@ test("a stylesheet's relative url() inside the package may be built", () => {
 test('a stylesheet may not @import', () => {
   assert.match(
     stylesheetRefusal(
-      join(PACKAGE_ROOT, 'src/shell/shell.css'),
+      join(PACKAGE_ROOT, 'src/shell/global.css'),
       "@import '../../../boxel-ui/addon/src/styles/global.css';",
     ) ?? '',
     /uses @import/,
@@ -78,15 +78,17 @@ test('a stylesheet may not @import', () => {
 });
 
 test('a stylesheet may not name a file outside the package or another origin', () => {
-  let shellCSS = join(PACKAGE_ROOT, 'src/shell/shell.css');
+  let globalCSS = join(PACKAGE_ROOT, 'src/shell/global.css');
   assert.match(
-    stylesheetRefusal(shellCSS, "background: url('../../../host/logo.svg');") ??
-      '',
+    stylesheetRefusal(
+      globalCSS,
+      "background: url('../../../host/logo.svg');",
+    ) ?? '',
     /outside the package/,
   );
   for (let url of ['https://example.test/font.woff2', '//example.test/x.png']) {
     assert.match(
-      stylesheetRefusal(shellCSS, `background: url(${url});`) ?? '',
+      stylesheetRefusal(globalCSS, `background: url(${url});`) ?? '',
       /not a relative path/,
       url,
     );
