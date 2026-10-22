@@ -93,6 +93,7 @@
     "yaml": "catalog:"
   },
   "devDependencies": {
+    "@cardstack/deck": "workspace:*",
     "@cardstack/local-types": "workspace:*",
     "@cardstack/postgres": "workspace:*",
     "@cardstack/runtime-common": "workspace:*",
