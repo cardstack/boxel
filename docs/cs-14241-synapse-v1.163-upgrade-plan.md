@@ -63,22 +63,34 @@ the same as today's. Existing rooms are not affected either way.
 - **Login, SSO and UIA:** every admin and client endpoint we call still
   exists. The OIDC mapping provider interface is unchanged.
   `test-oidc-mapping-provider.sh` passes in the v1.163.0 image.
-- **Rate limits:** v1.162 adds `rc_profile` (1/s, burst 500) on profile
-  lookups. Watch for 429s on `_matrix/client/v3/profile/*`.
+- **Rate limits:** several limits apply to requests that weren't limited on
+  v1.126.0. The templates and the deployed config lift the two our traffic
+  hits:
+  - `rc_room_creation` (v1.136; burst 10, then about one a minute per user).
+    The realm server's Matrix user creates a room for each user's first
+    sign-in.
+  - `rc_profile` (v1.162; burst 500, then 1/s per client IP for
+    unauthenticated lookups). The realm server and workers look up profiles
+    without an access token, and `fetchMatrixProfile` reads a 429 as "no
+    such user".
+  - `rc_user_directory` and `rc_reports` keep their defaults, since Boxel
+    calls neither endpoint.
 
 ## Rollout
 
 1. Merge the boxel change. CI's matrix suite runs on the v1.163.0 image, and
    the merge refreshes the GHCR mirror.
-2. Merge and apply the infra change for staging. Record:
+2. Merge and apply the infra change for staging. The ECS service's rolling
+   deploy runs the old and new task side by side against one database, so
+   scale the service to 0 before applying the new image and back to 1 after,
+   the same procedure production uses. Record:
    - how long the new task takes from start to its first healthy `/health`
      (the migration time);
    - how long the rows in `background_updates` take to drain.
 3. Let staging run, watching the logs for `UniqueViolation`,
    `state_groups_persisting` and background-update errors.
-4. Upgrade production. The ECS service's rolling deploy runs the old and new
-   task side by side against one database, so scale to 0 before applying the
-   new image.
+4. Upgrade production, scaling to 0 before applying the new image as on
+   staging.
 
 ## Testing
 
@@ -87,6 +99,8 @@ the same as today's. Existing rooms are not affected either way.
 - A throwaway v1.163.0 container from the `test` template boots healthy. A
   `createRoom` shaped like the host's (creator at 100, AI bot at 50) returns a
   room version 10 room. The same request with `room_version: "12"` returns
-  400 `Creator user … must not appear in content.users`.
+  400 `Creator user … must not appear in content.users`. With the `test`
+  template's limits, one user creates 15 rooms and makes 20 unauthenticated
+  profile lookups without a 429.
 - `pnpm test:shard-assignment` and `pnpm lint` in `packages/matrix`.
 - The full matrix Playwright suite runs in CI.
