@@ -126,6 +126,23 @@ describe('listUnchangedSince', () => {
     }
   });
 
+  it('leaves out files marked skip-worktree or assume-unchanged', async () => {
+    // git diff doesn't read these files' working-tree content, so an edit to
+    // one never shows up as a change.
+    writeFile(repoDir, 'kept.gts', 'kept');
+    writeFile(repoDir, 'skipped.gts', 'before');
+    writeFile(repoDir, 'assumed.gts', 'before');
+    let base = commitAll(repoDir, 'base');
+    git(repoDir, 'update-index', '--skip-worktree', 'skipped.gts');
+    git(repoDir, 'update-index', '--assume-unchanged', 'assumed.gts');
+    writeFile(repoDir, 'skipped.gts', 'after');
+    writeFile(repoDir, 'assumed.gts', 'after');
+
+    expect([...(await listUnchangedSince(repoDir, base))]).toEqual([
+      'kept.gts',
+    ]);
+  });
+
   it('answers paths relative to a subdirectory of the repository', async () => {
     writeFile(repoDir, 'outside.gts', 'outside');
     writeFile(repoDir, 'realm/kept.gts', 'kept');
@@ -165,8 +182,9 @@ describe('listUnchangedSince', () => {
   it('rejects a directory that is not in a git work tree', async () => {
     let plainDir = fs.mkdtempSync(path.join(os.tmpdir(), 'boxel-no-git-'));
     try {
+      // git's own reason follows the hint.
       await expect(listUnchangedSince(plainDir, 'HEAD')).rejects.toThrow(
-        /is not a commit in the git repository/,
+        /is not a commit in the git repository[\s\S]*not a git repository/,
       );
     } finally {
       fs.rmSync(plainDir, { recursive: true, force: true });

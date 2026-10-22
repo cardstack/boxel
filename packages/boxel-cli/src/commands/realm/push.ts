@@ -335,7 +335,12 @@ class RealmPusher extends RealmSyncBase {
     // newManifest.files only contains files the server actually wrote
     // (unchanged carry-overs + succeeded uploads), so persisting it
     // is always safe and avoids re-uploading text files that landed.
-    if (!this.options.dryRun && filesToUpload.size > 0) {
+    // Files --changed-since skipped have no mtime yet, even when nothing
+    // uploads, and a later push needs one to notice a realm-side edit.
+    if (
+      !this.options.dryRun &&
+      (filesToUpload.size > 0 || changedSince !== undefined)
+    ) {
       try {
         const freshMtimes = await this.getRemoteMtimes();
         for (const rel of Object.keys(newManifest.files)) {

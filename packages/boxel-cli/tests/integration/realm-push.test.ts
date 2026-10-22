@@ -914,6 +914,8 @@ describe('realm push (integration)', () => {
     expect(res2.ok, res2.stderr).toBe(true);
 
     expect(res2.stdout).toContain('No files to upload');
+    // A later plain push needs the realm mtime to notice a realm-side edit.
+    expect(readManifest(localDir).remoteMtimes?.['a.gts']).toBeTypeOf('number');
   });
 
   it('--changed-since fails without uploading when the revision is not in the checkout', async () => {
