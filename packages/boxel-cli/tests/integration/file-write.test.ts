@@ -1,5 +1,5 @@
 import '../helpers/setup-realm-server.ts';
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -12,6 +12,7 @@ import {
   createTestRealmViaCli,
 } from '../helpers/integration.ts';
 import { runBoxel } from '../helpers/run-boxel.ts';
+import { write } from '../../src/commands/file/write.ts';
 import {
   TINY_PNG_BYTES,
   TINY_PDF_BYTES,
@@ -217,5 +218,57 @@ describe('file write (integration)', () => {
     } finally {
       fs.rmSync(emptyHome, { recursive: true, force: true });
     }
+  });
+  it('marks a write sent with realm events off, and leaves a plain write unmarked', async () => {
+    // In-process so the request the write sends can be inspected.
+    let profileManager = reloadProfile(home);
+    let realFetch = profileManager.authedRealmFetch.bind(profileManager);
+    let markers: (string | null)[] = [];
+    let fetchSpy = vi
+      .spyOn(profileManager, 'authedRealmFetch')
+      .mockImplementation(async (input, init) => {
+        if (init?.method === 'POST') {
+          markers.push(new Headers(init?.headers).get('X-Boxel-Realm-Events'));
+        }
+        return realFetch(input, init);
+      });
+
+    try {
+      let plain = await write(realmUrl, 'plain.gts', 'export const p = 1;', {
+        profileManager,
+      });
+      expect(plain.ok, plain.error).toBe(true);
+      let silent = await write(realmUrl, 'silent.gts', 'export const s = 1;', {
+        profileManager,
+        realmEvents: false,
+      });
+      expect(silent.ok, silent.error).toBe(true);
+      let silentBytes = await write(realmUrl, 'silent.png', TINY_PNG_BYTES, {
+        profileManager,
+        realmEvents: false,
+      });
+      expect(silentBytes.ok, silentBytes.error).toBe(true);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+
+    expect(markers).toEqual([null, 'none', 'none']);
+    expect(await (await readBack('silent.gts')).text()).toContain('s = 1');
+  });
+
+  it('--no-realm-events writes the file', async () => {
+    let res = await runBoxel(
+      [
+        'file',
+        'write',
+        'flagged.gts',
+        '--realm',
+        realmUrl,
+        '--no-realm-events',
+      ],
+      { home, input: 'export const flagged = 1;' },
+    );
+    expect(res.ok, res.stderr).toBe(true);
+    expect(await (await readBack('flagged.gts')).text()).toContain('flagged');
   });
 });

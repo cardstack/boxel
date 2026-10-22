@@ -964,6 +964,125 @@ module(basename(import.meta.filename), function () {
       }
     });
 
+    test('from-scratch dedup: a pass that announces does not attach to a running pass that announces nothing', async function (assert) {
+      // A running job's args can no longer change, so a publish attaching to
+      // a silent pass would never have its pass announced.
+      await runner.destroy();
+      let realmURL = 'http://example.com/from-scratch-in-flight-silent/';
+      let started = new Deferred<void>();
+      let release = new Deferred<void>();
+
+      let worker = new PgQueueRunner({
+        adapter,
+        workerId: 'from-scratch-in-flight-silent-worker',
+      });
+      worker.register('from-scratch-index', async () => {
+        started.fulfill();
+        await release.promise;
+        return {
+          invalidations: [],
+          ignoreData: {},
+          stats: {
+            instancesIndexed: 0,
+            filesIndexed: 0,
+            instanceErrors: 0,
+            fileErrors: 0,
+            totalIndexEntries: 0,
+          },
+        };
+      });
+
+      try {
+        await worker.start();
+        let running = await publishFromScratchIndexJob({
+          priority: 0,
+          args: { realmURL, realmUsername: 'owner', realmEvents: false },
+        });
+        await started.promise;
+
+        let silent = await publishFromScratchIndexJob({
+          priority: 0,
+          args: { realmURL, realmUsername: 'owner', realmEvents: false },
+        });
+        assert.strictEqual(
+          silent.id,
+          running.id,
+          'a pass that announces nothing attaches to the running pass',
+        );
+
+        let announcing = await publishFromScratchIndexJob({
+          priority: 0,
+          args: { realmURL, realmUsername: 'owner' },
+        });
+        assert.notStrictEqual(
+          announcing.id,
+          running.id,
+          'a pass that announces waits for a pass that will announce it',
+        );
+      } finally {
+        release.fulfill();
+        await worker.destroy();
+      }
+    });
+
+    test('from-scratch coalesce: the merged pass announces when either pass does', async function (assert) {
+      await runner.destroy();
+      let pendingArgs = async (realmURL: string) => {
+        let rows = (await adapter.execute(
+          `SELECT args FROM jobs
+           WHERE job_type = 'from-scratch-index'
+             AND concurrency_group = $1
+             AND status = 'unfulfilled'`,
+          { bind: [`indexing:${realmURL}`] },
+        )) as { args: { realmEvents?: boolean } }[];
+        assert.strictEqual(rows.length, 1, `one pending pass for ${realmURL}`);
+        return rows[0].args;
+      };
+
+      let mixedRealm = 'http://example.com/from-scratch-merge-mixed/';
+      let silentThenAnnouncing = await publishFromScratchIndexJob({
+        priority: 0,
+        args: {
+          realmURL: mixedRealm,
+          realmUsername: 'owner',
+          realmEvents: false,
+        },
+      });
+      let announcingJoin = await publishFromScratchIndexJob({
+        priority: 0,
+        args: { realmURL: mixedRealm, realmUsername: 'owner' },
+      });
+      assert.strictEqual(announcingJoin.id, silentThenAnnouncing.id);
+      assert.notStrictEqual(
+        (await pendingArgs(mixedRealm)).realmEvents,
+        false,
+        'a silent pass joined by one that announces announces',
+      );
+
+      let silentRealm = 'http://example.com/from-scratch-merge-silent/';
+      let firstSilent = await publishFromScratchIndexJob({
+        priority: 0,
+        args: {
+          realmURL: silentRealm,
+          realmUsername: 'owner',
+          realmEvents: false,
+        },
+      });
+      let secondSilent = await publishFromScratchIndexJob({
+        priority: 0,
+        args: {
+          realmURL: silentRealm,
+          realmUsername: 'owner',
+          realmEvents: false,
+        },
+      });
+      assert.strictEqual(secondSilent.id, firstSilent.id);
+      assert.false(
+        (await pendingArgs(silentRealm)).realmEvents,
+        'two silent passes merge into a silent pass',
+      );
+    });
+
     test('from-scratch does not coalesce onto pending incremental in same group', async function (assert) {
       await runner.destroy();
 
@@ -1808,6 +1927,45 @@ module(basename(import.meta.filename), function () {
             rows[0].args.realmUrls.slice().sort(),
             ['http://example.com/a/', 'http://example.com/b/'],
             "canonical job args contain the union of both instances' realmUrls",
+          );
+        });
+
+        test('full-reindex: a merged sweep announces when either sweep does, and is silent when both are', async function (assert) {
+          let publishSweep = (
+            from: typeof publisher,
+            realmEvents: boolean | undefined,
+          ) =>
+            from.publish<void>({
+              jobType: 'full-reindex',
+              concurrencyGroup: 'full-reindex-group',
+              timeout: FULL_REINDEX_JOB_TIMEOUT_SEC,
+              priority: 0,
+              args: {
+                realmUrls: ['http://example.com/a/'],
+                ...(realmEvents === undefined ? {} : { realmEvents }),
+              },
+            });
+          let pendingRealmEvents = async () => {
+            let rows = (await adapter.execute(
+              `SELECT args FROM jobs
+               WHERE job_type = 'full-reindex' AND status = 'unfulfilled'`,
+            )) as { args: { realmEvents?: boolean } }[];
+            assert.strictEqual(rows.length, 1, 'one pending sweep');
+            return rows[0].args.realmEvents;
+          };
+
+          await publishSweep(publisher, false);
+          await publishSweep(publisher2, false);
+          assert.false(
+            await pendingRealmEvents(),
+            'two silent sweeps merge into a silent sweep',
+          );
+
+          await publishSweep(publisher2, undefined);
+          assert.notStrictEqual(
+            await pendingRealmEvents(),
+            false,
+            'a sweep that announces makes the merged sweep announce',
           );
         });
       },

@@ -1233,6 +1233,54 @@ module(basename(import.meta.filename), function () {
           );
         });
 
+        test('an ignore-file write sent with X-Boxel-Realm-Events: none reindexes the realm without any realm event', async function (assert) {
+          let auth = `Bearer ${createJWT(testRealm, 'user', ['read', 'write'])}`;
+          let writeIgnoreFile = async (
+            content: string,
+            headers: Record<string, string>,
+          ) => {
+            let pending = request
+              .post('/.boxelignore')
+              .set('Accept', SupportedMimeType.CardSource)
+              .set('Content-Type', 'text/plain;charset=UTF-8')
+              .set('Authorization', auth);
+            for (let [name, value] of Object.entries(headers)) {
+              pending = pending.set(name, value);
+            }
+            let response = await pending.send(content);
+            assert.strictEqual(response.status, 204);
+          };
+
+          let events = recordRealmEvents();
+          await writeIgnoreFile('quiet-ignored.json\n', {
+            'X-Boxel-Realm-Events': 'none',
+          });
+          // The write's own pass, then the from-scratch pass it starts.
+          await testRealm.indexing();
+          await testRealm.indexing();
+          // The reindex announces right after its pass settles.
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          assert.deepEqual(
+            eventKinds(events),
+            [],
+            'neither the write nor the reindex it started sent a realm event',
+          );
+
+          await writeIgnoreFile('loud-ignored.json\n', {});
+          await waitUntil(
+            async () => eventKinds(events).includes('index:full'),
+            {
+              timeout: 30000,
+              timeoutMessage: () =>
+                `no full index event; saw ${JSON.stringify(eventKinds(events))}`,
+            },
+          );
+          assert.ok(
+            eventKinds(events).includes('index:full'),
+            'an ignore-file write without the header announces the reindex',
+          );
+        });
+
         test('removing several files at once sends one initiation', async function (assert) {
           await postAtomic(peopleBatch(['gone-a', 'gone-b', 'gone-c']));
           await testRealm.incrementalIndexing();

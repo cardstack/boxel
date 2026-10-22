@@ -14,6 +14,11 @@ interface EnqueueReindexRealmJobOptions {
   // prerenderHtmlPriority). Surfaced in the from-scratch args, and carried
   // only when true so ordinary index args keep their existing shape.
   awaitedByPublish?: boolean;
+  // False for a pass the system starts on its own, such as a deploy or an
+  // operator's reindex, so it announces nothing to the realm's subscribers
+  // (see `fromScratchAnnounces`). Carried only when false so ordinary
+  // index args keep their existing shape.
+  realmEvents?: boolean;
 }
 
 export async function enqueueReindexRealmJob(
@@ -33,6 +38,7 @@ export async function enqueueReindexRealmJob(
     realmUsername,
     clearLastModified,
     ...(opts?.awaitedByPublish ? { awaitedByPublish: true } : {}),
+    ...(opts?.realmEvents === false ? { realmEvents: false } : {}),
   };
   if (clearLastModified) {
     await query(dbAdapter, [

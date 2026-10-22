@@ -501,16 +501,20 @@ function chooseFromScratchCoalesceDecision(
         // indexing of bytes it wrote. A publish naming nobody adds nobody,
         // which leaves an all-untagged job still reading as the realm owner.
         initiatedBy: mergeInitiators(sameTypeCandidate, incoming),
-        args: {
-          ...(isObjectLike(sameTypeCandidate.args)
-            ? sameTypeCandidate.args
-            : {}),
-          ...(isObjectLike(incoming.args) ? incoming.args : {}),
-          coalescedCallers: mergeCoalescedCallers(
-            getCoalescedCallers(sameTypeCandidate.args),
-            getCoalescedCallers(incoming.args),
-          ),
-        },
+        args: withFromScratchRealmEvents(
+          {
+            ...(isObjectLike(sameTypeCandidate.args)
+              ? sameTypeCandidate.args
+              : {}),
+            ...(isObjectLike(incoming.args) ? incoming.args : {}),
+            coalescedCallers: mergeCoalescedCallers(
+              getCoalescedCallers(sameTypeCandidate.args),
+              getCoalescedCallers(incoming.args),
+            ),
+          },
+          fromScratchAnnounces(sameTypeCandidate.args) ||
+            fromScratchAnnounces(incoming.args),
+        ),
       },
     };
   }
@@ -534,18 +538,48 @@ function chooseFromScratchCoalesceDecision(
   // pass a realm publish enqueues (`awaitedByPublish`), with or without the
   // clear: the publish has just swapped in new files, and an already-running
   // pass may have read the file mtimes before that swap.
+  //
+  // A pass that announces never rides on a running one that doesn't: a
+  // running job's args can no longer change, so its subscribers would never
+  // hear of a pass someone asked to announce.
   if (
     !incomingClearsLastModified(incoming.args) &&
     !argsAwaitedByPublish(incoming.args)
   ) {
     for (let candidate of inFlightCandidates) {
-      if (candidate.jobType === incoming.jobType) {
+      if (
+        candidate.jobType === incoming.jobType &&
+        (fromScratchAnnounces(candidate.args) ||
+          !fromScratchAnnounces(incoming.args))
+      ) {
         return { type: 'join', jobId: candidate.id };
       }
     }
   }
 
   return { type: 'insert' };
+}
+
+// Whether a from-scratch pass announces anything to the realm's subscribers,
+// read from the `realmEvents` key of its args. The key is false for a pass the
+// system starts on its own: a deploy of a realm's content, the post-deploy
+// reindex of every realm, an operator's reindex. Indexing that a user's own
+// session did not ask for must not reset that session's loader mid-use, so
+// such a pass announces nothing: its render job sends no `prerender_html`
+// event and its follow-up passes send no `incremental` event. Open tabs pick
+// the result up on their next load. Peer replicas are still told through
+// NOTIFY. The key is carried only when false, so an absent key announces, and
+// it is OR-merged on coalesce like `IncrementalArgs.realmEvents`.
+export function fromScratchAnnounces(args: unknown): boolean {
+  return !(isObjectLike(args) && args.realmEvents === false);
+}
+
+function withFromScratchRealmEvents(
+  args: JSONTypes.Object,
+  announces: boolean,
+): JSONTypes.Object {
+  let { realmEvents: _realmEvents, ...rest } = args;
+  return announces ? rest : { ...rest, realmEvents: false };
 }
 
 function incomingClearsLastModified(args: unknown): boolean {
@@ -695,6 +729,7 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
           // From-scratch: the prerender job runs the realm-wide module
           // pre-warm sweep before its format renders.
           preWarm: true,
+          announce: fromScratchAnnounces(args),
           // The pass is its family's exclusive work, so the render is too.
           lane: prerenderHtmlLaneFollowing(realmURL, jobInfo),
         }).catch((e) => {
@@ -703,7 +738,11 @@ const fromScratchIndex: Task<FromScratchArgs, FromScratchResult> = ({
           );
         });
       },
-      followUpJobArgs: followUpIncrementalArgs(realmURL, realmUsername, true),
+      followUpJobArgs: followUpIncrementalArgs(
+        realmURL,
+        realmUsername,
+        fromScratchAnnounces(args),
+      ),
       auth,
       fetch: _fetch,
       prerenderer,

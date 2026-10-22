@@ -18,6 +18,10 @@ export interface RealmReindexTarget extends JSONTypes.Object {
 
 interface FullReindexArgs {
   realmUrls: string[];
+  // False when the system starts the sweep on its own, after a deploy or from
+  // an operator's dashboard: each realm's pass then announces nothing to its
+  // subscribers (see `fromScratchAnnounces`). True when absent.
+  realmEvents?: boolean;
 }
 
 export { fullReindex };
@@ -68,19 +72,26 @@ function chooseFullReindexCoalesceDecision(
   let merged = [
     ...new Set([...getRealmUrls(twin.args), ...getRealmUrls(incoming.args)]),
   ];
+  let { realmEvents: _realmEvents, ...args } = {
+    ...(isObjectLike(twin.args) ? twin.args : {}),
+    ...(isObjectLike(incoming.args) ? incoming.args : {}),
+    realmUrls: merged,
+  } as JSONTypes.Object;
+  // One sweep that announces is enough for the merged sweep to announce.
+  let announces = announcesSweep(twin.args) || announcesSweep(incoming.args);
   return {
     type: 'join',
     jobId: twin.id,
     update: {
       priority: Math.max(twin.priority, incoming.priority),
       timeout: Math.max(twin.timeout, incoming.timeout),
-      args: {
-        ...(isObjectLike(twin.args) ? twin.args : {}),
-        ...(isObjectLike(incoming.args) ? incoming.args : {}),
-        realmUrls: merged,
-      },
+      args: announces ? args : { ...args, realmEvents: false },
     },
   };
+}
+
+function announcesSweep(args: unknown): boolean {
+  return !(isObjectLike(args) && args.realmEvents === false);
 }
 
 registerQueueJobDefinition({
@@ -95,7 +106,7 @@ const fullReindex: Task<FullReindexArgs, void> = ({
   queuePublisher,
 }) =>
   async function (args) {
-    let { jobInfo, realmUrls } = args;
+    let { jobInfo, realmUrls, realmEvents } = args;
     log.debug(
       `${jobIdentity(jobInfo)} starting reindex-all for job: ${JSON.stringify(args)}`,
     );
@@ -149,6 +160,7 @@ const fullReindex: Task<FullReindexArgs, void> = ({
           systemInitiatedIndexPriority(realmUrl),
           {
             clearLastModified: true,
+            realmEvents,
           },
         );
       } catch (error: any) {

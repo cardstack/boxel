@@ -3162,8 +3162,8 @@ export class Realm {
       dbAdapter,
       queue,
     });
-    this.#realmIndexUpdater.onIgnoreRulesChanged = () =>
-      this.#reindexForIgnoreRules();
+    this.#realmIndexUpdater.onIgnoreRulesChanged = (opts) =>
+      this.#reindexForIgnoreRules(opts);
     this.#realmIndexQueryEngine = new RealmIndexQueryEngine({
       realm: this,
       dbAdapter,
@@ -3780,12 +3780,17 @@ export class Realm {
   private startReindex(opts?: {
     clearLastModified?: boolean;
     priority?: number;
+    // See `fromScratchAnnounces`. False also withholds this method's
+    // own invalidation and `full` events.
+    realmEvents?: boolean;
   }): { published: Promise<Job<FromScratchResult>>; completed: Promise<void> } {
+    let realmEvents = opts?.realmEvents !== false;
     let { published, completed: indexingCompleted } =
       this.#realmIndexUpdater.publishFullIndex(
         opts?.priority ?? systemInitiatedPriority,
         {
           clearLastModified: opts?.clearLastModified,
+          realmEvents,
         },
       );
 
@@ -3812,17 +3817,19 @@ export class Realm {
             `dropAllTranspiledModuleCacheEntries failed after reindex of ${this.url}: ${String(err)}`,
           );
         }
-        if (invalidations.length > 0) {
-          this.broadcastIncrementalInvalidationEvent(invalidations, {
-            generation,
+        if (realmEvents) {
+          if (invalidations.length > 0) {
+            this.broadcastIncrementalInvalidationEvent(invalidations, {
+              generation,
+            });
+          }
+          this.broadcastRealmEvent({
+            eventName: 'index',
+            indexType: 'full',
+            ...(generation !== undefined ? { generation } : {}),
+            realmURL: this.url,
           });
         }
-        this.broadcastRealmEvent({
-          eventName: 'index',
-          indexType: 'full',
-          ...(generation !== undefined ? { generation } : {}),
-          realmURL: this.url,
-        });
         try {
           await this.#definitionLookup.clearRealmDefinitions(this.url);
         } catch (err: unknown) {
@@ -8027,18 +8034,28 @@ export class Realm {
       }
       let priority =
         opts?.fromScratchIndexPriority ?? this.#fromScratchIndexPriority;
-      let promise = this.#realmIndexUpdater.fullIndex(priority);
+      // Reindexing an existing index at boot is how a deploy delivers the
+      // content a bootstrap realm's image ships, so it is announced to nobody:
+      // tabs open on the realm pick the new content up on their next load
+      // rather than reset their loader mid-session (see
+      // `fromScratchAnnounces`). A brand-new index still announces.
+      let realmEvents = isNewIndex || !this.#fullIndexOnStartup;
+      let promise = this.#realmIndexUpdater.fullIndex(priority, {
+        realmEvents,
+      });
       if (isNewIndex) {
         // we only await the full indexing at boot if this is a brand new index
         await promise;
       }
-      // not sure how useful this event is--nothing is currently listening for
-      // it, and it may happen during or after the full index...
-      this.broadcastRealmEvent({
-        eventName: 'index',
-        indexType: 'full',
-        realmURL: this.url,
-      });
+      if (realmEvents) {
+        // not sure how useful this event is--nothing is currently listening
+        // for it, and it may happen during or after the full index...
+        this.broadcastRealmEvent({
+          eventName: 'index',
+          indexType: 'full',
+          realmURL: this.url,
+        });
+      }
     } else {
       await this.#loadIgnoreRules();
     }
@@ -8051,8 +8068,8 @@ export class Realm {
   // A changed root ignore file: the from-scratch pass rereads the rules and
   // broadcasts what it hid or revealed, and the cache wipe after it tells the
   // peer replicas to reread the rules too.
-  #reindexForIgnoreRules() {
-    let { completed } = this.startReindex();
+  #reindexForIgnoreRules(opts: { realmEvents?: boolean }) {
+    let { completed } = this.startReindex(opts);
     completed
       .then(() => this.clearRealmIndexCachesAndBroadcast())
       .catch(() => {
