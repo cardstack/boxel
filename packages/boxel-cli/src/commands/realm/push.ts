@@ -164,6 +164,7 @@ class RealmPusher extends RealmSyncBase {
     }
 
     let uploadFailed = false;
+    let uploadUnanswered: string[] = [];
 
     if (filesToUpload.size === 0) {
       console.log('No files to upload - everything is up to date');
@@ -199,6 +200,7 @@ class RealmPusher extends RealmSyncBase {
       }
 
       const result = await this.uploadFilesAtomic(filesToUpload, addPaths);
+      uploadUnanswered = result.unanswered;
 
       // Record every file the server actually wrote before surfacing
       // errors. uploadFilesAtomic can return both `succeeded` and
@@ -304,14 +306,28 @@ class RealmPusher extends RealmSyncBase {
       } catch (error) {
         console.warn('Could not refresh remote mtimes after upload:', error);
       }
-      // A file this push didn't confirm writing (rejected, never sent, or in
-      // a request that got no answer) is recorded with a hash no file has
-      // when the realm has it, so the next push re-sends it as an update
-      // rather than an add the realm would refuse. One the realm doesn't
-      // have stays out of the manifest and goes as an add.
+      // A file this push didn't confirm writing keeps what the last manifest
+      // knew of it, its realm mtime included, so the next push treats it as
+      // this one did. The exception is a new file in a request that got no
+      // answer and is on the realm now: this push wrote it, so it's recorded
+      // with a hash no file has and the next push sends it as an update.
+      const unanswered = new Set(uploadUnanswered);
       for (const rel of filesToUpload.keys()) {
-        if (newManifest.files[rel] === undefined && remoteNow.has(rel)) {
+        if (newManifest.files[rel] !== undefined) continue;
+        if (
+          unanswered.has(rel) &&
+          !initialRemoteFiles.has(rel) &&
+          remoteNow.has(rel)
+        ) {
           newManifest.files[rel] = '';
+        } else if (manifest?.files[rel] !== undefined) {
+          newManifest.files[rel] = manifest.files[rel];
+          const mtime = manifest.remoteMtimes?.[rel];
+          if (mtime !== undefined) {
+            newManifest.remoteMtimes![rel] = mtime;
+          } else {
+            delete newManifest.remoteMtimes![rel];
+          }
         }
       }
     }
