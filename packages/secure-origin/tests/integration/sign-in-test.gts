@@ -669,7 +669,7 @@ module('Integration | sign-in', function (hooks) {
     });
 
     test('a login token that can’t be minted says so, and how to start again', async function (assert) {
-      serve(NO_GOOGLE, signsIn(SIGNED_IN), {
+      let server = serve(NO_GOOGLE, signsIn(SIGNED_IN), ENDS, {
         'POST _secure-session/login-token': () =>
           refusal(503, 'unavailable', 'signing in is unavailable right now'),
       });
@@ -686,6 +686,11 @@ module('Integration | sign-in', function (hooks) {
         .hasText('Run boxel profile add in your terminal again.');
       assert.deepEqual(handoffs, []);
       assert.deepEqual(navigations, []);
+      assert.strictEqual(
+        server.requests.find((r) => r.method === 'DELETE')?.path,
+        '_secure-session',
+        'the session nobody will hold is ended',
+      );
     });
 
     test('a Google sign-in for it hands the CLI a login token too', async function (assert) {

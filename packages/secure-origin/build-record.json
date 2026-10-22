@@ -733,7 +733,7 @@
       ]
     },
     "shell.js": {
-      "bytes": 66141,
+      "bytes": 66360,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -783,7 +783,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/cli-handoff.js",
-          "size": 2301
+          "size": 2781
         },
         {
           "package": "@cardstack/secure-origin",
@@ -868,7 +868,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/shell/sign-in/cli-handoff.gts",
-          "size": 1982
+          "size": 1853
         },
         {
           "package": "@cardstack/secure-origin",

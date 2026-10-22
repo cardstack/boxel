@@ -4,13 +4,12 @@
 // `boxel keys sign-in` is handed the secure session. A profile sign-in
 // (`boxel profile add`) is handed a single-use Matrix login token, which the
 // CLI redeems for a Matrix device of its own, and the secure session too when
-// the CLI takes one. A CLI that doesn't take one never sees it, so it is ended
-// here rather than left to expire.
+// the CLI takes one (`handProfileSignIn`).
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
 import { trackedObject } from '@ember/reactive/collections';
 
-import { handToCli } from '../../security/cli-handoff.js';
+import { handProfileSignIn, handToCli } from '../../security/cli-handoff.js';
 import type { CliCallback } from '../../security/cli-handoff.js';
 import { endSession, loginToken, readConfig } from '../../security/session.js';
 import type { Session } from '../../security/session.js';
@@ -75,24 +74,16 @@ export default class CliHandoff extends Component<Signature> {
       return;
     }
     let config = readConfig();
-    let token: string;
     try {
-      // A second sign-in within a minute waits for the Matrix server's limit
-      // of one login token a minute, inside `loginToken`.
-      token = (await loginToken(config, session)).loginToken;
+      await handProfileSignIn(callback, session, {
+        // A second sign-in within a minute waits out the Matrix server's
+        // limit of one login token a minute, inside `loginToken`.
+        mintLoginToken: async (s) => (await loginToken(config, s)).loginToken,
+        endSession: (s) => endSession(config, s),
+        navigate: (url: string) => navigation.replace(url),
+      });
     } catch (e) {
       this.state.error = asSentence((e as Error).message);
-      return;
     }
-    if (callback.profile.secureSession) {
-      handToCli(callback, { loginToken: token, session });
-      return;
-    }
-    await endSession(config, session).catch(() => {});
-    handToCli(
-      callback,
-      { loginToken: token },
-      { navigate: (url: string) => navigation.replace(url) },
-    );
   }
 }

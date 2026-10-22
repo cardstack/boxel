@@ -4,6 +4,7 @@ import { afterEach, describe, test } from 'node:test';
 import {
   cliCallback,
   handoffFields,
+  handProfileSignIn,
   handToCli,
   isCliCallback,
 } from '../src/security/cli-handoff.js';
@@ -190,6 +191,113 @@ describe('handToCli', () => {
     );
     assert.deepEqual(appended, [form], 'the form is in the page');
     assert.equal(submitted, 1, 'it is submitted once');
+  });
+});
+
+describe('handProfileSignIn', () => {
+  const session = {
+    token: 'secure-session-token',
+    user: '@someone:example.test',
+    expiresAt: '2030-01-01T00:00:00.000Z',
+  };
+  const listener = { url: 'http://127.0.0.1:51234/callback', state: STATE };
+
+  function recorder() {
+    let calls: string[] = [];
+    let posted: unknown[] = [];
+    let doc = {
+      createElement(tag: string) {
+        return {
+          tag,
+          children: [] as any[],
+          append(...nodes: unknown[]) {
+            this.children.push(...nodes);
+          },
+          setAttribute() {},
+          submit() {
+            calls.push('post');
+            posted.push(this);
+          },
+        };
+      },
+      body: { append() {} },
+    } as unknown as Document;
+    return {
+      calls,
+      posted,
+      requests: {
+        mintLoginToken: async () => {
+          calls.push('mint');
+          return 'login-token';
+        },
+        endSession: async (ended: typeof session) => {
+          calls.push(`end ${ended.token}`);
+        },
+        doc,
+        navigate: (url: string) => calls.push(`navigate ${url}`),
+      },
+    };
+  }
+
+  test('a CLI that takes a secure session is posted the login token with it, and the session lives on', async () => {
+    let { calls, posted, requests } = recorder();
+    await handProfileSignIn(
+      { ...listener, profile: { secureSession: true } },
+      session,
+      requests,
+    );
+    assert.deepEqual(calls, ['mint', 'post']);
+    assert.deepEqual(
+      (posted[0] as any).children.map((input: any) => input.name),
+      ['state', 'login_token', 'secure_session', 'user_id', 'expires_at'],
+    );
+  });
+
+  test('a CLI that takes none is sent the login token only once the session is ended', async () => {
+    let { calls, requests } = recorder();
+    await handProfileSignIn(
+      { ...listener, profile: { secureSession: false } },
+      session,
+      requests,
+    );
+    assert.deepEqual(calls, [
+      'mint',
+      'end secure-session-token',
+      `navigate http://127.0.0.1:51234/callback?state=${STATE}&loginToken=login-token`,
+    ]);
+  });
+
+  test('a token that can’t be minted ends the session, and the failure is the caller’s to show', async () => {
+    let { calls, requests } = recorder();
+    await assert.rejects(
+      handProfileSignIn(
+        { ...listener, profile: { secureSession: true } },
+        session,
+        {
+          ...requests,
+          mintLoginToken: async () => {
+            throw new Error('signing in is unavailable right now');
+          },
+        },
+      ),
+      /unavailable/,
+    );
+    assert.deepEqual(calls, ['end secure-session-token']);
+  });
+
+  test('a failure to end the session doesn’t keep the CLI from its token', async () => {
+    let { calls, requests } = recorder();
+    await handProfileSignIn(
+      { ...listener, profile: { secureSession: false } },
+      session,
+      {
+        ...requests,
+        endSession: async () => {
+          throw new Error('Boxel could not be reached.');
+        },
+      },
+    );
+    assert.match(calls.at(-1)!, /^navigate /);
   });
 });
 

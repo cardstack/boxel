@@ -143,6 +143,42 @@ export function handToCli(
   return form;
 }
 
+// Hands a profile sign-in (`boxel profile add`) to the CLI: a single-use
+// Matrix login token minted with the secure session just signed in, and that
+// session too when the CLI takes one. A session the CLI won't hold is ended
+// here, before the window leaves for the listener, and so is the session when
+// no token could be minted for it: nothing else keeps it, so it would
+// otherwise run out its week unused. `mintLoginToken` and `endSession` make
+// the realm-server requests (`loginToken` and `endSession` in session.js).
+/**
+ * @param {CliCallback} callback A profile sign-in's (`callback.profile` set).
+ * @param {import('./session.js').Session} session
+ * @param {{
+ *   mintLoginToken: (session: import('./session.js').Session) => Promise<string>,
+ *   endSession: (session: import('./session.js').Session) => Promise<void>,
+ *   doc?: Document,
+ *   navigate?: (url: string) => void,
+ * }} requests
+ */
+export async function handProfileSignIn(
+  callback,
+  session,
+  { mintLoginToken, endSession, doc, navigate },
+) {
+  let loginToken;
+  try {
+    loginToken = await mintLoginToken(session);
+  } catch (e) {
+    await endSession(session).catch(() => {});
+    throw e;
+  }
+  if (callback.profile?.secureSession) {
+    return handToCli(callback, { loginToken, session }, { doc, navigate });
+  }
+  await endSession(session).catch(() => {});
+  return handToCli(callback, { loginToken }, { doc, navigate });
+}
+
 // Whether `callback` is a loopback listener and state `cliCallback` could
 // have returned.
 export function isCliCallback(callback) {
