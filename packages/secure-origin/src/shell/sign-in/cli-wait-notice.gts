@@ -4,17 +4,15 @@ import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import type { CliCallback } from '../../security/cli-handoff.js';
 
-// The CLI's own wait (`CLI_AUTH_TIMEOUT_MS` in runtime-common's `cli-auth`),
-// in its words; `tests/cli-wait.test.ts` holds the two together.
-export const CLI_WAIT = '30 minutes';
-
 interface Signature {
   Args: { cli: CliCallback };
 }
 
+// The wait is the CLI's own (`CLI_AUTH_TIMEOUT_MS` in runtime-common's
+// `cli-auth`), in its words; `tests/cli-wait.test.ts` holds the two together.
 const CliWaitNotice: TemplateOnlyComponent<Signature> = <template>
-  <p class='notice' data-test-secure-cli-wait>The CLI stops waiting after
-    {{CLI_WAIT}}. If signing in doesn't reach it, run
+  <p class='notice' data-test-secure-cli-wait>The CLI stops waiting after 30
+    minutes. If signing in doesn't reach it, run
     <code>{{if @cli.profile 'boxel profile add' 'boxel keys sign-in'}}</code>
     again.</p>
 

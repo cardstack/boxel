@@ -8,6 +8,7 @@ import {
   SsoTimeoutError,
   browserLogin,
   buildCliAuthUrl,
+  buildSecureCliAuthUrl,
   describeDuration,
   redeemLoginToken,
   startLoopbackCallback,
@@ -93,6 +94,36 @@ describe('buildCliAuthUrl', () => {
   });
 });
 
+describe('buildSecureCliAuthUrl', () => {
+  it("opens the secure origin's profile sign-in, for this listener, asking for a secure session too", () => {
+    const url = new URL(
+      buildSecureCliAuthUrl('https://secure.example.com/', {
+        port: 1234,
+        state: 'abc123def456',
+      }),
+    );
+    expect(url.origin).toBe('https://secure.example.com');
+    expect(url.pathname).toBe('/');
+    expect(Object.fromEntries(url.searchParams)).toEqual({
+      mode: 'cli-auth',
+      port: '1234',
+      state: 'abc123def456',
+      session: 'secure',
+    });
+  });
+
+  it('keeps the path of a secure origin served beneath one', () => {
+    const url = new URL(
+      buildSecureCliAuthUrl('https://localhost:4208/secure', {
+        port: 1,
+        state: 'abc123def456',
+      }),
+    );
+    expect(url.pathname).toBe('/secure');
+    expect(url.search).not.toMatch(/http|localhost|127\.0\.0\.1/i);
+  });
+});
+
 describe('startLoopbackCallback', () => {
   it('binds loopback and resolves a login token the browser delivers', async () => {
     const callback = await startLoopbackCallback();
@@ -137,6 +168,73 @@ describe('startLoopbackCallback', () => {
         userId: USER_ID,
       },
     });
+  });
+
+  it('accepts a login token POSTed with a secure session', async () => {
+    const callback = await startLoopbackCallback();
+    const state = new URL(callback.redirectUrl).searchParams.get('state')!;
+    const pending = callback.waitForResult();
+
+    const response = await fetch(callback.redirectUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formBody({
+        state,
+        login_token: 'syt_from_secure_origin',
+        secure_session: 'secure-session-token',
+        user_id: USER_ID,
+        expires_at: '2099-01-01T00:00:00.000Z',
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    await expect(pending).resolves.toEqual({
+      kind: 'loginToken',
+      loginToken: 'syt_from_secure_origin',
+      secureSession: {
+        token: 'secure-session-token',
+        userId: USER_ID,
+        expiresAt: '2099-01-01T00:00:00.000Z',
+      },
+    });
+  });
+
+  it('accepts a login token POSTed alone', async () => {
+    const callback = await startLoopbackCallback();
+    const state = new URL(callback.redirectUrl).searchParams.get('state')!;
+    const pending = callback.waitForResult();
+
+    await fetch(callback.redirectUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formBody({ state, login_token: 'syt_alone' }),
+    });
+
+    await expect(pending).resolves.toEqual({
+      kind: 'loginToken',
+      loginToken: 'syt_alone',
+    });
+  });
+
+  it('rejects a login token POSTed with an incomplete secure session', async () => {
+    const callback = await startLoopbackCallback();
+    const state = new URL(callback.redirectUrl).searchParams.get('state')!;
+    const settled = expect(callback.waitForResult()).rejects.toThrow(
+      /secure_session, user_id, or expires_at/,
+    );
+
+    const response = await fetch(callback.redirectUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: formBody({
+        state,
+        login_token: 'syt_token',
+        secure_session: 'secure-session-token',
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    await settled;
   });
 
   it('rejects a POSTed session whose state does not match', async () => {
@@ -350,6 +448,47 @@ describe('browserLogin', () => {
       deviceId: 'DEVICE',
       userId: USER_ID,
       matrixUrl: MATRIX_URL,
+    });
+  });
+
+  it("opens the secure origin's page when given one, and returns the secure session beside the device", async () => {
+    let opened: string | undefined;
+    const auth = await browserLogin({
+      matrixUrl: MATRIX_URL,
+      hostUrl: HOST_URL,
+      secureOriginUrl: 'https://secure.example.com/',
+      fetchFn: homeserver(),
+      log: () => {},
+      openBrowserFn: async (authUrl) => {
+        opened = authUrl;
+        const target = loopbackFrom(authUrl);
+        await fetch(target.origin + target.pathname, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: formBody({
+            state: target.searchParams.get('state')!,
+            login_token: 'syt_from_secure_origin',
+            secure_session: 'secure-session-token',
+            user_id: USER_ID,
+            expires_at: '2099-01-01T00:00:00.000Z',
+          }),
+        });
+        return true;
+      },
+    });
+
+    expect(new URL(opened!).origin).toBe('https://secure.example.com');
+    expect(new URL(opened!).searchParams.get('mode')).toBe('cli-auth');
+    expect(auth).toEqual({
+      accessToken: 'redeemed',
+      deviceId: 'DEVICE',
+      userId: USER_ID,
+      matrixUrl: MATRIX_URL,
+      secureSession: {
+        token: 'secure-session-token',
+        userId: USER_ID,
+        expiresAt: '2099-01-01T00:00:00.000Z',
+      },
     });
   });
 

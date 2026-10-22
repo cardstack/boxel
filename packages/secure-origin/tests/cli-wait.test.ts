@@ -16,6 +16,6 @@ test('the CLI wait the pages state is the one the CLI enforces', async () => {
       'utf8',
     ),
   );
-  let stated = /export const CLI_WAIT = '([^']+)';/.exec(source)?.[1];
+  let stated = /stops waiting after\s+([^.]+)\./.exec(source)?.[1];
   assert.equal(stated, describeDuration(CLI_AUTH_TIMEOUT_MS));
 });
