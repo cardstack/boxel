@@ -234,6 +234,18 @@ export const DEFAULT_FALLBACK_MODELS: readonly FallbackModelConfig[] = [
     inputModalities: ['text', 'image', 'file'],
   },
   {
+    modelId: 'anthropic/claude-sonnet-5.5',
+    displayName: 'Anthropic: Claude Sonnet 5.5',
+    toolsSupported: true,
+    inputModalities: ['text', 'image', 'file'],
+  },
+  {
+    modelId: 'anthropic/claude-haiku-5.5',
+    displayName: 'Anthropic: Claude Haiku 5.5',
+    toolsSupported: true,
+    inputModalities: ['text', 'image', 'file'],
+  },
+  {
     modelId: 'anthropic/claude-sonnet-4.6',
     displayName: 'Anthropic: Claude Sonnet 4.6',
     toolsSupported: true,

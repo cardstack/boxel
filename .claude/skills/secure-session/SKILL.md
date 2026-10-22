@@ -1,6 +1,6 @@
 ---
 name: secure-session
-description: Operate and diagnose sessions signed in on the secure origin — the `secureSession` claim on a realm-server session, the `secure_sessions` table behind it, how the secure window and `boxel keys sign-in` get one (a password checked by a Matrix user-interactive auth check the realm server drives through `account/3pid/add`, or the realm server's own Google sign-in returning to the secure origin), and what it gates (minting key write tickets). Use when a user can't sign in to the secure window or the CLI's `boxel keys sign-in`, when a key write ticket is refused with "issued only to a session signed in on the secure origin", when reading `secure_sessions`, when Synapse's admin credentials or the Google client change, or when changing `lib/secure-session.ts`, `lib/google-sign-in.ts`, `handlers/handle-secure-session.ts` or `secure-origin/sign-in.js`.
+description: Operate and diagnose sessions signed in on the secure origin — the `secureSession` claim on a realm-server session, the `secure_sessions` table behind it, how the secure window and `boxel keys sign-in` get one (a password checked by a Matrix user-interactive auth check the realm server drives through `account/3pid/add`, or the realm server's own Google sign-in returning to the secure origin), and what it gates (minting key write tickets). Use when a user can't sign in to the secure window or the CLI's `boxel keys sign-in`, when a key write ticket is refused with "issued only to a session signed in on the secure origin", when reading `secure_sessions`, when Synapse's admin credentials or the Google client change, when a password change or reset should have ended a secure session, or when changing `lib/secure-session.ts`, `lib/google-sign-in.ts`, `handlers/handle-secure-session.ts`, `secure-origin/sign-in.js`, `secure-origin/password-reset.js` or the credential fields' `set-password`.
 ---
 
 # Secure sessions (operators)
@@ -54,6 +54,7 @@ a user's sessions (`isSessionRevoked`) ends these too.
 | Its seven days pass    | —                                        | That session                                                        |
 | Signing out of it      | `DELETE /_secure-session` (the session)  | That session: `boxelSignOut()` in the window, `boxel keys sign-out` |
 | Signing out of the app | `DELETE /_secure-sessions?client=window` | Every unexpired `window` row of the token's user                    |
+| Changing the password  | `POST /_secure-sessions/password-change` | Every unexpired row of the account, `cli` included                  |
 | Revoking all sessions  | —                                        | Every session of the user (`isSessionRevoked`)                      |
 
 The app's sign-out (`MatrixService.logout()`) calls `DELETE
@@ -74,6 +75,41 @@ in again undoes; it answers 204 whether or not a row ended, and reads, lists
 and extends nothing. It ends the user's windows in every browser, since rows
 aren't tied to one, and leaves `cli` rows alone: the CLI usually runs on
 another machine.
+
+Every page that sets a password calls `POST
+/_secure-sessions/password-change` (a `password-change` resource,
+`attributes.{username, password}`) once Synapse has accepted the new
+password. Those pages are the secure origin's `reset-password` page and the
+credential fields' `set-password`, which the app's own reset and its
+change-password use. `username` is any name a password sign-in takes: the
+email address the reset link was sent to, or the Matrix id the app names in
+`set-password`'s `account`. `password` is the new password. The realm server
+checks the password exactly as a password sign-in does (`confirmPassword`),
+under the same per-account limit (`withPasswordLimit`; one `SignInLimiter`
+serves both routes), and then expires every unexpired row of the account. It
+answers only the secure origin, with the sign-in refusals below, and 204
+whether or not a row ended. Card code never sees the new password, so it
+can't end the CLI's sessions this way (ADR 005 §1.6). The call is best
+effort: the password stays changed when it fails, and a session signed in with
+the old password then lasts until it expires. Whoever holds the old password
+can keep the account's failure limit full to make it fail.
+`endSessionsForNewPassword` in `secure-origin/session.js` (which the credential
+fields import too) tries a 429 again, after `retryAfterMs`, for up to a
+minute, but that only beats someone filling the limit by hand: a refused
+attempt costs nothing and `retryAfterMs` says when the next one is free, so a
+script that polls faster than the page takes every free attempt and keeps its
+sessions for the week. Don't treat the retry as the defense, and don't drop
+the limit on this route either: a caller holding a session would learn the
+new password from their session ending. Closing the gap needs a proof that
+doesn't share the sign-in limit. A password set any other way,
+such as by an operator through Synapse's admin `reset_password`, ends no
+secure session. To end them, expire the rows.
+
+A reset link carries the email address it was sent to in its fragment, so
+the page it lands on can name the account: `#clientSecret=…&email=…&sid=…` on
+the secure origin, and `?clientSecret=…#email=…&sid=…` in the app (Synapse
+appends the `sid` to the end of the link). A link without one still resets
+the password, and ends no session.
 
 The window checks its stored session with `GET /_secure-session` (204 while
 it's live, 401 `signed-out` once it has ended) when it opens, and again when a
@@ -156,7 +192,10 @@ Matrix server's Google client (`lib/google-sign-in.ts`):
      `alice1`, `alice2`… past taken ones), Google's `name` as its display
      name, the email as a third-party id, and the Google link. An empty `PUT`
      makes the account, and only its `201` means this sign-in owns it, so a
-     taken localpart is never changed. A sign-in that fails after making the
+     taken localpart is never changed. A localpart is taken when an account
+     has it ignoring case, as Synapse's registration compares it; the admin
+     lookup matches only exactly, so a `M_USER_IN_USE` refusal of the `PUT`
+     counts the localpart as taken and the next one is tried. A sign-in that fails after making the
      account unlinks and deactivates it, so the next one resolves again.
 
    The rules live in `lib/google-account.ts`; the two implementations share
@@ -185,21 +224,21 @@ target, and `connect-src` to the realm server and the Matrix server (ADR 005 §1
 
 ## Refusals
 
-| Status, code              | Means                                                                                |
-| ------------------------- | ------------------------------------------------------------------------------------ |
-| 403 `forbidden`           | A sign-in not from the secure origin                                                 |
-| 401 `invalid-credentials` | Any failed password sign-in (no account, no password, wrong)                         |
-| 401 `signed-out`          | `GET /_secure-session` with a session that isn't, or is no longer, secure            |
-| 429 `rate-limited`        | Too many failed password sign-ins for the account; see `meta.retryAfterMs`           |
-| 401 `not-confirmed`       | Google's code didn't redeem, or its ID token didn't fit the sign-in                  |
-| 403 `unverified-email`    | An unlinked Google account whose email Google hasn't verified                        |
-| 403 `ambiguous-email`     | More than one account holds the unlinked Google account's email                      |
-| 403 `deactivated`         | The Google account's account is deactivated                                          |
-| 403 `locked`              | The Google account's account is locked                                               |
-| 403 `no-boxel-account`    | A session was asked for an account with no session room, which sign-in sets up first |
-| 409 `used`                | The proof already signed in                                                          |
-| 503 `unavailable`         | No Synapse admin credentials, or Synapse didn't answer with a challenge              |
-| 503 `google-unavailable`  | This server has no Google client                                                     |
+| Status, code              | Means                                                                                                                                                                                                                      |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 403 `forbidden`           | A sign-in not from the secure origin                                                                                                                                                                                       |
+| 401 `invalid-credentials` | Any failed password sign-in (no account, no password, wrong)                                                                                                                                                               |
+| 401 `signed-out`          | `GET /_secure-session` with a session that isn't, or is no longer, secure                                                                                                                                                  |
+| 429 `rate-limited`        | Too many failed password sign-ins for the account; see `meta.retryAfterMs`                                                                                                                                                 |
+| 401 `not-confirmed`       | Google's code didn't redeem, or its ID token didn't fit the sign-in                                                                                                                                                        |
+| 403 `unverified-email`    | An unlinked Google account whose email Google hasn't verified                                                                                                                                                              |
+| 403 `ambiguous-email`     | More than one account holds the unlinked Google account's email                                                                                                                                                            |
+| 403 `deactivated`         | The Google account's account is deactivated                                                                                                                                                                                |
+| 403 `locked`              | The Google account's account is locked                                                                                                                                                                                     |
+| 403 `no-boxel-account`    | A session was asked for an account with no session room, which sign-in sets up first                                                                                                                                       |
+| 409 `used`                | The proof already signed in                                                                                                                                                                                                |
+| 503 `unavailable`         | No Synapse admin credentials, Synapse didn't answer with a challenge, or a Google sign-in couldn't make or link an account (its `realm:secure-session` log line counts the lost races and the localparts taken or refused) |
+| 503 `google-unavailable`  | This server has no Google client                                                                                                                                                                                           |
 
 A Google refusal's message is the app's own copy: the mapping provider's
 words for an unverified or shared email, and the app's sign-in error for a

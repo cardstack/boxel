@@ -31,6 +31,10 @@ import type { AuthMode } from './auth';
 export type ResetPasswordParams = {
   sid: string;
   clientSecret: string;
+  // The email address the reset link was sent to, which names the account
+  // whose secure sessions end once the new password is set. A link that
+  // carries none still resets the password.
+  email?: string;
 };
 
 interface Signature {
@@ -275,6 +279,13 @@ export default class ForgotPassword extends Component<Signature> {
       let clientSecret = uuidv4();
       let redirectUrl = new URL(window.location.href);
       redirectUrl.searchParams.set('clientSecret', clientSecret);
+      // In the fragment, which never leaves the browser, so the address
+      // isn't recorded in an access log. The Matrix server adds the
+      // validation session's id to the end of the link, which puts it in the
+      // fragment too (see `Auth`).
+      redirectUrl.hash = new URLSearchParams({
+        email: this.state.email,
+      }).toString();
 
       let { sid } = await this.matrixService.requestPasswordEmailToken(
         this.state.email,
@@ -332,6 +343,7 @@ export default class ForgotPassword extends Component<Signature> {
             },
             type: 'm.login.email.identity',
           },
+          account: this.args.resetPasswordParams.email,
         },
       });
       if (!result.ok) {

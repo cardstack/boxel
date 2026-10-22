@@ -21,6 +21,11 @@ packages/boxel-cli/plugin/skills/
 # breaks its recorded SHA-256 and drifts it from its documented provenance.
 packages/experiments-realm/filedef-fixtures/samples/
 
+# Fonts, font stylesheets and an image that the matrix tests serve in place of
+# the internet copies the Synapse email templates load. They are the bytes the
+# browser received from those hosts; reformatting drifts them from that.
+packages/matrix/support/email-assets/
+
 # Vendored third-party bundles and data in Pret UI. Each directory's README.md
 # records the upstream version and build; reformatting drifts the bytes from it.
 packages/pretui/color/index.js
