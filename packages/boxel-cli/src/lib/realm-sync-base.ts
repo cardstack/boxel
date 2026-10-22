@@ -498,12 +498,14 @@ export abstract class RealmSyncBase {
   // a 409 on any `add` or a 404 on any `update` rejects that request with no
   // side effects; the requests before it have already been written, and the
   // ones after it are not sent. Returns the paths the server reported as
-  // written, and an error payload when the upload stopped.
+  // written, the paths of a request that got no answer (they may or may not
+  // have been written), and an error payload when the upload stopped.
   protected async uploadFilesAtomic(
     files: Map<string, string>,
     addPaths: Set<string>,
   ): Promise<{
     succeeded: string[];
+    unanswered: string[];
     error?: {
       status: number;
       perFile: UploadFailure[];
@@ -515,14 +517,14 @@ export abstract class RealmSyncBase {
     );
 
     if (entries.length === 0) {
-      return { succeeded: [] };
+      return { succeeded: [], unanswered: [] };
     }
 
     if (this.options.dryRun) {
       for (const [relativePath] of entries) {
         console.log(`[DRY RUN] Would upload ${relativePath}`);
       }
-      return { succeeded: [] };
+      return { succeeded: [], unanswered: [] };
     }
 
     // The /_atomic endpoint embeds each file's content inside a JSON
@@ -548,10 +550,12 @@ export abstract class RealmSyncBase {
     ]);
 
     const succeeded = [...textOutcome.succeeded, ...binaryOutcome.succeeded];
+    const unanswered = textOutcome.unanswered;
 
     if (textOutcome.fatal) {
       return {
         succeeded,
+        unanswered,
         error: {
           status: textOutcome.fatal.status,
           perFile: [...textOutcome.failed, ...binaryOutcome.failed],
@@ -563,6 +567,7 @@ export abstract class RealmSyncBase {
     if (binaryOutcome.failed.length > 0) {
       return {
         succeeded,
+        unanswered,
         error: {
           status: binaryOutcome.failed[0].status,
           perFile: binaryOutcome.failed,
@@ -571,7 +576,7 @@ export abstract class RealmSyncBase {
       };
     }
 
-    return { succeeded };
+    return { succeeded, unanswered };
   }
 
   // Fan out the per-file octet-stream POSTs for the binary slice of an
@@ -648,6 +653,7 @@ export abstract class RealmSyncBase {
     addPaths: Set<string>,
   ): Promise<{
     succeeded: string[];
+    unanswered: string[];
     failed: UploadFailure[];
     fatal?: { status: number; message: string };
   }> {
@@ -668,6 +674,7 @@ export abstract class RealmSyncBase {
           : `${batch.length} rejected`;
         return {
           succeeded,
+          unanswered: outcome.unanswered ? batch.map(([rel]) => rel) : [],
           failed: outcome.failed,
           fatal: {
             status: outcome.fatal.status,
@@ -676,7 +683,7 @@ export abstract class RealmSyncBase {
         };
       }
     }
-    return { succeeded, failed: [] };
+    return { succeeded, unanswered: [], failed: [] };
   }
 
   // POST one batch to /_atomic and decode the result. `fatal` is set when
