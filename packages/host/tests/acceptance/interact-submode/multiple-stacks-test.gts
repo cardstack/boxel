@@ -1,4 +1,14 @@
-import { currentURL, click, triggerEvent, waitFor } from '@ember/test-helpers';
+import {
+  currentURL,
+  click,
+  find,
+  focus,
+  settled,
+  triggerEvent,
+  triggerKeyEvent,
+  waitFor,
+  waitUntil,
+} from '@ember/test-helpers';
 
 import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
@@ -86,6 +96,86 @@ module(
           .dom(`[data-test-stack-card="${testRealmURL}Person/fadhlan"]`)
           .doesNotExist();
         assert.dom(`[data-test-stack-card="${testRealmURL}index"]`).exists();
+      });
+
+      test('Escape closes the card focus is in, even when a card in the other stack opened later', async function (assert) {
+        await visitOperatorMode({
+          stacks: [
+            [{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }],
+            [{ id: `${testRealmURL}Pet/vangogh`, format: 'isolated' }],
+          ],
+        });
+        let fadhlan = `[data-test-stack-card="${testRealmURL}Person/fadhlan"]`;
+        let mango = `[data-test-stack-card="${testRealmURL}Pet/mango"]`;
+        let vangogh = `[data-test-stack-card="${testRealmURL}Pet/vangogh"]`;
+        let opener = `${fadhlan} [data-test-view-pet]`;
+
+        await click(opener);
+        assert.dom(mango).isFocused();
+        await click(`${mango} [data-test-close-button]`);
+        await waitUntil(() => !find(mango));
+        assert.dom(opener).isFocused('focus is back in the first stack');
+
+        await triggerKeyEvent(opener, 'keydown', 'Escape');
+        await waitUntil(() => !find(fadhlan));
+
+        assert.dom(vangogh).exists('the card in the other stack stays open');
+      });
+
+      test('Escape closes a card the page loaded with once focus is in it', async function (assert) {
+        await visitOperatorMode({
+          stacks: [
+            [{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }],
+            [{ id: `${testRealmURL}Pet/vangogh`, format: 'isolated' }],
+          ],
+        });
+        let fadhlan = `[data-test-stack-card="${testRealmURL}Person/fadhlan"]`;
+        let vangogh = `[data-test-stack-card="${testRealmURL}Pet/vangogh"]`;
+
+        await focus(fadhlan);
+        await triggerKeyEvent(fadhlan, 'keydown', 'Escape');
+        await waitUntil(() => !find(fadhlan));
+
+        assert.dom(vangogh).exists('the card in the other stack stays open');
+      });
+
+      test('closing a card whose opener is now covered by another card focuses the card on top', async function (assert) {
+        await visitOperatorMode({
+          stacks: [
+            [{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }],
+          ],
+        });
+        let opener = `[data-test-stack-card="${testRealmURL}Person/fadhlan"] [data-test-view-pet]`;
+        let mango = `[data-test-stack-card="${testRealmURL}Pet/mango"]`;
+        let vangogh = `[data-test-stack-card="${testRealmURL}Pet/vangogh"]`;
+        let operatorModeStateService = getService(
+          'operator-mode-state-service',
+        );
+
+        await focus(opener);
+        operatorModeStateService.addItemToStack(
+          operatorModeStateService.createStackItem(
+            `${testRealmURL}Pet/vangogh`,
+            1,
+          ),
+        );
+        await settled();
+        assert.dom(vangogh).isFocused();
+        operatorModeStateService.addItemToStack(
+          operatorModeStateService.createStackItem(
+            `${testRealmURL}Pet/mango`,
+            0,
+          ),
+        );
+        await settled();
+
+        await click(`${vangogh} [data-test-close-button]`);
+        await waitUntil(() => !find(vangogh));
+
+        assert
+          .dom(opener)
+          .isNotFocused('the covered opener does not take focus');
+        assert.dom(mango).isFocused('the card covering it has focus');
       });
 
       test<TestContextWithSave>('can create a card when 2 stacks are present', async function (assert) {

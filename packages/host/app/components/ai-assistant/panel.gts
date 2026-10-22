@@ -71,6 +71,8 @@ export default class AiAssistantPanel extends Component<Signature> {
     >
       <div
         class='ai-assistant-panel'
+        {{! a card the assistant opens doesn't take focus from the panel }}
+        data-holds-focus
         data-test-ai-assistant-panel
         data-test-room-has-messages={{if this.roomResource.messages true false}}
         data-test-room-is-empty={{if this.roomResource.messages false true}}
