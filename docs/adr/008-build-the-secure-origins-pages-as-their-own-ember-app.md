@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-10-20
 scope:
   - packages/secure-origin/**
@@ -203,7 +203,3 @@ screens still needs the same change in the package.
    §1.4, the secure origin's pages and their policy.
 3. #6861, which adds the registration and password-reset pages, the copied
    styles and icons, and the pixel comparison.
-
-## 6. Remediation
-
-No gaps are known.
