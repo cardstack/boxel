@@ -254,17 +254,25 @@ export default function handleDeleteRealm({
         Sentry.captureException(error);
       }
 
-      // The realm's event room has no grants left to follow, so its members
-      // are removed and the room is forgotten. Through the realm server's own
-      // matrix client, the one every realm it serves sends its events with,
-      // and so the room's creator. Best-effort and not awaited: it never
-      // rejects, and the realm is already gone.
-      void retireRealmEventRoom({
-        realmURL,
-        matrixClient,
-        dbAdapter,
-        dispatcher: realmEventDispatcher(),
-      });
+      // The realm's event room has no grants left to follow, so it is
+      // retired: its members are removed and the realm server leaves it, in
+      // the background, and a removal that fails is tried again when a
+      // realm server next starts. Through the realm server's own matrix
+      // client, the one every realm it serves sends its events with, and so
+      // the room's creator. The realm has no grantees left to tell.
+      try {
+        await retireRealmEventRoom(
+          {
+            realmURL,
+            matrixClient,
+            dbAdapter,
+            dispatcher: realmEventDispatcher(),
+          },
+          { notifyGrantees: false },
+        );
+      } catch (error) {
+        Sentry.captureException(error);
+      }
 
       // CS-11156. Broadcast a bulk cache-invalidation for the source realm
       // and each removed published realm so any peer replicas that still

@@ -61,6 +61,8 @@ const { hostsOwnAssets, resolvedBaseRealmURL } = ENV;
 
 const REALM_EVENT_ROOMS_FIRST_RETRY_MS = 2_000;
 const REALM_EVENT_ROOMS_MAX_RETRY_MS = 60_000;
+// The most realms `/_realm-event-rooms` answers for in one request.
+const REALM_EVENT_ROOMS_PER_REQUEST = 100;
 
 export interface RealmServerTokenClaims {
   user: string;
@@ -766,8 +768,15 @@ export default class RealmServerService
     if (!client || this.realmEventRoomsPending.size === 0) {
       return;
     }
-    let realms = [...this.realmEventRoomsPending];
-    this.realmEventRoomsPending.clear();
+    // Asked about a request's worth at a time; the rest wait for the next run,
+    // started below once this one succeeds.
+    let realms = [...this.realmEventRoomsPending].slice(
+      0,
+      REALM_EVENT_ROOMS_PER_REQUEST,
+    );
+    for (let realm of realms) {
+      this.realmEventRoomsPending.delete(realm);
+    }
     try {
       await this.login();
       // TODO(ADR 004 §1.7–1.9): every realm is asked about at the home realm
@@ -802,6 +811,9 @@ export default class RealmServerService
         throw new Error(`${response.status} from _realm-event-rooms`);
       }
       this.realmEventRoomsRetryMs = REALM_EVENT_ROOMS_FIRST_RETRY_MS;
+      if (this.realmEventRoomsPending.size > 0) {
+        void this.joinRealmEventRoomsTask.perform();
+      }
     } catch (e) {
       // Asked about again after a pause, and again on the next subscription.
       for (let realm of realms) {

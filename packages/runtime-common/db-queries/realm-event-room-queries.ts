@@ -62,8 +62,8 @@ export async function insertRealmEventRoom(
 /**
  * Forgets the realm's event room when it is the given room, so the next host
  * that asks for the realm's room gets a new one. For a stored room the realm
- * server can no longer send in, such as after its homeserver was reset, and
- * for the room of a realm that is being deleted.
+ * server can no longer send in or administer, such as after its homeserver
+ * was reset.
  */
 export async function clearRealmEventRoom(
   dbAdapter: DBAdapter,
@@ -99,4 +99,89 @@ export async function fetchRealmNamedGrantees(
     'ORDER BY username',
   ]);
   return rows.map((row) => row.username as string);
+}
+
+/**
+ * Stops the realm's event room being the realm's, in one statement, and keeps
+ * a record of it until its members have been removed (see
+ * `retired_realm_event_rooms`). From the moment this returns, no process sends
+ * the realm's events there: they go to session rooms until a host asks for
+ * the realm's room again and a new one is made. Returns the retired room, or
+ * null when the realm had none.
+ */
+export async function retireRealmEventRoomRow(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+): Promise<string | null> {
+  let rows = await query(dbAdapter, [
+    'WITH retired AS (',
+    '  DELETE FROM realm_event_rooms WHERE realm_url =',
+    param(realmURL),
+    '  RETURNING realm_url, room_id',
+    ')',
+    'INSERT INTO retired_realm_event_rooms (room_id, realm_url)',
+    'SELECT room_id, realm_url FROM retired',
+    'ON CONFLICT (room_id) DO NOTHING',
+    'RETURNING room_id',
+  ]);
+  return (rows[0]?.room_id as string | undefined) ?? null;
+}
+
+/**
+ * Records a room that never became the realm's, such as one another process
+ * beat to being stored, so its invites are withdrawn and it is left.
+ */
+export async function insertRetiredRealmEventRoom(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+  roomId: string,
+): Promise<void> {
+  await query(dbAdapter, [
+    'INSERT INTO retired_realm_event_rooms (room_id, realm_url) VALUES (',
+    param(roomId),
+    ',',
+    param(realmURL),
+    ') ON CONFLICT (room_id) DO NOTHING',
+  ]);
+}
+
+/**
+ * The realm's retired event rooms whose members haven't all been removed.
+ */
+export async function fetchRetiredRealmEventRooms(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+): Promise<string[]> {
+  let rows = await query(dbAdapter, [
+    'SELECT room_id FROM retired_realm_event_rooms WHERE realm_url =',
+    param(realmURL),
+    'ORDER BY room_id',
+  ]);
+  return rows.map((row) => row.room_id as string);
+}
+
+/**
+ * Forgets a retired room once every member has been removed and the realm
+ * server has left it.
+ */
+export async function clearRetiredRealmEventRoom(
+  dbAdapter: DBAdapter,
+  roomId: string,
+): Promise<void> {
+  await query(dbAdapter, [
+    'DELETE FROM retired_realm_event_rooms WHERE room_id =',
+    param(roomId),
+  ]);
+}
+
+/**
+ * Every realm with a retired event room still to be emptied.
+ */
+export async function fetchRealmsWithRetiredEventRooms(
+  dbAdapter: DBAdapter,
+): Promise<string[]> {
+  let rows = await query(dbAdapter, [
+    'SELECT DISTINCT realm_url FROM retired_realm_event_rooms ORDER BY realm_url',
+  ]);
+  return rows.map((row) => row.realm_url as string);
 }

@@ -15,7 +15,10 @@ import {
 import type { CreateRoutesArgs } from '../routes.ts';
 import { normalizeRealmURL } from '../utils/realm-url.ts';
 import { realmEventDispatcher } from '../realm-event-dispatcher.ts';
-import { syncRealmEventRoom } from '../realm-event-rooms.ts';
+import {
+  retireRealmEventRoom,
+  syncRealmEventRoom,
+} from '../realm-event-rooms.ts';
 import {
   appendRealmServerToUserAccountData,
   appendRealmToUserAccountData,
@@ -139,16 +142,25 @@ export default function handleUpsertRealmUserPermission({
       [user]: actions,
     });
 
-    // The realm's event room holds the users its grants name, so the grant
-    // invites or removes this user. Through the realm server's own matrix
-    // client, the one every realm it serves sends its events with. Not
-    // awaited: it is paced behind the realm's events and never rejects.
-    void syncRealmEventRoom({
+    // The realm's event room holds the users its grants name. Revoking this
+    // user's access retires the room before this answers, so nothing more
+    // reaches them through it; granting it invites them, paced behind the
+    // realm's events and not awaited. Through the realm server's own matrix
+    // client, the one every realm it serves sends its events with.
+    let realmEventRoomDeps = {
       realmURL: normalizedRealmHref,
       matrixClient,
       dbAdapter,
       dispatcher: realmEventDispatcher(),
-    });
+    };
+    let hadAccess =
+      currentPermissions[user]?.includes('read') ||
+      currentPermissions[user]?.includes('write');
+    if (actions.length === 0 && hadAccess) {
+      await retireRealmEventRoom(realmEventRoomDeps);
+    } else {
+      void syncRealmEventRoom(realmEventRoomDeps);
+    }
 
     // Push a live "your realms changed" signal so a running session re-derives
     // its list from `_realm-auth` without a reload. This also covers the case

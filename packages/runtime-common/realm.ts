@@ -2477,6 +2477,15 @@ export interface RealmAdapter {
     dbAdapter: DBAdapter,
   ): Promise<void>;
 
+  // For a revoked grant: the realm's event room stops receiving its events
+  // before this resolves, in every process, and is replaced the next time a
+  // host asks for it.
+  retireRealmEventRoom?(
+    realmUrl: string,
+    matrixClient: MatrixClient,
+    dbAdapter: DBAdapter,
+  ): Promise<void>;
+
   // optional, set this to override _lint endpoint behavior in tests
   lintStub?(
     request: Request,
@@ -16623,10 +16632,27 @@ export class Realm {
     // permission PATCHes are admin-rare so the over-invalidation is
     // negligible).
     await this.clearRealmIndexCachesAndBroadcast();
-    // The realm's event room holds the users its grants name, so a grant
-    // that names someone new invites them and a revoked one removes them.
-    // Not awaited: the invites and kicks are paced behind the realm's events.
-    void this.syncRealmEventRoom();
+    // The realm's event room holds the users its grants name. A revoked grant
+    // retires the room before this answers, so nothing more reaches the
+    // revoked user through it; a grant that names someone new invites them,
+    // paced behind the realm's events and not awaited.
+    let revoked = Object.entries(patch).some(
+      ([user, permissions]) =>
+        user !== '*' &&
+        (currentPermissions[user]?.includes('read') ||
+          currentPermissions[user]?.includes('write')) &&
+        !permissions?.includes('read') &&
+        !permissions?.includes('write'),
+    );
+    if (revoked) {
+      await this.#adapter.retireRealmEventRoom?.(
+        this.url,
+        this.#matrixClient,
+        this.#dbAdapter,
+      );
+    } else {
+      void this.syncRealmEventRoom();
+    }
     // Tell each affected user their accessible-realm set changed so a running
     // session re-derives it from `_realm-auth` (which reads the permissions
     // written just above) without a reload. Nothing else notifies a grantee:

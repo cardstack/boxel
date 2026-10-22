@@ -8,11 +8,15 @@ import type { Realm } from '@cardstack/runtime-common';
 import {
   fetchRealmEventRoom,
   fetchRealmNamedGrantees,
+  fetchRetiredRealmEventRooms,
   insertPermissions,
   insertRealmEventRoom,
 } from '@cardstack/runtime-common';
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
-import { passwordFromSeed } from '@cardstack/runtime-common/matrix-client';
+import {
+  MatrixRequestError,
+  passwordFromSeed,
+} from '@cardstack/runtime-common/matrix-client';
 import {
   APP_BOXEL_REALM_EVENT_ROOM_TYPE,
   APP_BOXEL_REALM_EVENT_TYPE,
@@ -111,13 +115,24 @@ module(basename(import.meta.filename), function () {
       ]);
     });
 
-    test("creates a private realm's room for a grantee, inviting every grantee but the realm server", async function (assert) {
+    test("creates a private realm's room for a grantee, inviting every grantee but the realm server before storing it", async function (assert) {
       await insertPermissions(dbAdapter, new URL(realmURL), {
         '@alice:localhost': ['read', 'write', 'realm-owner'],
         '@bob:localhost': ['read'],
         [SELF]: ['read'],
       });
       let { matrixClient, calls } = fakeMatrixClient();
+      let storedAtInvite: (string | null)[] = [];
+      let realInvite = matrixClient.inviteUser.bind(matrixClient);
+      (matrixClient as any).inviteUser = async (
+        roomId: string,
+        userId: string,
+      ) => {
+        storedAtInvite.push(
+          (await fetchRealmEventRoom(dbAdapter, realmURL)).roomId,
+        );
+        await realInvite(roomId, userId);
+      };
 
       let roomId = await ensureRealmEventRoom(
         deps(matrixClient),
@@ -134,6 +149,11 @@ module(basename(import.meta.filename), function () {
         ],
         'the grantees are invited before the room is answered',
       );
+      assert.deepEqual(
+        storedAtInvite,
+        [null, null],
+        'no event can go to the room before its grantees are invited',
+      );
       assert.deepEqual(await fetchRealmEventRoom(dbAdapter, realmURL), {
         isPrivate: true,
         roomId: roomId!,
@@ -145,6 +165,23 @@ module(basename(import.meta.filename), function () {
       );
       assert.strictEqual(again, roomId, 'asking again answers the same room');
       assert.strictEqual(calls.length, 3, 'and changes nothing');
+    });
+
+    test('creates one room when two hosts ask at once', async function (assert) {
+      await insertPermissions(dbAdapter, new URL(realmURL), {
+        '@alice:localhost': ['read', 'write', 'realm-owner'],
+        '@bob:localhost': ['read'],
+      });
+      let { matrixClient, calls } = fakeMatrixClient();
+      let [a, b] = await Promise.all([
+        ensureRealmEventRoom(deps(matrixClient), '@alice:localhost'),
+        ensureRealmEventRoom(deps(matrixClient), '@bob:localhost'),
+      ]);
+      assert.strictEqual(a, b, 'both hosts get the same room');
+      assert.strictEqual(
+        calls.filter((call) => call.startsWith('create')).length,
+        1,
+      );
     });
 
     test('answers no room to a user no grant names, and creates none', async function (assert) {
@@ -178,7 +215,47 @@ module(basename(import.meta.filename), function () {
       assert.deepEqual(calls, []);
     });
 
-    test('uses the room another process stored first, and leaves its own', async function (assert) {
+    test('rejects, rather than answer no room, when synapse stays overloaded', async function (assert) {
+      await insertPermissions(dbAdapter, new URL(realmURL), {
+        '@alice:localhost': ['read', 'write', 'realm-owner'],
+      });
+      await insertRealmEventRoom(dbAdapter, realmURL, '!busy:localhost');
+      let { matrixClient } = fakeMatrixClient();
+      (matrixClient as any).getRoomMemberships = async () => {
+        throw new MatrixRequestError('overloaded', 503);
+      };
+
+      await assert.rejects(
+        ensureRealmEventRoom(
+          {
+            ...deps(matrixClient),
+            dispatcher: new RealmEventDispatcher({
+              maxAttempts: 1,
+              initialBackoffMs: 1,
+            }),
+          },
+          '@alice:localhost',
+        ),
+        /overloaded/,
+      );
+    });
+
+    test('makes a new room when the stored one is a room the realm server is no longer in', async function (assert) {
+      await insertPermissions(dbAdapter, new URL(realmURL), {
+        '@alice:localhost': ['read', 'write', 'realm-owner'],
+      });
+      await insertRealmEventRoom(dbAdapter, realmURL, '!gone:localhost');
+      let { matrixClient } = fakeMatrixClient();
+
+      let roomId = await ensureRealmEventRoom(
+        deps(matrixClient),
+        '@alice:localhost',
+      );
+
+      assert.strictEqual(roomId, '!created-1:localhost');
+    });
+
+    test('uses the room another process stored first, inviting the grantees to it, and retires its own', async function (assert) {
       await insertPermissions(dbAdapter, new URL(realmURL), {
         '@alice:localhost': ['read', 'write', 'realm-owner'],
       });
@@ -200,15 +277,25 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(roomId, '!winner:localhost');
       assert.deepEqual(calls, [
         'create !created-1:localhost',
+        'invite @alice:localhost',
+        'kick @alice:localhost',
         'leave !created-1:localhost',
         'invite @alice:localhost',
       ]);
+      assert.strictEqual(
+        rooms.get('!winner:localhost')!.get('@alice:localhost'),
+        'invite',
+      );
+      assert.deepEqual(
+        await fetchRetiredRealmEventRooms(dbAdapter, realmURL),
+        [],
+        'the unused room is emptied and forgotten',
+      );
     });
 
-    test('syncing invites a new grantee and kicks a member whose grant was revoked', async function (assert) {
+    test('syncing invites a new grantee without touching the members', async function (assert) {
       await insertPermissions(dbAdapter, new URL(realmURL), {
         '@alice:localhost': ['read', 'write', 'realm-owner'],
-        '@bob:localhost': ['read'],
       });
       let { matrixClient, rooms, calls } = fakeMatrixClient();
       let roomId = (await ensureRealmEventRoom(
@@ -219,28 +306,61 @@ module(basename(import.meta.filename), function () {
       calls.length = 0;
 
       await insertPermissions(dbAdapter, new URL(realmURL), {
+        '@carol:localhost': ['read'],
+      });
+      await syncRealmEventRoom(deps(matrixClient));
+
+      assert.deepEqual(calls, ['invite @carol:localhost']);
+      calls.length = 0;
+      await syncRealmEventRoom(deps(matrixClient));
+      assert.deepEqual(calls, [], 'a second sync changes nothing');
+    });
+
+    test('a member no grant names retires the room, so a later grantee never sees them', async function (assert) {
+      await insertPermissions(dbAdapter, new URL(realmURL), {
+        '@alice:localhost': ['read', 'write', 'realm-owner'],
+        '@bob:localhost': ['read'],
+      });
+      let { matrixClient, rooms, calls } = fakeMatrixClient();
+      let oldRoom = (await ensureRealmEventRoom(
+        deps(matrixClient),
+        '@alice:localhost',
+      ))!;
+      rooms.get(oldRoom)!.set('@alice:localhost', 'join');
+      calls.length = 0;
+
+      // Bob's grant is revoked where nothing saw it, and Carol is granted.
+      await insertPermissions(dbAdapter, new URL(realmURL), {
         '@bob:localhost': [],
         '@carol:localhost': ['read'],
       });
       await syncRealmEventRoom(deps(matrixClient));
 
-      assert.deepEqual(calls.sort(), [
-        'invite @carol:localhost',
+      assert.strictEqual(
+        (await fetchRealmEventRoom(dbAdapter, realmURL)).roomId,
+        null,
+        'the old room no longer carries the realm events',
+      );
+      assert.deepEqual(calls, [
+        'kick @alice:localhost',
         'kick @bob:localhost',
+        `leave ${oldRoom}`,
       ]);
       assert.deepEqual(
-        Object.fromEntries(rooms.get(roomId)!),
-        {
-          '@alice:localhost': 'join',
-          '@bob:localhost': 'leave',
-          '@carol:localhost': 'invite',
-        },
-        'the members are the users the grants name',
+        await fetchRetiredRealmEventRooms(dbAdapter, realmURL),
+        [],
       );
 
-      calls.length = 0;
-      await syncRealmEventRoom(deps(matrixClient));
-      assert.deepEqual(calls, [], 'a second sync changes nothing');
+      let newRoom = (await ensureRealmEventRoom(
+        deps(matrixClient),
+        '@carol:localhost',
+      ))!;
+      assert.notStrictEqual(newRoom, oldRoom);
+      assert.deepEqual(
+        [...rooms.get(newRoom)!.keys()].sort(),
+        ['@alice:localhost', '@carol:localhost'],
+        "the new room's state holds only the current grantees",
+      );
     });
 
     test('syncing a realm without a room does nothing', async function (assert) {
@@ -268,7 +388,7 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test("retiring a realm's room forgets it, kicks every member, then leaves", async function (assert) {
+    test("retiring a realm's room stops its events going there at once, then empties and leaves it", async function (assert) {
       await insertPermissions(dbAdapter, new URL(realmURL), {
         '@alice:localhost': ['read', 'write', 'realm-owner'],
         '@bob:localhost': ['read'],
@@ -280,7 +400,7 @@ module(basename(import.meta.filename), function () {
       );
       calls.length = 0;
 
-      await retireRealmEventRoom(deps(matrixClient));
+      await retireRealmEventRoom(deps(matrixClient), { waitForRemovals: true });
 
       assert.deepEqual(calls, [
         'kick @alice:localhost',
@@ -291,6 +411,87 @@ module(basename(import.meta.filename), function () {
         (await fetchRealmEventRoom(dbAdapter, realmURL)).roomId,
         null,
       );
+      assert.deepEqual(
+        await fetchRetiredRealmEventRooms(dbAdapter, realmURL),
+        [],
+      );
+    });
+
+    test('keeps a retired room it could not empty, still in it, and empties it on the next sync', async function (assert) {
+      await insertPermissions(dbAdapter, new URL(realmURL), {
+        '@alice:localhost': ['read', 'write', 'realm-owner'],
+        '@bob:localhost': ['read'],
+      });
+      let { matrixClient, calls } = fakeMatrixClient();
+      let roomId = (await ensureRealmEventRoom(
+        deps(matrixClient),
+        '@alice:localhost',
+      ))!;
+      calls.length = 0;
+      let realKick = matrixClient.kickUser.bind(matrixClient);
+      let failBob = true;
+      (matrixClient as any).kickUser = async (
+        room: string,
+        user: string,
+        reason: string,
+      ) => {
+        if (user === '@bob:localhost' && failBob) {
+          throw new Error('kick failed');
+        }
+        await realKick(room, user, reason);
+      };
+
+      await retireRealmEventRoom(deps(matrixClient), { waitForRemovals: true });
+
+      assert.false(
+        calls.includes(`leave ${roomId}`),
+        'the realm server stays in a room it could not empty',
+      );
+      assert.deepEqual(
+        await fetchRetiredRealmEventRooms(dbAdapter, realmURL),
+        [roomId],
+        'and keeps its record',
+      );
+
+      failBob = false;
+      calls.length = 0;
+      await syncRealmEventRoom(deps(matrixClient));
+      assert.deepEqual(calls, ['kick @bob:localhost', `leave ${roomId}`]);
+      assert.deepEqual(
+        await fetchRetiredRealmEventRooms(dbAdapter, realmURL),
+        [],
+      );
+    });
+
+    test('keeps a retired room whose members could not be read', async function (assert) {
+      await insertPermissions(dbAdapter, new URL(realmURL), {
+        '@alice:localhost': ['read', 'write', 'realm-owner'],
+      });
+      let { matrixClient, calls } = fakeMatrixClient();
+      let roomId = (await ensureRealmEventRoom(
+        deps(matrixClient),
+        '@alice:localhost',
+      ))!;
+      calls.length = 0;
+      let realRead = matrixClient.getRoomMemberships.bind(matrixClient);
+      (matrixClient as any).getRoomMemberships = async () => {
+        throw new Error('read failed');
+      };
+
+      await retireRealmEventRoom(deps(matrixClient), { waitForRemovals: true });
+
+      assert.deepEqual(
+        calls,
+        [],
+        'nothing is kicked, and the room is not left',
+      );
+      assert.deepEqual(await fetchRetiredRealmEventRooms(dbAdapter, realmURL), [
+        roomId,
+      ]);
+
+      (matrixClient as any).getRoomMemberships = realRead;
+      await syncRealmEventRoom(deps(matrixClient));
+      assert.deepEqual(calls, ['kick @alice:localhost', `leave ${roomId}`]);
     });
   });
 
@@ -534,13 +735,13 @@ module(basename(import.meta.filename), function () {
       );
     });
 
-    test('a grant invites its user to the room, and revoking it removes them', async function (assert) {
-      let roomId: string = (await realmEventRooms([testRealmHref])).body.rooms[
+    test('a grant invites its user to the room, and revoking it replaces the room with one that never held them', async function (assert) {
+      let oldRoom: string = (await realmEventRooms([testRealmHref])).body.rooms[
         testRealmHref
       ];
-      let asMember = await joinAsMember(roomId);
+      let asMember = await joinAsMember(oldRoom);
       assert.strictEqual(
-        await membershipOf(asMember, roomId, newcomer),
+        await membershipOf(asMember, oldRoom, newcomer),
         undefined,
       );
 
@@ -548,24 +749,30 @@ module(basename(import.meta.filename), function () {
       assert.strictEqual(granted.status, 200, 'the grant succeeds');
       await waitUntil(
         async () =>
-          (await membershipOf(asMember, roomId, newcomer)) === 'invite',
+          (await membershipOf(asMember, oldRoom, newcomer)) === 'invite',
         { timeout: 10_000, timeoutMessage: 'the grantee was never invited' },
       );
 
       let revoked = await patchPermissions({ [newcomer]: [] });
       assert.strictEqual(revoked.status, 200, 'the revocation succeeds');
-      await waitUntil(
-        async () =>
-          (await membershipOf(asMember, roomId, newcomer)) === 'leave',
-        {
-          timeout: 10_000,
-          timeoutMessage: 'the revoked user was never removed',
-        },
-      );
       assert.strictEqual(
-        await membershipOf(asMember, roomId, member),
-        'join',
-        'the remaining grantee is still a member',
+        (await fetchRealmEventRoom(dbAdapter, testRealmHref)).roomId,
+        null,
+        "by the time the revocation answers, no process sends the realm's events to the old room",
+      );
+
+      let newRoom: string = (await realmEventRooms([testRealmHref])).body.rooms[
+        testRealmHref
+      ];
+      assert.ok(newRoom, 'asking again gets a room');
+      assert.notStrictEqual(newRoom, oldRoom, 'a new one');
+      let asMemberOfNewRoom = await joinAsMember(newRoom);
+      let members = (await (
+        await asMemberOfNewRoom(`rooms/${encodeURIComponent(newRoom)}/members`)
+      ).json()) as { chunk: { state_key: string }[] };
+      assert.false(
+        members.chunk.some((event) => event.state_key === newcomer),
+        "the revoked user's id is nowhere in the new room's state",
       );
     });
 

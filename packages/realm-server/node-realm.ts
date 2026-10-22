@@ -66,6 +66,7 @@ import {
 } from './realm-event-dispatcher.ts';
 import {
   ensureRealmEventRoom,
+  retireRealmEventRoom,
   syncRealmEventRoom,
 } from './realm-event-rooms.ts';
 
@@ -498,6 +499,19 @@ export class NodeAdapter implements RealmAdapter {
     dbAdapter: DBAdapter,
   ): Promise<void> {
     await syncRealmEventRoom({
+      realmURL: realmUrl,
+      matrixClient,
+      dbAdapter,
+      dispatcher: this.dispatcher,
+    });
+  }
+
+  async retireRealmEventRoom(
+    realmUrl: string,
+    matrixClient: MatrixClient,
+    dbAdapter: DBAdapter,
+  ): Promise<void> {
+    await retireRealmEventRoom({
       realmURL: realmUrl,
       matrixClient,
       dbAdapter,
