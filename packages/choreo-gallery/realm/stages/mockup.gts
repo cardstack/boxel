@@ -2684,10 +2684,12 @@ export class Mockup extends Component {
       @keyframes mg-beckon {
         0%,
         100% {
-          box-shadow: 0 0 0 0 #ff6a3a00;
+          box-shadow: 0 0 0 0
+            color-mix(in srgb, var(--ember-hot) 0%, transparent);
         }
         50% {
-          box-shadow: 0 0 0 4px #ff6a3a26;
+          box-shadow: 0 0 0 4px
+            color-mix(in srgb, var(--ember-hot) 14.9%, transparent);
         }
       }
       @media (prefers-reduced-motion: reduce) {
@@ -2886,8 +2888,8 @@ export class Mockup extends Component {
            white fill: a selected state that outranks the primary action is a
            selected state arguing with it. */
       .mg-seg button:last-child {
-        background: var(--ember-hot, #ff6a3a);
-        border-color: var(--ember-hot, #ff6a3a);
+        background: var(--ember-hot);
+        border-color: var(--ember-hot);
         color: #ffffff;
         font-weight: 700;
       }

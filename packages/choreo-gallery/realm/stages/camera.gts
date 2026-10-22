@@ -781,7 +781,8 @@ export class Camera extends Component {
         background: var(--primary);
         border-color: transparent;
         color: #fff;
-        box-shadow: 0 4px 14px rgba(255, 59, 31, 0.45);
+        box-shadow: 0 4px 14px
+          color-mix(in srgb, var(--primary) 45%, transparent);
       }
 
       /* an X that is ON reads reversed — ink chip, paper glyph — with the same
@@ -829,7 +830,8 @@ export class Camera extends Component {
         color: #fff;
         background: var(--primary);
         border-color: transparent;
-        box-shadow: 0 4px 14px rgba(255, 59, 31, 0.5);
+        box-shadow: 0 4px 14px
+          color-mix(in srgb, var(--primary) 50%, transparent);
       }
 
       .cam-pass.is-active {

@@ -119,7 +119,8 @@ export class SharedTabs extends Component {
         inset: 0;
         border-radius: inherit;
         background: var(--foreground);
-        box-shadow: 0 10px 24px rgba(255, 59, 31, 0.28);
+        box-shadow: 0 10px 24px
+          color-mix(in srgb, var(--primary) 28%, transparent);
         z-index: -1;
       }
 

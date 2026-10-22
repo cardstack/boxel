@@ -738,7 +738,8 @@ export class Grip extends Component {
       }
 
       .chip.is-on {
-        box-shadow: inset 0 0 0 1px rgba(255, 59, 31, 0.35);
+        box-shadow: inset 0 0 0 1px
+          color-mix(in srgb, var(--primary) 35%, transparent);
         color: var(--ember-hot);
       }
 
@@ -816,12 +817,13 @@ export class Grip extends Component {
       }
 
       .tp-rail.is-live {
-        background: rgba(230, 163, 90, 0.05);
-        box-shadow: inset 0 0 0 1px rgba(230, 163, 90, 0.3);
+        background: color-mix(in srgb, var(--copper) 5%, transparent);
+        box-shadow: inset 0 0 0 1px
+          color-mix(in srgb, var(--copper) 30%, transparent);
       }
 
       .tp-rail.is-over {
-        background: rgba(230, 163, 90, 0.12);
+        background: color-mix(in srgb, var(--copper) 12%, transparent);
         box-shadow: inset 0 0 0 1px var(--copper);
       }
 
@@ -1035,8 +1037,8 @@ export class Grip extends Component {
       }
 
       .tp-pill.is-on {
-        background: rgba(230, 163, 90, 0.16);
-        border-color: rgba(230, 163, 90, 0.45);
+        background: color-mix(in srgb, var(--copper) 16%, transparent);
+        border-color: color-mix(in srgb, var(--copper) 45%, transparent);
         color: var(--copper-ink);
       }
 
@@ -1103,12 +1105,12 @@ export class Grip extends Component {
       }
 
       .tp-table.is-live {
-        background: rgba(230, 163, 90, 0.08);
-        border-color: rgba(230, 163, 90, 0.4);
+        background: color-mix(in srgb, var(--copper) 8%, transparent);
+        border-color: color-mix(in srgb, var(--copper) 40%, transparent);
       }
 
       .tp-table.is-over {
-        background: rgba(230, 163, 90, 0.2);
+        background: color-mix(in srgb, var(--copper) 20%, transparent);
         border-color: var(--copper);
         border-style: solid;
       }
@@ -1117,8 +1119,8 @@ export class Grip extends Component {
          go, which is the difference between a rule and a punishment: the snap-back
          still happens, but nobody was surprised by it. */
       .tp-table.is-no {
-        background: rgba(255, 59, 31, 0.1);
-        border-color: rgba(255, 59, 31, 0.5);
+        background: color-mix(in srgb, var(--primary) 10%, transparent);
+        border-color: color-mix(in srgb, var(--primary) 50%, transparent);
         border-style: solid;
         opacity: 1;
       }
@@ -1128,8 +1130,8 @@ export class Grip extends Component {
       }
 
       .tp-table.is-wrong {
-        background: rgba(255, 59, 31, 0.08);
-        border-color: rgba(255, 59, 31, 0.45);
+        background: color-mix(in srgb, var(--primary) 8%, transparent);
+        border-color: color-mix(in srgb, var(--primary) 45%, transparent);
         border-style: solid;
       }
 

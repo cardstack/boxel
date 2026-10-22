@@ -1190,7 +1190,7 @@ export class BuildOrder extends Component {
       .bo-tail {
         fill: none;
         /* ember, not copper — see choreo-mark.gts, same fix for the same reason */
-        stroke: rgba(255, 59, 31, 0.35);
+        stroke: color-mix(in srgb, var(--primary) 35%, transparent);
         stroke-width: 2.2;
         stroke-linecap: round;
       }
@@ -1207,7 +1207,7 @@ export class BuildOrder extends Component {
 
       .bo-orbit {
         fill: none;
-        stroke: rgba(139, 150, 156, 0.75);
+        stroke: color-mix(in srgb, var(--steel) 75%, transparent);
         stroke-width: 1.6;
         stroke-linecap: round;
       }
@@ -1544,7 +1544,8 @@ export class BuildOrder extends Component {
         height: 8px;
         border-radius: 50%;
         background: var(--primary);
-        box-shadow: 0 0 0 3px rgba(255, 59, 31, 0.26);
+        box-shadow: 0 0 0 3px
+          color-mix(in srgb, var(--primary) 26%, transparent);
       }
 
       /* the real control, invisible over the drawing */

@@ -1218,7 +1218,8 @@ export class Playhead extends Component {
         height: 30px;
         border-radius: 8px;
         background: linear-gradient(180deg, var(--ember-hot), var(--primary));
-        box-shadow: 0 4px 14px rgba(255, 59, 31, 0.35);
+        box-shadow: 0 4px 14px
+          color-mix(in srgb, var(--primary) 35%, transparent);
       }
 
       .ph-seg-btn {
@@ -1360,7 +1361,7 @@ export class Playhead extends Component {
         /* the disc is the element; the padding is what keeps the tick inside it */
         padding: 8px;
         border-radius: 50%;
-        background: rgba(255, 59, 31, 0.16);
+        background: color-mix(in srgb, var(--primary) 16%, transparent);
         color: var(--ember-hot);
         fill: none;
         stroke: currentColor;
@@ -1559,7 +1560,8 @@ export class Playhead extends Component {
         margin: -5.5px 0 0 -5.5px;
         border-radius: 50%;
         background: #fff;
-        box-shadow: 0 0 0 3px rgba(255, 59, 31, 0.28);
+        box-shadow: 0 0 0 3px
+          color-mix(in srgb, var(--primary) 28%, transparent);
       }
 
       /* the real control, invisible over the drawing */

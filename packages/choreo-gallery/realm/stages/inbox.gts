@@ -318,8 +318,8 @@ export class Inbox extends Component {
         /* a color tint rather than a neutral one — the bar is chrome the same way
          the topbar or a card is, and everything else on the page that plays that
          role takes its warmth from the brand rather than from plain white */
-        background: rgba(255, 59, 31, 0.05);
-        border: 1px solid rgba(255, 59, 31, 0.14);
+        background: color-mix(in srgb, var(--primary) 5%, transparent);
+        border: 1px solid color-mix(in srgb, var(--primary) 14%, transparent);
       }
 
       .inbox-compose {

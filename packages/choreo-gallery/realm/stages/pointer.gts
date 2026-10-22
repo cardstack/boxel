@@ -192,7 +192,7 @@ export class FollowPointer extends Component {
         background:
           radial-gradient(
             80% 70% at 50% 40%,
-            rgba(255, 59, 31, 0.16),
+            color-mix(in srgb, var(--primary) 16%, transparent),
             transparent 60%
           ),
           rgba(var(--surface-tint-rgb), 0.14);
@@ -220,7 +220,7 @@ export class FollowPointer extends Component {
         border-radius: 50%;
         background: radial-gradient(
           circle,
-          rgba(255, 59, 31, 0.32),
+          color-mix(in srgb, var(--primary) 32%, transparent),
           transparent 68%
         );
         pointer-events: none;
@@ -247,7 +247,7 @@ export class FollowPointer extends Component {
         border-radius: 50%;
         background: #fff;
         box-shadow:
-          0 0 0 6px rgba(255, 59, 31, 0.22),
+          0 0 0 6px color-mix(in srgb, var(--primary) 22%, transparent),
           0 0 28px var(--glow);
         pointer-events: none;
       }

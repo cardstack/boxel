@@ -350,7 +350,7 @@ export class Lightbox extends Component {
         background:
           radial-gradient(
             120% 90% at 50% 42%,
-            rgba(255, 106, 58, 0.16),
+            color-mix(in srgb, var(--ember-hot) 16%, transparent),
             transparent 58%
           ),
           radial-gradient(
@@ -538,7 +538,7 @@ export class Lightbox extends Component {
         background:
           radial-gradient(
             120% 90% at 50% 42%,
-            rgba(255, 106, 58, 0.16),
+            color-mix(in srgb, var(--ember-hot) 16%, transparent),
             transparent 58%
           ),
           radial-gradient(

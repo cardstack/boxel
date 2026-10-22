@@ -246,7 +246,7 @@ export class Subdivision extends Component {
       }
 
       .sub-tile.is-on {
-        border-color: rgba(255, 59, 31, 0.45);
+        border-color: color-mix(in srgb, var(--primary) 45%, transparent);
         background: var(--bg-spot);
       }
 

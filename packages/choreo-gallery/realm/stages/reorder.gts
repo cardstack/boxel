@@ -198,8 +198,9 @@ export class ReorderList extends Component {
       }
 
       .track.is-on {
-        border-color: rgba(255, 59, 31, 0.35);
-        box-shadow: inset 0 0 0 1px rgba(255, 59, 31, 0.18);
+        border-color: color-mix(in srgb, var(--primary) 35%, transparent);
+        box-shadow: inset 0 0 0 1px
+          color-mix(in srgb, var(--primary) 18%, transparent);
       }
 
       .track-hue {

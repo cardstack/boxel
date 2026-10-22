@@ -1189,8 +1189,8 @@ export class Drift extends Component {
           color 220ms var(--ease);
       }
       .drift-gate.is-next {
-        border-color: rgba(230, 163, 90, 0.72);
-        color: rgba(230, 163, 90, 0.85);
+        border-color: color-mix(in srgb, var(--copper) 72%, transparent);
+        color: color-mix(in srgb, var(--copper) 85%, transparent);
       }
       .drift-car {
         background: var(--primary);
@@ -1288,7 +1288,7 @@ export class Drift extends Component {
       }
 
       .drift-flag {
-        background: rgba(230, 163, 90, 0.2);
+        background: color-mix(in srgb, var(--copper) 20%, transparent);
         border-radius: 7px;
         color: #f0c48a;
         font-family: var(--font-mono);
@@ -1446,7 +1446,7 @@ export class Drift extends Component {
       }
 
       .drift-lap.is-best {
-        background: rgba(230, 163, 90, 0.14);
+        background: color-mix(in srgb, var(--copper) 14%, transparent);
         color: var(--copper-ink);
       }
 
@@ -1513,8 +1513,8 @@ export class Drift extends Component {
       }
 
       .drift-race.is-on {
-        background: rgba(230, 163, 90, 0.18);
-        border-color: rgba(230, 163, 90, 0.5);
+        background: color-mix(in srgb, var(--copper) 18%, transparent);
+        border-color: color-mix(in srgb, var(--copper) 50%, transparent);
         color: var(--copper-ink);
       }
     </style>

@@ -634,7 +634,8 @@ export class Jump extends Component {
       }
 
       .chip.is-on {
-        box-shadow: inset 0 0 0 1px rgba(255, 59, 31, 0.35);
+        box-shadow: inset 0 0 0 1px
+          color-mix(in srgb, var(--primary) 35%, transparent);
         color: var(--ember-hot);
       }
 
@@ -753,7 +754,7 @@ export class Jump extends Component {
 
       /* a failure that has been looked at: still there, no longer shouting */
       .jump-tick.is-red.is-seen {
-        background: rgba(255, 59, 31, 0.4);
+        background: color-mix(in srgb, var(--primary) 40%, transparent);
       }
 
       .jump-tick.is-at {
@@ -926,8 +927,9 @@ export class Jump extends Component {
          notch or runs into the curve and is clipped into a wedge, and no radius makes
          that look deliberate. A ring follows the shape. */
       .jump-row.is-red {
-        background: rgba(255, 59, 31, 0.07);
-        box-shadow: inset 0 0 0 1px rgba(255, 59, 31, 0.22);
+        background: color-mix(in srgb, var(--primary) 7%, transparent);
+        box-shadow: inset 0 0 0 1px
+          color-mix(in srgb, var(--primary) 22%, transparent);
         opacity: 0.92;
       }
 

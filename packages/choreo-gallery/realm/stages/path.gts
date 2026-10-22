@@ -98,7 +98,7 @@ export class PathDraw extends Component {
         background:
           radial-gradient(
             80% 70% at 50% 40%,
-            rgba(255, 59, 31, 0.16),
+            color-mix(in srgb, var(--primary) 16%, transparent),
             transparent 60%
           ),
           rgba(var(--surface-tint-rgb), 0.14);

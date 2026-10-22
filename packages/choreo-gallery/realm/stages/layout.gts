@@ -138,7 +138,8 @@ export class LayoutToggle extends Component {
       }
 
       .chip.is-on {
-        box-shadow: inset 0 0 0 1px rgba(255, 59, 31, 0.35);
+        box-shadow: inset 0 0 0 1px
+          color-mix(in srgb, var(--primary) 35%, transparent);
         color: var(--ember-hot);
       }
 

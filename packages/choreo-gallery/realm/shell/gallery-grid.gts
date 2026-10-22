@@ -491,7 +491,8 @@ export class GalleryGrid extends Component<Signature> {
       .chip.is-on {
         border-color: var(--border-strong);
         background: var(--bg-spot);
-        box-shadow: inset 0 0 0 1px rgba(255, 59, 31, 0.35);
+        box-shadow: inset 0 0 0 1px
+          color-mix(in srgb, var(--primary) 35%, transparent);
         /* full ink: the raised ground and the ember ring say selected, and
            --primary-ink falls under 4.5:1 on --bg-spot in the dark palette */
         color: var(--foreground);

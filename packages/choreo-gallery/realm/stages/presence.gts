@@ -270,7 +270,7 @@ const ModeColumn = <template>
 
     .toast.is-fail {
       background: color-mix(in srgb, var(--steel) 14%, var(--bg-spot));
-      border-color: rgba(139, 150, 156, 0.28);
+      border-color: color-mix(in srgb, var(--steel) 28%, transparent);
     }
 
     .toast.is-fail .toast-mark {

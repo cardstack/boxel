@@ -147,7 +147,7 @@ export class Lists extends Component {
       }
 
       .list-name.is-bench {
-        border-color: rgba(228, 163, 90, 0.4);
+        border-color: color-mix(in srgb, var(--copper) 40%, transparent);
         color: var(--copper-ink);
       }
     </style>

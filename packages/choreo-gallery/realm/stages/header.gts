@@ -212,7 +212,7 @@ export class HideHeader extends Component {
         background:
           radial-gradient(
             80% 50% at 50% 0%,
-            rgba(255, 59, 31, 0.08),
+            color-mix(in srgb, var(--primary) 8%, transparent),
             transparent 55%
           ),
           var(--inset);
@@ -390,7 +390,7 @@ export class HideHeader extends Component {
           color-mix(in srgb, var(--primary) 20%, var(--bg-spot)),
           color-mix(in srgb, var(--primary) 10%, var(--inset))
         );
-        border-color: rgba(255, 59, 31, 0.28);
+        border-color: color-mix(in srgb, var(--primary) 28%, transparent);
       }
 
       .bubble.is-me small {
@@ -523,7 +523,7 @@ export class HideHeader extends Component {
         background:
           radial-gradient(
             80% 50% at 50% 0%,
-            rgba(255, 59, 31, 0.08),
+            color-mix(in srgb, var(--primary) 8%, transparent),
             transparent 55%
           ),
           #2a2521;

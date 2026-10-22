@@ -379,8 +379,8 @@ export class DialPanel extends Component<Signature> {
          into. Marked rather than merely selected, because the difference
          matters: move a slider now and this chip is what changed. */
       .dial-tune.is-on {
-        background: rgba(230, 163, 90, 0.16);
-        border-color: rgba(230, 163, 90, 0.42);
+        background: color-mix(in srgb, var(--copper) 16%, transparent);
+        border-color: color-mix(in srgb, var(--copper) 42%, transparent);
         color: var(--copper-ink);
       }
 
@@ -408,7 +408,7 @@ export class DialPanel extends Component<Signature> {
 
       .dial-tune-input {
         background: color-mix(in srgb, var(--foreground) 10%, transparent);
-        border: 1px solid rgba(230, 163, 90, 0.42);
+        border: 1px solid color-mix(in srgb, var(--copper) 42%, transparent);
         border-radius: 999px;
         color: var(--foreground);
         font-family: var(--font-mono);

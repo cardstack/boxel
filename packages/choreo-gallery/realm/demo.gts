@@ -445,7 +445,7 @@ class Fitted extends Component<typeof GalleryDemo> {
         background:
           radial-gradient(
             80% 70% at 50% 40%,
-            rgba(255, 59, 31, 0.08),
+            color-mix(in srgb, var(--primary) 8%, transparent),
             transparent 62%
           ),
           var(--canvas);

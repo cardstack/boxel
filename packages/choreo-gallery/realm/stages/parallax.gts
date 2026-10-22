@@ -171,7 +171,7 @@ export class Parallax extends Component {
         top: 38cqh;
         background: radial-gradient(
           circle at 40% 40%,
-          #ff6a3a,
+          var(--ember-hot),
           transparent 68%
         );
         opacity: 0.85;

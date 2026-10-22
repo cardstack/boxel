@@ -225,7 +225,8 @@ export class DragWell extends Component {
       }
 
       .chip.is-on {
-        box-shadow: inset 0 0 0 1px rgba(255, 59, 31, 0.35);
+        box-shadow: inset 0 0 0 1px
+          color-mix(in srgb, var(--primary) 35%, transparent);
         color: var(--ember-hot);
       }
 
@@ -283,10 +284,10 @@ export class DragWell extends Component {
       }
 
       .crop.is-held {
-        border-color: #ff3b1f;
+        border-color: var(--primary);
         box-shadow:
-          0 0 0 1px rgba(255, 59, 31, 0.35),
-          0 22px 50px rgba(255, 59, 31, 0.2);
+          0 0 0 1px color-mix(in srgb, var(--primary) 35%, transparent),
+          0 22px 50px color-mix(in srgb, var(--primary) 20%, transparent);
         transition-duration: 0.1s;
       }
 

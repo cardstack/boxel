@@ -390,8 +390,8 @@ export class DemoPage extends Component<Signature> {
         font-family: var(--font-mono);
         font-size: 11px;
         color: var(--iris-ink);
-        background: rgba(150, 103, 247, 0.1);
-        border: 1px solid rgba(150, 103, 247, 0.3);
+        background: color-mix(in srgb, var(--iris) 10%, transparent);
+        border: 1px solid color-mix(in srgb, var(--iris) 30%, transparent);
         border-radius: 6px;
         padding: 3px 7px;
       }
@@ -440,7 +440,7 @@ export class DemoPage extends Component<Signature> {
         background:
           radial-gradient(
             70% 60% at 50% 40%,
-            rgba(255, 59, 31, 0.1),
+            color-mix(in srgb, var(--primary) 10%, transparent),
             transparent 60%
           ),
           var(--canvas);
@@ -789,7 +789,7 @@ export class DemoPage extends Component<Signature> {
       }
 
       .demo-body :deep(.dg-hot) {
-        fill: rgba(255, 59, 31, 0.16);
+        fill: color-mix(in srgb, var(--primary) 16%, transparent);
         stroke: var(--primary);
       }
 
