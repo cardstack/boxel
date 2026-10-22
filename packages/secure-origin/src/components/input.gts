@@ -40,7 +40,7 @@ export interface Signature {
   Element: HTMLInputElement;
 }
 
-export default class Input extends Component<Signature> {
+export default class BoxelInput extends Component<Signature> {
   private guid = guidFor(this);
 
   private get id() {
