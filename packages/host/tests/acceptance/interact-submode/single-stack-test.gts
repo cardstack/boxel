@@ -1053,6 +1053,23 @@ module('Acceptance | interact submode | single stack tests', function (hooks) {
       assert.dom(fieldInput).isFocused('focus stays in the input');
     });
 
+    test('a card opened over the card whose input has focus takes focus', async function (assert) {
+      await visitOperatorMode({
+        stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'edit' }]],
+      });
+      await focus('[data-test-field="firstName"] input');
+
+      let operatorModeStateService = getService('operator-mode-state-service');
+      operatorModeStateService.addItemToStack(
+        operatorModeStateService.createStackItem(`${testRealmURL}Pet/mango`, 0),
+      );
+      await settled();
+
+      assert
+        .dom(`[data-test-stack-card="${testRealmURL}Pet/mango"]`)
+        .isFocused('the opened card has focus');
+    });
+
     test('a card opened while focus is on a checkbox takes focus', async function (assert) {
       await visitOperatorMode({
         stacks: [[{ id: `${testRealmURL}Person/fadhlan`, format: 'isolated' }]],

@@ -33,13 +33,28 @@ interface Signature {
   };
 }
 
-// Whether focus stays where it is as a card opens. A text entry keeps it, so
-// a card opened on the user's behalf (by the AI assistant, say) doesn't take
-// keystrokes meant for a field. A panel that holds focus, like the AI
-// assistant's, keeps it too while the cards it opens appear in the stacks.
-function keepsFocus(active: Element | null): boolean {
+// Whether focus stays where it is as `item` opens onto `stack`. A text entry
+// keeps it, so a card opened on the user's behalf (by the AI assistant, say)
+// doesn't take keystrokes meant for a field. A panel that holds focus, like
+// the AI assistant's, keeps it too while the cards it opens appear in the
+// stacks. Nothing in a card the opening card covers keeps it: that card's
+// content goes inert, and focus would fall to the page.
+function keepsFocus(
+  active: Element | null,
+  item: StackItem,
+  stack: StackItem[],
+): boolean {
+  if (!active) {
+    return false;
+  }
+  let holder = active
+    .closest('[data-stack-item]')
+    ?.getAttribute('data-stack-item');
+  if (stack.some((other) => other !== item && other.instanceId === holder)) {
+    return false;
+  }
   return Boolean(
-    active?.matches(':read-write') || active?.closest('[data-holds-focus]'),
+    active.matches(':read-write') || active.closest('[data-holds-focus]'),
   );
 }
 
@@ -62,6 +77,7 @@ function escapeTarget(topItems: StackItem[]): StackItem | undefined {
 function openStackItem(
   element: HTMLElement,
   item: StackItem,
+  stack: StackItem[],
   isTopCard: () => boolean,
 ) {
   let { opening } = item;
@@ -71,7 +87,7 @@ function openStackItem(
   opening.opened = true;
   let active = focusedElement();
   opening.opener = active ? new WeakRef(active) : undefined;
-  if (keepsFocus(active)) {
+  if (keepsFocus(active, item, stack)) {
     return;
   }
   schedule('afterRender', () => {
@@ -173,6 +189,6 @@ export default class FollowFocus extends Modifier<Signature> {
       stack,
       stacks: this.operatorModeStateService.state.stacks,
     };
-    openStackItem(element, item, isTopCard);
+    openStackItem(element, item, stack, isTopCard);
   }
 }
