@@ -227,9 +227,11 @@ port and state wait in session storage):
 /_secure-session/login-token`) and posts it as `login_token` beside the
   session's fields. The CLI redeems it (`m.login.token`) for a Matrix device
   of its own and keeps the secure session on the profile, so one sign-in
-  serves realm commands and `boxel keys` alike. Without `session=secure` (a
-  CLI from before secure sessions, sent here from the app's `/cli-auth`),
-  the window ends the session it signed in and navigates to the listener
+  serves realm commands and `boxel keys` alike. A `cli-auth` link without
+  `session=secure` is one for a CLI that can't hold a secure session (one
+  from before secure sessions opens the host app's `/cli-auth`, which
+  forwards to this page when the app signs in on the secure origin). For
+  it, the window ends the session it signed in and navigates to the listener
   with `?state=…&loginToken=…`, the form every released CLI accepts.
 
 The terminal and CI sign-ins (`--no-browser`, `-u` with `BOXEL_PASSWORD`,

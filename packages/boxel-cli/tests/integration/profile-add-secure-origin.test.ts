@@ -25,6 +25,8 @@ import {
   secureOriginForProfiles,
 } from '../../src/lib/secure-session.ts';
 import { browserLogin } from '../../src/lib/sso-login.ts';
+import { requestLoginToken } from '../../src/lib/auth.ts';
+import { pull } from '../../src/commands/realm/pull.ts';
 
 const realmServerUrl = `${TEST_REALM_SERVER_URL}/`;
 const secureOriginURL = new URL('https://secure.cli-profile.test/secure');
@@ -66,13 +68,6 @@ async function signInOnSecureOrigin() {
   return { session, loginToken };
 }
 
-async function secureSessionIsLive(token: string): Promise<boolean> {
-  let response = await fetch(`${realmServerUrl}_secure-session`, {
-    headers: { Accept: JSON_API, Authorization: `Bearer ${token}` },
-  });
-  return response.status === 204;
-}
-
 // Matrix mints a user one login token a minute, so each sign-in here waits
 // out the last one's minute.
 let lastMint = 0;
@@ -90,7 +85,10 @@ describe('boxel profile add on the secure origin (integration)', () => {
   beforeAll(async () => {
     installSecretsKeyring(await new LocalKeyProvider().loadDataKeys());
     await ensureMatrixAdminUser();
-    await startTestRealmServer({ secureOriginURL });
+    await startTestRealmServer({
+      secureOriginURL,
+      fileSystem: { 'hello.gts': 'export const hello = "world";\n' },
+    });
     // The account signs in once the ordinary way, as one made in the app
     // has, so the realm server knows it.
     configDir = fs.mkdtempSync(join(os.tmpdir(), 'boxel-cli-profile-'));
@@ -119,14 +117,75 @@ describe('boxel profile add on the secure origin (integration)', () => {
     );
   });
 
-  it('keeps an existing profile working, with no new sign-in', async () => {
+  it('keeps an existing profile working, with no new sign-in: it pulls a realm', async () => {
     let pm = new ProfileManager(configDir);
     let before = pm.getProfile(matrixId)!;
-    let token = await pm.getOrRefreshServerToken();
-    expect(token).toBeTruthy();
+    let localDir = fs.mkdtempSync(join(os.tmpdir(), 'boxel-cli-pull-'));
+    try {
+      let result = await pull(`${TEST_REALM_SERVER_URL}/test/`, localDir, {
+        profileManager: pm,
+      });
+      expect(result.error).toBeUndefined();
+      expect(result.files).toContain('hello.gts');
+    } finally {
+      fs.rmSync(localDir, { recursive: true, force: true });
+    }
     let after = new ProfileManager(configDir).getProfile(matrixId)!;
     expect(after.matrixAccessToken).toBe(before.matrixAccessToken);
     expect(after.matrixDeviceId).toBe(before.matrixDeviceId);
+  });
+
+  it('signs a profile in with a password, without the browser, as -u/-p, --no-browser and migrate do', async () => {
+    // Each of them ends in `addProfile`'s direct Matrix password login.
+    let dir = fs.mkdtempSync(join(os.tmpdir(), 'boxel-cli-password-'));
+    try {
+      let pm = new ProfileManager(dir);
+      await pm.addProfile(
+        matrixId,
+        TEST_PASSWORD,
+        'Password',
+        matrixURL.href,
+        realmServerUrl,
+      );
+      expect(await pm.getOrRefreshServerToken()).toBeTruthy();
+      expect(pm.getProfile(matrixId)!.secureSession).toBeUndefined();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('signs in again with the password when the stored Matrix token is rejected', async () => {
+    let dir = fs.mkdtempSync(join(os.tmpdir(), 'boxel-cli-reauth-'));
+    try {
+      let pm = new ProfileManager(dir, {
+        isTty: () => true,
+        promptPassword: async () => TEST_PASSWORD,
+      });
+      await pm.addProfile(
+        matrixId,
+        TEST_PASSWORD,
+        'Re-auth',
+        matrixURL.href,
+        realmServerUrl,
+      );
+      let { accessToken } = pm.getStoredMatrixAuth();
+      let loggedOut = await fetch(
+        new URL('_matrix/client/v3/logout', matrixURL).href,
+        { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` } },
+      );
+      expect(loggedOut.status).toBe(200);
+      expect(await pm.refreshServerToken()).toBeTruthy();
+      expect(pm.getStoredMatrixAuth().accessToken).not.toBe(accessToken);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("mints a login token for the app from the profile's own Matrix device, as browse does", async () => {
+    await waitForMintWindow();
+    let pm = new ProfileManager(configDir);
+    let { loginToken } = await requestLoginToken(pm.getStoredMatrixAuth());
+    expect(loginToken).toBeTruthy();
   });
 
   it('adds a profile with a Matrix device and a secure session from one sign-in', async () => {
@@ -191,13 +250,12 @@ describe('boxel profile add on the secure origin (integration)', () => {
     }
   }, 120_000);
 
-  it('signs in a CLI that predates secure sessions with a login token in the query, as it accepts', async () => {
+  it('redeems a login token sent in the query, as every released CLI accepts it', async () => {
     await waitForMintWindow();
-    // A CLI opens the app's `/cli-auth`, which forwards to the secure
-    // origin's `cli-auth` without `session=secure`. The page ends the secure
-    // session it signed in, since that CLI can't take it, and sends the login
-    // token in the query of a navigation to the listener.
-    let ended: string | undefined;
+    // What the `cli-auth` page sends a CLI that can't hold a secure session:
+    // a navigation to its listener with the login token and state in the
+    // query. Ending the session it signed in is the page's part, covered by
+    // the secure origin's own tests.
     let auth = await browserLogin({
       matrixUrl: matrixURL.href,
       hostUrl: realmServerUrl,
@@ -205,16 +263,7 @@ describe('boxel profile add on the secure origin (integration)', () => {
       openBrowserFn: async (link) => {
         let url = new URL(link);
         expect(url.pathname).toBe('/cli-auth');
-        let { session, loginToken } = await signInOnSecureOrigin();
-        let endedSession = await fetch(`${realmServerUrl}_secure-session`, {
-          method: 'DELETE',
-          headers: {
-            Accept: JSON_API,
-            Authorization: `Bearer ${session.token}`,
-          },
-        });
-        expect(endedSession.status).toBe(204);
-        ended = session.token;
+        let { loginToken } = await signInOnSecureOrigin();
         let target = new URL(
           `http://127.0.0.1:${url.searchParams.get('port')}/callback`,
         );
@@ -225,8 +274,11 @@ describe('boxel profile add on the secure origin (integration)', () => {
       },
     });
     expect(auth.userId).toBe(matrixId);
-    expect(auth.accessToken).toBeTruthy();
+    let whoami = await fetch(
+      new URL('_matrix/client/v3/account/whoami', matrixURL).href,
+      { headers: { Authorization: `Bearer ${auth.accessToken}` } },
+    );
+    expect(whoami.status).toBe(200);
     expect(auth).not.toHaveProperty('secureSession');
-    expect(await secureSessionIsLive(ended!)).toBe(false);
   }, 120_000);
 });
