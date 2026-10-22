@@ -5,6 +5,8 @@
 // over. Everything else about the CLI's sign-in is presentation.
 
 const LOOPBACK_CALLBACK_PATH = '/callback';
+const STATE = /^[A-Za-z0-9_-]{16,128}$/;
+const LOOPBACK_CALLBACK = /^http:\/\/127\.0\.0\.1:([0-9]{1,5})\/callback$/;
 
 // The CLI waiting for a session: the loopback port it listens on and the
 // state value it expects back. Anything else is refused, so a page can only
@@ -16,7 +18,7 @@ export function cliCallback(params) {
     !Number.isInteger(port) ||
     port < 1 ||
     port > 65535 ||
-    !/^[A-Za-z0-9_-]{16,128}$/.test(state)
+    !STATE.test(state)
   ) {
     return undefined;
   }
@@ -41,8 +43,14 @@ export function handoffFields(callback, session) {
 // a top-level navigation, so it leaves this window only for this machine. A
 // navigation, not a `fetch`, is not subject to the private-network preflight
 // a cross-origin request to a loopback address would need, and it keeps the
-// session out of a URL. `callback` is only ever one `cliCallback` returned.
+// session out of a URL. The target is checked here, where the session
+// leaves, whatever it came from: a callback read back from storage after a
+// Google sign-in is held to the same loopback address and state as one
+// `cliCallback` read from the page's URL, and anything else is refused.
 export function handToCli(callback, session, doc = document) {
+  if (!isCliCallback(callback)) {
+    throw new Error('The CLI sign-in names no listener on this machine.');
+  }
   let form = doc.createElement('form');
   form.method = 'POST';
   form.action = callback.url;
@@ -58,4 +66,19 @@ export function handToCli(callback, session, doc = document) {
   doc.body.append(form);
   form.submit();
   return form;
+}
+
+// Whether `callback` is a loopback listener and state `cliCallback` could
+// have returned.
+export function isCliCallback(callback) {
+  let port = Number(
+    LOOPBACK_CALLBACK.exec(String(callback?.url ?? ''))?.[1] ?? NaN,
+  );
+  return (
+    Number.isInteger(port) &&
+    port >= 1 &&
+    port <= 65535 &&
+    typeof callback.state === 'string' &&
+    STATE.test(callback.state)
+  );
 }

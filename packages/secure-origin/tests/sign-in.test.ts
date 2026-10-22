@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, test } from 'node:test';
 
 import {
   cliCallback,
   handoffFields,
   handToCli,
+  isCliCallback,
 } from '../src/security/cli-handoff.js';
 import {
   asSentence,
@@ -122,6 +124,45 @@ describe('handToCli', () => {
   });
 });
 
+describe('a hand-off target that is not the loopback listener', () => {
+  const session = { token: 't', user: '@u:example.test', expiresAt: 'x' };
+
+  test('every callback cliCallback makes is one', () => {
+    for (let port of ['1', '51234', '65535']) {
+      assert.ok(isCliCallback(cliCallback(params({ port, state: STATE }))));
+    }
+  });
+
+  test('is refused before anything is posted', () => {
+    let created = 0;
+    let doc = {
+      createElement() {
+        created++;
+        return {};
+      },
+      body: { append() {} },
+    } as unknown as Document;
+    for (let callback of [
+      { url: 'https://evil.example/callback', state: STATE },
+      { url: 'http://127.0.0.1.evil.example:51234/callback', state: STATE },
+      { url: 'http://localhost:51234/callback', state: STATE },
+      { url: 'http://127.0.0.1:51234/elsewhere', state: STATE },
+      { url: 'http://127.0.0.1:51234/callback?x=1', state: STATE },
+      { url: 'http://127.0.0.1:70000/callback', state: STATE },
+      { url: 'http://127.0.0.1:51234/callback', state: 'short' },
+      { url: 'http://127.0.0.1:51234/callback' },
+      undefined,
+    ]) {
+      assert.throws(
+        () => handToCli(callback as any, session, doc),
+        /names no listener on this machine/,
+        JSON.stringify(callback),
+      );
+    }
+    assert.equal(created, 0, 'no form is made');
+  });
+});
+
 describe("the shell's addresses", () => {
   let original = (globalThis as any).window;
   afterEach(() => {
@@ -231,4 +272,24 @@ describe('what a failed sign-in says', () => {
     assert.equal(asSentence('  '), '');
     assert.equal(asSentence(undefined), '');
   });
+});
+
+// `shell.css` styles the pages `dom.js` still draws, with the same class names
+// the components use. Each of its component rules is scoped to the plain
+// pages' root, so none of them reaches a component; only the page-wide rules
+// (the reset, the typeface, the page's background) are left global.
+test("shell.css's component rules reach only the plain pages", () => {
+  let css = readFileSync(
+    new URL('../src/shell/shell.css', import.meta.url),
+    'utf8',
+  ).replace(/\/\*[\s\S]*?\*\//g, '');
+  let components = css.slice(css.indexOf('@layer boxel {'));
+  let unscoped = [...components.matchAll(/([^{};]+)\{/g)]
+    .map(([, selector]) => selector.trim())
+    .filter((selector) => !/^(@|from$|to$|body$|\.plain-page$)/.test(selector))
+    .flatMap((selector) =>
+      selector.split(',').map((s) => s.trim().replace(/\s+/g, ' ')),
+    )
+    .filter((selector) => !selector.startsWith(':where(.plain-page) '));
+  assert.deepEqual(unscoped, []);
 });
