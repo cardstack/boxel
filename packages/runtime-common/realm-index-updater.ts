@@ -86,6 +86,10 @@ export interface IncrementalIndexOptions {
   // Whether the caller announces the pass the moment it lands, rather than
   // after later passes of the same write. See CoalescedCaller.
   announcesPass?: boolean;
+  // False when the write asked for no realm events, so neither the pass's
+  // render job nor a follow-up pass announces anything on its behalf. See
+  // `IncrementalArgs.realmEvents`.
+  realmEvents?: boolean;
   // Matrix user whose HTTP write produced this job, when known. Scopes
   // the read endpoints' read-your-writes drain — see
   // #incrementalIndexingDeferreds.
@@ -626,6 +630,7 @@ export class RealmIndexUpdater {
         {
           clientAuthored: opts?.clientAuthored ?? null,
           announcesPass: opts?.announcesPass === true,
+          realmEvents: opts?.realmEvents !== false,
         },
       );
       job = await this.#queue.publish<IncrementalDoneResult>({
@@ -742,6 +747,7 @@ export class RealmIndexUpdater {
       | 'clientRequestId'
       | 'clientAuthored'
       | 'announcesPass'
+      | 'realmEvents'
       | 'initiatedBy'
       | 'deferPrerenderHtml'
       | 'carriedPrerenderHtmlChanges'

@@ -698,6 +698,60 @@ describe('realm push (integration)', () => {
     expect(await remoteFileExists(realmUrl, 'c.gts')).toBe(true);
   });
 
+  it('--no-realm-events marks every write it sends, and a plain push marks none', async () => {
+    // In-process so the requests the push sends can be inspected.
+    let realmUrl = await createTestRealm();
+    let localDir = makeLocalDir();
+    writeLocalFile(localDir, 'a.gts', 'export const a = 1;\n');
+    writeLocalBytes(localDir, 'pixel.png', TINY_PNG_BYTES);
+    writeLocalFile(localDir, 'stale.gts', 'export const stale = 1;\n');
+
+    let profileManager = reloadProfile(home);
+    let realFetch = profileManager.authedRealmFetch.bind(profileManager);
+    let writes: { method: string; marker: string | null }[] = [];
+    let fetchSpy = vi
+      .spyOn(profileManager, 'authedRealmFetch')
+      .mockImplementation(async (input, init) => {
+        let method = init?.method ?? 'GET';
+        if (method === 'POST' || method === 'DELETE') {
+          writes.push({
+            method,
+            marker: new Headers(init?.headers).get('X-Boxel-Realm-Events'),
+          });
+        }
+        return realFetch(input, init);
+      });
+
+    try {
+      await pushCommand(localDir, realmUrl, { profileManager });
+      expect(writes.length).toBeGreaterThan(0);
+      expect(writes.every(({ marker }) => marker === null)).toBe(true);
+
+      writes = [];
+      fs.rmSync(path.join(localDir, 'stale.gts'));
+      writeLocalFile(localDir, 'a.gts', 'export const a = 2;\n');
+      await pushCommand(localDir, realmUrl, {
+        profileManager,
+        delete: true,
+        force: true,
+        realmEvents: false,
+      });
+      // The upload batch, the binary upload and the removal of the file
+      // that no longer exists locally.
+      expect(writes.map(({ method }) => method).sort()).toEqual([
+        'DELETE',
+        'POST',
+        'POST',
+      ]);
+      expect(writes.every(({ marker }) => marker === 'none')).toBe(true);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+
+    expect(await fetchRemoteFile(realmUrl, 'a.gts')).toContain('a = 2');
+    expect(await remoteFileExists(realmUrl, 'stale.gts')).toBe(false);
+  });
+
   it('splits an upload into /_atomic requests, modules first', async () => {
     // In-process so the /_atomic requests can be read.
     let realmUrl = await createTestRealm();
