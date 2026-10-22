@@ -40,12 +40,19 @@ esac
 
 cd "$(dirname "$0")/.."
 
-# These two parameters are the whole grant of the boxel-observability-preview
-# role, and the list is deliberately short: this script runs from the pull
-# request's own checkout, so whatever it can read, a pull request can read.
-# Adding an SSM read here means widening that role and handing the new value
-# to unreviewed code — GRAFANA_SECRET and the Grafana database password are
-# excluded for exactly that reason.
+# These three parameters are the whole grant of the
+# boxel-observability-preview role, and the list stays short on purpose:
+# this script runs from the pull request's own checkout, so whatever it can
+# read, a pull request can read. Adding an SSM read here means widening that
+# role and handing the new value to unreviewed code. The Grafana database
+# credentials are excluded for exactly that reason.
+#
+# GRAFANA_SECRET is included because the operator buttons on a preview
+# dashboard are part of what a reviewer needs to see working. It is a weaker
+# secret than it looks: apply.sh substitutes it into six canonical dashboards
+# as a `constant` template variable, so every Grafana viewer can already read
+# it out of the dashboard JSON. Withholding it here would not keep it from
+# anyone who can reach the preview.
 #
 # GRAFANA_TOKEN is re-fetched by grafanactl-env.sh inside apply-preview.sh;
 # fetching it here too is what registers the `::add-mask::`, so the value is
@@ -58,9 +65,12 @@ ssm() {
 GRAFANA_TOKEN="$(ssm "/${ENV_NAME}/grafana/grafanactl_token" --with-decryption)"
 echo "::add-mask::$GRAFANA_TOKEN"
 
+GRAFANA_SECRET="$(ssm "/${ENV_NAME}/boxel/GRAFANA_SECRET" --with-decryption)"
+echo "::add-mask::$GRAFANA_SECRET"
+
 REALM_SERVER_URL="$(ssm "/${ENV_NAME}/boxel-grafana/realm_server_url")"
 
-export GRAFANA_TOKEN REALM_SERVER_URL
+export GRAFANA_TOKEN GRAFANA_SECRET REALM_SERVER_URL
 
 out_file="$(mktemp)"
 echo "out_file=$out_file" >> "$GITHUB_OUTPUT"

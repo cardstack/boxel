@@ -14,13 +14,12 @@ name: Observability — PR preview
 # preview or the comment, which is posted from whatever succeeded.
 #
 # The two environments render the same dashboard set under the same preview
-# UIDs — only the realm-server URL substitution differs — so the comment
-# lists each dashboard once with a link per environment.
+# UIDs — only the apply-time substitutions differ — so the comment lists
+# each dashboard once with a link per environment.
 #
-# A preview never carries the real operator secret: render-preview.sh stamps
-# an inert placeholder into `grafana_secret`, so operator buttons on a
-# preview dashboard return 401. That is what keeps this workflow runnable
-# under a role that cannot read GRAFANA_SECRET.
+# CAUTION: a preview carries the real operator secret, so the action buttons
+# on a preview dashboard act on the real environment. A button clicked on a
+# production preview performs the production mutation.
 #
 # Scope: dashboards + folders only. Data sources, alert rules, and the
 # home-dashboard preference are file-provisioned at Grafana startup and
@@ -55,12 +54,15 @@ env:
   # The dedicated preview role, NOT boxel-observability-apply. This workflow
   # runs on `pull_request`, so GitHub loads it — and every script it calls —
   # from the pull request itself; whatever the assumed role can read, a
-  # contributor can read. boxel-observability-preview grants only
-  # /<env>/grafana/grafanactl_token and /<env>/boxel-grafana/realm_server_url,
-  # so the worst case equals this feature: write `pr<n>-` dashboards. The
-  # apply role additionally grants the Grafana database password and
-  # GRAFANA_SECRET (the realm-server operator bearer token) — never point
-  # this workflow at it.
+  # contributor can read. boxel-observability-preview grants three
+  # parameters per environment and nothing else:
+  #
+  #   /<env>/grafana/grafanactl_token        authenticate grafanactl
+  #   /<env>/boxel-grafana/realm_server_url  fill a template variable
+  #   /<env>/boxel/GRAFANA_SECRET            make operator buttons work
+  #
+  # The apply role additionally grants the Grafana database credentials and
+  # the Loki / Prometheus / DB-host values. Never point this workflow at it.
   STAGING_AWS_ROLE_ARN: arn:aws:iam::680542703984:role/boxel-observability-preview
   PRODUCTION_AWS_ROLE_ARN: arn:aws:iam::120317779495:role/boxel-observability-preview
   PREVIEW_MARKER: "<!-- observability-preview -->"
