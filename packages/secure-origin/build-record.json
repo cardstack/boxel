@@ -15,20 +15,120 @@
   },
   "files": {
     "credentials.css": {
-      "bytes": 4341,
+      "bytes": 7233,
       "sources": [
         {
           "package": "@cardstack/secure-origin",
-          "module": "src/credentials/credentials.css"
+          "module": "src/components/2672b6a8df.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/8bdbff4e39.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/927d417b70.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/d2e02754fc.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/e6384ada8e.css"
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/credentials/b38b0caa88.css"
         }
       ]
     },
     "credentials.html": {
-      "bytes": 770
+      "bytes": 715
     },
     "credentials.js": {
-      "bytes": 13058,
+      "bytes": 277262,
       "modules": [
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/auth-form-field.gts",
+          "size": 645
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/field-container.gts",
+          "size": 2466
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/icons/check-mark.gts",
+          "size": 707
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/icons/failure-bordered.gts",
+          "size": 1090
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/icons/success-bordered.gts",
+          "size": 1082
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/input.gts",
+          "size": 3766
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/label.gts",
+          "size": 668
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/components/validation-hint.gts",
+          "size": 624
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/credentials/changes.ts",
+          "size": 198
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/credentials/credential-fields.gts",
+          "size": 5685
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/credentials/main.ts",
+          "size": 1094
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/credentials/style.ts",
+          "size": 2472
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/helpers/cn.ts",
+          "size": 231
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/helpers/optional.ts",
+          "size": 115
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/helpers/truth-helpers.ts",
+          "size": 182
+        },
+        {
+          "package": "@cardstack/secure-origin",
+          "module": "src/modifiers/modifier.ts",
+          "size": 771
+        },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/app-origins.js",
@@ -37,12 +137,472 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/credentials.js",
-          "size": 18806
+          "size": 12169
         },
         {
           "package": "@cardstack/secure-origin",
           "module": "src/security/redact.js",
           "size": 853
+        },
+        {
+          "package": "@glimmer/component@2.1.1",
+          "module": "dist/index.js",
+          "size": 2375
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/deprecations/index.js",
+          "size": 1767
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/error-handling/index.js",
+          "size": 414
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/meta/lib/meta.js",
+          "size": 7956
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/owner/index.js",
+          "size": 452
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/runtime/lib/ext/rsvp.js",
+          "size": 1203
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/runtime/lib/mixins/-proxy.js",
+          "size": 1447
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/runtime/lib/mixins/action_handler.js",
+          "size": 569
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/runtime/lib/mixins/comparable.js",
+          "size": 310
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/runtime/lib/mixins/container_proxy.js",
+          "size": 753
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/runtime/lib/mixins/registry_proxy.js",
+          "size": 900
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/runtime/lib/mixins/target_action_support.js",
+          "size": 1648
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/string/index.js",
+          "size": 1344
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/views/lib/compat/attrs.js",
+          "size": 296
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/views/lib/mixins/action_support.js",
+          "size": 532
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/views/lib/system/utils.js",
+          "size": 1859
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/views/lib/views/core_view.js",
+          "size": 1284
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/-internals/views/lib/views/states.js",
+          "size": 1331
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/array/-internals.js",
+          "size": 404
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/array/index.js",
+          "size": 8472
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/array/lib/make-array.js",
+          "size": 390
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/component/template-only.js",
+          "size": 285
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/controller/index.js",
+          "size": 1062
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/debug/index.js",
+          "size": 280
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/debug/lib/assert.js",
+          "size": 259
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/debug/lib/inspect.js",
+          "size": 2309
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/debug/lib/testing.js",
+          "size": 300
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/engine/instance.js",
+          "size": 2409
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/engine/lib/engine-parent.js",
+          "size": 435
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/enumerable/index.js",
+          "size": 269
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/enumerable/mutable.js",
+          "size": 288
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/helper/index.js",
+          "size": 255
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/instrumentation/index.js",
+          "size": 1740
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/modifier/index.js",
+          "size": 281
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/modifier/on.js",
+          "size": 246
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/object/-internals.js",
+          "size": 305
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/object/compat.js",
+          "size": 989
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/object/core.js",
+          "size": 5721
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/object/evented.js",
+          "size": 660
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/object/index.js",
+          "size": 1630
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/object/lib/computed/computed_macros.js",
+          "size": 1227
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/object/mixin.js",
+          "size": 8986
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/object/observable.js",
+          "size": 1481
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/owner/index.js",
+          "size": 258
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/routing/lib/dsl.js",
+          "size": 4734
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/routing/lib/generate_controller.js",
+          "size": 790
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/routing/lib/router_state.js",
+          "size": 925
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/routing/lib/routing-service.js",
+          "size": 2383
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/routing/lib/utils.js",
+          "size": 3973
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/routing/route.js",
+          "size": 16516
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/routing/router-service.js",
+          "size": 3342
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/routing/router.js",
+          "size": 23451
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/runloop/index.js",
+          "size": 1371
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/service/index.js",
+          "size": 381
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/utils/lib/compare.js",
+          "size": 1550
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@ember/utils/lib/type-of.js",
+          "size": 1032
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@glimmer/destroyable/index.js",
+          "size": 2866
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@glimmer/encoder/index.js",
+          "size": 817
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@glimmer/global-context/index.js",
+          "size": 923
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@glimmer/manager/index.js",
+          "size": 13917
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@glimmer/opcode-compiler/index.js",
+          "size": 35262
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@glimmer/owner/index.js",
+          "size": 386
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@glimmer/program/index.js",
+          "size": 8169
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@glimmer/reference/index.js",
+          "size": 6308
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@glimmer/runtime/index.js",
+          "size": 100137
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@glimmer/util/index.js",
+          "size": 1618
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@glimmer/validator/index.js",
+          "size": 17358
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@glimmer/vm/index.js",
+          "size": 904
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/@glimmer/wire-format/index.js",
+          "size": 1578
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/backburner.js/index.js",
+          "size": 21688
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/ember/version.js",
+          "size": 250
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/route-recognizer/index.js",
+          "size": 15564
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/alias-CPqbuwcg.js",
+          "size": 1966
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/array-CVk-fNjW.js",
+          "size": 2539
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/cache-DtDz7X5V.js",
+          "size": 24158
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/cache-qDyqAcpg.js",
+          "size": 804
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/chunk-3SQBS3Y5-Cj4eryg1.js",
+          "size": 3258
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/dictionary-gc5gpyOG.js",
+          "size": 377
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/env-DxZ20QzS.js",
+          "size": 2506
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/index-BGP1rw3B.js",
+          "size": 993
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/index-DaCZcoCY.js",
+          "size": 61674
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/is_proxy-DxRbm8wn.js",
+          "size": 455
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/managers-CbMgnSoo.js",
+          "size": 336
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/mandatory-setter-CXNsxygN.js",
+          "size": 3101
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/namespace_search-Dh_YNV5f.js",
+          "size": 346
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/property_set-n9lAuzYY.js",
+          "size": 1319
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/registry-BJpQx6hv.js",
+          "size": 10870
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/router-BViwI_oJ.js",
+          "size": 35890
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/rsvp-ziM3qQyS.js",
+          "size": 22994
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/set_properties-D2_u0phU.js",
+          "size": 892
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/to-string-DaIn5NlY.js",
+          "size": 406
+        },
+        {
+          "package": "ember-source@6.10.1",
+          "module": "dist/packages/shared-chunks/unrecognized-url-error-Csk7hcJF.js",
+          "size": 8923
         }
       ]
     },

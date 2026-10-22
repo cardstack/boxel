@@ -1,7 +1,14 @@
 'use strict';
 
 module.exports = {
+  env: { browser: true, es2022: true },
   overrides: [
+    {
+      files: ['**/*.gts'],
+      parser: 'ember-eslint-parser',
+      plugins: ['ember'],
+      extends: ['plugin:ember/recommended-gts'],
+    },
     {
       files: ['./.eslintrc.cjs', './.template-lintrc.cjs'],
       parserOptions: { sourceType: 'script' },
