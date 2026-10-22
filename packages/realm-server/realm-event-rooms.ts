@@ -27,10 +27,12 @@ const log = logger('realm:events');
 // members are exactly the users the realm's grants name (see
 // `fetchRealmNamedGrantees`), rather than once into each of their session
 // rooms. Users who each hold a grant naming them on the same realm may see
-// each other's Matrix ids, so the room must never show anyone a user they
-// don't share a grant with. The room is created through the matrix client the
-// realm sends its events with, so that client's user is the only one who may
-// send, invite or kick in it (see `MatrixClient.createRealmEventRoom`).
+// each other's Matrix ids (ADR 011 §1.2), and no one else may, through room
+// membership or room state (§1.1, §1.5). So the room must never show anyone a
+// user they don't share a grant with. The room is created through the matrix
+// client the realm sends its events with, so that client's user is the only
+// one who may send, invite or kick in it (see
+// `MatrixClient.createRealmEventRoom`).
 //
 // Membership follows the grants:
 //
