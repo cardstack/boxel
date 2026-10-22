@@ -223,6 +223,60 @@ Google sign-in that fails any other way shows the error, with Start again
 pointing at that same page. The shell's CSP allows that form
 target, and `connect-src` to the realm server and the Matrix server (ADR 005 §1.4).
 
+## Handing a sign-in to the app
+
+With `SIGN_IN_ON_SECURE_ORIGIN=true` on the realm server that serves the app,
+the app draws no sign-in form. The realm server writes the setting into the
+host's config as `signInOnSecureOrigin` each time it serves the app, so a
+deployment turns it on or off without a rebuild. Unset, the host keeps what
+its build set, which is off.
+
+1. A signed-out app (`components/matrix/secure-sign-in.gts`) replaces itself
+   with `<secure origin>?mode=sign-in#return=<the app page, path and query>`.
+   `return` rides in the fragment, which no firewall or access log sees. The
+   page is also a plain **Sign in to Boxel** link to the same address. A tab
+   that comes back signed out within two minutes of being sent stops and
+   says "Sign-in didn’t complete" (`sessionStorage`), and an app in a frame
+   is never navigated: its link opens a new tab.
+2. The sign-in page keeps `return` for the tab, in `sessionStorage`, once it
+   checks out against the app origins the realm server lists
+   (`boxel-app-origins` in the shell's markup: the credential fields'
+   `--secureOriginAppOrigin` list and the realm server's own origin). Every
+   way the window signs in (password, Google, a new account) ends on
+   `SignedIn`, which then mints a login token, `POST
+/_secure-session/login-token` under the window's secure session, and
+   replaces the location with `return?loginToken=…`. A loopback `http:`
+   `return` first asks "Continue to http://localhost:4200?". A `return` on an
+   origin that isn't listed is dropped, and the window just says it is
+   signed in.
+3. The app redeems the token with an `m.login.token` login before it loads
+   any card, takes it out of the address, and boots as after any sign-in:
+   realm-server session, realm tokens, service-worker sync.
+
+The login token is the Matrix server's own (MSC3882 `login/get_token`),
+asked for with an admin-minted token for the user that is logged out right
+after. The Matrix server binds it to the user, honours it once, and expires
+it after `login_via_existing_session.token_timeout` (two minutes on every
+deployment). It mints one per user a minute, and the route passes a refusal
+on as `429 rate-limited` with `meta.retryAfterMs`. The window's
+`loginToken()` waits and tries again for up to about a minute, so signing in
+again straight after signing out shows "Signing you in…" for a while rather
+than an error. The route answers only the secure origin (403 `forbidden`)
+and only a live secure session (401 `signed-out`).
+
+Signing out of the app (`MatrixService.signOut()`) runs the app's own
+`logout()` first, which ends the Matrix device, clears the service worker's
+realm tokens and asks the realm server to end the user's window sessions.
+It then replaces the location with
+`<secure origin>?mode=sign-out#return=<app root>`, which forgets the
+window's session, ends it on the server, and goes back to a listed `return`.
+
+Links already sent keep working through the app: a reset link
+(`?clientSecret=…#email=…&sid=…`) is replaced by the secure origin's
+`reset-password` with all three in its fragment, and an older CLI's
+`/cli-auth?port=&state=` by the secure origin's `cli-auth` mode with the
+same port and state.
+
 ## Refusals
 
 | Status, code              | Means                                                                                                                                                                                                                      |
