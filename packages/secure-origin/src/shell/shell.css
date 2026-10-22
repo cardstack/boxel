@@ -1,20 +1,19 @@
 /*
-  The secure origin's pages: sign-in, account creation and password reset.
-  They have to look exactly like the app's own sign-in screens, so a user
-  meets one page whichever they land on, but they load nothing from the app.
-  boxel-ui's `variables.css` and `theme.css` are served here as they are (see
-  `lib/secure-origin.ts`), so every token below resolves to what the app's
-  does, and these rules mirror the components the app draws the screens with:
-  the host's AuthContainer, Login, RegisterUser, ForgotPassword, AuthButton
-  and AuthFormField, and boxel-ui's Button, FieldContainer, Label, BoxelInput,
-  InputGroup and LoadingIndicator. A change to one of those components'
-  styles needs the same change here; the matrix suite's visual comparison of
-  the two sign-in pages fails until it is made.
+  The styles of the shell's plain pages: account creation and password reset.
+  The sign-in pages are components that style themselves (`sign-in/`,
+  `../components/`); the page-wide rules here (the reset, the typeface, the
+  page's background) apply to them too.
+  The pages have to look exactly like the app's own sign-in screens, so a
+  user meets one page whichever they land on, but they load nothing from the
+  app. boxel-ui's `variables.css` and `theme.css` are served here as they are
+  (see `lib/secure-origin.ts`), so every token below resolves to what the
+  app's does, and these rules mirror the components the app draws the screens
+  with: the host's AuthContainer, Login, RegisterUser, ForgotPassword,
+  AuthButton and AuthFormField, and boxel-ui's Button, FieldContainer, Label,
+  BoxelInput, InputGroup and LoadingIndicator. A change to one of those
+  components' styles needs the same change here; the matrix suite's visual
+  comparison of the pages fails until it is made.
 */
-
-/* As in the app: boxel-ui's reset, then its components, then the host's own
-   (unlayered) rules. */
-@layer reset, boxel;
 
 @font-face {
   font-family: 'IBM Plex Sans';
@@ -123,7 +122,7 @@
 
 @layer boxel {
   /* boxel-ui Button */
-  .boxel-button {
+  :where(.plain-page) .boxel-button {
     --boxel-loading-indicator-size: var(
       --boxel-button-loading-icon-size,
       var(--boxel-icon-xs)
@@ -150,7 +149,7 @@
     box-shadow: var(--boxel-button-box-shadow);
   }
 
-  .boxel-button:not(:disabled):hover {
+  :where(.plain-page) .boxel-button:not(:disabled):hover {
     background-color: color-mix(
       in oklab,
       var(--boxel-button-color) 90%,
@@ -158,19 +157,19 @@
     );
   }
 
-  .boxel-button:focus-visible {
+  :where(.plain-page) .boxel-button:focus-visible {
     outline-color: var(--ring, var(--boxel-highlight));
     outline-offset: 2px;
   }
 
-  .boxel-button .loading-indicator {
+  :where(.plain-page) .boxel-button .loading-indicator {
     margin-right: var(
       --boxel-button-loading-indicator-gap,
       var(--boxel-sp-xxs)
     );
   }
 
-  .boxel-button:disabled:not(.loading) {
+  :where(.plain-page) .boxel-button:disabled:not(.loading) {
     --boxel-button-box-shadow: none;
     background-color: var(
       --boxel-button-disabled-background,
@@ -185,15 +184,15 @@
     cursor: default;
   }
 
-  .boxel-button.loading {
+  :where(.plain-page) .boxel-button.loading {
     pointer-events: none;
   }
 
-  a.boxel-button:hover {
+  :where(.plain-page) a.boxel-button:hover {
     color: var(--boxel-button-text-color);
   }
 
-  .kind-default {
+  :where(.plain-page) .kind-default {
     --boxel-button-color: var(
       --boxel-button-default-background,
       var(--background)
@@ -206,8 +205,8 @@
       var(--boxel-button-default-border, var(--border));
   }
 
-  .kind-default:not(:disabled):hover,
-  .kind-default:not(:disabled):active {
+  :where(.plain-page) .kind-default:not(:disabled):hover,
+  :where(.plain-page) .kind-default:not(:disabled):active {
     --boxel-button-color: var(
       --boxel-button-default-active-background,
       var(--accent)
@@ -220,7 +219,7 @@
       var(--boxel-button-default-active-border, var(--border));
   }
 
-  .kind-primary {
+  :where(.plain-page) .kind-primary {
     --boxel-button-color: var(
       --boxel-button-primary-background,
       var(--primary)
@@ -231,15 +230,15 @@
     );
   }
 
-  .kind-primary:not(:disabled):hover,
-  .kind-primary:not(:disabled):active {
+  :where(.plain-page) .kind-primary:not(:disabled):hover,
+  :where(.plain-page) .kind-primary:not(:disabled):active {
     --boxel-button-color: var(
       --boxel-button-primary-active-background,
       var(--primary)
     );
   }
 
-  .kind-secondary {
+  :where(.plain-page) .kind-secondary {
     --boxel-button-color: var(
       --boxel-button-secondary-background,
       var(--secondary)
@@ -252,22 +251,13 @@
       var(--boxel-button-secondary-border, var(--secondary));
   }
 
-  .kind-secondary:not(:disabled):hover,
-  .kind-secondary:not(:disabled):active {
+  :where(.plain-page) .kind-secondary:not(:disabled):hover,
+  :where(.plain-page) .kind-secondary:not(:disabled):active {
     --boxel-button-border: 1px solid
       var(--boxel-button-secondary-active-border, var(--secondary));
   }
 
-  .size-extra-small {
-    --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
-    --boxel-button-min-height: var(--boxel-button-xs);
-    --boxel-button-min-width: 5rem;
-    --boxel-button-loading-icon-size: var(--boxel-icon-2xs);
-    --boxel-button-font: 500 var(--boxel-font-xs);
-    --boxel-button-letter-spacing: var(--boxel-lsp-lg);
-  }
-
-  .size-touch {
+  :where(.plain-page) .size-touch {
     --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
     --boxel-button-min-height: var(--boxel-button-touch);
     --boxel-button-min-width: 5rem;
@@ -276,44 +266,8 @@
     --boxel-button-letter-spacing: var(--boxel-lsp-xs);
   }
 
-  .boxel-button:is(.kind-link-primary, .kind-link-muted) {
-    min-height: initial;
-    min-width: initial;
-    padding: 0;
-    background: none;
-    border: none;
-    border-radius: var(--boxel-border-radius-xs);
-    font-weight: inherit;
-    line-height: inherit;
-    letter-spacing: inherit;
-    box-shadow: none;
-  }
-
-  .boxel-button:is(.kind-link-primary, .kind-link-muted):not(:disabled):hover {
-    background: none;
-  }
-
-  .kind-link-primary {
-    --boxel-button-text-color: var(
-      --boxel-button-link-primary-foreground,
-      var(--primary)
-    );
-  }
-
-  .kind-link-primary:not(:disabled):hover {
-    --boxel-button-text-color: color-mix(in oklab, var(--primary) 80%, black);
-  }
-
-  .kind-link-muted {
-    --boxel-button-text-color: var(--muted-foreground);
-  }
-
-  .kind-link-muted:not(:disabled):hover {
-    --boxel-button-text-color: var(--foreground);
-  }
-
   /* boxel-ui LoadingIndicator */
-  .loading-indicator {
+  :where(.plain-page) .loading-indicator {
     display: inline-flex;
     width: var(--boxel-loading-indicator-size, var(--boxel-icon-sm));
     height: var(--boxel-loading-indicator-size, var(--boxel-icon-sm));
@@ -321,7 +275,7 @@
     color: var(--loading-indicator-color, currentColor);
   }
 
-  .loading-indicator svg {
+  :where(.plain-page) .loading-indicator svg {
     width: 100%;
     height: 100%;
     animation: boxel-spin 6000ms linear infinite;
@@ -337,23 +291,23 @@
   }
 
   /* boxel-ui FieldContainer and Label */
-  .boxel-field {
+  :where(.plain-page) .boxel-field {
     display: grid;
     width: 100%;
     max-width: 100%;
     overflow-wrap: break-word;
   }
 
-  .boxel-field.vertical {
+  :where(.plain-page) .boxel-field.vertical {
     grid-template-rows: auto 1fr;
     gap: var(--boxel-sp-4xs);
   }
 
-  .label-container {
+  :where(.plain-page) .label-container {
     align-items: start;
   }
 
-  .boxel-label {
+  :where(.plain-page) .boxel-label {
     display: flex;
     align-items: normal;
     padding-top: 0;
@@ -365,14 +319,14 @@
     letter-spacing: var(--boxel-lsp-xs);
   }
 
-  .boxel-field .content {
+  :where(.plain-page) .boxel-field .content {
     max-width: 100%;
     padding: var(--boxel-field-content-padding, var(--boxel-outline-width));
     word-break: break-word;
   }
 
   /* boxel-ui BoxelInput */
-  .input-container {
+  :where(.plain-page) .input-container {
     --icon-size: var(--boxel-icon-sm);
     --icon-space: var(--boxel-sp-xs);
     --_icon-full-length: var(
@@ -393,7 +347,7 @@
     width: 100%;
   }
 
-  .boxel-input {
+  :where(.plain-page) .boxel-input {
     grid-column: 1 / span 3;
     grid-row: 2;
     box-sizing: border-box;
@@ -414,34 +368,35 @@
       outline-color var(--boxel-transition);
   }
 
-  .boxel-input:focus-visible {
+  :where(.plain-page) .boxel-input:focus-visible {
     outline-color: var(--ring, var(--boxel-highlight));
     border-color: var(--ring, var(--boxel-highlight));
   }
 
-  .boxel-input::placeholder {
+  :where(.plain-page) .boxel-input::placeholder {
     color: var(--muted-foreground, var(--boxel-450));
   }
 
-  .boxel-input:hover:not(:focus-visible):not(:disabled):not(.invalid) {
+  :where(.plain-page)
+    .boxel-input:hover:not(:focus-visible):not(:disabled):not(.invalid) {
     border-color: currentColor;
   }
 
-  .boxel-input.invalid:not(:disabled) {
+  :where(.plain-page) .boxel-input.invalid:not(:disabled) {
     border-color: var(--destructive, var(--boxel-error-100));
     box-shadow: 0 0 0 1px var(--destructive, var(--boxel-error-100));
   }
 
-  .boxel-input.invalid:focus-visible {
+  :where(.plain-page) .boxel-input.invalid:focus-visible {
     outline: 1px solid transparent;
     box-shadow: 0 0 0 1.5px var(--destructive, var(--boxel-error-100));
   }
 
-  .boxel-input.invalid:hover:not(:disabled) {
+  :where(.plain-page) .boxel-input.invalid:hover:not(:disabled) {
     border-color: var(--destructive, var(--boxel-error-100));
   }
 
-  .error-message {
+  :where(.plain-page) .error-message {
     grid-area: error;
     margin-top: var(--boxel-sp-xxxs);
     margin-left: calc(var(--boxel-sp-sm) + 1px);
@@ -453,12 +408,12 @@
 
   /* boxel-ui InputGroup with Text accessories, for the username's "@" and
      server name. */
-  .input-group-container {
+  :where(.plain-page) .input-group-container {
     display: flex;
     flex-direction: column;
   }
 
-  .boxel-input-group {
+  :where(.plain-page) .boxel-input-group {
     --boxel-input-group-padding-x: var(--boxel-sp-sm);
     --boxel-input-group-padding-y: var(--boxel-sp-xxs);
     --boxel-input-group-border-color: var(
@@ -488,7 +443,7 @@
     border: 1px solid var(--boxel-input-group-border-color);
   }
 
-  .boxel-input-group > .form-control {
+  :where(.plain-page) .boxel-input-group > .form-control {
     appearance: none;
     background-clip: padding-box;
     display: block;
@@ -509,37 +464,38 @@
     outline: none;
   }
 
-  .boxel-input-group:focus-within:not(.boxel-input-group--invalid) {
+  :where(.plain-page)
+    .boxel-input-group:focus-within:not(.boxel-input-group--invalid) {
     outline: 1px solid var(--ring, var(--boxel-highlight));
     border-color: var(--ring, var(--boxel-highlight));
   }
 
-  .boxel-input-group > :last-child {
+  :where(.plain-page) .boxel-input-group > :last-child {
     border-top-right-radius: var(--boxel-input-group-inner-border-radius);
     border-bottom-right-radius: var(--boxel-input-group-inner-border-radius);
   }
 
-  .boxel-input-group > :not(:last-child) {
+  :where(.plain-page) .boxel-input-group > :not(:last-child) {
     border-top-right-radius: 0;
     border-bottom-right-radius: 0;
   }
 
-  .boxel-input-group > :first-child {
+  :where(.plain-page) .boxel-input-group > :first-child {
     border-top-left-radius: var(--boxel-input-group-inner-border-radius);
     border-bottom-left-radius: var(--boxel-input-group-inner-border-radius);
   }
 
-  .boxel-input-group > :not(:first-child) {
+  :where(.plain-page) .boxel-input-group > :not(:first-child) {
     border-top-left-radius: 0;
     border-bottom-left-radius: 0;
   }
 
-  .boxel-input-group--invalid {
+  :where(.plain-page) .boxel-input-group--invalid {
     box-shadow: 0 0 0 1px var(--destructive, var(--boxel-error-100));
     border-color: var(--destructive, var(--boxel-error-100));
   }
 
-  .text-accessory {
+  :where(.plain-page) .text-accessory {
     align-items: center;
     color: color-mix(in oklch, var(--muted-foreground) 55%, var(--foreground));
     display: flex;
@@ -551,7 +507,7 @@
   }
 
   /* RegisterUser */
-  .text-accessory.username-prefix {
+  :where(.plain-page) .text-accessory.username-prefix {
     padding-right: 0;
   }
 }
@@ -561,7 +517,7 @@ body {
   background-color: #191624;
 }
 
-.auth {
+:where(.plain-page) .auth {
   --background: #272432;
   --foreground: var(--boxel-light);
   --muted-foreground: #7f7c8c;
@@ -575,7 +531,7 @@ body {
   overflow: auto;
 }
 
-.auth > .logo {
+:where(.plain-page) .auth > .logo {
   position: absolute;
   top: var(--boxel-sp-lg);
   left: var(--boxel-sp-lg);
@@ -584,16 +540,16 @@ body {
   height: 2rem;
 }
 
-.auth > .logo svg {
+:where(.plain-page) .auth > .logo svg {
   width: 100%;
   height: 100%;
 }
 
-.auth > .logo .boxel-icon-shape {
+:where(.plain-page) .auth > .logo .boxel-icon-shape {
   fill: var(--icon-color, #00ffba);
 }
 
-.auth > .container {
+:where(.plain-page) .auth > .container {
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -602,7 +558,7 @@ body {
   padding: var(--boxel-sp-lg);
 }
 
-.auth > .container > .content {
+:where(.plain-page) .auth > .container > .content {
   display: flex;
   flex-direction: column;
   width: 100%;
@@ -610,120 +566,63 @@ body {
   padding: var(--boxel-sp) 0 calc(var(--boxel-sp) * 2) 0;
 }
 
+/* The root `dom.js` draws each plain page in. It lays the page out as if it
+   weren't there; every rule below is scoped to it, so none reaches the
+   components, which reuse the same class names and style themselves. */
+.plain-page {
+  display: contents;
+}
+
 /* A page's steps, and a page that only says something, wrap what the app
      puts straight into the page's column; they lay it out as if they
      weren't there. */
-.step,
-.message {
+:where(.plain-page) .step,
+:where(.plain-page) .message {
   display: contents;
 }
 
 /* AuthButton */
-.auth-btn {
+:where(.plain-page) .auth-btn {
   width: 100%;
 }
 
-.auth-btn .loading-indicator {
+:where(.plain-page) .auth-btn .loading-indicator {
   display: flex;
   justify-content: center;
   align-items: center;
 }
 
 /* AuthFormField */
-.auth-form-field {
+:where(.plain-page) .auth-form-field {
   margin-top: var(--boxel-sp);
 }
 
-.auth-form-field input:autofill {
+:where(.plain-page) .auth-form-field input:autofill {
   transition:
     background-color 0s 600000s,
     color 0s 600000s;
 }
 
-.auth-form-field .error-message {
+:where(.plain-page) .auth-form-field .error-message {
   margin-left: 0;
   font: 500 var(--boxel-font-xs);
 }
 
 /* Login */
-.auth form {
+:where(.plain-page) .auth form {
   display: flex;
   flex-direction: column;
 }
 
 /* A heading here, where the app's is a span; drawn the same. */
-.title {
+:where(.plain-page) .title {
   font: 600 var(--boxel-font-md);
   color: var(--foreground);
   margin: 0 0 var(--boxel-sp-sm);
   padding: 0;
 }
 
-.subtitle {
-  margin: 0 0 var(--boxel-sp-lg);
-  color: var(--foreground);
-  font: var(--boxel-font-sm);
-  line-height: 1.4;
-}
-
-.forgot-password {
-  --host-outline-offset: 2px;
-  margin-top: var(--boxel-sp-4xs);
-  margin-bottom: var(--boxel-sp-lg);
-  margin-left: auto;
-}
-
-.google-button {
-  margin-top: var(--boxel-sp-sm);
-  gap: var(--boxel-sp-xs);
-}
-
-.google-g {
-  width: 1.125rem;
-  height: 1.125rem;
-  flex-shrink: 0;
-}
-
-.divider {
-  display: flex;
-  align-items: center;
-  gap: var(--boxel-sp-sm);
-  margin: var(--boxel-sp-lg) 0 var(--boxel-sp-xs);
-}
-
-.divider::before,
-.divider::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background-color: rgba(255, 255, 255, 0.18);
-}
-
-.divider-label {
-  color: var(--muted-foreground);
-  font: 600 var(--boxel-font-xs);
-  letter-spacing: var(--boxel-lsp-lg);
-  text-transform: uppercase;
-}
-
-.register-prompt {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--boxel-sp-3xs);
-  margin: var(--boxel-sp) 0 0;
-  font: 500 var(--boxel-font-sm);
-}
-
-.register-prompt-text {
-  color: var(--muted-foreground);
-}
-
-.register-link {
-  --host-outline-offset: 2px;
-}
-
-.centered-loading {
+:where(.plain-page) .centered-loading {
   align-self: center;
   display: flex;
   flex-direction: column;
@@ -732,17 +631,17 @@ body {
   text-align: center;
 }
 
-.loading-title {
+:where(.plain-page) .loading-title {
   font: 600 var(--boxel-font-md);
   color: var(--foreground);
 }
 
-.loading-spinner {
+:where(.plain-page) .loading-spinner {
   --boxel-loading-indicator-size: var(--boxel-icon-md);
   --loading-indicator-color: var(--boxel-highlight);
 }
 
-.error {
+:where(.plain-page) .error {
   color: var(--boxel-error-100);
   padding: 0;
   font: 500 var(--boxel-font-xs);
@@ -750,15 +649,15 @@ body {
 }
 
 /* RegisterUser and ForgotPassword */
-.registration-page {
+:where(.plain-page) .registration-page {
   display: contents;
 }
 
-.registration-page form {
+:where(.plain-page) .registration-page form {
   display: block;
 }
 
-.button-wrapper {
+:where(.plain-page) .button-wrapper {
   width: 100%;
   margin-top: var(--boxel-sp-xl);
   display: flex;
@@ -769,15 +668,15 @@ body {
   color: var(--muted-foreground);
 }
 
-.title.forgot-title {
+:where(.plain-page) .title.forgot-title {
   margin-bottom: var(--boxel-sp);
 }
 
-.button-wrapper.forgot-buttons {
+:where(.plain-page) .button-wrapper.forgot-buttons {
   margin-top: var(--boxel-sp-lg);
 }
 
-.info {
+:where(.plain-page) .info {
   margin-top: 0;
   margin-bottom: var(--boxel-sp-sm);
   letter-spacing: var(--boxel-lsp);
@@ -785,7 +684,7 @@ body {
   color: var(--foreground);
 }
 
-.validation-hint {
+:where(.plain-page) .validation-hint {
   display: flex;
   align-items: center;
   gap: var(--boxel-sp-3xs);
@@ -794,17 +693,17 @@ body {
   font: 500 var(--boxel-font-xs);
 }
 
-.validation-hint-icon {
+:where(.plain-page) .validation-hint-icon {
   width: 0.875rem;
   height: 0.875rem;
   flex-shrink: 0;
 }
 
-.validation-hint-icon path {
+:where(.plain-page) .validation-hint-icon path {
   stroke: var(--boxel-highlight);
 }
 
-.email-validation-instruction {
+:where(.plain-page) .email-validation-instruction {
   padding: 0;
   list-style-position: inside;
   margin-top: 0;
@@ -812,25 +711,25 @@ body {
   color: var(--foreground);
 }
 
-.email-validation-instruction li {
+:where(.plain-page) .email-validation-instruction li {
   margin-bottom: var(--boxel-sp-sm);
 }
 
-.resend-email {
+:where(.plain-page) .resend-email {
   margin-top: var(--boxel-sp);
 }
 
-.form-error {
+:where(.plain-page) .form-error {
   color: var(--boxel-error-100);
   margin-top: var(--boxel-sp-lg);
 }
 
-.error.forgot-error {
+:where(.plain-page) .error.forgot-error {
   text-align: center;
 }
 
-.error a,
-.error .link {
+:where(.plain-page) .error a,
+:where(.plain-page) .error .link {
   padding: 0;
   border: none;
   background: none;
@@ -840,7 +739,7 @@ body {
   cursor: pointer;
 }
 
-.loading-message {
+:where(.plain-page) .loading-message {
   margin: 0;
   font: 500 var(--boxel-font-sm);
 }

@@ -43,16 +43,15 @@ import {
   signInWithPassword,
   storeSession,
 } from '../security/session.js';
+import { cliCallback } from '../security/cli-handoff.js';
 import {
-  asSentence,
-  cliCallback,
-  cliParams,
   handToCli,
-  modeURL,
   renderIncompleteCliLink,
   renderMessage,
   renderSignedIn,
-} from './sign-in.js';
+} from './plain-pages.js';
+import { asSentence } from './sign-in-copy.js';
+import { cliParams, modeURL } from './urls.js';
 
 // How often the page asks whether the email has been validated.
 const EMAIL_POLL_INTERVAL_MS = 1000;

@@ -34,12 +34,9 @@ import {
 } from '../security/matrix.js';
 import { newPasswordFields } from './password-fields.js';
 import { endSessionsForNewPassword, readConfig } from '../security/session.js';
-import {
-  cliCallback,
-  cliParams,
-  modeURL,
-  renderIncompleteCliLink,
-} from './sign-in.js';
+import { cliCallback } from '../security/cli-handoff.js';
+import { renderIncompleteCliLink } from './plain-pages.js';
+import { cliParams, modeURL } from './urls.js';
 
 // The CLI the reset began from, when one did: the page carries its listener
 // along so that signing in afterwards hands the session to it.

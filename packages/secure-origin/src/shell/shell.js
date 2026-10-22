@@ -7,13 +7,24 @@
 // query parameter and given the page's root element to render into. A request
 // naming no known mode leaves the page empty. The address Google returns to
 // after a sign-in is a mode of its own.
-import { cliSignInMode, googleCallbackMode, signInMode } from './sign-in.js';
+import '../styles/layers.css';
+import { renderComponent } from '@ember/renderer';
+
+import CliSignInPage from './sign-in/cli-sign-in-page.gts';
+import GoogleCallback from './sign-in/google-callback.gts';
+import SignInPage from './sign-in/sign-in-page.gts';
 import { registerMode, verifyEmailMode } from './register.js';
 import { forgotPasswordMode, resetPasswordMode } from './password-reset.js';
+import { isGoogleCallback } from './urls.js';
+
+// A mode drawn by a component.
+function component(page) {
+  return (root) => renderComponent(page, { into: root });
+}
 
 const modes = {
-  'sign-in': signInMode,
-  'cli-sign-in': cliSignInMode,
+  'sign-in': component(SignInPage),
+  'cli-sign-in': component(CliSignInPage),
   register: registerMode,
   'verify-email': verifyEmailMode,
   'forgot-password': forgotPasswordMode,
@@ -21,10 +32,9 @@ const modes = {
 };
 
 let root = document.getElementById('secure-shell');
-let url = new URL(window.location.href);
-let mode = url.searchParams.get('mode');
-if (root && url.pathname.endsWith('/google-callback')) {
-  googleCallbackMode(root);
+let mode = new URL(window.location.href).searchParams.get('mode');
+if (root && isGoogleCallback()) {
+  component(GoogleCallback)(root);
 } else if (root && mode && Object.hasOwn(modes, mode)) {
   modes[mode](root);
 }
