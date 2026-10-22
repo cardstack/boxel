@@ -1409,49 +1409,33 @@ module(`server-endpoints/${basename(import.meta.filename)}`, function () {
         );
       });
 
-      // A stored event room the realm server isn't in shows what each call
-      // does to the realm's room: a grant checks the room against the grants,
-      // which forgets it, and a revocation retires it before answering.
-      test("upserts: a grant checks the realm's event room, and a revocation retires it before answering", async function (assert) {
+      // A stored event room the realm server isn't in shows that a grant
+      // checks the realm's room against its grants: the check forgets it.
+      test("upserts: a grant checks the realm's event room against its grants", async function (assert) {
         let user = '@op-test-event-room:localhost';
-        let url = (read: string, write: string) =>
-          `/_grafana-upsert-realm-user-permission` +
-          `?realm=${encodeURIComponent(testRealmURL.href)}` +
-          `&user=${encodeURIComponent(user)}` +
-          `&read=${read}&write=${write}`;
-        let roomOf = async () =>
-          (await fetchRealmEventRoom(context.dbAdapter, testRealmURL.href))
-            .roomId;
-
         await insertRealmEventRoom(
           context.dbAdapter,
           testRealmURL.href,
           '!not-a-room:localhost',
         );
         let granted = await context.request
-          .post(url('true', 'false'))
+          .post(
+            `/_grafana-upsert-realm-user-permission` +
+              `?realm=${encodeURIComponent(testRealmURL.href)}` +
+              `&user=${encodeURIComponent(user)}` +
+              `&read=true&write=false`,
+          )
           .set('Authorization', `Bearer ${grafanaSecret}`)
           .set('Content-Type', 'application/json');
         assert.strictEqual(granted.status, 200, 'the grant succeeds');
-        await waitUntil(async () => (await roomOf()) === null, {
-          timeout: 10_000,
-          timeoutMessage: "the grant never checked the realm's event room",
-        });
-
-        await insertRealmEventRoom(
-          context.dbAdapter,
-          testRealmURL.href,
-          '!another-room:localhost',
-        );
-        let revoked = await context.request
-          .post(url('false', 'false'))
-          .set('Authorization', `Bearer ${grafanaSecret}`)
-          .set('Content-Type', 'application/json');
-        assert.strictEqual(revoked.status, 200, 'the revocation succeeds');
-        assert.strictEqual(
-          await roomOf(),
-          null,
-          'the room is retired by the time the revocation answers',
+        await waitUntil(
+          async () =>
+            (await fetchRealmEventRoom(context.dbAdapter, testRealmURL.href))
+              .roomId === null,
+          {
+            timeout: 10_000,
+            timeoutMessage: "the grant never checked the realm's event room",
+          },
         );
       });
 

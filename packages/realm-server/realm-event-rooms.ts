@@ -71,11 +71,13 @@ function oneAtATime<T>(realmURL: string, run: () => Promise<T>): Promise<T> {
   let previous = creations.get(realmURL) ?? Promise.resolve();
   let next = previous.then(run, run);
   creations.set(realmURL, next);
-  void next.finally(() => {
+  // The caller handles `next` failing; this cleanup must not reject too.
+  let forget = () => {
     if (creations.get(realmURL) === next) {
       creations.delete(realmURL);
     }
-  });
+  };
+  next.then(forget, forget);
   return next;
 }
 
