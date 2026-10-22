@@ -51,16 +51,18 @@ The names with no slot keep their gallery names, but the theme declares them now
 
 ## Steps
 
-1. Rewrite `theme.json` as a `BrandGuide` with the values above, copied from `ChoreoRoot`'s current light and dark sets. These are the values PR #6741 measured.
+1. Rewrite `theme.json` as a `BrandGuide` with the values above, copied from `ChoreoRoot`'s current light and dark sets. These are the measured values that hold 4.5:1 for text in both schemes.
 2. Strip the palette from `ChoreoRoot`. Rewrite references across `realm/` mechanically, matching only `var(--name)` with a `,` or `)` after the name, plus the string token names in `stages/inline-edit.gts`.
 3. Read the eyebrow role at the ten kicker sites.
 4. Update the docs that describe where the palette lives: the README's `theme.json` row, the `lib/theme.ts` comment and the `ChoreoRoot` doc comment.
 5. Test, in `gallery.test.gts`:
-   - Render the gallery with the theme card linked, in each scheme. The gallery's text, an accent and the focus ring compute to the theme's values. A Pret UI `Button` rendered in the gallery computes `--primary` and `--foreground` to the gallery's values.
+   - Render the gallery with the theme card linked, in each scheme. The contract tokens a Pret UI control reads (`--foreground`, `--background`, `--card`, `--primary`, `--primary-ink`, `--ring`, …) resolve to the gallery's values on a control inside it. Pret UI itself can't render here: `boxel test`'s local mode doesn't mount the `@cardstack/pretui/` realm.
    - A second theme with a different `--foreground` and `--primary` repaints the gallery.
+   - The theme's eyebrow role reaches the gallery.
+6. `check-realm` fails on any card instance that doesn't link `theme.json`.
 
 ## Testing notes
 
 - `boxel test realm` runs against a built host `dist/`, with no realm-server or Matrix stack.
 - Lint with `pnpm lint` in `packages/choreo-gallery`; that includes `check-realm`.
-- Check visual parity in light and dark by computing styles on the grid and a demo page before and after the change.
+- Check value parity by resolving every token of the old `ChoreoRoot` and of the new theme card in each scheme, and comparing them.
