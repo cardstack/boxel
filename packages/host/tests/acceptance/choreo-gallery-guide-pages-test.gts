@@ -40,7 +40,7 @@ class StubHostModeService extends HostModeService {
 }
 
 const guide = (slug: string) => `${testHostModeRealmURL}docs/guides/${slug}`;
-const article = '[data-guide-article]';
+const article = '[data-test-guide-article]';
 
 module('Acceptance | Choreo gallery | guide pages', function (hooks) {
   setupApplicationTest(hooks);
@@ -88,13 +88,13 @@ module('Acceptance | Choreo gallery | guide pages', function (hooks) {
       .exists('the page is the guide card');
     assert.dom(`${article} h1`).hasText('Getting Started');
     assert
-      .dom('[data-choreo-site] [data-guide-article]')
+      .dom('[data-choreo-site] [data-test-guide-article]')
       .exists('inside the gallery’s frame and palette');
     assert
-      .dom('[data-site-home]')
+      .dom('[data-test-site-home]')
       .hasAttribute('href', testHostModeRealmURL, 'the brand leads home');
     assert
-      .dom('[data-guide-home]')
+      .dom('[data-test-guide-home]')
       .hasAttribute('href', testHostModeRealmURL, 'and so does the nav');
     assert
       .dom('[data-test-file-isolated]')
@@ -106,7 +106,7 @@ module('Acceptance | Choreo gallery | guide pages', function (hooks) {
 
   test("the guides' sections run down the side, with the guide marked", async function (assert) {
     await visit('/test/docs/guides/core-presence');
-    await waitFor('[data-guide-section]', { timeout: 15_000 });
+    await waitFor('[data-test-guide-section]', { timeout: 15_000 });
 
     let titles = [
       ...document.querySelectorAll('[data-test-guide-section-title]'),
@@ -122,19 +122,19 @@ module('Acceptance | Choreo gallery | guide pages', function (hooks) {
       'the four sections of the index, in its order',
     );
     assert
-      .dom('[data-guide-nav-link]')
+      .dom('[data-test-guide-nav-link]')
       .exists(
         { count: Object.keys(choreoGalleryGuides()).length },
         'every guide, whether or not this realm holds it',
       );
     assert
-      .dom('[data-guide-nav] [aria-current="page"]')
+      .dom('[data-test-guide-nav] [aria-current="page"]')
       .exists({ count: 1 }, 'one guide is marked');
     assert
-      .dom('[data-guide-nav-link="core-presence"]')
+      .dom('[data-test-guide-nav-link="core-presence"]')
       .hasAttribute('aria-current', 'page', 'the one being read');
     assert
-      .dom('[data-guide-nav-link="core-layout"]')
+      .dom('[data-test-guide-nav-link="core-layout"]')
       .hasAttribute('href', guide('core-layout'), 'each links its page');
   });
 
@@ -204,7 +204,7 @@ module('Acceptance | Choreo gallery | guide pages', function (hooks) {
 
     assert.dom(`${article} h1`).hasText('The Choreo guides');
     assert
-      .dom('[data-guide-nav] [aria-current="page"]')
+      .dom('[data-test-guide-nav] [aria-current="page"]')
       .hasText('All guides', 'the index is the one marked');
     assert
       .dom(`${article} a[href="core-start"]`)

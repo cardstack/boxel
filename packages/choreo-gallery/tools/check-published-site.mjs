@@ -258,7 +258,7 @@ async function expectTheme(page, theme, problems) {
 // host's file chrome.
 async function expectGuide(page, slug, embeds, problems) {
   await goLive(page, new URL(`docs/guides/${slug}`, site).href);
-  let article = page.locator('[data-guide-article]');
+  let article = page.locator('[data-test-guide-article]');
   let rendered = await article
     .locator('h1')
     .first()
@@ -275,12 +275,12 @@ async function expectGuide(page, slug, embeds, problems) {
     );
     return;
   }
-  let sections = await page.locator('[data-guide-section]').count();
+  let sections = await page.locator('[data-test-guide-section]').count();
   if (sections === 0) {
     problems.push("the guides' sections are missing");
   }
   let current = await page
-    .locator('[data-guide-nav] [aria-current="page"]')
+    .locator('[data-test-guide-nav] [aria-current="page"]')
     .count();
   if (current !== 1) {
     problems.push(`${current} navigation links mark the guide as current`);

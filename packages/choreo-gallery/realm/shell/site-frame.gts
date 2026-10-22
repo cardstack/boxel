@@ -42,7 +42,7 @@ export class SiteFrame extends Component<Signature> {
             class='brand'
             href={{@home}}
             aria-label='Choreo gallery'
-            data-site-home
+            data-test-site-home
           >
             <ChoreoMark />
             <span class='brand-copy'>

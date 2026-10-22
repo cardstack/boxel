@@ -62,14 +62,14 @@ export class GuidePage extends Component<Signature> {
   <template>
     <SiteFrame @home={{this.home}}>
       <div class='guide-page' {{theaterView}}>
-        <div class='guide-layout' data-guide={{@current}}>
+        <div class='guide-layout'>
           <nav
             class='guide-nav {{if this.navOpen "is-open"}}'
             aria-label='Guides'
             {{this.showCurrent @current}}
-            data-guide-nav
+            data-test-guide-nav
           >
-            <a class='guide-back' href={{this.home}} data-guide-home>
+            <a class='guide-back' href={{this.home}} data-test-guide-home>
               <span aria-hidden='true'>←</span>
               Gallery
             </a>
@@ -86,7 +86,7 @@ export class GuidePage extends Component<Signature> {
                 aria-current={{this.isCurrent 'README' @current}}
               >All guides</a>
               {{#each @sections as |part|}}
-                <section class='guide-section' data-guide-section>
+                <section class='guide-section' data-test-guide-section>
                   <p class='guide-section-title' data-test-guide-section-title>
                     {{#if part.number}}
                       <span class='guide-section-number'>{{part.number}}</span>
@@ -99,7 +99,7 @@ export class GuidePage extends Component<Signature> {
                         <a
                           href={{this.href guide.slug}}
                           aria-current={{this.isCurrent guide.slug @current}}
-                          data-guide-nav-link={{guide.slug}}
+                          data-test-guide-nav-link={{guide.slug}}
                         >{{guide.title}}</a>
                       </li>
                     {{/each}}
@@ -108,7 +108,7 @@ export class GuidePage extends Component<Signature> {
               {{/each}}
             </div>
           </nav>
-          <article class='guide-article' data-guide-article>
+          <article class='guide-article' data-test-guide-article>
             {{#if @document}}
               <MarkdownPreview
                 @model={{@document}}
