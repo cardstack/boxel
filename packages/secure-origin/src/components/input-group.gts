@@ -140,6 +140,13 @@ export default class InputGroup extends Component<Signature> {
               (concat 'error-message-' this.elementId)
               false
             }}
+            {{! Screen readers announce aria-errormessage unevenly, so the
+                error also describes the input, as BoxelInput's does. }}
+            aria-describedby={{if
+              shouldShowErrorMessage
+              (concat 'error-message-' this.elementId)
+              false
+            }}
             {{on 'input' this.onInput}}
             {{on 'blur' this.onBlur}}
             ...attributes
@@ -159,6 +166,7 @@ export default class InputGroup extends Component<Signature> {
           <div
             id={{concat 'error-message-' this.elementId}}
             class='error-message'
+            aria-live='polite'
             data-test-boxel-input-group-error-message
           >{{@errorMessage}}</div>
         {{/if}}

@@ -281,6 +281,18 @@ module('Integration | register', function (hooks) {
         document.querySelector(error('username'))?.textContent?.trim(),
       );
       assert.dom(error('username')).hasText(message, value || 'empty');
+      // An error the availability check shows on its own is announced, and
+      // read with its field.
+      let input = document.querySelector('[data-test-username-field]')!;
+      let described = input.getAttribute('aria-describedby');
+      assert.ok(
+        described,
+        `${value || 'empty'}: the input names a description`,
+      );
+      assert
+        .dom(document.getElementById(described!))
+        .hasAttribute('aria-live', 'polite')
+        .hasText(message);
     }
     assert.deepEqual(
       servers.requests('matrix', 'GET register/available').map(() => 'checked'),

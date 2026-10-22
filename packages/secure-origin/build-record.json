@@ -184,7 +184,7 @@
       ]
     },
     "shared.js": {
-      "bytes": 272678,
+      "bytes": 272803,
       "modules": [
         {
           "package": "@cardstack/secure-origin",
@@ -239,7 +239,7 @@
         {
           "package": "@cardstack/secure-origin",
           "module": "src/components/input-group.gts",
-          "size": 3727
+          "size": 3862
         },
         {
           "package": "@cardstack/secure-origin",
