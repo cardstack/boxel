@@ -9,6 +9,7 @@ import { loadContentTag } from '@cardstack/runtime-common/content-tag-loader';
 // eslint-disable-next-line ember/no-test-import-export
 import { loadRealmTests } from './live-test';
 import { setupQUnit } from './helpers/setup-qunit';
+import { setupTestIdentityTags } from './helpers/identity-tags';
 import { pinTestClock } from './helpers/test-clock';
 import { registerShardWarmup } from './helpers/shard-warmup';
 import { selectShardModules } from './helpers/shard-modules';
@@ -37,6 +38,7 @@ export async function start(examOptions) {
   async function setupHostTests() {
     setApplication(application);
     setupQUnit();
+    setupTestIdentityTags();
     setupOperatorModeParametersMatchAssertion(QUnit.assert);
 
     const urlParams = new URLSearchParams(window.location.search);

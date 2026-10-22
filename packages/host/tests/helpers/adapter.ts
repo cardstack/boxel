@@ -13,11 +13,9 @@ import {
   hasExecutableExtension,
   Deferred,
   streamSpliced,
-  trimExecutableExtension,
   unixTime,
   type LintResult,
 } from '@cardstack/runtime-common';
-import { exportIdentitySymbolKey } from '@cardstack/runtime-common/export-identity-plugin';
 
 import type { MatrixClient } from '@cardstack/runtime-common/matrix-client';
 import { APP_BOXEL_REALM_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
@@ -54,38 +52,6 @@ interface File {
 }
 
 type CardAPI = typeof import('@cardstack/base/card-api');
-
-// A class a test shims as a module stands in for one a realm compiles, which
-// carries its identity as a static member (see export-identity-plugin.ts), so
-// it is tagged the same way: with the module it is shimmed as and the first
-// name that module exports it under. A fixture class can be shimmed by more
-// than one test, as a different module each time, so the latest shim's tag
-// replaces an earlier one. A tag the class was compiled with — a base class a
-// fixture re-exports — is left alone.
-const identityTagKey = Symbol.for(exportIdentitySymbolKey);
-const taggedByShim = new WeakSet<Function>();
-
-function tagShimmedClasses(moduleURL: URL, exports: Record<string, unknown>) {
-  let module = trimExecutableExtension(moduleURL.href);
-  let tagged = new Set<Function>();
-  for (let [name, value] of Object.entries(exports)) {
-    if (
-      typeof value !== 'function' ||
-      !Function.prototype.toString.call(value).startsWith('class') ||
-      tagged.has(value) ||
-      (Object.hasOwn(value, identityTagKey) && !taggedByShim.has(value))
-    ) {
-      continue;
-    }
-    Object.defineProperty(value, identityTagKey, {
-      value: [module, name],
-      configurable: true,
-      writable: true,
-    });
-    taggedByShim.add(value);
-    tagged.add(value);
-  }
-}
 
 class TokenExpiredError extends Error {}
 class JsonWebTokenError extends Error {}
@@ -197,7 +163,6 @@ export class TestRealmAdapter implements RealmAdapter {
       }
       for (let [name, fn] of Object.entries(content)) {
         if (typeof fn === 'function' && typeof name === 'string') {
-          tagShimmedClasses(url, content);
           this.#loader.shimModule(url.href, content);
           continue;
         }
