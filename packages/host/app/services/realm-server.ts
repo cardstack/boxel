@@ -50,6 +50,7 @@ import {
 import { createServerRequestTimingMiddleware } from './client-telemetry';
 
 import type { ExtendedClient } from './matrix-sdk-loader';
+import type MessageService from './message-service';
 import type NetworkService from './network';
 import type RealmService from './realm';
 import type SessionService from './session';
@@ -121,6 +122,7 @@ export default class RealmServerService
   extends Service
   implements RealmServerTokenSource
 {
+  @service declare private messageService: MessageService;
   @service declare private network: NetworkService;
   @service declare private session: SessionService;
   @service declare private realm: RealmService;
@@ -156,6 +158,9 @@ export default class RealmServerService
     super(owner);
     this.session.register(this);
     this.fetchCatalogRealms();
+    this.messageService.onFirstSubscription((realm) =>
+      this.joinRealmEventRoom(realm),
+    );
   }
 
   get ready() {
@@ -713,7 +718,7 @@ export default class RealmServerService
   // the user's session room. Joining once is enough: the host stays in the
   // room, and catches up on what it missed through sync. Realms asked for in
   // the same turn are asked about together.
-  joinRealmEventRoom(realmIdentifier: string) {
+  private joinRealmEventRoom(realmIdentifier: string) {
     let realmURL = ensureTrailingSlash(
       resolvedRealmURLHref(this.network.virtualNetwork, realmIdentifier),
     );
@@ -755,16 +760,10 @@ export default class RealmServerService
       let { rooms } = (await response.json()) as {
         rooms?: Record<string, string>;
       };
-      let roomIds = [...new Set(Object.values(rooms ?? {}))];
-      if (roomIds.length === 0) {
-        return;
-      }
-      let { joined_rooms } = await client.getJoinedRooms();
-      let joinedRooms = new Set(joined_rooms ?? []);
-      for (let roomId of roomIds) {
-        if (!joinedRooms.has(roomId)) {
-          await client.joinRoom(roomId);
-        }
+      // Joining a room the user is already in changes nothing, and the SDK
+      // answers it locally once sync has the room.
+      for (let roomId of new Set(Object.values(rooms ?? {}))) {
+        await client.joinRoom(roomId);
       }
     } catch (e) {
       // Asked about again the next time this runs.

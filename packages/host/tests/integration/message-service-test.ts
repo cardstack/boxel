@@ -119,17 +119,35 @@ module('Integration | message-service | realm event rooms', function (hooks) {
 
   test('subscribing to a world-readable realm joins the room its events go to', async function (assert) {
     let publicRealmURL = 'http://localhost:4205/public/';
-    let roomId = '!public-realm-events:localhost';
+    // The realm's own user creates the room; the host is not in it yet.
+    let roomId = mockMatrixUtils.createAndJoinRoom({
+      sender: '@public_realm:localhost',
+      name: `Realm events: ${publicRealmURL}`,
+      id: '!public-realm-events:localhost',
+    });
     setRealmEventRoom(publicRealmURL, roomId);
+    let membership = () => {
+      try {
+        return mockMatrixUtils.getRoomState(
+          roomId,
+          'm.room.member',
+          '@testuser:localhost',
+        ).membership;
+      } catch {
+        return undefined;
+      }
+    };
+    assert.strictEqual(membership(), undefined, 'the host starts outside it');
     let messageService = getService('message-service');
 
     let unsubscribe = messageService.subscribe(publicRealmURL, () => {});
     try {
-      await waitUntil(() => mockMatrixUtils.getRoomIds().includes(roomId), {
+      await waitUntil(() => membership() === 'join', {
         timeoutMessage: `the host did not join ${roomId}`,
       });
-      assert.ok(
-        mockMatrixUtils.getRoomIds().includes(roomId),
+      assert.strictEqual(
+        membership(),
+        'join',
         'the host joined the realm event room',
       );
     } finally {
