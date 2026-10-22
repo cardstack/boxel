@@ -208,12 +208,19 @@ test.describe('Live Cards', () => {
     // that wait has taken over 10 seconds, so wait for the save itself rather
     // than giving the whole round trip a fixed window.
     let saveStartedAt = Date.now();
-    let save = page.waitForResponse(
-      (response) =>
-        response.request().method() === 'PATCH' &&
-        response.url().startsWith(instanceUrl) &&
-        (response.request().postData() ?? '').includes('Replacement'),
-    );
+    let save = page
+      .waitForResponse(
+        (response) =>
+          response.request().method() === 'PATCH' &&
+          response.url().startsWith(instanceUrl) &&
+          (response.request().postData() ?? '').includes('Replacement'),
+        { timeout: 60_000 },
+      )
+      .catch((e) => {
+        throw new Error(
+          `no PATCH to ${instanceUrl} with 'Replacement' in its body: ${e.message}`,
+        );
+      });
 
     await page
       .locator('[data-test-field="cardInfo-name"] input')
@@ -234,10 +241,13 @@ test.describe('Live Cards', () => {
         })
         .toContain('Replacement');
     } catch (e) {
+      // The page may be gone (at the test timeout, say); the original
+      // failure is the one to report.
+      let models = await describeMonacoModels(page).catch(
+        (err) => `unavailable: ${err.message}`,
+      );
       console.log(
-        `monaco models when the update was missing: ${JSON.stringify(
-          await describeMonacoModels(page),
-        )}`,
+        `monaco models when the update was missing: ${JSON.stringify(models)}`,
       );
       throw e;
     }
