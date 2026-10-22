@@ -1022,13 +1022,25 @@ export class MockClient implements ExtendedClient {
     for (const [listKey, list] of Object.entries(req.lists || {})) {
       for (let i = 0; i < list.ranges.length; i++) {
         let [start, end] = list.ranges[i];
-        //currently we only filter rooms using is_dm
+        // Filters on is_dm, room_types and not_room_types, the filters the
+        // host's lists use.
         let dmRooms = (await this.getAccountDataFromServer('m.direct')) ?? {};
+        let roomType = (roomId: string): string =>
+          this.serverState.getRoomState(roomId, 'm.room.create', '')?.content
+            ?.type;
         let roomsInRange = this.serverState.rooms
           .filter((r) =>
             list.filters?.is_dm
               ? dmRooms[this.loggedInAs!]?.includes(r.id)
               : !dmRooms[this.loggedInAs!]?.includes(r.id),
+          )
+          .filter(
+            (r) =>
+              !list.filters?.room_types ||
+              list.filters.room_types.includes(roomType(r.id)),
+          )
+          .filter(
+            (r) => !list.filters?.not_room_types?.includes(roomType(r.id)),
           )
           .slice(start, end + 1);
 

@@ -131,7 +131,8 @@ export async function fetchRealmEventRoom(
  * Stores the given room as the realm's event room, unless the realm already
  * has one, and returns the room that is stored. When two processes create a
  * room for the same realm at once, the first stored wins and the other's room
- * goes unused.
+ * goes unused. A conflicting insert waits for the row it conflicts with and
+ * reads that row's room, so every caller gets the winner back.
  */
 export async function insertRealmEventRoom(
   dbAdapter: DBAdapter,
@@ -139,19 +140,33 @@ export async function insertRealmEventRoom(
   roomId: string,
 ): Promise<string> {
   let rows = await query(dbAdapter, [
-    'WITH inserted AS (',
-    '  INSERT INTO realm_event_rooms (realm_url, room_id) VALUES (',
+    'INSERT INTO realm_event_rooms (realm_url, room_id) VALUES (',
     param(realmURL),
     ',',
     param(roomId),
-    '  ) ON CONFLICT (realm_url) DO NOTHING',
-    '  RETURNING room_id',
-    ')',
-    'SELECT room_id FROM inserted',
-    'UNION ALL',
-    'SELECT room_id FROM realm_event_rooms WHERE realm_url =',
-    param(realmURL),
-    'LIMIT 1',
+    ') ON CONFLICT (realm_url) DO UPDATE',
+    'SET room_id = realm_event_rooms.room_id',
+    'RETURNING room_id',
   ]);
   return rows[0].room_id as string;
+}
+
+/**
+ * Forgets the realm's event room when it is the given room, so the next host
+ * that asks for the realm's room gets a new one. For a stored room the realm
+ * server can no longer send in, such as after its homeserver was reset.
+ */
+export async function clearRealmEventRoom(
+  dbAdapter: DBAdapter,
+  realmURL: string,
+  roomId: string,
+): Promise<boolean> {
+  let rows = await query(dbAdapter, [
+    'DELETE FROM realm_event_rooms WHERE realm_url =',
+    param(realmURL),
+    'AND room_id =',
+    param(roomId),
+    'RETURNING realm_url',
+  ]);
+  return rows.length > 0;
 }

@@ -8,6 +8,7 @@ import {
   fetchRealmEventRoom,
   fetchSessionRoom,
   fetchRealmSessionRooms,
+  clearRealmEventRoom,
   insertRealmEventRoom,
   upsertSessionRoom,
 } from '@cardstack/runtime-common/db-queries/session-room-queries';
@@ -370,6 +371,47 @@ module(basename(import.meta.filename), function () {
         stored,
         '!first:localhost',
         'the room stored first is the one returned',
+      );
+    });
+
+    test('rooms stored for a realm at once all come back as the one kept', async function (assert) {
+      let stored = await Promise.all(
+        ['!a:localhost', '!b:localhost', '!c:localhost', '!d:localhost'].map(
+          (roomId) => insertRealmEventRoom(dbAdapter, realmURL.href, roomId),
+        ),
+      );
+      let { roomId } = await fetchRealmEventRoom(dbAdapter, realmURL.href);
+      assert.ok(roomId, 'a room is stored');
+      assert.deepEqual(
+        stored,
+        stored.map(() => roomId),
+        'every caller gets the stored room back',
+      );
+    });
+
+    test('forgets the stored room only when it is the one named', async function (assert) {
+      await insertPermissions(dbAdapter, realmURL, { '*': ['read'] });
+      await insertRealmEventRoom(dbAdapter, realmURL.href, '!events:localhost');
+
+      assert.false(
+        await clearRealmEventRoom(dbAdapter, realmURL.href, '!other:localhost'),
+        'another room is not forgotten',
+      );
+      assert.strictEqual(
+        (await fetchRealmEventRoom(dbAdapter, realmURL.href)).roomId,
+        '!events:localhost',
+      );
+      assert.true(
+        await clearRealmEventRoom(
+          dbAdapter,
+          realmURL.href,
+          '!events:localhost',
+        ),
+        'the stored room is forgotten',
+      );
+      assert.strictEqual(
+        (await fetchRealmEventRoom(dbAdapter, realmURL.href)).roomId,
+        null,
       );
     });
   });

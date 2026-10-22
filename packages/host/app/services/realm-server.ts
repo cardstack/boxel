@@ -35,6 +35,7 @@ import {
   type PublicRealmSummary,
   type RealmServerTokenSource,
 } from '@cardstack/runtime-common';
+import { REALMS_LIST_UPDATED_EVENT_TYPE } from '@cardstack/runtime-common/matrix-constants';
 import {
   joinDMRoom,
   RealmAuthClient,
@@ -57,6 +58,9 @@ import type SessionService from './session';
 import type { IEvent } from 'matrix-js-sdk';
 
 const { hostsOwnAssets, resolvedBaseRealmURL } = ENV;
+
+const REALM_EVENT_ROOMS_FIRST_RETRY_MS = 2_000;
+const REALM_EVENT_ROOMS_MAX_RETRY_MS = 60_000;
 
 export interface RealmServerTokenClaims {
   user: string;
@@ -153,6 +157,9 @@ export default class RealmServerService
   // asked about this session.
   private realmEventRoomsPending = new Set<string>();
   private realmEventRoomsRequested = new Set<string>();
+  // How long to wait before asking again about realms whose rooms could not
+  // be provided. Doubles on each failure up to a minute; reset on success.
+  private realmEventRoomsRetryMs = REALM_EVENT_ROOMS_FIRST_RETRY_MS;
 
   constructor(owner: Owner) {
     super(owner);
@@ -161,6 +168,12 @@ export default class RealmServerService
     this.messageService.onFirstSubscription((realm) =>
       this.joinRealmEventRoom(realm),
     );
+    // A change to which realms the user can read can also change whether a
+    // realm they have open is world-readable, and so which room its events
+    // arrive in. Ask again about every realm that has a subscriber.
+    this.subscribeEvent(REALMS_LIST_UPDATED_EVENT_TYPE, async () => {
+      this.reaskRealmEventRooms();
+    });
   }
 
   get ready() {
@@ -189,8 +202,13 @@ export default class RealmServerService
       0,
       this.unreachableRealmServersList.length,
     );
+    // A run in flight belongs to the session that is ending; it must not put
+    // that session's realms back in line for the next one.
+    this.joinRealmEventRoomsTask.cancelAll();
+    this.retryRealmEventRoomsTask.cancelAll();
     this.realmEventRoomsPending.clear();
     this.realmEventRoomsRequested.clear();
+    this.realmEventRoomsRetryMs = REALM_EVENT_ROOMS_FIRST_RETRY_MS;
     // Do NOT clear eventSubscribers here: subscriber *wiring* is app-scoped.
     // Services (e.g. BillingService) call subscribeEvent() once in their
     // constructor, for the app's lifetime. Logout is an in-app reset, not a
@@ -730,6 +748,13 @@ export default class RealmServerService
     void this.joinRealmEventRoomsTask.perform();
   }
 
+  private reaskRealmEventRooms() {
+    this.realmEventRoomsRequested.clear();
+    for (let realm of this.messageService.subscribedRealms()) {
+      this.joinRealmEventRoom(realm);
+    }
+  }
+
   private joinRealmEventRoomsTask = task({ keepLatest: true }, async () => {
     await rawTimeout(0);
     // Without a matrix client there's no session to join with. Signing in
@@ -754,24 +779,38 @@ export default class RealmServerService
           body: JSON.stringify({ realms }),
         },
       );
-      if (!response.ok) {
-        throw new Error(`${response.status} - ${await response.text()}`);
-      }
-      let { rooms } = (await response.json()) as {
-        rooms?: Record<string, string>;
-      };
+      // A 503 still carries the rooms the server could provide; the rest are
+      // asked about again below.
+      let { rooms } = (
+        response.ok || response.status === 503 ? await response.json() : {}
+      ) as { rooms?: Record<string, string> };
       // Joining a room the user is already in changes nothing, and the SDK
       // answers it locally once sync has the room.
       for (let roomId of new Set(Object.values(rooms ?? {}))) {
         await client.joinRoom(roomId);
       }
+      if (!response.ok) {
+        throw new Error(`${response.status} from _realm-event-rooms`);
+      }
+      this.realmEventRoomsRetryMs = REALM_EVENT_ROOMS_FIRST_RETRY_MS;
     } catch (e) {
-      // Asked about again the next time this runs.
+      // Asked about again after a pause, and again on the next subscription.
       for (let realm of realms) {
         this.realmEventRoomsPending.add(realm);
       }
       console.warn(`Unable to join the realm event rooms of ${realms}`, e);
+      let retryMs = this.realmEventRoomsRetryMs;
+      this.realmEventRoomsRetryMs = Math.min(
+        retryMs * 2,
+        REALM_EVENT_ROOMS_MAX_RETRY_MS,
+      );
+      void this.retryRealmEventRoomsTask.perform(retryMs);
     }
+  });
+
+  private retryRealmEventRoomsTask = restartableTask(async (ms: number) => {
+    await rawTimeout(ms);
+    void this.joinRealmEventRoomsTask.perform();
   });
 
   private async ensureJoinedSessionRoom(tokens: {

@@ -71,6 +71,11 @@ export default class MessageService extends Service {
     };
   }
 
+  // The realms that have at least one subscriber.
+  subscribedRealms(): string[] {
+    return [...this.listenerCallbacks.keys()];
+  }
+
   // Calls `listener` with each realm as it gains its first subscriber, starting
   // with the realms subscribed to already. A world-readable realm's events
   // arrive in a room of their own, which RealmServerService joins this way.

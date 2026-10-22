@@ -213,17 +213,21 @@ export class MockUtils {
     name,
     id,
     timestamp,
+    roomType,
   }: {
     sender: string;
     name: string;
     id?: string;
     timestamp?: number;
+    // The room's `m.room.create` type, which sliding sync lists filter on.
+    roomType?: string;
   }) => {
     let roomId = this.testState.sdk!.serverState.createRoom(
       sender,
       name,
       timestamp,
       id,
+      roomType,
     );
     return roomId;
   };

@@ -170,6 +170,38 @@ module(`realm-endpoints/${basename(import.meta.filename)}`, function () {
         );
       });
 
+      test("PATCH /_permissions of the '*' grant pushes realms-list-updated to every user the realm names", async function (assert) {
+        // Making a realm world-readable moves its events into a room of its
+        // own, so a host that has it open must ask again where to listen.
+        await insertPermissions(dbAdapter, testRealmURL, {
+          [granteeUserId]: ['read'],
+        });
+        let response = await request
+          .patch('/_permissions')
+          .set('Accept', 'application/vnd.api+json')
+          .set(
+            'Authorization',
+            `Bearer ${createJWT(testRealm, 'mary', [
+              'read',
+              'write',
+              'realm-owner',
+            ])}`,
+          )
+          .send({
+            data: {
+              id: testRealmHref,
+              type: 'permissions',
+              attributes: { permissions: { '*': ['read'] } },
+            },
+          });
+        assert.strictEqual(response.status, 200, 'the grant succeeds');
+
+        assert.ok(
+          await receivedRealmsListUpdated(matrixClient, sessionRoom),
+          'a realms-list-updated event reached the session room of a user the realm already named',
+        );
+      });
+
       test('PATCH /_permissions still succeeds when the grantee has no session room', async function (assert) {
         // A user who never established a session room (e.g. a fresh
         // Synapse-registered account) has nowhere to deliver to. The push is a

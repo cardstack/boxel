@@ -16411,7 +16411,19 @@ export class Realm {
     // session re-derives it from `_realm-auth` (which reads the permissions
     // written just above) without a reload. Nothing else notifies a grantee:
     // the index_updated broadcast above is server-to-server only.
-    await this.notifyRealmsListUpdated(Object.keys(patch));
+    //
+    // A change to the `'*'` grant moves where the realm's events go: a
+    // world-readable realm sends them into a room of its own, any other realm
+    // into its grantees' session rooms. So every user the realm grants by
+    // name hears of it too, and their hosts ask again which room to listen in.
+    let affected = new Set(Object.keys(patch));
+    if (affected.has('*')) {
+      for (let user of Object.keys(currentPermissions)) {
+        affected.add(user);
+      }
+    }
+    affected.delete('*');
+    await this.notifyRealmsListUpdated([...affected]);
     return await this.getRealmPermissions(request, requestContext);
   }
 

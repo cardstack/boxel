@@ -5,6 +5,7 @@ import { tmpdir } from 'os';
 import fsExtra from 'fs-extra';
 import type { PgAdapter } from '@cardstack/postgres';
 import {
+  fetchRealmEventRoom,
   fetchSessionRoom,
   insertPermissions,
   insertRealmEventRoom,
@@ -312,6 +313,35 @@ module(basename(import.meta.filename), function (hooks) {
     );
 
     assert.deepEqual(sentTo, [], 'no room was sent to');
+  });
+
+  test("forgets a world-readable realm's event room the realm server is no longer in", async function (assert) {
+    await insertPermissions(dbAdapter, realmURL, { '*': ['read'] });
+    await insertRealmEventRoom(dbAdapter, realmURL.href, '!events:localhost');
+
+    let matrixClient = {
+      login: async () => undefined,
+      getUserId: () => '@realm_server:localhost',
+      isLoggedIn: () => true,
+      nextTxnId: () => 'txn-1',
+      sendEvent: async () => {
+        throw new Error(
+          `Unable to send room event 'app.boxel.realm-event' to room !events:localhost: status 403 - {"errcode":"M_FORBIDDEN","error":"User @realm_server:localhost not in room !events:localhost"}`,
+        );
+      },
+    } as unknown as MatrixClient;
+
+    await new NodeAdapter(
+      '/tmp',
+      false,
+      new RealmEventDispatcher(),
+    ).broadcastRealmEvent(makeEvent(), realmURL.href, matrixClient, dbAdapter);
+
+    assert.deepEqual(
+      await fetchRealmEventRoom(dbAdapter, realmURL.href),
+      { worldReadable: true, roomId: null },
+      'the next host to ask gets a new room',
+    );
   });
 
   test("sends a realm's event to session rooms once it is no longer world-readable", async function (assert) {

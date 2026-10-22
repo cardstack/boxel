@@ -307,9 +307,10 @@ export const INITIAL_SLIDING_SYNC_LIST_TIMELINE_LIMIT = 1;
 export const SLIDING_SYNC_AI_BOT_ROOM_LIST_RANGE: [number, number] = [0, 99];
 export const SLIDING_SYNC_AI_ROOM_TIMELINE_LIMIT = 20;
 export const SLIDING_SYNC_AUTH_ROOM_TIMELINE_LIMIT = 20;
-// Sliding sync reports changes only for rooms inside a list's range, so the
-// realm-event-room window is wide enough for every world-readable realm a host
-// has open at once.
+// Sliding sync orders a list by recent activity and reports changes only for
+// rooms inside its range. A host stays in every realm event room it has
+// joined, so it can hold more rooms than this window, but a room moves back
+// into the window as soon as it gets an event.
 export const SLIDING_SYNC_REALM_EVENT_ROOM_LIST_RANGE: [number, number] = [
   0, 99,
 ];

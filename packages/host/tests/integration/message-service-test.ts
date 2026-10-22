@@ -4,6 +4,10 @@ import { getService } from '@universal-ember/test-support';
 import { module, test } from 'qunit';
 
 import { baseRealm } from '@cardstack/runtime-common';
+import {
+  APP_BOXEL_REALM_EVENT_ROOM_TYPE,
+  APP_BOXEL_REALM_EVENT_TYPE,
+} from '@cardstack/runtime-common/matrix-constants';
 
 import ENV from '@cardstack/host/config/environment';
 
@@ -124,6 +128,7 @@ module('Integration | message-service | realm event rooms', function (hooks) {
       sender: '@public_realm:localhost',
       name: `Realm events: ${publicRealmURL}`,
       id: '!public-realm-events:localhost',
+      roomType: APP_BOXEL_REALM_EVENT_ROOM_TYPE,
     });
     setRealmEventRoom(publicRealmURL, roomId);
     let membership = () => {
@@ -140,7 +145,10 @@ module('Integration | message-service | realm event rooms', function (hooks) {
     assert.strictEqual(membership(), undefined, 'the host starts outside it');
     let messageService = getService('message-service');
 
-    let unsubscribe = messageService.subscribe(publicRealmURL, () => {});
+    let heard: RealmEventContent[] = [];
+    let unsubscribe = messageService.subscribe(publicRealmURL, (event) => {
+      heard.push(event);
+    });
     try {
       await waitUntil(() => membership() === 'join', {
         timeoutMessage: `the host did not join ${roomId}`,
@@ -149,6 +157,28 @@ module('Integration | message-service | realm event rooms', function (hooks) {
         membership(),
         'join',
         'the host joined the realm event room',
+      );
+
+      // An event the realm sends into the room reaches the realm's
+      // subscribers, which it would not if the room were taken for an AI room.
+      mockMatrixUtils.simulateRemoteMessage(
+        roomId,
+        '@public_realm:localhost',
+        {
+          eventName: 'index',
+          indexType: 'incremental',
+          invalidations: [`${publicRealmURL}card`],
+          realmURL: publicRealmURL,
+        },
+        { type: APP_BOXEL_REALM_EVENT_TYPE },
+      );
+      await waitUntil(() => heard.length > 0, {
+        timeoutMessage: `no realm event arrived through ${roomId}`,
+      });
+      assert.deepEqual(
+        heard.map((event) => event.eventName),
+        ['index'],
+        "the realm's subscriber heard the event sent into its room",
       );
     } finally {
       unsubscribe();

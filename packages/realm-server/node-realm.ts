@@ -12,6 +12,7 @@ import {
   unixTime,
   type ResponseWithNodeStream,
   type TokenClaims,
+  clearRealmEventRoom,
   clearSessionRoom,
   fetchRealmEventRoom,
   fetchRealmSessionRooms,
@@ -531,6 +532,28 @@ export class NodeAdapter implements RealmAdapter {
             );
           },
           onFailure: async (e: unknown) => {
+            // A stored room the server user is no longer in, as after a
+            // homeserver reset, is forgotten: the next host that asks for the
+            // realm's room gets a new one.
+            if (isRealmServerNotInRoomError(e, roomId)) {
+              try {
+                let cleared = await clearRealmEventRoom(
+                  dbAdapter,
+                  realmUrl,
+                  roomId,
+                );
+                realmEventsLog.warn(
+                  `Forgetting realm event room ${roomId} of ${realmUrl}; realm server is no longer in the room`,
+                  { cleared },
+                );
+                return;
+              } catch (cleanupError) {
+                realmEventsLog.error(
+                  `Failed to forget realm event room ${roomId} of ${realmUrl}`,
+                  cleanupError,
+                );
+              }
+            }
             realmEventsLog.error(
               `Unable to send event in realm event room ${roomId} for ${realmUrl}: ${
                 e instanceof Error ? e.message : String(e)

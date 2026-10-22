@@ -316,8 +316,9 @@ export class MatrixClient {
 
   // The room a world-readable realm sends its realm events into. Any user on
   // the homeserver may join it, and a member sees only what is sent after
-  // they join. Only this client's user, the realm's, may send in it or change
-  // its state.
+  // they join. Only this client's user, the one the realm sends its realm
+  // events as, may send in it or change its state. A realm server's realms
+  // share that user, so a member can't forge a realm event either way.
   async createRealmEventRoom(realmURL: string): Promise<string> {
     let response = await this.request('_matrix/client/v3/createRoom', 'POST', {
       body: JSON.stringify({
