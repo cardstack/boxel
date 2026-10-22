@@ -1,6 +1,7 @@
 import jwt from 'jsonwebtoken';
 import { ensureTrailingSlash } from '@cardstack/runtime-common/paths';
 import type { RealmAuthenticator } from './realm-authenticator.ts';
+import { realmFetch } from './realm-fetch.ts';
 
 /**
  * The realm server's shared matrix-client username in every deployed
@@ -297,7 +298,7 @@ export class SeedAuthenticator implements RealmAuthenticator {
     const realmUrl = this.#resolveRealmUrl(url);
     const token = this.mintTokenForRealm(realmUrl);
     const headers = this.#buildHeaders(input, init, token);
-    return fetch(input, { ...init, headers });
+    return realmFetch(input, { ...init, headers });
   }
 
   #buildHeaders(

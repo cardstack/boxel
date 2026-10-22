@@ -180,6 +180,25 @@ describe('CheckpointManager', () => {
       );
     });
 
+    it('commits a message longer than one command-line argument can carry', async () => {
+      // A push of the whole catalog lists thousands of files in the message.
+      // 1.4 MB is past Linux's 128 KB per-argument limit and macOS's 1 MB total.
+      writeFile(workspaceDir, 'a.txt', 'a');
+      const changes = Array.from({ length: 6000 }, (_, i) => ({
+        file: `${'nested/'.repeat(30)}file-${i}.json`,
+        status: 'modified' as const,
+      }));
+
+      const cp = await cm.createCheckpoint('local', changes);
+
+      expect(cp!.message).toBe('Push: 6000 files (~6000)');
+      const body = execFileSync('git', ['log', '-1', '--format=%B'], {
+        cwd: path.join(workspaceDir, '.boxel-history'),
+        maxBuffer: 16 * 1024 * 1024,
+      }).toString();
+      expect(body).toContain(`~ ${'nested/'.repeat(30)}file-5999.json`);
+    });
+
     describe('classification', () => {
       it('marks a single .gts modification as major', async () => {
         writeFile(workspaceDir, 'a.gts', 'a');
