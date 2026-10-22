@@ -19,11 +19,6 @@ import { asSentence } from '../sign-in-copy.js';
 
 import MessagePage from './message-page.gts';
 
-// The Matrix server mints a user one login token a minute. A second profile
-// sign-in within the minute waits for it, for as long as the server says,
-// rather than failing; past this, it says so.
-const LOGIN_TOKEN_WAIT_MS = 2 * 60 * 1000;
-
 interface Signature {
   Args: {
     // A value `isCliCallback` accepts; `handToCli` refuses anything else.
@@ -82,7 +77,9 @@ export default class CliHandoff extends Component<Signature> {
     let config = readConfig();
     let token: string;
     try {
-      token = await this.mintLoginToken(config, session);
+      // A second sign-in within a minute waits for the Matrix server's limit
+      // of one login token a minute, inside `loginToken`.
+      token = (await loginToken(config, session)).loginToken;
     } catch (e) {
       this.state.error = asSentence((e as Error).message);
       return;
@@ -97,27 +94,5 @@ export default class CliHandoff extends Component<Signature> {
       { loginToken: token },
       { navigate: (url: string) => navigation.replace(url) },
     );
-  }
-
-  private async mintLoginToken(
-    config: ReturnType<typeof readConfig>,
-    session: Session,
-  ): Promise<string> {
-    let deadline = Date.now() + LOGIN_TOKEN_WAIT_MS;
-    for (;;) {
-      try {
-        return (await loginToken(config, session)).loginToken;
-      } catch (e) {
-        let { status, retryAfterMs } = e as {
-          status?: number;
-          retryAfterMs?: number;
-        };
-        let wait = retryAfterMs ?? 1000;
-        if (status !== 429 || Date.now() + wait > deadline) {
-          throw e;
-        }
-        await new Promise((resolve) => setTimeout(resolve, wait));
-      }
-    }
   }
 }

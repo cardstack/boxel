@@ -66,8 +66,17 @@ export function cliCallback(
   };
 }
 
+/**
+ * What a hand-off carries: a secure session, a login token, or both.
+ * @typedef {{ session?: import('./session.js').Session, loginToken?: string }} Handoff
+ */
+
 // What the CLI's listener is sent: the state it expects back, the login
 // token for a profile sign-in, and the secure session when the CLI takes one.
+/**
+ * @param {CliCallback} callback
+ * @param {Handoff} handoff
+ */
 export function handoffFields(callback, { session, loginToken }) {
   return [
     ['state', callback.state],
@@ -97,6 +106,11 @@ export function handoffFields(callback, { session, loginToken }) {
 // those from before secure sessions: a navigation to the listener with the
 // login token and state in its query, as Synapse's own single sign-on returns
 // to it.
+/**
+ * @param {CliCallback} callback
+ * @param {Handoff} handoff
+ * @param {{ doc?: Document, navigate?: (url: string) => void }} [options]
+ */
 export function handToCli(
   callback,
   handoff,
