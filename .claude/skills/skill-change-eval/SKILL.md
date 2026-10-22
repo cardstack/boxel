@@ -136,9 +136,11 @@ the same day, the same models. There are two ways to get them.
   it, so one branch gives both sides: run with
   `EVAL_SKILL_FEATURES=<name>` for "with" and without it (or with `-<name>`
   when the evaluation's `skillFeatures` switches it on) for "without". The
-  section also lands dark for the assistant until the feature is turned on
-  for everyone, which is how a change for Claude Code ships without touching
-  the assistant.
+  section stays out of every assistant prompt for as long as the markers
+  remain: nothing turns a feature on for every room. So once the evidence
+  says the change helps, the PR that ships it removes the markers and drops
+  the name from `SKILL_FEATURES`. A change meant only for Claude Code keeps
+  them, which is how it ships without touching the assistant.
 - **Two branches.** Make the "without" side from the PR branch with the
   change reverted, not from `main`, because `main` may have moved under the
   PR. To measure rules that are already merged, revert them on a scratch
@@ -202,4 +204,5 @@ request: the eval that shows the problem, and the with/without numbers. A
 table whose problem criterion holds without the change does not show the
 problem. A table with no small-card rows does not show what the change costs.
 A rule written for apps or pages whose text does not say so will fire on
-every build: ask for the limit in the text.
+every build: ask for the limit in the text. A change meant for the assistant that still sits
+between feature markers reaches no one: ask for the markers to come out.
