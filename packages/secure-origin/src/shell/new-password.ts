@@ -1,4 +1,4 @@
-import { tracked } from '@glimmer/tracking';
+import { trackedObject } from '@ember/reactive/collections';
 
 // A new password and its confirmation, as the app's registration and
 // password reset forms ask for them: each checked when it loses focus, and
@@ -24,27 +24,45 @@ export function confirmError(
 }
 
 export class NewPassword {
-  @tracked password = '';
-  @tracked confirm = '';
-  @tracked passwordError: string | undefined;
-  @tracked confirmError: string | undefined;
+  private state = trackedObject({
+    password: '',
+    confirm: '',
+    passwordError: undefined as string | undefined,
+    confirmError: undefined as string | undefined,
+  });
+
+  get password() {
+    return this.state.password;
+  }
+
+  get confirm() {
+    return this.state.confirm;
+  }
+
+  get passwordError() {
+    return this.state.passwordError;
+  }
+
+  get confirmError() {
+    return this.state.confirmError;
+  }
 
   setPassword = (value: string) => {
-    this.password = value;
-    this.passwordError = undefined;
+    this.state.password = value;
+    this.state.passwordError = undefined;
   };
 
   setConfirm = (value: string) => {
-    this.confirm = value;
-    this.confirmError = undefined;
+    this.state.confirm = value;
+    this.state.confirmError = undefined;
   };
 
   checkPassword = () => {
-    this.passwordError = passwordError(this.password);
+    this.state.passwordError = passwordError(this.password);
   };
 
   checkConfirm = () => {
-    this.confirmError = confirmError(this.password, this.confirm);
+    this.state.confirmError = confirmError(this.password, this.confirm);
   };
 
   // Both filled in, with no error showing.

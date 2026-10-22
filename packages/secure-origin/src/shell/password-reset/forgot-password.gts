@@ -1,11 +1,11 @@
 import { on } from '@ember/modifier';
+import { trackedObject } from '@ember/reactive/collections';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
 import AuthButton from '../../components/auth-button.gts';
 import AuthContainer from '../../components/auth-container.gts';
 import AuthFormField from '../../components/auth-form-field.gts';
-import Input from '../../components/input.gts';
+import BoxelInput from '../../components/input.gts';
 import { autofocus } from '../../modifiers/autofocus.ts';
 import {
   clientSecret as newClientSecret,
@@ -27,21 +27,25 @@ interface Signature {
 }
 
 export default class ForgotPassword extends Component<Signature> {
-  @tracked private email = '';
-  @tracked private emailError: string | undefined;
-  @tracked private sending = false;
+  private state = trackedObject({
+    email: '',
+    emailError: undefined as string | undefined,
+    sending: false,
+    sentTo: undefined as string | undefined,
+  });
   // The address the link was sent to, once it was.
-  @tracked private sentTo: string | undefined;
   private clientSecret = '';
   private sendAttempt = 0;
 
   private get submitDisabled() {
-    return this.sending || !this.email || Boolean(this.emailError);
+    return (
+      this.state.sending || !this.state.email || Boolean(this.state.emailError)
+    );
   }
 
   private setEmail = (value: string) => {
-    this.email = value;
-    this.emailError = undefined;
+    this.state.email = value;
+    this.state.emailError = undefined;
   };
 
   private async send(email: string) {
@@ -59,35 +63,35 @@ export default class ForgotPassword extends Component<Signature> {
     if (this.submitDisabled) {
       return;
     }
-    let email = this.email;
+    let email = this.state.email;
     this.clientSecret = newClientSecret();
     this.sendAttempt = 0;
-    this.sending = true;
+    this.state.sending = true;
     try {
       await this.send(email);
     } catch {
-      this.emailError = 'No account with the given email address exists';
+      this.state.emailError = 'No account with the given email address exists';
       return;
     } finally {
-      this.sending = false;
+      this.state.sending = false;
     }
-    this.sentTo = email;
+    this.state.sentTo = email;
   };
 
   private resend = async () => {
-    this.sending = true;
+    this.state.sending = true;
     try {
-      await this.send(this.sentTo!);
+      await this.send(this.state.sentTo!);
     } catch {
       // The page keeps waiting on the email already sent.
     } finally {
-      this.sending = false;
+      this.state.sending = false;
     }
   };
 
   <template>
     <AuthContainer>
-      {{#if this.sentTo}}
+      {{#if this.state.sentTo}}
         <span
           class='title'
           role='heading'
@@ -95,14 +99,14 @@ export default class ForgotPassword extends Component<Signature> {
           data-test-email-validation
         >Please check your email to reset your password</span>
         <ul class='email-validation-instruction'>
-          <li>We've sent an email to <b>{{this.sentTo}}</b></li>
+          <li>We've sent an email to <b>{{this.state.sentTo}}</b></li>
           <li>Click on the link within the email to reset your password</li>
         </ul>
         <AuthButton
           data-test-resend-validation-btn
           @variant='primary'
-          @disabled={{this.sending}}
-          @loading={{this.sending}}
+          @disabled={{this.state.sending}}
+          @loading={{this.state.sending}}
           {{on 'click' this.resend}}
         >Resend Email</AuthButton>
       {{else}}
@@ -115,18 +119,15 @@ export default class ForgotPassword extends Component<Signature> {
           <span class='title' role='heading' aria-level='1'>Forgot your
             password?</span>
           <p class='info'>Enter email to receive a reset password link.</p>
-          <AuthFormField
-            @label='Email Address'
-            data-test-secure-field='email'
-          >
-            <Input
+          <AuthFormField @label='Email Address' data-test-secure-field='email'>
+            <BoxelInput
               data-test-email-field
               name='email'
               autocomplete='email'
               @type='text'
-              @errorMessage={{this.emailError}}
-              @state={{if this.emailError 'invalid' 'initial'}}
-              @value={{this.email}}
+              @errorMessage={{this.state.emailError}}
+              @state={{if this.state.emailError 'invalid' 'initial'}}
+              @value={{this.state.email}}
               @onInput={{this.setEmail}}
               {{autofocus}}
             />
@@ -137,7 +138,7 @@ export default class ForgotPassword extends Component<Signature> {
               type='submit'
               @variant='primary'
               @disabled={{this.submitDisabled}}
-              @loading={{this.sending}}
+              @loading={{this.state.sending}}
             >Reset Your Password</AuthButton>
             <div>or</div>
             <AuthButton

@@ -7,8 +7,8 @@ import MessagePage from '../sign-in/message-page.gts';
 // for it, and carries on from there by itself.
 const VerifyEmail: TemplateOnlyComponent = <template>
   <MessagePage @heading='Your email has now been validated'>
-    <p class='info' data-test-email-validated>Return to the window where you
-      are creating your Boxel account to finish. You can close this one.</p>
+    <p class='info' data-test-email-validated>Return to the window where you are
+      creating your Boxel account to finish. You can close this one.</p>
   </MessagePage>
   <style scoped>
     .info {

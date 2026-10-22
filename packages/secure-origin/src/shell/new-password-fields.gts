@@ -1,20 +1,21 @@
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 import AuthFormField from '../components/auth-form-field.gts';
-import Input from '../components/input.gts';
+import BoxelInput from '../components/input.gts';
 import ValidationHint from '../components/validation-hint.gts';
 import { autofocus } from '../modifiers/autofocus.ts';
 import type { NewPassword } from './new-password.ts';
 
 // The new password and confirmation fields of the app's registration and
 // password reset forms. `@hints` shows registration's check-marked hint
-// under each once it is right, and `@labels` and `@placeholders` name the
-// two fields in order.
+// under each once it is right.
 interface Signature {
   Args: {
     password: NewPassword;
-    labels: string[];
-    placeholders?: string[];
+    passwordLabel: string;
+    confirmLabel: string;
+    passwordPlaceholder?: string;
+    confirmPlaceholder?: string;
     hints?: boolean;
     // Focuses the new password field as it is drawn.
     autofocus?: boolean;
@@ -22,14 +23,14 @@ interface Signature {
 }
 
 const NewPasswordFields: TemplateOnlyComponent<Signature> = <template>
-  <AuthFormField @label={{@labels.[0]}} data-test-secure-field='password'>
-    <Input
+  <AuthFormField @label={{@passwordLabel}} data-test-secure-field='password'>
+    <BoxelInput
       data-test-password-field
       name='password'
       autocomplete='new-password'
       @type='password'
       @value={{@password.password}}
-      @placeholder={{@placeholders.[0]}}
+      placeholder={{@passwordPlaceholder}}
       @state={{if @password.passwordError 'invalid' 'initial'}}
       @errorMessage={{@password.passwordError}}
       @onInput={{@password.setPassword}}
@@ -43,16 +44,16 @@ const NewPasswordFields: TemplateOnlyComponent<Signature> = <template>
     {{/if}}
   </AuthFormField>
   <AuthFormField
-    @label={{@labels.[1]}}
+    @label={{@confirmLabel}}
     data-test-secure-field='confirm-password'
   >
-    <Input
+    <BoxelInput
       data-test-confirm-password-field
       name='confirm-password'
       autocomplete='new-password'
       @type='password'
       @value={{@password.confirm}}
-      @placeholder={{@placeholders.[1]}}
+      placeholder={{@confirmPlaceholder}}
       @state={{if @password.confirmError 'invalid' 'initial'}}
       @errorMessage={{@password.confirmError}}
       @onInput={{@password.setConfirm}}

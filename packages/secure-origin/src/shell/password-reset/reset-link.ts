@@ -46,11 +46,12 @@ export function resetLink(
   email: string,
   cli?: CliCallback,
 ): string {
-  let fragment = new URLSearchParams({
-    clientSecret,
-    email,
-    ...cliParams(cli),
-  });
+  let fragment = new URLSearchParams({ clientSecret, email });
+  for (let [name, value] of Object.entries(cliParams(cli))) {
+    if (value) {
+      fragment.set(name, String(value));
+    }
+  }
   return new URL(`${modeURL('reset-password')}#${fragment}`, location.href)
     .href;
 }

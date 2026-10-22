@@ -1,13 +1,13 @@
-import { array } from '@ember/helper';
 import { on } from '@ember/modifier';
+import type Owner from '@ember/owner';
+import { trackedObject } from '@ember/reactive/collections';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
 import AuthButton from '../../components/auth-button.gts';
 import AuthContainer from '../../components/auth-container.gts';
 import AuthFormField from '../../components/auth-form-field.gts';
 import CheckMark from '../../components/icons/check-mark.gts';
-import Input from '../../components/input.gts';
+import BoxelInput from '../../components/input.gts';
 import InputGroup, {
   type InputGroupValidationState,
 } from '../../components/input-group.gts';
@@ -91,33 +91,35 @@ export default class Register extends Component<Signature> {
   // The account the registration made, which the page signs in to.
   private accountUser = '';
 
-  @tracked private page: Page = 'form';
-  @tracked private name = '';
-  @tracked private email = '';
-  @tracked private username = '';
-  @tracked private token = '';
-  @tracked private serverName = '';
-  @tracked private nameError: string | undefined;
-  @tracked private emailError: string | undefined;
-  @tracked private usernameError: string | undefined;
-  @tracked private tokenError: string | undefined;
-  @tracked private formError: string | undefined;
-  @tracked private signInError: string | undefined;
-  @tracked private checkingUsername = false;
-  @tracked private usernameAvailable = false;
-  @tracked private registering = false;
-  @tracked private resending = false;
-  @tracked private retrying = false;
-  @tracked private session: Session | undefined;
+  private state = trackedObject({
+    page: 'form' as Page,
+    name: '',
+    email: '',
+    username: '',
+    token: '',
+    serverName: '',
+    nameError: undefined as string | undefined,
+    emailError: undefined as string | undefined,
+    usernameError: undefined as string | undefined,
+    tokenError: undefined as string | undefined,
+    formError: undefined as string | undefined,
+    signInError: undefined as string | undefined,
+    checkingUsername: false,
+    usernameAvailable: false,
+    registering: false,
+    resending: false,
+    retrying: false,
+    session: undefined as Session | undefined,
+  });
 
-  constructor(owner: unknown, args: Signature['Args']) {
+  constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
     let suggested = args.username ?? '';
     if (suggested && !suggested.includes('@')) {
-      this.username = suggested;
+      this.state.username = suggested;
     }
     matrixServerName(this.config).then(
-      (name: string) => (this.serverName = name),
+      (name: string) => (this.state.serverName = name),
       () => undefined,
     );
   }
@@ -129,79 +131,86 @@ export default class Register extends Component<Signature> {
 
   private get registerDisabled() {
     return Boolean(
-      this.registering ||
-      !this.name ||
-      !this.email ||
-      !this.username ||
+      this.state.registering ||
+      !this.state.name ||
+      !this.state.email ||
+      !this.state.username ||
       !this.password.complete ||
-      this.nameError ||
-      this.emailError ||
-      this.usernameError,
+      this.state.nameError ||
+      this.state.emailError ||
+      this.state.usernameError,
     );
   }
 
+  // The CLI and the session it is handed, once there is one to hand over.
+  private get handoff() {
+    let { cli } = this.args;
+    let { session } = this.state;
+    return cli && session ? { callback: cli, session } : undefined;
+  }
+
   private get nextDisabled() {
-    return this.registering || !this.token;
+    return this.state.registering || !this.state.token;
   }
 
   private get usernameState(): InputGroupValidationState {
-    if (this.usernameError) {
+    if (this.state.usernameError) {
       return 'invalid';
     }
-    if (this.checkingUsername) {
+    if (this.state.checkingUsername) {
       return 'loading';
     }
-    return this.usernameAvailable ? 'valid' : 'initial';
+    return this.state.usernameAvailable ? 'valid' : 'initial';
   }
 
   private get usernameValidAndAvailable() {
     return (
-      Boolean(this.username) &&
-      !this.usernameError &&
-      !this.checkingUsername &&
-      this.usernameAvailable
+      Boolean(this.state.username) &&
+      !this.state.usernameError &&
+      !this.state.checkingUsername &&
+      this.state.usernameAvailable
     );
   }
 
   private setName = (value: string) => {
-    this.name = value;
-    this.nameError = undefined;
+    this.state.name = value;
+    this.state.nameError = undefined;
   };
 
   private checkName = () => {
-    if (!this.name) {
-      this.nameError = 'Your name is missing';
+    if (!this.state.name) {
+      this.state.nameError = 'Your name is missing';
     }
   };
 
   private setEmail = (value: string) => {
-    this.email = value;
-    this.emailError = undefined;
+    this.state.email = value;
+    this.state.emailError = undefined;
   };
 
   private checkEmail = () => {
-    if (!this.email) {
-      this.emailError = 'Email address is missing';
+    if (!this.state.email) {
+      this.state.emailError = 'Email address is missing';
     }
   };
 
   private setUsername = (value: string) => {
-    this.username = value;
-    this.usernameError = undefined;
-    this.usernameAvailable = false;
+    this.state.username = value;
+    this.state.usernameError = undefined;
+    this.state.usernameAvailable = false;
     // A check still under way is for a username no longer typed.
     this.availabilityCheck++;
-    this.checkingUsername = false;
+    this.state.checkingUsername = false;
   };
 
   private checkUsername = async () => {
-    let username = this.username;
-    this.usernameError = usernameError(username);
-    if (this.usernameError) {
+    let username = this.state.username;
+    this.state.usernameError = usernameError(username);
+    if (this.state.usernameError) {
       return;
     }
     let check = ++this.availabilityCheck;
-    this.checkingUsername = true;
+    this.state.checkingUsername = true;
     let available: boolean;
     try {
       available = await isUsernameAvailable(username);
@@ -209,21 +218,21 @@ export default class Register extends Component<Signature> {
       return;
     } finally {
       if (check === this.availabilityCheck) {
-        this.checkingUsername = false;
+        this.state.checkingUsername = false;
       }
     }
     if (check !== this.availabilityCheck) {
       return;
     }
-    this.usernameAvailable = available;
+    this.state.usernameAvailable = available;
     if (!available) {
-      this.usernameError = 'Username is already taken';
+      this.state.usernameError = 'Username is already taken';
     }
   };
 
   private setToken = (value: string) => {
-    this.token = value;
-    this.tokenError = undefined;
+    this.state.token = value;
+    this.state.tokenError = undefined;
   };
 
   private register = async (event: Event) => {
@@ -234,16 +243,16 @@ export default class Register extends Component<Signature> {
     this.registration?.stop();
     this.registration = new Registration(
       {
-        name: this.name.trim(),
-        email: this.email,
-        username: this.username,
+        name: this.state.name.trim(),
+        email: this.state.email,
+        username: this.state.username,
         password: this.password.password,
         nextLink: new URL(modeURL('verify-email'), window.location.href).href,
       },
-      { onAwaitingEmail: () => (this.page = 'awaiting-email') },
+      { onAwaitingEmail: () => (this.state.page = 'awaiting-email') },
     );
-    this.formError = undefined;
-    this.registering = true;
+    this.state.formError = undefined;
+    this.state.registering = true;
     this.show(await this.registration.start());
   };
 
@@ -252,46 +261,46 @@ export default class Register extends Component<Signature> {
     if (this.nextDisabled || !this.registration) {
       return;
     }
-    this.registering = true;
-    this.show(await this.registration.submitInviteCode(this.token));
+    this.state.registering = true;
+    this.show(await this.registration.submitInviteCode(this.state.token));
   };
 
   private resendValidation = async () => {
-    this.resending = true;
+    this.state.resending = true;
     try {
       await this.registration?.sendValidationEmail();
     } catch {
       // The page keeps waiting on the email already sent.
     } finally {
-      this.resending = false;
+      this.state.resending = false;
     }
   };
 
   private retrySignIn = async () => {
-    this.retrying = true;
+    this.state.retrying = true;
     await this.signIn();
-    this.retrying = false;
+    this.state.retrying = false;
   };
 
   // Where the registration stands once a step of it returns.
   private show(outcome: Outcome) {
-    this.registering = false;
+    this.state.registering = false;
     switch (outcome.step) {
       case 'account':
         this.finish(outcome.account);
         return;
       case 'invite-code':
-        this.tokenError = outcome.error;
-        this.page = 'invite-code';
+        this.state.tokenError = outcome.error;
+        this.state.page = 'invite-code';
         return;
       case 'form':
-        this.page = 'form';
+        this.state.page = 'form';
         if (outcome.field === 'username') {
-          this.usernameError = outcome.error;
+          this.state.usernameError = outcome.error;
         } else if (outcome.field === 'email') {
-          this.emailError = outcome.error;
+          this.state.emailError = outcome.error;
         } else {
-          this.formError = outcome.error;
+          this.state.formError = outcome.error;
         }
         return;
       case 'stopped':
@@ -300,7 +309,7 @@ export default class Register extends Component<Signature> {
   }
 
   private async finish(account: Account) {
-    this.page = 'creating';
+    this.state.page = 'creating';
     await this.registration!.setUp(account);
     this.accountUser = account.user_id;
     await this.signIn();
@@ -319,48 +328,51 @@ export default class Register extends Component<Signature> {
         registrationToken: this.registration!.token,
       });
     } catch (e) {
-      this.signInError = asSentence((e as Error).message);
-      this.page = 'sign-in-failed';
+      this.state.signInError = asSentence((e as Error).message);
+      this.state.page = 'sign-in-failed';
       return;
     }
-    this.signInError = undefined;
+    this.state.signInError = undefined;
     if (this.args.cli) {
-      this.session = session;
-      this.page = 'cli-handoff';
+      this.state.session = session;
+      this.state.page = 'cli-handoff';
     } else {
       storeSession(session);
       history.replaceState(null, '', modeURL('sign-in'));
-      this.page = 'signed-in';
+      this.state.page = 'signed-in';
     }
   }
 
   <template>
-    {{#if (eq this.page 'sign-in-failed')}}
+    {{#if (eq this.state.page 'sign-in-failed')}}
       <MessagePage
         @heading='Your account was created, but signing in didn’t finish'
       >
         <div class='error' role='alert' data-test-secure-error>
-          {{this.signInError}}
+          {{this.state.signInError}}
         </div>
         <div class='button-wrapper'>
           <AuthButton
             data-test-secure-retry-sign-in
             @variant='primary'
-            @disabled={{this.retrying}}
-            @loading={{this.retrying}}
+            @disabled={{this.state.retrying}}
+            @loading={{this.state.retrying}}
             {{on 'click' this.retrySignIn}}
           >Try again</AuthButton>
         </div>
       </MessagePage>
-    {{else if (eq this.page 'signed-in')}}
+    {{else if (eq this.state.page 'signed-in')}}
       <SignedIn />
-    {{else if (eq this.page 'cli-handoff')}}
-      {{#if this.session}}
-        <CliHandoff @callback={{@cli}} @session={{this.session}} />
+    {{else if (eq this.state.page 'cli-handoff')}}
+      {{#if this.handoff}}
+        <CliHandoff
+          @callback={{this.handoff.callback}}
+          @session={{this.handoff.session}}
+        />
       {{/if}}
     {{else}}
       <AuthContainer>
-        {{#if (eq this.page 'awaiting-email')}}
+        {{#if (eq this.state.page 'awaiting-email')}}
           <span
             class='title'
             role='heading'
@@ -375,18 +387,20 @@ export default class Register extends Component<Signature> {
             data-test-resend-validation
             class='resend-email'
             @variant='primary'
-            @disabled={{this.resending}}
-            @loading={{this.resending}}
+            @disabled={{this.state.resending}}
+            @loading={{this.state.resending}}
             {{on 'click' this.resendValidation}}
           >Resend Email</AuthButton>
-        {{else if (eq this.page 'creating')}}
+        {{else if (eq this.state.page 'creating')}}
           <div class='centered-loading'>
-            <span class='loading-title' data-test-email-validation-complete>Email
-              validation complete</span>
+            <span
+              class='loading-title'
+              data-test-email-validation-complete
+            >Email validation complete</span>
             <p class='loading-message'>Please wait as we set up your account.</p>
             <LoadingIndicator class='loading-spinner' />
           </div>
-        {{else if (eq this.page 'invite-code')}}
+        {{else if (eq this.state.page 'invite-code')}}
           <form
             class='step'
             novalidate
@@ -399,14 +413,14 @@ export default class Register extends Component<Signature> {
               @label='Your invite code'
               data-test-secure-field='token'
             >
-              <Input
+              <BoxelInput
                 data-test-token-field
                 name='invite-code'
                 autocomplete='off'
-                @state={{if this.tokenError 'invalid' 'initial'}}
-                @value={{this.token}}
-                @placeholder='Enter invite code'
-                @errorMessage={{this.tokenError}}
+                @state={{if this.state.tokenError 'invalid' 'initial'}}
+                @value={{this.state.token}}
+                placeholder='Enter invite code'
+                @errorMessage={{this.state.tokenError}}
                 @onInput={{this.setToken}}
                 {{autofocus}}
               />
@@ -417,7 +431,7 @@ export default class Register extends Component<Signature> {
                 type='submit'
                 @variant='primary'
                 @disabled={{this.nextDisabled}}
-                @loading={{this.registering}}
+                @loading={{this.state.registering}}
               >Next</AuthButton>
             </div>
           </form>
@@ -431,28 +445,28 @@ export default class Register extends Component<Signature> {
               {{on 'submit' this.register}}
             >
               <AuthFormField @label='Your Name' data-test-secure-field='name'>
-                <Input
+                <BoxelInput
                   data-test-name-field
                   name='name'
                   autocomplete='name'
-                  @state={{if this.nameError 'invalid' 'initial'}}
-                  @value={{this.name}}
-                  @placeholder='Enter your name'
-                  @errorMessage={{this.nameError}}
+                  @state={{if this.state.nameError 'invalid' 'initial'}}
+                  @value={{this.state.name}}
+                  placeholder='Enter your name'
+                  @errorMessage={{this.state.nameError}}
                   @onInput={{this.setName}}
                   @onBlur={{this.checkName}}
                   {{autofocus}}
                 />
               </AuthFormField>
               <AuthFormField @label='Email' data-test-secure-field='email'>
-                <Input
+                <BoxelInput
                   data-test-email-field
                   name='email'
                   autocomplete='email'
-                  @state={{if this.emailError 'invalid' 'initial'}}
-                  @value={{this.email}}
-                  @placeholder='Enter your email'
-                  @errorMessage={{this.emailError}}
+                  @state={{if this.state.emailError 'invalid' 'initial'}}
+                  @value={{this.state.email}}
+                  placeholder='Enter your email'
+                  @errorMessage={{this.state.emailError}}
                   @onInput={{this.setEmail}}
                   @onBlur={{this.checkEmail}}
                 />
@@ -466,21 +480,23 @@ export default class Register extends Component<Signature> {
                   @name='username'
                   @autocomplete='username'
                   @state={{this.usernameState}}
-                  @value={{this.username}}
+                  @value={{this.state.username}}
                   @placeholder='Your username'
-                  @errorMessage={{this.usernameError}}
+                  @errorMessage={{this.state.usernameError}}
                   @onInput={{this.setUsername}}
                   @onBlur={{this.checkUsername}}
                   @validIcon={{CheckMark}}
                 >
                   <:before as |Accessories|>
-                    <Accessories.Text class='username-prefix'>@</Accessories.Text>
+                    <Accessories.Text
+                      class='username-prefix'
+                    >@</Accessories.Text>
                   </:before>
                   <:after as |Accessories|>
                     <Accessories.Text
                       data-input-group-suffix
                       data-test-input-group-suffix
-                    >{{this.serverName}}</Accessories.Text>
+                    >{{this.state.serverName}}</Accessories.Text>
                   </:after>
                 </InputGroup>
                 {{#if this.usernameValidAndAvailable}}
@@ -489,17 +505,19 @@ export default class Register extends Component<Signature> {
               </AuthFormField>
               <NewPasswordFields
                 @password={{this.password}}
-                @labels={{array 'Password' 'Confirm Password'}}
-                @placeholders={{array 'Your password' 'Re-enter your password'}}
+                @passwordLabel='Password'
+                @confirmLabel='Confirm Password'
+                @passwordPlaceholder='Your password'
+                @confirmPlaceholder='Re-enter your password'
                 @hints={{true}}
               />
-              {{#if this.formError}}
+              {{#if this.state.formError}}
                 <div
                   class='error-message'
                   role='alert'
                   data-test-register-user-error
                   data-test-secure-error
-                >{{this.formError}}</div>
+                >{{this.state.formError}}</div>
               {{/if}}
               <div class='button-wrapper'>
                 <AuthButton
@@ -507,7 +525,7 @@ export default class Register extends Component<Signature> {
                   type='submit'
                   @variant='primary'
                   @disabled={{this.registerDisabled}}
-                  @loading={{this.registering}}
+                  @loading={{this.state.registering}}
                 >Create Account</AuthButton>
                 <div>or</div>
                 <AuthButton

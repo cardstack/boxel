@@ -1,7 +1,6 @@
-import { array } from '@ember/helper';
 import { on } from '@ember/modifier';
+import { trackedObject } from '@ember/reactive/collections';
 import Component from '@glimmer/component';
-import { tracked } from '@glimmer/tracking';
 
 import AuthButton from '../../components/auth-button.gts';
 import AuthContainer from '../../components/auth-container.gts';
@@ -27,14 +26,15 @@ interface Signature {
 
 export default class ResetPassword extends Component<Signature> {
   private password = new NewPassword();
-  @tracked private resetting = false;
-  @tracked private done = false;
-  @tracked private error: string | undefined;
-  @tracked private paramsError =
-    !this.args.link.clientSecret || !this.args.link.sid;
+  private state = trackedObject({
+    resetting: false,
+    done: false,
+    error: undefined as string | undefined,
+    paramsError: !this.args.link.clientSecret || !this.args.link.sid,
+  });
 
   private get submitDisabled() {
-    return this.resetting || !this.password.complete;
+    return this.state.resetting || !this.password.complete;
   }
 
   private get forgotPasswordURL() {
@@ -52,18 +52,18 @@ export default class ResetPassword extends Component<Signature> {
     }
     let { sid, clientSecret, email } = this.args.link;
     let newPassword = this.password.password;
-    this.resetting = true;
-    this.error = undefined;
-    this.paramsError = false;
+    this.state.resetting = true;
+    this.state.error = undefined;
+    this.state.paramsError = false;
     try {
       await resetPassword({ sid, clientSecret, newPassword });
     } catch (e) {
-      this.resetting = false;
+      this.state.resetting = false;
       let { status } = e as { status: number };
       if (status >= 400 && status < 500) {
-        this.paramsError = true;
+        this.state.paramsError = true;
       } else {
-        this.error =
+        this.state.error =
           'An unknown error happened. Please try again, or contact support if the problem persists.';
       }
       return;
@@ -81,13 +81,13 @@ export default class ResetPassword extends Component<Signature> {
         // couldn't end runs out within its week.
       }
     }
-    this.resetting = false;
-    this.done = true;
+    this.state.resetting = false;
+    this.state.done = true;
   };
 
   <template>
     <AuthContainer>
-      {{#if this.done}}
+      {{#if this.state.done}}
         <span
           class='title'
           role='heading'
@@ -95,8 +95,7 @@ export default class ResetPassword extends Component<Signature> {
           data-test-reset-password-success
         >Your password is now reset</span>
         <p class='info'>Your password has been successfully reset. You can use
-          the link below to sign into your Boxel account with your new
-          password.</p>
+          the link below to sign into your Boxel account with your new password.</p>
         <div class='button-wrapper'>
           <AuthButton
             data-test-back-to-login-btn
@@ -112,11 +111,11 @@ export default class ResetPassword extends Component<Signature> {
           data-test-reset-password-form
           {{on 'submit' this.submit}}
         >
-          <span class='title' role='heading' aria-level='1'>Reset your
-            password</span>
+          <span class='title' role='heading' aria-level='1'>Reset your password</span>
           <NewPasswordFields
             @password={{this.password}}
-            @labels={{array 'Enter New Password' 'Re-Enter New Password'}}
+            @passwordLabel='Enter New Password'
+            @confirmLabel='Re-Enter New Password'
             @autofocus={{true}}
           />
           <div class='button-wrapper'>
@@ -125,10 +124,10 @@ export default class ResetPassword extends Component<Signature> {
               type='submit'
               @variant='primary'
               @disabled={{this.submitDisabled}}
-              @loading={{this.resetting}}
+              @loading={{this.state.resetting}}
             >Reset Password</AuthButton>
           </div>
-          {{#if this.paramsError}}
+          {{#if this.state.paramsError}}
             <span
               class='error'
               role='alert'
@@ -142,13 +141,13 @@ export default class ResetPassword extends Component<Signature> {
                 data-test-forgot-password-link
               >forgot password form</a>
               and try again.</span>
-          {{else if this.error}}
+          {{else if this.state.error}}
             <span
               class='error'
               role='alert'
               data-test-reset-password-error
               data-test-secure-error
-            >{{this.error}}</span>
+            >{{this.state.error}}</span>
           {{/if}}
         </form>
       {{/if}}

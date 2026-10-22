@@ -108,8 +108,7 @@ export default class InputGroup extends Component<Signature> {
 
   <template>
     {{#let
-      (and (eq @state 'invalid') (bool @errorMessage))
-      (hash Text=Text)
+      (and (eq @state 'invalid') (bool @errorMessage)) (hash Text=Text)
       as |shouldShowErrorMessage Accessories|
     }}
       <div class='container'>

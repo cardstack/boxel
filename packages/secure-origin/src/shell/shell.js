@@ -12,8 +12,11 @@ import { renderComponent } from '@ember/renderer';
 import CliSignInPage from './sign-in/cli-sign-in-page.gts';
 import GoogleCallback from './sign-in/google-callback.gts';
 import SignInPage from './sign-in/sign-in-page.gts';
-import { registerMode, verifyEmailMode } from './register.js';
-import { forgotPasswordMode, resetPasswordMode } from './password-reset.js';
+import { registerMode, verifyEmailMode } from './register/modes.ts';
+import {
+  forgotPasswordMode,
+  resetPasswordMode,
+} from './password-reset/modes.ts';
 import { isGoogleCallback } from './urls.js';
 
 // A mode drawn by a component.
