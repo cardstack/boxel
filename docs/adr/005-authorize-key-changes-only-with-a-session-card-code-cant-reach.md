@@ -18,6 +18,8 @@ scope:
   - packages/boxel-cli/src/lib/secure-session.ts
   - packages/host/app/services/realm-server.ts
   - packages/host/app/services/matrix-service.ts
+  - packages/host/app/lib/secure-sign-in.ts
+  - packages/host/app/components/matrix/secure-sign-in.gts
 ---
 
 # 005. Authorize changes to a user's keys only with a session that card code can't reach
@@ -103,6 +105,30 @@ password stays changed whatever the route answers.
 
 A secure window whose session has ended MUST forget it and offer to sign in
 again.
+
+### 1.7. Signing in to the app on the secure origin
+
+A deployment that signs users in on the secure origin MUST NOT have the app
+draw a field that a credential is typed into for signing in. A signed-out app
+MUST send the user to the secure origin's sign-in page instead, and it MUST
+NOT navigate a frame it is shown in to do so.
+
+The secure origin MUST hand the app only a single-use Matrix login token, and
+MUST NOT hand it the secure session (§1.4). The token MUST travel only by a
+top-level navigation to the page the app asked to come back to, never by
+`postMessage`. The realm server MUST mint it only for a live secure session,
+and only for a request whose `Origin` is the secure origin's.
+
+The page to come back to MUST travel to the secure origin in the URL's
+fragment, never its query string. The secure origin MUST hand a token only to
+a page on one of the app origins the realm server lists for the deployment.
+It MUST ask the user to confirm a hand-off to a loopback `http:` origin, which
+any program on the user's machine can listen on.
+
+A login token is something card code can get (§1.3), so the session the app
+redeems it for MUST NOT be a secure session. Signing out of the app SHOULD
+also sign out on the secure origin, by a top-level navigation there once the
+app's own sign-out has finished.
 
 ## 2. Rationale
 

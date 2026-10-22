@@ -46,6 +46,7 @@ export default config as {
   logLevels: string;
   iconsURL: string;
   secureOriginURL: string;
+  signInOnSecureOrigin: boolean;
   autoSaveDelayMs: number;
   monacoDebounceMs: number;
   monacoCursorDebounceMs: number;
