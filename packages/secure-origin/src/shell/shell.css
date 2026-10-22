@@ -1,15 +1,18 @@
 /*
-  The secure origin's pages: sign-in, account creation and password reset.
-  They have to look exactly like the app's own sign-in screens, so a user
-  meets one page whichever they land on, but they load nothing from the app.
-  boxel-ui's `variables.css` and `theme.css` are served here as they are (see
-  `lib/secure-origin.ts`), so every token below resolves to what the app's
-  does, and these rules mirror the components the app draws the screens with:
-  the host's AuthContainer, Login, RegisterUser, ForgotPassword, AuthButton
-  and AuthFormField, and boxel-ui's Button, FieldContainer, Label, BoxelInput,
-  InputGroup and LoadingIndicator. A change to one of those components'
-  styles needs the same change here; the matrix suite's visual comparison of
-  the two sign-in pages fails until it is made.
+  The styles of the shell's plain pages: account creation and password reset.
+  The sign-in pages are components that style themselves (`sign-in/`,
+  `../components/`); the page-wide rules here (the reset, the typeface, the
+  page's background) apply to them too.
+  The pages have to look exactly like the app's own sign-in screens, so a
+  user meets one page whichever they land on, but they load nothing from the
+  app. boxel-ui's `variables.css` and `theme.css` are served here as they are
+  (see `lib/secure-origin.ts`), so every token below resolves to what the
+  app's does, and these rules mirror the components the app draws the screens
+  with: the host's AuthContainer, Login, RegisterUser, ForgotPassword,
+  AuthButton and AuthFormField, and boxel-ui's Button, FieldContainer, Label,
+  BoxelInput, InputGroup and LoadingIndicator. A change to one of those
+  components' styles needs the same change here; the matrix suite's visual
+  comparison of the pages fails until it is made.
 */
 
 /* As in the app: boxel-ui's reset, then its components, then the host's own
@@ -258,15 +261,6 @@
       var(--boxel-button-secondary-active-border, var(--secondary));
   }
 
-  .size-extra-small {
-    --boxel-button-padding: var(--boxel-sp-5xs) var(--boxel-sp-xs);
-    --boxel-button-min-height: var(--boxel-button-xs);
-    --boxel-button-min-width: 5rem;
-    --boxel-button-loading-icon-size: var(--boxel-icon-2xs);
-    --boxel-button-font: 500 var(--boxel-font-xs);
-    --boxel-button-letter-spacing: var(--boxel-lsp-lg);
-  }
-
   .size-touch {
     --boxel-button-padding: var(--boxel-sp-xs) var(--boxel-sp-lg);
     --boxel-button-min-height: var(--boxel-button-touch);
@@ -274,42 +268,6 @@
     --boxel-button-loading-icon-size: var(--boxel-icon-sm);
     --boxel-button-font: 600 var(--boxel-font);
     --boxel-button-letter-spacing: var(--boxel-lsp-xs);
-  }
-
-  .boxel-button:is(.kind-link-primary, .kind-link-muted) {
-    min-height: initial;
-    min-width: initial;
-    padding: 0;
-    background: none;
-    border: none;
-    border-radius: var(--boxel-border-radius-xs);
-    font-weight: inherit;
-    line-height: inherit;
-    letter-spacing: inherit;
-    box-shadow: none;
-  }
-
-  .boxel-button:is(.kind-link-primary, .kind-link-muted):not(:disabled):hover {
-    background: none;
-  }
-
-  .kind-link-primary {
-    --boxel-button-text-color: var(
-      --boxel-button-link-primary-foreground,
-      var(--primary)
-    );
-  }
-
-  .kind-link-primary:not(:disabled):hover {
-    --boxel-button-text-color: color-mix(in oklab, var(--primary) 80%, black);
-  }
-
-  .kind-link-muted {
-    --boxel-button-text-color: var(--muted-foreground);
-  }
-
-  .kind-link-muted:not(:disabled):hover {
-    --boxel-button-text-color: var(--foreground);
   }
 
   /* boxel-ui LoadingIndicator */
@@ -657,70 +615,6 @@ body {
   color: var(--foreground);
   margin: 0 0 var(--boxel-sp-sm);
   padding: 0;
-}
-
-.subtitle {
-  margin: 0 0 var(--boxel-sp-lg);
-  color: var(--foreground);
-  font: var(--boxel-font-sm);
-  line-height: 1.4;
-}
-
-.forgot-password {
-  --host-outline-offset: 2px;
-  margin-top: var(--boxel-sp-4xs);
-  margin-bottom: var(--boxel-sp-lg);
-  margin-left: auto;
-}
-
-.google-button {
-  margin-top: var(--boxel-sp-sm);
-  gap: var(--boxel-sp-xs);
-}
-
-.google-g {
-  width: 1.125rem;
-  height: 1.125rem;
-  flex-shrink: 0;
-}
-
-.divider {
-  display: flex;
-  align-items: center;
-  gap: var(--boxel-sp-sm);
-  margin: var(--boxel-sp-lg) 0 var(--boxel-sp-xs);
-}
-
-.divider::before,
-.divider::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background-color: rgba(255, 255, 255, 0.18);
-}
-
-.divider-label {
-  color: var(--muted-foreground);
-  font: 600 var(--boxel-font-xs);
-  letter-spacing: var(--boxel-lsp-lg);
-  text-transform: uppercase;
-}
-
-.register-prompt {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: var(--boxel-sp-3xs);
-  margin: var(--boxel-sp) 0 0;
-  font: 500 var(--boxel-font-sm);
-}
-
-.register-prompt-text {
-  color: var(--muted-foreground);
-}
-
-.register-link {
-  --host-outline-offset: 2px;
 }
 
 .centered-loading {

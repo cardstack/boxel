@@ -61,36 +61,6 @@ export function boxelIcon() {
   );
 }
 
-// boxel-ui's GoogleColor icon: Google's "G".
-export function googleIcon() {
-  return svg(
-    'svg',
-    {
-      class: 'google-g',
-      width: '18',
-      height: '18',
-      viewBox: '0 0 18 18',
-      'aria-hidden': 'true',
-    },
-    svg('path', {
-      fill: '#4285F4',
-      d: 'M17.64 9.205q-.002-.958-.164-1.841H9v3.481h4.844a4.14 4.14 0 0 1-1.795 2.717v2.258h2.909c1.702-1.567 2.682-3.874 2.682-6.615',
-    }),
-    svg('path', {
-      fill: '#34A853',
-      d: 'M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A9 9 0 0 0 9 18',
-    }),
-    svg('path', {
-      fill: '#FBBC05',
-      d: 'M3.964 10.71c-.18-.54-.282-1.117-.282-1.71s.102-1.17.282-1.71V4.958H.957C.347 6.173 0 7.548 0 9s.348 2.827.957 4.042z',
-    }),
-    svg('path', {
-      fill: '#EA4335',
-      d: 'M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.581C13.463.892 11.426 0 9 0A9 9 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58',
-    }),
-  );
-}
-
 // boxel-ui's CheckMark icon, beside a field's "valid" hint.
 function checkMarkIcon() {
   return svg(
@@ -195,23 +165,6 @@ export function setLoading(button, loading) {
   if (loading) {
     button.prepend(loadingIndicator());
   }
-}
-
-// A boxel-ui Button of a link kind ('link-primary' or 'link-muted').
-export function linkButton(
-  { kind, size, className = '', ...attributes },
-  ...children
-) {
-  return h(
-    'button',
-    {
-      type: 'button',
-      class:
-        `boxel-button kind-${kind} ${size ? `size-${size}` : ''} ${className}`.trim(),
-      ...attributes,
-    },
-    ...children,
-  );
 }
 
 let fieldIds = 0;
