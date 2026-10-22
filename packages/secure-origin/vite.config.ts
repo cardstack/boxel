@@ -7,6 +7,7 @@ import { defineConfig } from 'vite';
 import { buildRecord } from './build/build-record.ts';
 import { importAllowlist } from './build/import-allowlist.ts';
 import { layerOrderFirst } from './build/layer-order.ts';
+import { relativeModuleNames } from './build/relative-module-names.ts';
 
 const macros = buildMacros();
 
@@ -79,6 +80,7 @@ export default defineConfig(({ mode }) => ({
       ],
       generatorOpts: { compact: false },
     }),
+    relativeModuleNames(),
     // The pages' build alone: the tests' development build loads modules
     // the pages never ship, and its page is not one of the origin's.
     ...(mode === 'development'

@@ -15,6 +15,10 @@ class TestApplication extends Application {
 }
 
 export function start() {
+  // The credential fields' stylesheet hides the document until the app has
+  // styled it, and every module's styles share this page, so the page is
+  // marked styled for all of them. A hidden page can't take focus.
+  document.documentElement.classList.add('styled');
   setApplication(
     TestApplication.create({ autoboot: false, rootElement: '#ember-testing' }),
   );
