@@ -2,8 +2,9 @@
 // server's `secure-origin-test.ts` checks it against boxel-ui's). boxel-ui
 // takes `@color` and `@size` and binds them to a `style` attribute, which the
 // page's policy refuses. Here a caller sets them from a scoped rule of its
-// own, as the custom properties that binding would have set: `--icon-color`
-// and `--boxel-loading-indicator-size`.
+// own on the indicator: `--boxel-loading-indicator-color` (or
+// `--loading-indicator-color`) for the colour, and
+// `--boxel-loading-indicator-size` for the size.
 import type { TemplateOnlyComponent } from '@ember/component/template-only';
 
 interface Signature {

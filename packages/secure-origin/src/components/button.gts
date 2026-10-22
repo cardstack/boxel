@@ -167,7 +167,7 @@ const Button: TemplateOnlyComponent<Signature> = <template>
 
       .loading-indicator {
         /* boxel-ui passes this as the indicator's @color. */
-        --icon-color: var(--boxel-button-text-color);
+        --boxel-loading-indicator-color: var(--boxel-button-text-color);
         margin-right: var(
           --boxel-button-loading-indicator-gap,
           var(--boxel-sp-xxs)
