@@ -18,7 +18,7 @@ import DeselectIcon from '@cardstack/boxel-icons/deselect';
 import Maximize from '@cardstack/boxel-icons/maximize';
 import SelectAllIcon from '@cardstack/boxel-icons/select-all';
 import { dropTask } from 'ember-concurrency';
-import Modifier, { modifier } from 'ember-modifier';
+import Modifier from 'ember-modifier';
 import { provide, consume } from 'ember-provide-consume-context';
 
 import pluralize from 'pluralize';
@@ -84,7 +84,7 @@ import CardError from './card-error';
 import DeleteModal from './delete-modal';
 
 import OperatorModeOverlays from './operator-mode-overlays';
-import { leaveStackItem, openStackItem } from './stack-focus';
+import FollowFocus from './stack-focus';
 
 import type CardService from '../../services/card-service';
 import type NetworkService from '../../services/network';
@@ -933,13 +933,7 @@ export default class OperatorModeStackItem extends Component<Signature> {
     this.args.item.markInteracted();
   };
 
-  // The card takes focus as it opens and hands it back as it closes.
-  private followFocus = modifier((element: HTMLElement) => {
-    let { item, stackItems } = this.args;
-    openStackItem(element, item, () => this.isTopCard);
-    return () =>
-      leaveStackItem(item, stackItems, this.operatorModeStateService);
-  });
+  private isTopCardNow = () => this.isTopCard;
 
   private setupItemEl = (el: HTMLElement) => {
     this.itemEl = el;
@@ -1011,7 +1005,8 @@ export default class OperatorModeStackItem extends Component<Signature> {
       aria-label={{this.regionLabel}}
       style={{this.styleForStackedCard}}
       {{on 'focusin' this.markInteracted}}
-      {{this.followFocus}}
+      {{! the card takes focus as it opens and hands it back as it closes }}
+      {{FollowFocus item=@item stack=@stackItems isTopCard=this.isTopCardNow}}
       {{ContentElement onSetup=this.setupItemEl}}
     >
       <CardContainer

@@ -1,4 +1,9 @@
+import { registerDestructor } from '@ember/destroyable';
+import type Owner from '@ember/owner';
 import { schedule } from '@ember/runloop';
+import { service } from '@ember/service';
+
+import Modifier from 'ember-modifier';
 
 import type { StackItem } from '@cardstack/host/lib/stack-item';
 import type OperatorModeStateService from '@cardstack/host/services/operator-mode-state-service';
@@ -7,11 +12,26 @@ import {
   focusedElement,
 } from '@cardstack/host/utils/stack-item-focus';
 
+import type { ArgsFor, NamedArgs } from 'ember-modifier';
+
 // Focus in the operator-mode stacks follows the cards the way it follows a
 // non-modal dialog. A card takes focus as it opens, so the keyboard and a
 // screen reader carry on in the card now on top, and hands focus back to
 // what opened it as it closes. Each stack item does this for itself, as it
 // first renders and as it leaves the page.
+
+interface Signature {
+  Element: HTMLElement;
+  Args: {
+    Positional: [];
+    Named: {
+      item: StackItem;
+      // The stack the item is in.
+      stack: StackItem[];
+      isTopCard: () => boolean;
+    };
+  };
+}
 
 // Whether focus stays where it is as a card opens. A text entry keeps it, so
 // a card opened on the user's behalf (by the AI assistant, say) doesn't take
@@ -35,7 +55,7 @@ function escapeTarget(topItems: StackItem[]): StackItem | undefined {
 
 // As a stack item first renders, a card that is opening records what had
 // focus, and takes focus itself when it opens on top of its stack.
-export function openStackItem(
+function openStackItem(
   element: HTMLElement,
   item: StackItem,
   isTopCard: () => boolean,
@@ -58,7 +78,7 @@ export function openStackItem(
 // rendered, it goes to the card on top of the item's stack, or to the top
 // card Escape acts on when that stack has gone. Focus the user has put
 // elsewhere stays where it is.
-export function leaveStackItem(
+function leaveStackItem(
   item: StackItem,
   stack: StackItem[],
   operatorModeStateService: OperatorModeStateService,
@@ -92,4 +112,32 @@ export function leaveStackItem(
       );
     }
   });
+}
+
+// Applied to a stack item's root. The item opens as the modifier first runs,
+// and leaves as the modifier is destroyed with the item's element. A rerun,
+// as the arguments it read change, is neither.
+export default class FollowFocus extends Modifier<Signature> {
+  @service declare private operatorModeStateService: OperatorModeStateService;
+  #item: StackItem | undefined;
+  #stack: StackItem[] = [];
+
+  constructor(owner: Owner, args: ArgsFor<Signature>) {
+    super(owner, args);
+    registerDestructor(this, () => {
+      if (this.#item) {
+        leaveStackItem(this.#item, this.#stack, this.operatorModeStateService);
+      }
+    });
+  }
+
+  modify(
+    element: HTMLElement,
+    _positional: [],
+    { item, stack, isTopCard }: NamedArgs<Signature>,
+  ) {
+    this.#item = item;
+    this.#stack = stack;
+    openStackItem(element, item, isTopCard);
+  }
 }
