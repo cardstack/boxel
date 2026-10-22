@@ -10112,13 +10112,14 @@ export class Realm {
       }
       this.#transpileCallCount += 1;
       compileStart = performance.now();
-      // The module's exported classes are tagged with the identifier the
-      // loader's `identify()` gives them: the module's URL without its
-      // executable extension, in canonical (RRI) form.
-      let moduleIdentifier = this.#virtualNetwork.unresolveURL(
+      // The module's exported classes are tagged with its URL without the
+      // executable extension. The tag is canonicalized where it is read, so
+      // what is compiled does not depend on the realm prefixes registered now.
+      transpiled = await transpileJS(
+        source,
+        debugFilename,
         trimExecutableExtension(canonicalPath),
       );
-      transpiled = await transpileJS(source, debugFilename, moduleIdentifier);
     } catch (err: any) {
       // A compile that fails can hold the thread as long as one that
       // succeeds, so it is recorded too. Nothing is recorded when the failure
