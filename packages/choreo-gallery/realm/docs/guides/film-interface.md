@@ -41,4 +41,4 @@ Read the implementation: [`player.gts`](https://github.com/cardstack/boxel/blob/
 
 ---
 
-[← Voice Cues, Mixing, and Browser Playback](film-audio-mix.md) · [All guides](README.md) · [Graph Compilation and Custom Adjustments →](film-graph-extension.md)
+[← Voice Cues, Mixing, and Browser Playback](film-audio-mix) · [All guides](README) · [Graph Compilation and Custom Adjustments →](film-graph-extension)

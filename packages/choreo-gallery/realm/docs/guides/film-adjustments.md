@@ -40,4 +40,4 @@ Read the implementation: [`types.ts`](https://github.com/cardstack/boxel/blob/ma
 
 ---
 
-[← Seam Readiness and Exact Capture](film-seam-readiness.md) · [All guides](README.md) · [World Annotations and Construction Cues →](film-world-annotations.md)
+[← Seam Readiness and Exact Capture](film-seam-readiness) · [All guides](README) · [World Annotations and Construction Cues →](film-world-annotations)

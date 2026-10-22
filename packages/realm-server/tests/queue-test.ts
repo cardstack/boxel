@@ -89,6 +89,7 @@ module(basename(import.meta.filename), function () {
       clientRequestId: string | null;
       priority?: number;
       initiatedBy?: string[];
+      realmEvents?: boolean;
     }) {
       let priority = args.priority ?? userInitiatedPriority;
       return await publisher.publish<IncrementalDoneResult>({
@@ -99,6 +100,9 @@ module(basename(import.meta.filename), function () {
         args: makeIncrementalArgsWithCallerMetadata(
           args.args,
           args.clientRequestId,
+          args.realmEvents === undefined
+            ? undefined
+            : { realmEvents: args.realmEvents },
         ),
         ...(args.initiatedBy ? { initiatedBy: args.initiatedBy } : {}),
         mapResult: mapIncrementalDoneResult(args.clientRequestId),
@@ -960,6 +964,125 @@ module(basename(import.meta.filename), function () {
       }
     });
 
+    test('from-scratch dedup: a pass that announces does not attach to a running pass that announces nothing', async function (assert) {
+      // A running job's args can no longer change, so a publish attaching to
+      // a silent pass would never have its pass announced.
+      await runner.destroy();
+      let realmURL = 'http://example.com/from-scratch-in-flight-silent/';
+      let started = new Deferred<void>();
+      let release = new Deferred<void>();
+
+      let worker = new PgQueueRunner({
+        adapter,
+        workerId: 'from-scratch-in-flight-silent-worker',
+      });
+      worker.register('from-scratch-index', async () => {
+        started.fulfill();
+        await release.promise;
+        return {
+          invalidations: [],
+          ignoreData: {},
+          stats: {
+            instancesIndexed: 0,
+            filesIndexed: 0,
+            instanceErrors: 0,
+            fileErrors: 0,
+            totalIndexEntries: 0,
+          },
+        };
+      });
+
+      try {
+        await worker.start();
+        let running = await publishFromScratchIndexJob({
+          priority: 0,
+          args: { realmURL, realmUsername: 'owner', realmEvents: false },
+        });
+        await started.promise;
+
+        let silent = await publishFromScratchIndexJob({
+          priority: 0,
+          args: { realmURL, realmUsername: 'owner', realmEvents: false },
+        });
+        assert.strictEqual(
+          silent.id,
+          running.id,
+          'a pass that announces nothing attaches to the running pass',
+        );
+
+        let announcing = await publishFromScratchIndexJob({
+          priority: 0,
+          args: { realmURL, realmUsername: 'owner' },
+        });
+        assert.notStrictEqual(
+          announcing.id,
+          running.id,
+          'a pass that announces waits for a pass that will announce it',
+        );
+      } finally {
+        release.fulfill();
+        await worker.destroy();
+      }
+    });
+
+    test('from-scratch coalesce: the merged pass announces when either pass does', async function (assert) {
+      await runner.destroy();
+      let pendingArgs = async (realmURL: string) => {
+        let rows = (await adapter.execute(
+          `SELECT args FROM jobs
+           WHERE job_type = 'from-scratch-index'
+             AND concurrency_group = $1
+             AND status = 'unfulfilled'`,
+          { bind: [`indexing:${realmURL}`] },
+        )) as { args: { realmEvents?: boolean } }[];
+        assert.strictEqual(rows.length, 1, `one pending pass for ${realmURL}`);
+        return rows[0].args;
+      };
+
+      let mixedRealm = 'http://example.com/from-scratch-merge-mixed/';
+      let silentThenAnnouncing = await publishFromScratchIndexJob({
+        priority: 0,
+        args: {
+          realmURL: mixedRealm,
+          realmUsername: 'owner',
+          realmEvents: false,
+        },
+      });
+      let announcingJoin = await publishFromScratchIndexJob({
+        priority: 0,
+        args: { realmURL: mixedRealm, realmUsername: 'owner' },
+      });
+      assert.strictEqual(announcingJoin.id, silentThenAnnouncing.id);
+      assert.notStrictEqual(
+        (await pendingArgs(mixedRealm)).realmEvents,
+        false,
+        'a silent pass joined by one that announces announces',
+      );
+
+      let silentRealm = 'http://example.com/from-scratch-merge-silent/';
+      let firstSilent = await publishFromScratchIndexJob({
+        priority: 0,
+        args: {
+          realmURL: silentRealm,
+          realmUsername: 'owner',
+          realmEvents: false,
+        },
+      });
+      let secondSilent = await publishFromScratchIndexJob({
+        priority: 0,
+        args: {
+          realmURL: silentRealm,
+          realmUsername: 'owner',
+          realmEvents: false,
+        },
+      });
+      assert.strictEqual(secondSilent.id, firstSilent.id);
+      assert.false(
+        (await pendingArgs(silentRealm)).realmEvents,
+        'two silent passes merge into a silent pass',
+      );
+    });
+
     test('from-scratch does not coalesce onto pending incremental in same group', async function (assert) {
       await runner.destroy();
 
@@ -1621,6 +1744,79 @@ module(basename(import.meta.filename), function () {
       }
     });
 
+    test('incremental dedup: a publish that announces does not attach to a running pass that announces nothing', async function (assert) {
+      // A running job's args can no longer change, so a publish attaching to
+      // a pass whose writes asked for no realm events would have the render
+      // job that pass spawns render its cards without announcing them.
+      await runner.destroy();
+      let realmURL = 'http://example.com/in-flight-silent/';
+      let started = new Deferred<void>();
+      let release = new Deferred<void>();
+
+      let worker = new PgQueueRunner({
+        adapter,
+        workerId: 'in-flight-silent-worker',
+      });
+      worker.register(
+        'incremental-index',
+        async (args: { changes: { url: string }[] }) => {
+          started.fulfill();
+          await release.promise;
+          return {
+            invalidations: args.changes.map((change) => change.url),
+            ignoreData: {},
+            stats: {
+              instancesIndexed: 0,
+              filesIndexed: 0,
+              instanceErrors: 0,
+              fileErrors: 0,
+              totalIndexEntries: 0,
+            },
+          };
+        },
+      );
+      let changeArgs = () => ({
+        realmURL,
+        realmUsername: 'owner',
+        ignoreData: {},
+        changes: [{ url: `${realmURL}a`, operation: 'update' as const }],
+      });
+
+      try {
+        await worker.start();
+        let running = await publishIncrementalIndexJob({
+          clientRequestId: 'silent-1',
+          args: changeArgs(),
+          realmEvents: false,
+        });
+        await started.promise;
+
+        let silent = await publishIncrementalIndexJob({
+          clientRequestId: 'silent-2',
+          args: changeArgs(),
+          realmEvents: false,
+        });
+        assert.strictEqual(
+          silent.id,
+          running.id,
+          'a publish that announces nothing attaches to the running pass',
+        );
+
+        let announcing = await publishIncrementalIndexJob({
+          clientRequestId: 'announcing',
+          args: changeArgs(),
+        });
+        assert.notStrictEqual(
+          announcing.id,
+          running.id,
+          'a publish that announces waits for a pass that will announce it',
+        );
+      } finally {
+        release.fulfill();
+        await worker.destroy();
+      }
+    });
+
     test('incremental does not coalesce onto pending from-scratch in same group', async function (assert) {
       await runner.destroy();
 
@@ -1731,6 +1927,76 @@ module(basename(import.meta.filename), function () {
             rows[0].args.realmUrls.slice().sort(),
             ['http://example.com/a/', 'http://example.com/b/'],
             "canonical job args contain the union of both instances' realmUrls",
+          );
+        });
+
+        test('full-reindex: sweeps merge only with sweeps that make the same choice about announcing', async function (assert) {
+          let publishSweep = (
+            from: typeof publisher,
+            realmUrl: string,
+            realmEvents: boolean | undefined,
+          ) =>
+            from.publish<void>({
+              jobType: 'full-reindex',
+              concurrencyGroup: 'full-reindex-group',
+              timeout: FULL_REINDEX_JOB_TIMEOUT_SEC,
+              priority: 0,
+              args: {
+                realmUrls: [realmUrl],
+                ...(realmEvents === undefined ? {} : { realmEvents }),
+              },
+            });
+          let pendingSweeps = async () =>
+            (await adapter.execute(
+              `SELECT id, args FROM jobs
+               WHERE job_type = 'full-reindex' AND status = 'unfulfilled'
+               ORDER BY id`,
+            )) as {
+              id: number;
+              args: { realmUrls: string[]; realmEvents?: boolean };
+            }[];
+
+          let silent = await publishSweep(
+            publisher,
+            'http://example.com/a/',
+            false,
+          );
+          let secondSilent = await publishSweep(
+            publisher2,
+            'http://example.com/b/',
+            false,
+          );
+          assert.strictEqual(
+            secondSilent.id,
+            silent.id,
+            'two silent sweeps merge',
+          );
+
+          let announcing = await publishSweep(
+            publisher2,
+            'http://example.com/c/',
+            undefined,
+          );
+          assert.notStrictEqual(
+            announcing.id,
+            silent.id,
+            'a sweep that announces does not merge into a silent one',
+          );
+
+          let sweeps = await pendingSweeps();
+          assert.deepEqual(
+            sweeps.map(({ args }) => ({
+              realmUrls: [...args.realmUrls].sort(),
+              realmEvents: args.realmEvents,
+            })),
+            [
+              {
+                realmUrls: ['http://example.com/a/', 'http://example.com/b/'],
+                realmEvents: false,
+              },
+              { realmUrls: ['http://example.com/c/'], realmEvents: undefined },
+            ],
+            "each sweep keeps its own realms' choice",
           );
         });
       },

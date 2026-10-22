@@ -37,7 +37,7 @@ Shot lengths use the film schedule's ticks. The current `TICK` constant is two s
 
 Use exact mode when a renderer must capture frames in any order. Smoothness during live playback and repeatability during offline recording are separate things to verify.
 
-Next, connect the picture to [Narration and Overlays](film-audio.md).
+Next, connect the picture to [Narration and Overlays](film-audio).
 
 ## Separating the Authoring Layers
 
@@ -45,4 +45,4 @@ The film graph now has dedicated guides for its spine, chapters, shot poses, tai
 
 ---
 
-[← Driving an External Clock](film-clock.md) · [All guides](README.md) · [Narration and Overlays →](film-audio.md)
+[← Driving an External Clock](film-clock) · [All guides](README) · [Narration and Overlays →](film-audio)

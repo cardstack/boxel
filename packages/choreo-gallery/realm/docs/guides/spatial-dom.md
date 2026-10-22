@@ -41,4 +41,4 @@ Check the relationship after a viewport resize as well as a camera move. Both th
 
 ---
 
-[← Directing a 3D Camera](spatial-cameras.md) · [All guides](README.md) · [Building a Spatial Gallery →](spatial-gallery.md)
+[← Directing a 3D Camera](spatial-cameras) · [All guides](README) · [Building a Spatial Gallery →](spatial-gallery)

@@ -22,8 +22,8 @@ Shared text needs similar care. Its identity explains continuity, but newly intr
 
 Use the two presets to compare an elastic treatment with a concise editorial treatment. Then edit only the type spring while leaving the plate response fixed. This separates the pacing of the message from the pacing of its container. Reverse direction before settlement: a presentation still has to behave when a speaker changes their mind.
 
-For click-paced reveals within a composition, continue with [gates](interactive-gates.md). For changing live contents inside a travelling box, compare [crossings](interactive-crossings.md). These solve related problems at different boundaries; neither requires turning every slide into a screenshot.
+For click-paced reveals within a composition, continue with [gates](interactive-gates). For changing live contents inside a travelling box, compare [crossings](interactive-crossings). These solve related problems at different boundaries; neither requires turning every slide into a screenshot.
 
 ---
 
-[← Composing a Continuous Loop](interactive-circle-loop.md) · [All guides](README.md) · [Keeping Simulation and Choreography Separate →](interactive-drift.md)
+[← Composing a Continuous Loop](interactive-circle-loop) · [All guides](README) · [Keeping Simulation and Choreography Separate →](interactive-drift)

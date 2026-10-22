@@ -42,4 +42,4 @@ Read the implementation: [`changeset.ts`](https://github.com/cardstack/boxel/blo
 
 ---
 
-[← Connecting Regions and Destinations](interactive-beacons.md) · [All guides](README.md) · [Sequences and Parallel Blocks →](interactive-blocks.md)
+[← Connecting Regions and Destinations](interactive-beacons) · [All guides](README) · [Sequences and Parallel Blocks →](interactive-blocks)

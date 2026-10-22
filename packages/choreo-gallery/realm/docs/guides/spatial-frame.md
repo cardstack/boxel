@@ -43,4 +43,4 @@ Read the implementation: [`types.ts`](https://github.com/cardstack/boxel/blob/ma
 
 ---
 
-[← Building a Spatial Gallery](spatial-gallery.md) · [All guides](README.md) · [Relative Pans and Slow Zooms →](spatial-relative.md)
+[← Building a Spatial Gallery](spatial-gallery) · [All guides](README) · [Relative Pans and Slow Zooms →](spatial-relative)

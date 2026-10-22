@@ -38,4 +38,4 @@ Read the implementation: [`seam.ts`](https://github.com/cardstack/boxel/blob/mai
 
 ---
 
-[← Joins and Transition Presentations](film-joins.md) · [All guides](README.md) · [Picture Adjustments, Grades, and Filters →](film-adjustments.md)
+[← Joins and Transition Presentations](film-joins) · [All guides](README) · [Picture Adjustments, Grades, and Filters →](film-adjustments)

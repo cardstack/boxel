@@ -24,7 +24,8 @@ the rest).
 | `stages/<slug>.gts` | A demo's own `GalleryDemo` subclass, supplying its live stage and its notes.                                                                   |
 | `notes/`            | Each demo's long-form notes (its Deep Dive).                                                                                                   |
 | `docs/`             | The long-form documentation, as Markdown: the guide, the choreography model, the construct reference, Film. `docs/README.md` indexes it.       |
-| `docs/guides/`      | The Choreo guides, one Markdown file each, with their live demos embedded. `docs/guides/README.md` indexes them in reading order.              |
+| `docs/guides/`      | The Choreo guides, one Markdown file each, with their live demos embedded, and beside each its page, a `Guide` card. `README.md` is the index. |
+| `guide.gts`         | `Guide`, a guide's page: the site's frame around the guide's Markdown, with the guides' sections beside it.                                    |
 | `study.gts`         | `GuideStudy`, the small application a first-steps guide builds. `studies/<name>.gts` supplies each one; `studies/<name>.json` is its instance. |
 | `design/`           | Design history: design records, handoffs, measurements, and the films' scripts. Drafts by definition.                                          |
 | `licenses/`         | Attribution for third-party material the demos use.                                                                                            |
@@ -43,16 +44,41 @@ shows a placeholder.
 
 ## The guides and the lab
 
-Each guide is a Markdown file in `docs/guides/`, and the host renders it as
-any Markdown file in a realm. A guide embeds its live demo as a card,
-`::card[../../demos/<slug>]`, which renders the demo card's embedded format:
-the stage, what the demo is, its guide, and its lab. The first-steps guides
-embed the application they build the same way, from `studies/`.
+Each guide is a Markdown file in `docs/guides/`, and the Markdown is its only
+source. A guide embeds its live demo as a card, `::card[../../demos/<slug>]`,
+which renders the demo card's embedded format: the stage, what the demo is,
+its guide, and its lab. The first-steps guides embed the application they
+build the same way, from `studies/`.
+
+A guide is read on its page: a `Guide` card (`guide.gts`) beside the Markdown,
+`docs/guides/<slug>.json` for `docs/guides/<slug>.md`, so the page's URL is the
+file's without `.md`. The card holds no prose. It links its Markdown file
+(`document`) and the index (`index`, `README.md`), and its title and
+description are the file's first heading and opening paragraph. The index has
+a page too, `docs/guides/README`. The page (`shell/guide-page.gts`) is the
+site's frame, whose brand leads back to the gallery, around two columns:
+
+- the guides' sections, read from the index's `## 01 Section` headings and
+  `- [Title](slug)` items, with the guide being read marked. On a narrow card
+  they fold into a "Guides" button above the guide.
+- the guide's Markdown, through base's content-only `MarkdownPreview`, which
+  resolves the guide's embeds into live demos and draws none of the host's
+  file chrome. The gallery sets its type and palette through the renderer's
+  `--markdown-*` properties, in either theme. Code blocks keep a dark surface
+  in both, because the renderer sets their text light.
+
+Because the page sits beside its Markdown, the guide's relative links resolve
+the same from either: `../../demos/inbox`, `../../widget-room`, `../film.md`.
+Guides link one another, and the index, by their pages: `[…](core-layout)`,
+not `core-layout.md`, and each guide's last line is its pager, in that form.
+A guide's `.md` URL still opens the host's view of the file.
 
 A demo's lesson names its concept guide (`lesson.guide`). `shell/guide-link.gts`
-turns that into "Read the guide →", a real link to the guide's file that the
+turns that into "Read the guide →", a real link to the guide's page that the
 host follows; the grid's tiles, the demo page and the embedded demo all carry
-it.
+it. A guide's page provides the guide being read
+(`CurrentGuideContext`, `lib/guide-index.ts`), and an embedded demo leaves the
+link out when it would lead to that page.
 
 The lab is a DialKit panel over the values a demo declares through
 `lib/tuning.ts` (`demoTuning(slug)`), opened from the demo page or an embedded
@@ -136,10 +162,10 @@ deploy. The service account `choreo_gallery_realm` owns the realm,
 `https://choreo.boxel.site/` serves a published copy of the production realm.
 The realm's root is the site's root, so a file's path in `realm/` is its path
 on the site: the gallery (`index.json`) is `https://choreo.boxel.site/`, a demo
-(`demos/towers.json`) is `https://choreo.boxel.site/demos/towers`, and a guide
-is `https://choreo.boxel.site/docs/guides/<name>.md`. The libraries' READMEs,
-the docs and the guides link to the gallery by these URLs, and `pnpm
-lint:realm` checks that each names a file in the realm.
+(`demos/towers.json`) is `https://choreo.boxel.site/demos/towers`, and a guide's
+page (`docs/guides/<name>.json`) is `https://choreo.boxel.site/docs/guides/<name>`.
+The libraries' READMEs, the docs and the guides link to the gallery by these
+URLs, and `pnpm lint:realm` checks that each names a file in the realm.
 
 Publishing copies the realm's files into a realm of their own, which indexes
 them and renders each card and file to HTML. Everyone can read the copy and
@@ -235,9 +261,12 @@ it checks whatever the copy holds:
 - each film's frame plays its first frame;
 - each tile opens its demo, and Back returns to the grid;
 - the 3D Gallery link opens the widget room, and the room renders;
-- every guide renders, with a live demo for each card it embeds.
+- every guide's page renders in the site's frame, with the guides' sections,
+  its pager and a live demo for each card it embeds, and none of the file
+  view's chrome; no embedded demo links back to the guide it is in.
 
-It runs the grid and the demo pages in both the dark and the light theme. Any
+It runs the grid, the demo pages and the guides' index in both the dark and
+the light theme. Any
 console error, uncaught exception, failed request, or error response from the
 site fails the check it happened in, except the platform problems the script
 names in `knownIssue` and `knownConsoleIssue`, which it reports as `known:`
@@ -301,6 +330,8 @@ against the libraries it documents:
   and each demo has a complete teaching lesson naming a known guide;
 - every guide meets the prose floor and has a preamble, the guides' index
   lists each guide once, and each guide's pager names its neighbours in it;
+- each guide, and the index, has its `Guide` card beside its Markdown,
+  linking only that file and the index;
 - every card a doc embeds (`::card[…]`) is a card instance in the realm, and
   every demo has a guide that embeds it;
 - `docs/` and `design/` link only to realm files and headings that exist;
@@ -310,11 +341,14 @@ against the libraries it documents:
   imports aren't checked);
 - every `choreo.boxel.site` URL names a file in the realm, and every link into
   the monorepo names a file that exists, along with the heading any `#fragment`
-  names.
+  names;
+- a realm doc's link to a guide, and any `choreo.boxel.site` URL of one, leads
+  to its page, not its `.md` file. A package README's relative link to a guide
+  stays on its `.md` file, which is what GitHub can show.
 
 Tests that load the gallery's cards from their realm source run in the host
 suite, `packages/host/tests/integration/choreo-*-test.gts`, through
 `tests/helpers/choreo-gallery.ts` and `tests/helpers/choreo-gallery-stage.gts`:
 every stage rendering on its own, each demo's behaviour, the gallery site and
-its crossing between the grid and a demo page, the films' faces and theater,
-and the feature reel under an external clock.
+its crossing between the grid and a demo page, the guides' pages, the films'
+faces and theater, and the feature reel under an external clock.

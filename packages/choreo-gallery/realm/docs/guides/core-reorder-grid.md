@@ -20,10 +20,10 @@ Compare Playful pickup with Precise pickup, then edit the rotation alone. Drag d
 
 ## Integrate with a real collection
 
-If a cover contains a link, text field or menu, decide where dragging is allowed to start. A separate handle can preserve normal interaction with those controls. Read [drag handles](core-drag-handles.md) before making the entire cover a gesture surface.
+If a cover contains a link, text field or menu, decide where dragging is allowed to start. A separate handle can preserve normal interaction with those controls. Read [drag handles](core-drag-handles) before making the entire cover a gesture surface.
 
-Removal is a separate lifetime question. [Presence](core-presence.md) can retain a departing item, but the values passed to the group must still represent the application's intended order. Check rapid removal and reorder together before assuming they compose correctly. Also preserve a non-drag way to change order when the product needs keyboard operation.
+Removal is a separate lifetime question. [Presence](core-presence) can retain a departing item, but the values passed to the group must still represent the application's intended order. Check rapid removal and reorder together before assuming they compose correctly. Also preserve a non-drag way to change order when the product needs keyboard operation.
 
 ---
 
-[← Testing Geometry, Identity, and Cleanup](core-test-geometry.md) · [All guides](README.md) · [Moving a Shared Selection Marker →](core-shared-layout.md)
+[← Testing Geometry, Identity, and Cleanup](core-test-geometry) · [All guides](README) · [Moving a Shared Selection Marker →](core-shared-layout)

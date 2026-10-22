@@ -43,4 +43,4 @@ Read the implementation: [`types.ts`](https://github.com/cardstack/boxel/blob/ma
 
 ---
 
-[← Sequences and Parallel Blocks](interactive-blocks.md) · [All guides](README.md) · [Named Anchors and Overlap →](interactive-anchors.md)
+[← Sequences and Parallel Blocks](interactive-blocks) · [All guides](README) · [Named Anchors and Overlap →](interactive-anchors)

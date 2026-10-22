@@ -51,7 +51,7 @@ Read the label from the yielded `message`, as this example does. A leaving Glimm
 
 The default `sync` mode lets arrivals and departures animate together. `wait` holds the arriving item until the departure finishes. `popLayout` removes the leaving item from layout immediately so its siblings can close the gap.
 
-Compare these behaviors in the [presence modes demo](../../demos/presence). If you need to order exits, layout movement, and entrances across a whole region, use [a Choreo timeline](interactive-timelines.md).
+Compare these behaviors in the [presence modes demo](../../demos/presence). If you need to order exits, layout movement, and entrances across a whole region, use [a Choreo timeline](interactive-timelines).
 
 ## Testing Replacement and Teardown
 
@@ -65,4 +65,4 @@ Read the implementation: [`presence.gts`](https://github.com/cardstack/boxel/blo
 
 ---
 
-[← Animating an Element](core-elements.md) · [All guides](README.md) · [Animating Layout →](core-layout.md)
+[← Animating an Element](core-elements) · [All guides](README) · [Animating Layout →](core-layout)

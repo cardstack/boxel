@@ -45,4 +45,4 @@ Read the implementation: [`test-support/index.ts`](https://github.com/cardstack/
 
 ---
 
-[← Testing Time, Gates, and Settlement](core-test-timing.md) · [All guides](README.md) · [Reordering a Wrapped Grid →](core-reorder-grid.md)
+[← Testing Time, Gates, and Settlement](core-test-timing) · [All guides](README) · [Reordering a Wrapped Grid →](core-reorder-grid)

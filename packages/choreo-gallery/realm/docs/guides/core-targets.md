@@ -48,4 +48,4 @@ Read the implementation: [`helpers.ts`](https://github.com/cardstack/boxel/blob/
 
 ---
 
-[← API and Concept Inventory](core-api-inventory.md) · [All guides](README.md) · [Spring Transitions →](core-springs.md)
+[← API and Concept Inventory](core-api-inventory) · [All guides](README) · [Spring Transitions →](core-springs)

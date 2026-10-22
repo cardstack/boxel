@@ -37,4 +37,4 @@ Use fewer live renderers where necessary, but do not treat a preview as the only
 
 ---
 
-[← Plane Coordinates and Hit Testing](spatial-coordinates.md) · [All guides](README.md) · [Recorded & Film Choreo →](film-start.md)
+[← Plane Coordinates and Hit Testing](spatial-coordinates) · [All guides](README) · [Recorded & Film Choreo →](film-start)

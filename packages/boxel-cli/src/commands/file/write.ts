@@ -22,6 +22,12 @@ export interface WriteCommandOptions {
   realmSecretSeed?: string;
   /** @internal Test hook: supply an already-constructed authenticator. */
   authenticator?: RealmAuthenticator;
+  /**
+   * When false, the write carries `X-Boxel-Realm-Events: none`, so the realm
+   * indexes it without announcing it to its subscribers. For deploys, whose
+   * changes open tabs pick up on their next load. On by default.
+   */
+  realmEvents?: boolean;
 }
 
 interface WriteCliOptions {
@@ -29,6 +35,7 @@ interface WriteCliOptions {
   file?: string;
   json?: boolean;
   realmSecretSeed?: boolean;
+  realmEvents?: boolean;
 }
 
 /**
@@ -99,12 +106,17 @@ export async function write(
   try {
     let response = await authenticator.authedRealmFetch(url, {
       method: 'POST',
-      headers: isBinary
-        ? { 'Content-Type': SupportedMimeType.OctetStream }
-        : {
-            Accept: SupportedMimeType.CardSource,
-            'Content-Type': SupportedMimeType.CardSource,
-          },
+      headers: {
+        ...(isBinary
+          ? { 'Content-Type': SupportedMimeType.OctetStream }
+          : {
+              Accept: SupportedMimeType.CardSource,
+              'Content-Type': SupportedMimeType.CardSource,
+            }),
+        ...(options?.realmEvents === false
+          ? { 'X-Boxel-Realm-Events': 'none' }
+          : {}),
+      },
       // Both branches of `body: string | Uint8Array` are valid BodyInit
       // values, but TS narrows them as a union that doesn't unify against
       // the fetch signature without a hint.
@@ -157,6 +169,10 @@ export function registerWriteCommand(parent: Command): void {
     .option(
       '--realm-secret-seed',
       'Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)',
+    )
+    .option(
+      '--no-realm-events',
+      'Index the write without announcing it to open tabs, which pick it up on their next load (for deploys)',
     )
     .option('--json', 'Output raw JSON response')
     .action(async (filePath: string, opts: WriteCliOptions) => {
@@ -221,6 +237,7 @@ export function registerWriteCommand(parent: Command): void {
       try {
         result = await write(opts.realm, filePath, content, {
           realmSecretSeed,
+          realmEvents: opts.realmEvents,
         });
       } catch (err) {
         stderr(

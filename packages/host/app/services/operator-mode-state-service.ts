@@ -37,6 +37,7 @@ import type { Submode } from '@cardstack/host/components/submode-switcher';
 import { Submodes } from '@cardstack/host/components/submode-switcher';
 import {
   StackItem,
+  StackItemOpening,
   takesFileDeleteRoute,
   type StackItemType,
 } from '@cardstack/host/lib/stack-item';
@@ -724,6 +725,16 @@ export default class OperatorModeStateService extends Service {
       .map((stack) => stack[stack.length - 1]);
   }
 
+  // The top card the user most recently interacted with: the one keyboard
+  // shortcuts such as Escape act on.
+  mostRecentlyInteractedTopItem(): StackItem | undefined {
+    let topItems = this.topMostStackItems();
+    if (topItems.length === 0) return undefined;
+    return topItems.reduce((a, b) =>
+      b.lastInteractedAt > a.lastInteractedAt ? b : a,
+    );
+  }
+
   // Opening a card that is already behind you in the trail is a navigation
   // *back* to it — an in-page "up" link, or a second visit to the same page —
   // so unwind to it rather than stacking another copy of a page the user is
@@ -1263,6 +1274,7 @@ export default class OperatorModeStateService extends Service {
             stackIndex,
             type: item.type,
             useBaseTemplate: item.useBaseTemplate,
+            opening: new StackItemOpening(true),
           }),
         );
       }

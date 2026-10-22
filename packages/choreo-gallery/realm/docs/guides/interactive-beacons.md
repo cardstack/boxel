@@ -60,4 +60,4 @@ Read the implementation: [`beacon.ts`](https://github.com/cardstack/boxel/blob/m
 
 ---
 
-[← Writing a Timeline](interactive-timelines.md) · [All guides](README.md) · [Changesets, Sprites, and Queries →](interactive-queries.md)
+[← Writing a Timeline](interactive-timelines) · [All guides](README) · [Changesets, Sprites, and Queries →](interactive-queries)

@@ -101,6 +101,9 @@ export default function handleReindex({
   };
 }
 
+// An operator's reindex, which the realm's users did not ask for, so it
+// announces nothing to the realm's subscribers (see
+// `fromScratchAnnounces`).
 export async function reindex({
   realm,
   queue,
@@ -123,6 +126,7 @@ export async function reindex({
     priority,
     {
       clearLastModified: true,
+      realmEvents: false,
     },
   );
 }

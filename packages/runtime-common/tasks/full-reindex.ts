@@ -18,6 +18,10 @@ export interface RealmReindexTarget extends JSONTypes.Object {
 
 interface FullReindexArgs {
   realmUrls: string[];
+  // False when the system starts the sweep on its own, after a deploy or from
+  // an operator's dashboard: each realm's pass then announces nothing to its
+  // subscribers (see `fromScratchAnnounces`). True when absent.
+  realmEvents?: boolean;
 }
 
 export { fullReindex };
@@ -56,8 +60,13 @@ function chooseFullReindexCoalesceDecision(
   context: QueueCoalesceContext,
 ): QueueCoalesceDecision {
   let { incoming, candidates } = context;
+  // A sweep merges only with one that makes the same choice about announcing:
+  // its realms' passes either all announce or all don't, and a merged sweep
+  // would impose one sweep's choice on the other's realms.
   let twin = candidates.find(
-    (candidate) => candidate.jobType === incoming.jobType,
+    (candidate) =>
+      candidate.jobType === incoming.jobType &&
+      announcesSweep(candidate.args) === announcesSweep(incoming.args),
   );
   if (!twin) {
     return { type: 'insert' };
@@ -83,6 +92,10 @@ function chooseFullReindexCoalesceDecision(
   };
 }
 
+function announcesSweep(args: unknown): boolean {
+  return !(isObjectLike(args) && args.realmEvents === false);
+}
+
 registerQueueJobDefinition({
   jobType: 'full-reindex',
   coalesce: chooseFullReindexCoalesceDecision,
@@ -95,7 +108,7 @@ const fullReindex: Task<FullReindexArgs, void> = ({
   queuePublisher,
 }) =>
   async function (args) {
-    let { jobInfo, realmUrls } = args;
+    let { jobInfo, realmUrls, realmEvents } = args;
     log.debug(
       `${jobIdentity(jobInfo)} starting reindex-all for job: ${JSON.stringify(args)}`,
     );
@@ -149,6 +162,7 @@ const fullReindex: Task<FullReindexArgs, void> = ({
           systemInitiatedIndexPriority(realmUrl),
           {
             clearLastModified: true,
+            realmEvents,
           },
         );
       } catch (error: any) {

@@ -1,15 +1,30 @@
 'use strict';
 
 module.exports = {
+  env: { browser: true, es2022: true },
   overrides: [
+    {
+      files: ['**/*.gts'],
+      parser: 'ember-eslint-parser',
+      plugins: ['ember'],
+      extends: ['plugin:ember/recommended-gts'],
+    },
     {
       files: ['./.eslintrc.cjs', './.template-lintrc.cjs'],
       parserOptions: { sourceType: 'script' },
       env: { browser: false, node: true },
     },
     {
-      files: ['./build/**/*.ts', './tests/**/*.ts', './vite.config.ts'],
+      files: ['./build/**/*.ts', './tests/**/*.test.ts', './vite.config.ts'],
       env: { browser: false, node: true },
+    },
+    {
+      // The components' suite, run in the browser.
+      files: ['./tests/**/*-test.{ts,gts}'],
+      extends: ['plugin:qunit/recommended'],
+      rules: {
+        'qunit/require-expect': 'off',
+      },
     },
     {
       // The secure origin's security logic: the credential frame's protocol

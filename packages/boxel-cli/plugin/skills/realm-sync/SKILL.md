@@ -45,6 +45,22 @@ A profile must be active. If `boxel profile list` shows none, the user has to ru
 
 `watch` protects local edits without a flag: by default any file whose local hash differs from the sync manifest is skipped (with a yellow `⚠ skipped …` line) instead of overwritten. The warning re-fires on every poll until the user reconciles via `boxel realm sync …` (e.g. `--prefer-newest`) or reruns watch with `--overwrite-local` to accept the remote.
 
+## Pushing without realm events (`--no-realm-events`)
+
+Every write to a realm normally broadcasts realm events to each session room subscribed to it. Open tabs use them to show that the realm is indexing, then reload the changed cards, modules and live searches. `push --no-realm-events` marks each write it sends so the realm server announces none of them. The files are still written and indexed, and the server's caches are still invalidated. Open tabs just aren't told, so they pick the new content up on their next page load.
+
+**Use it** when a push replaces a realm's content out of band, for a realm people mostly read rather than edit:
+
+- A deploy that pushes a git tree to a shared realm, such as the catalog. Without the flag, every open tab on that realm reloads code its user didn't ask for, mid-session, and the realm server fans the events out to every subscribed room.
+- Seeding or restoring a realm in bulk when nobody needs to see the change live.
+
+**Don't use it** when someone needs to see the push as it lands:
+
+- Pushing your own edits to a workspace you, a collaborator or an agent has open. Those tabs keep showing the old cards and code until reload. Card saves don't check for a newer version, so an open tab's next save of a stale card writes the old content back over the push.
+- Small, everyday pushes. Their events cost little, and live refresh is what users expect.
+
+When unsure, leave it off. Realm servers that predate the flag ignore it and announce as usual.
+
 ## Realm skills reach Claude Code automatically
 
 A workspace's user-authored skills live in the realm as `skills/<name>/SKILL.md` (see `/boxel-skills:boxel-skill-authoring`). `pull`, `sync`, and `watch` expose them to Claude Code with no extra step: each one is copied into `<local-dir>/.claude/skills/<realm>-<name>/`, where `<realm>` is the last segment of the realm URL. So a skill named `trip-planner` in `…/alice/experiments/` becomes `/experiments-trip-planner` in the next session.
@@ -118,6 +134,7 @@ Push local files to a Boxel realm
 - `--dry-run` — Show what would be done without making changes
 - `--force` — Upload all files, even if unchanged
 - `--changed-since <revision>` — Upload only files that differ from this git revision (one the realm already holds), plus files git does not track and files missing from the realm, instead of comparing against the sync manifest. Repeat it to name every revision the realm may hold part of, such as one a failed sync stopped partway through; a file is skipped only when it matches all of them. A file edited directly on the realm stays as it is until it changes in git. The local directory must be a git checkout whose history reaches each revision
+- `--no-realm-events` — Index the pushed changes without announcing them to open tabs, which pick them up on their next load (for deploys)
 - `--realm-secret-seed` — Administrative auth: prompt for a realm secret seed and mint a JWT locally instead of using a Matrix profile (env: BOXEL_REALM_SECRET_SEED)
 
 ### `boxel realm pull <realm-url> <local-dir>`
@@ -179,5 +196,6 @@ List realms accessible to the active profile
 ## Pitfalls
 
 - `boxel realm push --delete` will remove remote files that don't exist locally. Confirm the user intends destructive sync before adding the flag.
+- Don't add `--no-realm-events` to a push into a realm someone has open. Their tabs go stale, and a stale tab's next save can overwrite the push. See [Pushing without realm events](#pushing-without-realm-events---no-realm-events).
 - The `<realm-url>` argument is the realm's _base URL_ (`https://app.boxel.ai/owner/realm/`), not a card URL inside the realm. If the user pastes a card URL, strip the path back to the realm root.
 - Newly created realms need indexing before they're usable. After `boxel realm create`, follow up with `boxel realm wait-for-ready` (see `/boxel-cli:realm-history`).

@@ -57,4 +57,4 @@ Read the implementation: [`speed.ts`](https://github.com/cardstack/boxel/blob/ma
 
 ---
 
-[← Page Transitions and Live Crossings](core-page-transitions.md) · [All guides](README.md) · [Host Adapters and the Render Pipeline →](core-host.md)
+[← Page Transitions and Live Crossings](core-page-transitions) · [All guides](README) · [Host Adapters and the Render Pipeline →](core-host)

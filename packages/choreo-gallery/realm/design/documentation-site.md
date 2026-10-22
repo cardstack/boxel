@@ -3,7 +3,9 @@
 > The design of the test app's documentation site, which the gallery realm's
 > guides take over. Paths into the test app name it as it was. The tools and
 > checks are named where they live now, in `packages/choreo-gallery`; the realm
-> check (`pnpm lint:realm`) replaced `docs:check`.
+> check (`pnpm lint:realm`) replaced `docs:check`. [The guides in the gallery
+> realm](#the-guides-in-the-gallery-realm) describes how the realm presents
+> them.
 
 The guides are part of `test-app`, sharing its brand mark, theme, navigation, and deployment. Open `/docs`; `/docs/:topic_id` is a guide, `/playground/:demo_id` is a live tuning workspace, and `/_widgets` opens the 3D gallery.
 
@@ -111,3 +113,35 @@ Run the generated consumer's build and type check, then use
 `packages/choreo-gallery/scripts/verify-tutorials.mjs` against its server.
 `record-tutorial.mjs` renders and probes a complete 1080p60 MP4 with local cue audio.
 Keep generated apps and output media outside the source tree.
+
+## The guides in the gallery realm
+
+The gallery realm keeps the site's brand mark, theme and navigation for its
+guides. Each guide is still Markdown, `docs/guides/<slug>.md`, and is read on
+its page: a `Guide` card beside the file, at the file's URL without `.md`
+(`https://choreo.boxel.site/docs/guides/core-start`). The index,
+`docs/guides/README.md`, has a page of its own at `docs/guides/README`.
+
+- **Frame and brand.** The page wears the gallery's site frame: the Choreo
+  mark and name, which lead back to the gallery, the theme picker, the 3D
+  Gallery and GitHub links, and the licence. It follows the visitor's theme,
+  dark or light, like every gallery page.
+- **Navigation.** Down the side are the four sections, in the index's order,
+  each listing its guides, with the guide being read marked and scrolled into
+  view. "← Gallery" and "All guides" head the list. On a narrow card the list
+  folds into a "Guides" button above the guide.
+- **The guide.** The Markdown renders through base's content-only renderer,
+  set in the gallery's type: Syne headings, IBM Plex Sans text, IBM Plex Mono
+  code, copper links. It carries no file chrome (no file name, badge, Download
+  or Copy link). Code blocks keep a dark surface in either theme.
+- **Live demos.** A guide's `::card[…]` embeds render the demo cards live, with
+  their labs. A demo embedded in the guide its lesson names leaves out "Read
+  the guide →", which would lead back to the page.
+- **Moving on.** Each guide ends on its pager, previous · All guides · next, in
+  the index's order. Guides link one another by their pages
+  (`[…](core-layout)`), and `pnpm lint:realm` refuses a link to a guide's `.md`
+  file.
+
+The page's title and description are the guide's first heading and opening
+paragraph, so the published site's HTML names each guide and previews it when
+shared.

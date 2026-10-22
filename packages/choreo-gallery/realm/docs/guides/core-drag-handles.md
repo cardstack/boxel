@@ -46,4 +46,4 @@ Read the implementation: [`drag-controls.ts`](https://github.com/cardstack/boxel
 
 ---
 
-[← Dragging, Constraints, and Momentum](core-drag.md) · [All guides](README.md) · [Reordering Lists and Grids →](core-reorder.md)
+[← Dragging, Constraints, and Momentum](core-drag) · [All guides](README) · [Reordering Lists and Grids →](core-reorder)

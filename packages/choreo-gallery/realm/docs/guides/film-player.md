@@ -46,4 +46,4 @@ Read the implementation: [`index.ts`](https://github.com/cardstack/boxel/blob/ma
 
 ---
 
-[← Attaching Another Region to a Clock](film-attachments.md) · [All guides](README.md) · [Registering a Picture and Its Capabilities →](film-picture.md)
+[← Attaching Another Region to a Clock](film-attachments) · [All guides](README) · [Registering a Picture and Its Capabilities →](film-picture)

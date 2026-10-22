@@ -38,4 +38,4 @@ Read the implementation: [`types.ts`](https://github.com/cardstack/boxel/blob/ma
 
 ---
 
-[← Shots, Tail Poses, and Eye-Level Views](film-poses.md) · [All guides](README.md) · [Film Handles, Playback, and Exact Rendering →](film-transport.md)
+[← Shots, Tail Poses, and Eye-Level Views](film-poses) · [All guides](README) · [Film Handles, Playback, and Exact Rendering →](film-transport)

@@ -86,6 +86,10 @@ export interface IncrementalIndexOptions {
   // Whether the caller announces the pass the moment it lands, rather than
   // after later passes of the same write. See CoalescedCaller.
   announcesPass?: boolean;
+  // False when the write asked for no realm events, so neither the pass's
+  // render job nor a follow-up pass announces anything on its behalf. See
+  // `IncrementalArgs.realmEvents`.
+  realmEvents?: boolean;
   // Matrix user whose HTTP write produced this job, when known. Scopes
   // the read endpoints' read-your-writes drain — see
   // #incrementalIndexingDeferreds.
@@ -457,17 +461,19 @@ export class RealmIndexUpdater {
   }
 
   // Set by the realm, which runs the pass through its own reindex so the
-  // pass's invalidations reach its subscribers and its peer replicas.
-  onIgnoreRulesChanged: (() => void) | undefined;
+  // pass's invalidations reach its subscribers and its peer replicas. The
+  // pass announces only if the write that changed the rules did (see
+  // `IncrementalIndexOptions.realmEvents`).
+  onIgnoreRulesChanged: ((opts: { realmEvents?: boolean }) => void) | undefined;
 
   // Not awaited by the write that changed the rules: the gates a request
   // waits on never cover a from-scratch pass (see `indexing`).
-  #rereadIgnoreRules() {
+  #rereadIgnoreRules(opts: { realmEvents?: boolean }) {
     if (this.onIgnoreRulesChanged) {
-      this.onIgnoreRulesChanged();
+      this.onIgnoreRulesChanged(opts);
       return;
     }
-    this.publishFullIndex().completed.catch((e: any) => {
+    this.publishFullIndex(undefined, opts).completed.catch((e: any) => {
       this.#log.warn(
         `Rereading the ignore rules of ${this.realmURL.href} failed: ${e?.message}`,
       );
@@ -476,7 +482,12 @@ export class RealmIndexUpdater {
 
   publishFullIndex(
     priority = systemInitiatedPriority,
-    opts?: { clearLastModified?: boolean; awaitedByPublish?: boolean },
+    opts?: {
+      clearLastModified?: boolean;
+      awaitedByPublish?: boolean;
+      // See `fromScratchAnnounces`.
+      realmEvents?: boolean;
+    },
   ): {
     published: Promise<Job<FromScratchResult>>;
     completed: Promise<FromScratchResult>;
@@ -500,6 +511,7 @@ export class RealmIndexUpdater {
         {
           clearLastModified: opts?.clearLastModified,
           awaitedByPublish: opts?.awaitedByPublish,
+          realmEvents: opts?.realmEvents,
         },
       );
       pendingPass.jobId = job.id;
@@ -537,8 +549,11 @@ export class RealmIndexUpdater {
     };
   }
 
-  async fullIndex(priority = systemInitiatedPriority) {
-    let { completed } = this.publishFullIndex(priority);
+  async fullIndex(
+    priority = systemInitiatedPriority,
+    opts?: { realmEvents?: boolean },
+  ) {
+    let { completed } = this.publishFullIndex(priority, opts);
     try {
       await completed;
     } catch (e: any) {
@@ -626,6 +641,7 @@ export class RealmIndexUpdater {
         {
           clientAuthored: opts?.clientAuthored ?? null,
           announcesPass: opts?.announcesPass === true,
+          realmEvents: opts?.realmEvents !== false,
         },
       );
       job = await this.#queue.publish<IncrementalDoneResult>({
@@ -678,7 +694,7 @@ export class RealmIndexUpdater {
         // root ignore files takes a from-scratch pass: it rereads the rules,
         // tombstones what they now hide and indexes what they now reveal.
         if (changes.some(({ url }) => this.#isRealmIgnoreFile(url))) {
-          this.#rereadIgnoreRules();
+          this.#rereadIgnoreRules({ realmEvents: opts?.realmEvents });
         }
         if (opts?.onInvalidation) {
           await opts.onInvalidation(
@@ -742,6 +758,7 @@ export class RealmIndexUpdater {
       | 'clientRequestId'
       | 'clientAuthored'
       | 'announcesPass'
+      | 'realmEvents'
       | 'initiatedBy'
       | 'deferPrerenderHtml'
       | 'carriedPrerenderHtmlChanges'

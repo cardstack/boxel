@@ -47,7 +47,7 @@ Application state must also be reproducible. If a recorded click opens a panel a
 
 The [3D gallery](../../widget-room) includes a quick highlights tour and a longer guided tour. The [Towers film](../../demos/towers) demonstrates a presentation with chapters and narration.
 
-Start with [Driving an External Clock](film-clock.md), then read [Building a Film](film-shots.md). The final guide covers recording checks and portable deployment.
+Start with [Driving an External Clock](film-clock), then read [Building a Film](film-shots). The final guide covers recording checks and portable deployment.
 
 ## API Coverage
 
@@ -57,8 +57,8 @@ Read the implementation: [`film.ts`](https://github.com/cardstack/boxel/blob/mai
 
 ## A complete working tutorial
 
-Continue with the [end-to-end tutorial](film-first-export.md) for a runnable application, complete source, and verification commands.
+Continue with the [end-to-end tutorial](film-first-export) for a runnable application, complete source, and verification commands.
 
 ---
 
-[← DOM and WebGL Compositing](spatial-compositing.md) · [All guides](README.md) · [Render Your First MP4 →](film-first-export.md)
+[← DOM and WebGL Compositing](spatial-compositing) · [All guides](README) · [Render Your First MP4 →](film-first-export)

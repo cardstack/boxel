@@ -52,7 +52,7 @@ The complete component wraps the list in Choreo. The each block uses key="id", a
 </c.Sequence>
 ```
 
-Choreo retains the removed row for its exit. Do not add Presence around this same scene to create a second owner of removal. Presence is the smaller pattern for an independent enter/exit example; the [presence guide](core-presence.md) teaches it separately. Here, removal and the neighbors' movement form one coordinated interaction.
+Choreo retains the removed row for its exit. Do not add Presence around this same scene to create a second owner of removal. Presence is the smaller pattern for an independent enter/exit example; the [presence guide](core-presence) teaches it separately. Here, removal and the neighbors' movement form one coordinated interaction.
 
 ## Tune and interrupt
 
@@ -70,8 +70,8 @@ node packages/choreo-gallery/scripts/verify-tutorials.mjs http://localhost:4600
 
 The check reverses and removes during movement, checks final row identity, tests the spatial button, and compares film frames reached from different times. It is a small regression check, not a substitute for your application's keyboard, focus-restoration, and reduced-motion tests. In particular, decide where focus should move when the user removes the focused task.
 
-The complete source is [task-board.gts](../../studies/task-board.gts). Next, reuse the same separation of state and motion in [your first spatial scene](spatial-first-scene.md), or consult [testing motion](core-testing.md) before adding more interactions.
+The complete source is [task-board.gts](../../studies/task-board.gts). Next, reuse the same separation of state and motion in [your first spatial scene](spatial-first-scene), or consult [testing motion](core-testing) before adding more interactions.
 
 ---
 
-[← Getting Started](core-start.md) · [All guides](README.md) · [Animating an Element →](core-elements.md)
+[← Getting Started](core-start) · [All guides](README) · [Animating an Element →](core-elements)

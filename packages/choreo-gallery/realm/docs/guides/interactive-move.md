@@ -37,4 +37,4 @@ Read the implementation: [`choreo.gts`](https://github.com/cardstack/boxel/blob/
 
 ---
 
-[← Tween and Spring Steps](interactive-property-steps.md) · [All guides](README.md) · [Holds, Waits, and Standing Steps →](interactive-holds.md)
+[← Tween and Spring Steps](interactive-property-steps) · [All guides](README) · [Holds, Waits, and Standing Steps →](interactive-holds)

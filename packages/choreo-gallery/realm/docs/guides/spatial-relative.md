@@ -40,4 +40,4 @@ Read the implementation: [`choreo.gts`](https://github.com/cardstack/boxel/blob/
 
 ---
 
-[← Framing and Aiming a DOM Camera](spatial-frame.md) · [All guides](README.md) · [The Camera3D Renderer Contract →](spatial-camera3d.md)
+[← Framing and Aiming a DOM Camera](spatial-frame) · [All guides](README) · [The Camera3D Renderer Contract →](spatial-camera3d)
