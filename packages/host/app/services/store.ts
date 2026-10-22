@@ -266,6 +266,8 @@ type PendingAutoSave = {
   // The reference count entry, and the map it lives in, that this save holds.
   holdKey: string;
   heldIn: ReferenceCount;
+  // The session the edit was made in. A save never writes in a later one.
+  sessionEpoch: number;
 };
 
 // The browser refuses a `keepalive` request whose body is over 64 KiB.
@@ -528,6 +530,11 @@ export default class StoreService extends Service implements StoreInterface {
   // Cards whose last real reference was dropped while a save held them. Their
   // teardown runs when the last hold is released.
   #teardownAfterSave = new Set<string>();
+  // Advanced when the session ends (`resetState`).
+  #sessionEpoch = 0;
+  // Bytes of `keepalive` save bodies in flight. The browser's 64 KiB limit
+  // applies to all of a document's keepalive requests together.
+  #keepaliveBytesInFlight = 0;
 
   constructor(owner: Owner) {
     super(owner);
@@ -539,13 +546,7 @@ export default class StoreService extends Service implements StoreInterface {
       clearInterval(this.gcInterval);
       removePageListeners();
       // The owner is gone, so there is nothing left to send a save with.
-      for (let pending of this.#pendingAutoSaves.values()) {
-        if (!pending.isSending) {
-          clearTimeout(pending.timer);
-          waiter.endAsync(pending.waiterToken);
-        }
-      }
-      this.#pendingAutoSaves.clear();
+      this.#dropPendingAutoSaves();
     });
   }
 
@@ -553,17 +554,20 @@ export default class StoreService extends Service implements StoreInterface {
   // tab, so anything that can end the tab's chance to send it sends it now:
   // focus leaving a field, the page being hidden (which precedes closing or
   // backgrounding a tab on every supported browser), and `pagehide`, the last
-  // event a closing page gets. Only `visibilitychange` is dependable;
-  // `pagehide` is best effort, since a save is serialized asynchronously and
-  // the page may be gone before its request goes out.
+  // event a closing page gets. Both send with `keepalive` so the request can
+  // outlive the page, but closing is still best effort: a save is serialized
+  // asynchronously, and the page may be gone before its request goes out.
   #listenForLeavingThePage(): () => void {
     if (typeof document === 'undefined' || typeof window === 'undefined') {
       return () => {};
     }
     let onFocusOut = () => this.#sendPendingAutoSaves();
+    // Hidden can be the first event of a closing tab, so its saves are sent
+    // to outlive the page too: once sent, a later `pagehide` cannot upgrade
+    // them.
     let onVisibilityChange = () => {
       if (document.visibilityState === 'hidden') {
-        this.#sendPendingAutoSaves();
+        this.#sendPendingAutoSaves({ keepalive: true });
       }
     };
     let onPageHide = () => this.#sendPendingAutoSaves({ keepalive: true });
@@ -617,10 +621,13 @@ export default class StoreService extends Service implements StoreInterface {
   }
 
   resetState() {
-    // Pending saves go out before the state they would be lost with is
-    // replaced. Each one holds its own instance, so it completes against the
-    // card it was made from.
-    this.#sendPendingAutoSaves();
+    // The session has ended: logout sends pending saves while it can still
+    // authenticate them, so what is left here belongs to a session that is
+    // gone. Sending it now would write without that session's credentials, or
+    // under the next one's. Pending saves are dropped, and a save already
+    // sent skips its write when it starts (see `#sendAutoSave`).
+    this.#sessionEpoch++;
+    this.#dropPendingAutoSaves();
     clearInterval(this.gcInterval);
     this.subscriptions = new Map();
     this.cardInvalidationSubscribers = new Map();
@@ -2322,10 +2329,11 @@ export default class StoreService extends Service implements StoreInterface {
   // saves to settle, including any that edits made meanwhile scheduled. With
   // `timeoutMs`, gives up waiting after that long; the saves carry on.
   async flushSaves(opts?: { timeoutMs?: number }) {
+    let gaveUp = false;
     let flush = async () => {
       while (
-        this.#pendingAutoSaves.size > 0 ||
-        this.autoSavePromises.size > 0
+        !gaveUp &&
+        (this.#pendingAutoSaves.size > 0 || this.autoSavePromises.size > 0)
       ) {
         this.#sendPendingAutoSaves();
         await Promise.allSettled([...this.autoSavePromises.values()]);
@@ -2343,6 +2351,8 @@ export default class StoreService extends Service implements StoreInterface {
       }),
     ]);
     clearTimeout(timer);
+    // Edits made after this flush gives up wait for typing to pause as usual.
+    gaveUp = true;
   }
 
   get hasUnsavedEdits(): boolean {
@@ -4144,10 +4154,14 @@ export default class StoreService extends Service implements StoreInterface {
         keepalive: false,
         isSending: false,
         waiterToken: waiter.beginAsync(undefined, `pendingAutoSave ${localId}`),
+        sessionEpoch: this.#sessionEpoch,
         ...this.#holdForAutoSave(instance),
       };
       this.#pendingAutoSaves.set(localId, pending);
     }
+    // A card rebuilt under a new type keeps its local id but is a new object;
+    // the save goes to the one being edited.
+    pending.instance = instance;
     if (opts?.isImmediate) {
       pending.isImmediate = true;
     }
@@ -4182,6 +4196,19 @@ export default class StoreService extends Service implements StoreInterface {
     }
   }
 
+  // Forgets saves still waiting for typing to pause. One already sent is left
+  // to its run, which settles it.
+  #dropPendingAutoSaves() {
+    for (let [localId, pending] of [...this.#pendingAutoSaves]) {
+      if (pending.isSending) {
+        continue;
+      }
+      clearTimeout(pending.timer);
+      this.#pendingAutoSaves.delete(localId);
+      waiter.endAsync(pending.waiterToken);
+    }
+  }
+
   // Sends a card's pending save without waiting for typing to pause. It still
   // runs after the card's previous save, so a card never has two saves in
   // flight.
@@ -4199,7 +4226,6 @@ export default class StoreService extends Service implements StoreInterface {
       return;
     }
     pending.isSending = true;
-    let { instance } = pending;
     let previous = this.autoSavePromises.get(localId);
     let run: Promise<void> | undefined;
     run = (async () => {
@@ -4211,6 +4237,13 @@ export default class StoreService extends Service implements StoreInterface {
         if (this.#pendingAutoSaves.get(localId) === pending) {
           this.#pendingAutoSaves.delete(localId);
         }
+        if (pending.sessionEpoch !== this.#sessionEpoch) {
+          storeLogger.warn(
+            `not saving ${localId}: the session it was edited in has ended`,
+          );
+          return;
+        }
+        let { instance } = pending;
         let autoSaveState = this.initOrGetAutoSaveState(instance);
         autoSaveState.isSaving = true;
         await this.trackingSaveState(instance, localId, () =>
@@ -4385,32 +4418,46 @@ export default class StoreService extends Service implements StoreInterface {
     let isSaved = !!doc.data.id;
     let url = resolveDocUrl(doc.data.id, opts?.realm, opts?.localDir);
     let body = JSON.stringify(doc, null, 2);
-    let json = await this.cardService.fetchJSON(url, {
-      method: isSaved ? 'PATCH' : 'POST',
-      body,
-      ...(opts?.keepalive &&
-      new TextEncoder().encode(body).length <= KEEPALIVE_BODY_LIMIT
-        ? { keepalive: true }
-        : {}),
-      headers: {
-        'Content-Type': SupportedMimeType.CardJson,
-        // Marks a write issued by a headless command, which makes the realm
-        // index it deferred and answer from the document it serialized rather
-        // than from the index. The command's tab holds a prerender render slot
-        // until it returns, and the index read the realm would otherwise do
-        // awaits a job needing that slot. See DURING_PRERENDER_HEADER.
-        ...headlessCommandWriteHeaders(),
-        // Caller opted out of blocking this save on the realm's in-flight
-        // incremental indexing (see SKIP_INDEX_WAIT_HEADER). Same deferred-
-        // index + serialized-echo response the header above asks for, but
-        // driven by an explicit per-save option rather than the prerender
-        // context. Defaults to waiting when unset.
-        ...(opts?.skipIndexWait === true
-          ? { [SKIP_INDEX_WAIT_HEADER]: '1' }
-          : {}),
-      },
-      clientRequestId: opts?.clientRequestId,
-    });
+    // A body that would take the document's keepalive requests over the
+    // browser's limit is sent as an ordinary request instead of failing.
+    let keepaliveBytes = opts?.keepalive
+      ? new TextEncoder().encode(body).length
+      : 0;
+    let keepalive =
+      keepaliveBytes > 0 &&
+      this.#keepaliveBytesInFlight + keepaliveBytes <= KEEPALIVE_BODY_LIMIT;
+    if (keepalive) {
+      this.#keepaliveBytesInFlight += keepaliveBytes;
+    }
+    let json = await this.cardService
+      .fetchJSON(url, {
+        method: isSaved ? 'PATCH' : 'POST',
+        body,
+        ...(keepalive ? { keepalive: true } : {}),
+        headers: {
+          'Content-Type': SupportedMimeType.CardJson,
+          // Marks a write issued by a headless command, which makes the realm
+          // index it deferred and answer from the document it serialized rather
+          // than from the index. The command's tab holds a prerender render slot
+          // until it returns, and the index read the realm would otherwise do
+          // awaits a job needing that slot. See DURING_PRERENDER_HEADER.
+          ...headlessCommandWriteHeaders(),
+          // Caller opted out of blocking this save on the realm's in-flight
+          // incremental indexing (see SKIP_INDEX_WAIT_HEADER). Same deferred-
+          // index + serialized-echo response the header above asks for, but
+          // driven by an explicit per-save option rather than the prerender
+          // context. Defaults to waiting when unset.
+          ...(opts?.skipIndexWait === true
+            ? { [SKIP_INDEX_WAIT_HEADER]: '1' }
+            : {}),
+        },
+        clientRequestId: opts?.clientRequestId,
+      })
+      .finally(() => {
+        if (keepalive) {
+          this.#keepaliveBytesInFlight -= keepaliveBytes;
+        }
+      });
     if (!isSingleCardDocument(json)) {
       throw new Error(
         `bug: arg is not a card document:
