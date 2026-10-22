@@ -6,6 +6,7 @@
         "name": "Choreo",
         "summary": "The gallery's palette and type: warm charcoal and cream grounds with an ember accent, Syne and Archivo for display, IBM Plex for text and code. Dark is the gallery's default scheme."
       },
+      "visualDNA": "A dark stage by default: warm charcoal grounds, cream ink, one hot ember accent. Light mode inverts to cream paper with charcoal ink and keeps the same ember.\n\nThe ember (--primary) is a fill: the active chip, a progress bead, the send button. Text and rules in that hue read --primary-ink, which holds 4.5:1 on the grounds in both schemes; the other accents' text reads their own -ink variables.\n\nSyne is the display face, for page titles and tile names; Archivo's wide cut sets the hero's italic word and the presentation stage's titles. IBM Plex Sans carries body text, and IBM Plex Mono the code, readouts and the tracked uppercase kickers (the eyebrow role).\n\nShadows in light mode are scaled down by --shadow-a, since their alphas were picked against the dark ground.",
       "customCssImports": [
         "https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Syne:wght@600;700;800&display=swap"
       ],
@@ -46,7 +47,8 @@
       "typography": {
         "eyebrow": {
           "fontFamily": "'IBM Plex Mono', ui-monospace, monospace",
-          "fontSize": "11px",
+          "fontSize": "0.6875rem",
+          "lineHeight": "1.5",
           "fontWeight": "400",
           "letterSpacing": "0.18em"
         }

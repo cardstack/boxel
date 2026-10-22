@@ -336,6 +336,7 @@ export class DemoPage extends Component<Signature> {
         font-family: var(--boxel-eyebrow-font-family);
         font-weight: var(--boxel-eyebrow-font-weight);
         font-size: var(--boxel-eyebrow-font-size);
+        line-height: var(--boxel-eyebrow-line-height);
         letter-spacing: var(--boxel-eyebrow-letter-spacing);
         text-transform: uppercase;
         color: var(--primary-ink);
