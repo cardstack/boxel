@@ -1859,8 +1859,12 @@ module('Integration | Store', function (hooks) {
     (instance as any).name = 'Air';
 
     assert.true(
-      storeService.getSaveState(instance[localId])?.isSaving,
-      'isSaving state is correct',
+      storeService.getSaveState(instance[localId])?.hasUnsavedChanges,
+      'hasUnsavedChanges state is correct',
+    );
+    await waitUntil(
+      () => storeService.getSaveState(instance[localId])?.isSaving,
+      { timeout: 10000 },
     );
 
     await waitUntil(
@@ -1901,6 +1905,488 @@ module('Integration | Store', function (hooks) {
     } finally {
       delete (globalThis as any).__emulateServerPatchFailure;
     }
+  });
+
+  module('auto save waits for edits to pause', function (hooks) {
+    let saves: { url: string; name: unknown }[];
+    let originalQuietPeriodMs: number;
+    let originalMaxWaitMs: number;
+
+    function recordSave(url: URL, doc: SingleCardDocument | string) {
+      saves.push({
+        url: url.href,
+        name: (doc as SingleCardDocument).data?.attributes?.name,
+      });
+    }
+
+    hooks.beforeEach(function (this: TestContextWithSave) {
+      saves = [];
+      this.onSave(recordSave);
+      let environment = getService('environment-service');
+      originalQuietPeriodMs = environment.autoSaveQuietPeriodMs;
+      originalMaxWaitMs = environment.autoSaveMaxWaitMs;
+      // The suite runs with no quiet period, which would let a save sent by
+      // its timer pass for one sent by the trigger under test. Every test here
+      // starts from a quiet period nothing in it can outlast.
+      setAutoSaveTiming(NEVER, NEVER);
+    });
+
+    hooks.afterEach(function () {
+      let environment = getService('environment-service');
+      environment.autoSaveQuietPeriodMs = originalQuietPeriodMs;
+      environment.autoSaveMaxWaitMs = originalMaxWaitMs;
+    });
+
+    function setAutoSaveTiming(quietPeriodMs: number, maxWaitMs: number) {
+      let environment = getService('environment-service');
+      environment.autoSaveQuietPeriodMs = quietPeriodMs;
+      environment.autoSaveMaxWaitMs = maxWaitMs;
+    }
+
+    // Long enough that a save which arrives inside a test's few-second budget
+    // was sent by something other than the timer.
+    const NEVER = 10 * 60_000;
+
+    function pause(ms: number) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    async function waitForSaves(count: number, message: string) {
+      try {
+        await waitUntil(() => saves.length >= count, { timeout: 5_000 });
+      } catch (err) {
+        throw new Error(
+          `${message}: expected ${count} save(s), saw ${JSON.stringify(saves)}`,
+          { cause: err },
+        );
+      }
+    }
+
+    // Records the URL of every card write the store sends, and whether it was
+    // sent with keepalive, without consuming the request.
+    function recordWrites() {
+      let virtualNetwork = getService('network').virtualNetwork;
+      let originalFetch = virtualNetwork.fetch;
+      let writes: { url: string; keepalive: boolean }[] = [];
+      virtualNetwork.fetch = (async (
+        input: RequestInfo | URL,
+        init?: RequestInit,
+      ) => {
+        let request = input instanceof Request ? input : undefined;
+        let method = init?.method ?? request?.method ?? 'GET';
+        if (method === 'PATCH' || method === 'POST') {
+          writes.push({
+            url: request?.url ?? String(input),
+            keepalive: init?.keepalive ?? request?.keepalive ?? false,
+          });
+        }
+        return await originalFetch.call(virtualNetwork, input, init);
+      }) as typeof virtualNetwork.fetch;
+      return {
+        writes,
+        restore: () => (virtualNetwork.fetch = originalFetch),
+      };
+    }
+
+    function hidePage() {
+      Object.defineProperty(document, 'visibilityState', {
+        configurable: true,
+        get: () => 'hidden',
+      });
+      try {
+        document.dispatchEvent(new Event('visibilitychange'));
+      } finally {
+        delete (document as any).visibilityState;
+      }
+    }
+
+    test('edits are saved once, after they pause', async function (assert) {
+      setAutoSaveTiming(300, NEVER);
+      let id = `${testRealmURL}Person/hassan`;
+      let instance = (await storeService.get(id)) as CardDef;
+
+      for (let name of ['H', 'Ha', 'Has', 'Hass', 'Hassa']) {
+        (instance as any).name = name;
+        await pause(50);
+      }
+      assert.strictEqual(saves.length, 0, 'nothing is saved while editing');
+      let saveState = storeService.getSaveState(id)!;
+      assert.true(saveState.hasUnsavedChanges, 'the card has unsaved changes');
+      assert.false(saveState.isSaving, 'the card is not saving yet');
+      assert.strictEqual(
+        saveState.lastSavedErrorMsg,
+        'Unsaved changes',
+        'the indicator reports unsaved changes',
+      );
+
+      await waitForSaves(1, 'the edits are saved once they pause');
+      await storeService.flushSaves();
+      assert.deepEqual(
+        saves,
+        [{ url: id, name: 'Hassa' }],
+        'one save carries the last edit',
+      );
+      assert.false(
+        storeService.getSaveState(id)!.hasUnsavedChanges,
+        'nothing is left unsaved',
+      );
+      assert.ok(
+        storeService.getSaveState(id)!.lastSavedErrorMsg?.startsWith('Saved'),
+        'the indicator reports the save',
+      );
+    });
+
+    test('editing without a pause is saved at the maximum wait', async function (assert) {
+      setAutoSaveTiming(300, 600);
+
+      let id = `${testRealmURL}Person/hassan`;
+      let instance = (await storeService.get(id)) as CardDef;
+
+      let maxWaitMs = 600;
+      let edits = 30;
+      let startedAt = Date.now();
+      for (let i = 1; i <= edits; i++) {
+        (instance as any).name = `Hassan ${i}`;
+        await pause(100);
+      }
+      let editingMs = Date.now() - startedAt;
+      let savedWhileEditing = saves.length;
+      await storeService.flushSaves();
+
+      assert.ok(
+        savedWhileEditing >= 1,
+        `edits are saved while editing goes on (${savedWhileEditing} saved)`,
+      );
+      // At most one save per maximum wait while editing, plus the one that
+      // carries the last edit.
+      let bound = Math.ceil(editingMs / maxWaitMs) + 1;
+      assert.ok(
+        saves.length <= bound,
+        `${edits} edits over ${editingMs}ms take at most ${bound} saves (${saves.length} saved)`,
+      );
+      assert.ok(
+        saves.length < edits / 3,
+        `${edits} edits take far fewer saves than edits (${saves.length} saved)`,
+      );
+      assert.strictEqual(
+        saves[saves.length - 1]?.name,
+        `Hassan ${edits}`,
+        'the last save carries the last edit',
+      );
+    });
+
+    test('an edit made while its save runs stays unsaved until the next save', async function (assert) {
+      let id = `${testRealmURL}Person/hassan`;
+      let instance = (await storeService.get(id)) as CardDef;
+
+      await withSavesHeldOpen(async (release) => {
+        (instance as any).name = 'Paper';
+        // Sends only the save pending now; `flushSaves` would go on to send
+        // the next edit's save as soon as this one lands.
+        document.body.dispatchEvent(
+          new FocusEvent('focusout', { bubbles: true }),
+        );
+        await waitUntil(() => storeService.getSaveState(id)?.isSaving);
+        (instance as any).name = 'Paper Hassan';
+        release();
+        await waitUntil(() => !storeService.getSaveState(id)?.isSaving);
+        let saveState = storeService.getSaveState(id)!;
+        assert.true(
+          saveState.hasUnsavedChanges,
+          'the edit made during the save is still unsaved',
+        );
+        assert.strictEqual(
+          saveState.lastSavedErrorMsg,
+          'Unsaved changes',
+          'the indicator does not report the edit as saved',
+        );
+      });
+      await storeService.flushSaves();
+      assert.deepEqual(
+        saves.map((s) => s.name),
+        ['Paper', 'Paper Hassan'],
+        'both edits are saved, in order',
+      );
+      assert.false(storeService.getSaveState(id)!.hasUnsavedChanges);
+    });
+
+    test('a pending save is sent when the last reference to its card is dropped', async function (assert) {
+      let id = `${testRealmURL}Person/hassan`;
+      storeService.addReference(id);
+      await storeService.flush();
+      let instance = storeService.peek(id) as CardDef;
+      (instance as any).name = 'Paper';
+
+      storeService.dropReference(id);
+      await waitForSaves(1, 'dropping the last reference sends the save');
+      assert.deepEqual(saves, [{ url: id, name: 'Paper' }]);
+      await storeService.flushSaves();
+      assert.strictEqual(
+        storeService.getReferenceCount(id),
+        0,
+        "the save's hold on the card is released once it lands",
+      );
+    });
+
+    test('a pending save is not sent early while something still shows its card', async function (assert) {
+      let id = `${testRealmURL}Person/hassan`;
+      storeService.addReference(id);
+      storeService.addReference(id);
+      await storeService.flush();
+      let instance = storeService.peek(id) as CardDef;
+      (instance as any).name = 'Paper';
+
+      storeService.dropReference(id);
+      await pause(1_000);
+      assert.strictEqual(saves.length, 0, 'the save keeps waiting');
+
+      storeService.dropReference(id);
+      await waitForSaves(1, 'dropping the last reference sends the save');
+      assert.deepEqual(saves, [{ url: id, name: 'Paper' }]);
+    });
+
+    test('garbage collection keeps a card whose save is pending', async function (assert) {
+      let id = `${testRealmURL}Person/hassan`;
+      let controlId = `${testRealmURL}Person/jade`;
+      let instance = (await storeService.get(id)) as CardDef;
+      let control = await storeService.get(controlId);
+      assert.strictEqual(storeService.getReferenceCount(id), 0);
+      assert.strictEqual(storeService.getReferenceCount(controlId), 0);
+      (instance as any).name = 'Paper';
+
+      forceGC();
+
+      assert.strictEqual(
+        storeService.peek(controlId),
+        undefined,
+        'an unreferenced card without a pending save is collected',
+      );
+      assert.notStrictEqual(control, undefined);
+      assert.strictEqual(
+        storeService.peek(id),
+        instance,
+        'the card with a pending save is kept',
+      );
+      await storeService.flushSaves();
+      assert.deepEqual(saves, [{ url: id, name: 'Paper' }]);
+    });
+
+    test('flushSaves sends pending saves and waits for them', async function (assert) {
+      let id = `${testRealmURL}Person/hassan`;
+      let instance = (await storeService.get(id)) as CardDef;
+      (instance as any).name = 'Paper';
+
+      await storeService.flushSaves();
+      assert.deepEqual(saves, [{ url: id, name: 'Paper' }]);
+      assert.false(storeService.hasUnsavedEdits);
+    });
+
+    test('ending the session drops saves still waiting for typing to pause', async function (assert) {
+      let id = `${testRealmURL}Person/hassan`;
+      let instance = (await storeService.get(id)) as CardDef;
+      (instance as any).name = 'Paper';
+
+      storeService.resetState();
+      storeService._onSave(recordSave);
+      await pause(1_000);
+      assert.deepEqual(saves, [], 'nothing is written after the session ends');
+      assert.false(storeService.hasUnsavedEdits, 'nothing is left pending');
+    });
+
+    test('a save queued behind a running one does not write once the session ends', async function (assert) {
+      let id = `${testRealmURL}Person/hassan`;
+      let instance = (await storeService.get(id)) as CardDef;
+
+      await withSavesHeldOpen(async (release) => {
+        (instance as any).name = 'Paper';
+        storeService.flushSaves();
+        await waitUntil(() => storeService.getSaveState(id)?.isSaving);
+        // Sent, but waiting for the running save to settle.
+        (instance as any).name = 'Paper Hassan';
+        storeService.flushSaves();
+
+        storeService.resetState();
+        storeService._onSave(recordSave);
+        release();
+        await waitUntil(() => !storeService.hasUnsavedEdits, {
+          timeout: 5_000,
+        });
+      });
+      assert.deepEqual(
+        saves.map((s) => s.name),
+        ['Paper'],
+        'only the save that started before the session ended is written',
+      );
+    });
+
+    test('logout saves pending edits before the session ends', async function (assert) {
+      let id = `${testRealmURL}Person/hassan`;
+      let instance = (await storeService.get(id)) as CardDef;
+      (instance as any).name = 'Paper';
+
+      // Logout stops at clearing auth, recording what had been saved by then;
+      // the rest of a logout would tear down the session the test runs in.
+      let matrixService = getService('matrix-service') as any;
+      let originalClearAuth = matrixService.clearAuth;
+      let originalResetState = matrixService.resetState;
+      let savedWhenAuthCleared: typeof saves | undefined;
+      matrixService.clearAuth = () => {
+        savedWhenAuthCleared = [...saves];
+        throw new Error('stop logout here');
+      };
+      matrixService.resetState = () => {};
+      try {
+        await matrixService.logout({ skipIndexTransition: true });
+      } finally {
+        matrixService.clearAuth = originalClearAuth;
+        matrixService.resetState = originalResetState;
+      }
+      assert.deepEqual(
+        savedWhenAuthCleared,
+        [{ url: id, name: 'Paper' }],
+        'the edit is saved before auth is cleared',
+      );
+    });
+
+    test('resetting the store cache sends pending saves', async function (assert) {
+      let id = `${testRealmURL}Person/hassan`;
+      let instance = (await storeService.get(id)) as CardDef;
+      (instance as any).name = 'Paper';
+
+      storeService.resetCache();
+      await waitForSaves(1, 'the reset sends the save');
+      assert.deepEqual(saves, [{ url: id, name: 'Paper' }]);
+      await storeService.flushSaves();
+    });
+
+    test('hiding the page sends pending saves as requests that outlive the page', async function (assert) {
+      let id = `${testRealmURL}Person/hassan`;
+      let instance = (await storeService.get(id)) as CardDef;
+      (instance as any).name = 'Paper';
+
+      let { writes, restore } = recordWrites();
+      try {
+        hidePage();
+        await waitForSaves(1, 'hiding the page sends the save');
+      } finally {
+        restore();
+      }
+      assert.deepEqual(saves, [{ url: id, name: 'Paper' }]);
+      assert.deepEqual(writes, [{ url: id, keepalive: true }]);
+    });
+
+    test('pagehide sends pending saves as requests that outlive the page', async function (assert) {
+      let id = `${testRealmURL}Person/hassan`;
+      let instance = (await storeService.get(id)) as CardDef;
+      (instance as any).name = 'Paper';
+
+      let { writes, restore } = recordWrites();
+      try {
+        window.dispatchEvent(new PageTransitionEvent('pagehide'));
+        await waitForSaves(1, 'pagehide sends the save');
+        await storeService.flushSaves();
+      } finally {
+        restore();
+      }
+      assert.deepEqual(saves, [{ url: id, name: 'Paper' }]);
+      assert.deepEqual(writes, [{ url: id, keepalive: true }]);
+    });
+
+    test('saves past the keepalive budget are still sent, without keepalive', async function (assert) {
+      let ids = [`${testRealmURL}Person/hassan`, `${testRealmURL}Person/jade`];
+      // Each body fits the browser's 64 KiB keepalive limit; both together
+      // do not.
+      let longName = 'x'.repeat(40_000);
+      for (let id of ids) {
+        let instance = (await storeService.get(id)) as CardDef;
+        (instance as any).name = longName;
+      }
+
+      let { writes, restore } = recordWrites();
+      try {
+        window.dispatchEvent(new PageTransitionEvent('pagehide'));
+        await waitForSaves(2, 'pagehide sends both saves');
+        await storeService.flushSaves();
+      } finally {
+        restore();
+      }
+      assert.deepEqual(
+        saves.map((s) => s.url).sort(),
+        [...ids].sort(),
+        'both cards are saved',
+      );
+      assert.deepEqual(
+        writes.map((w) => w.keepalive).sort(),
+        [false, true],
+        'one save fits the budget and the other is sent as an ordinary request',
+      );
+    });
+
+    test('an edit after a flush gives up still waits for typing to pause', async function (assert) {
+      let id = `${testRealmURL}Person/hassan`;
+      let jade = `${testRealmURL}Person/jade`;
+      let instance = (await storeService.get(id)) as CardDef;
+      let other = (await storeService.get(jade)) as CardDef;
+
+      await withSavesHeldOpen(async (release) => {
+        (instance as any).name = 'Paper';
+        await storeService.flushSaves({ timeoutMs: 100 });
+        assert.true(storeService.hasUnsavedEdits, 'the held save is running');
+
+        (other as any).name = 'Jade Paper';
+        release();
+        await waitUntil(() => saves.length === 1, { timeout: 5_000 });
+        await pause(500);
+      });
+      assert.deepEqual(
+        saves.map((s) => s.name),
+        ['Paper'],
+        "the later edit is not sent when the flush's save lands",
+      );
+      await storeService.flushSaves();
+      assert.deepEqual(
+        saves.map((s) => s.name),
+        ['Paper', 'Jade Paper'],
+      );
+    });
+
+    test('focus leaving a field sends pending saves', async function (assert) {
+      let id = `${testRealmURL}Person/hassan`;
+      let instance = (await storeService.get(id)) as CardDef;
+      (instance as any).name = 'Paper';
+
+      document.body.dispatchEvent(
+        new FocusEvent('focusout', { bubbles: true }),
+      );
+      await waitForSaves(1, 'focus leaving sends the save');
+      assert.deepEqual(saves, [{ url: id, name: 'Paper' }]);
+    });
+
+    test('closing a card in the stack sends the save its edit is waiting on', async function (assert) {
+      let id = `${testRealmURL}Person/hassan`;
+      setCardInOperatorModeState(id, 'edit');
+      await renderComponent(
+        class TestDriver extends GlimmerComponent {
+          <template><OperatorMode @onClose={{noop}} /></template>
+        },
+      );
+
+      // Typed without the test helpers, which wait for settled — and settled
+      // includes the save waiting for typing to pause.
+      let input = find(
+        `[data-test-stack-card="${id}"] [data-test-field="name"] input`,
+      ) as HTMLInputElement;
+      input.value = 'Hassan Paper';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      assert.strictEqual(saves.length, 0, 'the edit waits to be saved');
+
+      let closed = click(
+        `[data-test-stack-card="${id}"] [data-test-close-button]`,
+      );
+      await waitForSaves(1, 'closing the card sends the save');
+      await closed;
+      assert.deepEqual(saves, [{ url: id, name: 'Hassan Paper' }]);
+    });
   });
 
   test('can delete card from the store', async function (assert) {
