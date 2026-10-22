@@ -15,6 +15,7 @@ import { NewPassword } from '../new-password.ts';
 import { cliParams, modeURL } from '../urls.js';
 import { signInURL } from '../cli-links.ts';
 import type { ResetLink } from './reset-link.ts';
+import CliWaitNotice from '../sign-in/cli-wait-notice.gts';
 
 // Where a password reset link lands (`reset-password`), once it was
 // confirmed at the Matrix server: the new password is set here. Setting it
@@ -103,6 +104,9 @@ export default class ResetPassword extends Component<Signature> {
         >Your password is now reset</span>
         <p class='info'>Your password has been successfully reset. You can use
           the link below to sign into your Boxel account with your new password.</p>
+        {{#if @link.cli}}
+          <CliWaitNotice @cli={{@link.cli}} />
+        {{/if}}
         <div class='button-wrapper'>
           <AuthButton
             data-test-back-to-login-btn
@@ -124,6 +128,9 @@ export default class ResetPassword extends Component<Signature> {
             aria-level='1'
             data-test-secure-title
           >Reset your password</span>
+          {{#if @link.cli}}
+            <CliWaitNotice @cli={{@link.cli}} />
+          {{/if}}
           <NewPasswordFields
             @password={{this.password}}
             @passwordLabel='Enter New Password'

@@ -136,12 +136,22 @@ export interface PostedSecureSession {
   expiresAt: string;
 }
 
-// The ways a browser can finish the flow: Synapse redirecting back with a
-// single-use token (the SSO branch), the authorizing page POSTing a session it
-// already obtained (the password branch), or the secure window POSTing a
-// secure session.
+// The ways a browser can finish the flow:
+//
+// - a single-use Matrix login token, for this process to redeem for a device
+//   of its own. The secure origin's `cli-auth` page sends it, and Synapse's
+//   single sign-on returns one to the app's `/cli-auth` page. A `?loginToken=`
+//   navigation is the form every version of the CLI accepts; the secure
+//   origin POSTs it instead when it also hands over a secure session.
+// - the app's `/cli-auth` page POSTing a Matrix session it already signed in
+//   (its password branch).
+// - the secure origin POSTing a secure session alone (`boxel keys sign-in`).
 export type LoopbackResult =
-  | { kind: 'loginToken'; loginToken: string }
+  | {
+      kind: 'loginToken';
+      loginToken: string;
+      secureSession?: PostedSecureSession;
+    }
   | { kind: 'session'; session: PostedSession }
   | { kind: 'secureSession'; session: PostedSecureSession };
 
@@ -246,6 +256,7 @@ export async function startLoopbackCallback(opts?: {
         return;
       }
 
+      let secureSession: PostedSecureSession | undefined;
       if (posted?.has('secure_session')) {
         const token = posted.get('secure_session');
         const userId = posted.get('user_id');
@@ -258,10 +269,29 @@ export async function startLoopbackCallback(opts?: {
           );
           return;
         }
+        secureSession = { token, userId, expiresAt };
+      }
+
+      if (posted?.has('login_token')) {
+        const loginToken = posted.get('login_token');
+        if (!loginToken) {
+          fail(
+            res,
+            'That sign-in did not include a complete session.',
+            'callback POST had an empty login_token',
+          );
+          return;
+        }
         succeed(res, {
-          kind: 'secureSession',
-          session: { token, userId, expiresAt },
+          kind: 'loginToken',
+          loginToken,
+          ...(secureSession ? { secureSession } : {}),
         });
+        return;
+      }
+
+      if (secureSession) {
+        succeed(res, { kind: 'secureSession', session: secureSession });
         return;
       }
 
@@ -521,7 +551,9 @@ export function watchForCopyKey(
 export const CLI_AUTH_PATH = 'cli-auth';
 
 // The host app's authorization page, which offers the same sign-in choices as
-// the web login: a password form and a Google button.
+// the web login: a password form and a Google button. The CLI opens it when
+// the realm server's secure origin can't sign a profile in (see
+// `buildSecureCliAuthUrl`), or when `--host-url` names it.
 //
 // The listener is identified by port rather than by handing over its URL. A URL
 // in a query argument reads as an SSRF attempt to the WAF in front of deployed
@@ -535,6 +567,23 @@ export function buildCliAuthUrl(
   const url = new URL(CLI_AUTH_PATH, ensureTrailingSlash(hostUrl));
   url.searchParams.set('port', String(callback.port));
   url.searchParams.set('state', callback.state);
+  return url.href;
+}
+
+// The secure origin's sign-in for a new profile (its `cli-auth` mode). It
+// hands the listener a Matrix login token to redeem, and, because this CLI
+// asks for one with `session=secure`, the secure session `boxel keys` uses,
+// so one sign-in sets up both. As with the app's page, the listener is named
+// by port alone.
+export function buildSecureCliAuthUrl(
+  secureOriginUrl: string,
+  callback: { port: number; state: string },
+): string {
+  const url = new URL(secureOriginUrl);
+  url.searchParams.set('mode', 'cli-auth');
+  url.searchParams.set('port', String(callback.port));
+  url.searchParams.set('state', callback.state);
+  url.searchParams.set('session', 'secure');
   return url.href;
 }
 
@@ -569,8 +618,12 @@ async function verifySession(
 
 export interface BrowserLoginOptions {
   matrixUrl: string;
-  // Origin of the host app serving the authorization page.
+  // Origin of the host app serving the authorization page, opened when
+  // `secureOriginUrl` is not given.
   hostUrl: string;
+  // The realm server's secure origin, when it signs profiles in. Its
+  // `cli-auth` page is opened instead of the host app's.
+  secureOriginUrl?: string;
   timeoutMs?: number;
   fetchFn?: typeof fetch;
   openBrowserFn?: (url: string) => Promise<boolean>;
@@ -579,16 +632,25 @@ export interface BrowserLoginOptions {
   copyToClipboardFn?: (text: string) => Promise<boolean>;
 }
 
+// What a browser sign-in gives the new profile: a Matrix device of its own,
+// and, from the secure origin, a secure session for `boxel keys`.
+export type BrowserLoginResult = MatrixAuth & {
+  secureSession?: PostedSecureSession;
+};
+
 // Sign in through the browser. The authorization page decides how the user
-// authenticates, so this ends one of two ways: Google sends the browser back
-// through Synapse with a single-use token to redeem, or the page signs in with
-// a password and hands over the resulting session directly.
+// authenticates. The secure origin always ends with a single-use login token
+// to redeem, with a secure session beside it. The app's page ends one of two
+// ways: Google sends the browser back through Synapse with a single-use token
+// to redeem, or the page signs in with a password and hands over the
+// resulting session directly.
 export async function browserLogin(
   options: BrowserLoginOptions,
-): Promise<MatrixAuth> {
+): Promise<BrowserLoginResult> {
   const {
     matrixUrl,
     hostUrl,
+    secureOriginUrl,
     timeoutMs,
     fetchFn = fetch,
     openBrowserFn = openBrowser,
@@ -599,7 +661,9 @@ export async function browserLogin(
   const callback = await startLoopbackCallback({ timeoutMs });
   let stopCopyKey: (() => void) | undefined;
   try {
-    const authUrl = buildCliAuthUrl(hostUrl, callback);
+    const authUrl = secureOriginUrl
+      ? buildSecureCliAuthUrl(secureOriginUrl, callback)
+      : buildCliAuthUrl(hostUrl, callback);
     const opened = await openBrowserFn(authUrl);
     if (opened) {
       log('Opening your browser to sign in or create an account...');
@@ -620,7 +684,14 @@ export async function browserLogin(
 
     const result = await callback.waitForResult();
     if (result.kind === 'loginToken') {
-      return await redeemLoginToken(matrixUrl, result.loginToken, fetchFn);
+      const auth = await redeemLoginToken(
+        matrixUrl,
+        result.loginToken,
+        fetchFn,
+      );
+      return result.secureSession
+        ? { ...auth, secureSession: result.secureSession }
+        : auth;
     }
     if (result.kind !== 'session') {
       throw new Error('The browser returned a different kind of sign-in.');

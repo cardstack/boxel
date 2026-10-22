@@ -10,6 +10,10 @@ import { ensurePersonalRealm } from '../lib/personal-realm.ts';
 import { prompt, promptPassword } from '../lib/prompt.ts';
 import { SsoTimeoutError, browserLogin } from '../lib/sso-login.ts';
 import {
+  secureOriginForProfiles,
+  secureSignOut,
+} from '../lib/secure-session.ts';
+import {
   FG_GREEN,
   FG_YELLOW,
   FG_CYAN,
@@ -50,6 +54,9 @@ interface EnvironmentDefaults {
   // origin-scoped storage, so a page loaded from the realm server's port
   // wouldn't see the session established on the app's.
   appUrl?: string;
+  // Set by `--host-url`, which names the sign-in page to open: the host app's
+  // own, even where the realm server's secure origin could sign in instead.
+  signInOnHostApp?: boolean;
 }
 
 type PresetName = 'staging' | 'production' | 'local';
@@ -243,6 +250,7 @@ export function resolveEnvironment(
       matrixUrl: matrixUrl ?? base.matrixUrl,
       realmServerUrl: realmServerUrl ?? base.realmServerUrl,
       appUrl: appUrl ?? base.appUrl,
+      ...(appUrl ? { signInOnHostApp: true } : {}),
     },
   };
 }
@@ -426,6 +434,8 @@ export async function listProfiles(
 // browser and for the person at the terminal through it.
 export interface AddProfileDeps {
   browserLogin?: typeof browserLogin;
+  secureOriginForProfiles?: typeof secureOriginForProfiles;
+  secureSignOut?: typeof secureSignOut;
   ensurePersonalRealm?: typeof ensurePersonalRealm;
   prompt?: (question: string) => Promise<string>;
   // Whether a person is at the terminal to answer questions. A coding agent or
@@ -436,6 +446,8 @@ export interface AddProfileDeps {
 
 interface AddProfileContext {
   browserLogin: typeof browserLogin;
+  secureOriginForProfiles: typeof secureOriginForProfiles;
+  secureSignOut: typeof secureSignOut;
   ensurePersonalRealm: typeof ensurePersonalRealm;
   prompt: (question: string) => Promise<string>;
   interactive: boolean;
@@ -490,16 +502,25 @@ type AddProfileOutcome =
 // account is replaced, since the browser has just proven it is that account.
 // It keeps its display name. `addProfile` leaves a different active profile
 // active.
+//
+// The sign-in page is the realm server's secure origin when it can sign a
+// profile in, and the host app's own page otherwise, or when `--host-url`
+// names one. The secure origin also hands over a secure session, kept with
+// the profile, so `boxel keys` works without a separate `boxel keys sign-in`.
 async function addProfileViaBrowser(
   manager: ProfileManager,
   matrixUrl: string,
   hostUrl: string,
   realmServerUrl: string,
+  signInOnHostApp: boolean,
   ctx: AddProfileContext,
 ): Promise<AddProfileOutcome> {
   let auth;
   try {
-    auth = await ctx.browserLogin({ matrixUrl, hostUrl });
+    let secureOriginUrl = signInOnHostApp
+      ? undefined
+      : await ctx.secureOriginForProfiles(realmServerUrl);
+    auth = await ctx.browserLogin({ matrixUrl, hostUrl, secureOriginUrl });
   } catch (err) {
     if (err instanceof SsoTimeoutError) {
       console.log(`\n${FG_YELLOW}${err.message}${RESET}`);
@@ -507,6 +528,24 @@ async function addProfileViaBrowser(
     }
     throw err;
   }
+
+  // A secure session is for the account the Matrix device is. The secure
+  // origin signs both in from one sign-in, so they always agree; one that
+  // doesn't is ended rather than kept.
+  let { secureSession, ...matrixAuth } = auth;
+  if (secureSession && secureSession.userId !== auth.userId) {
+    await ctx
+      .secureSignOut(realmServerUrl, secureSession.token)
+      .catch(() => {});
+    secureSession = undefined;
+  }
+  const endUnused = async () => {
+    if (secureSession) {
+      await ctx
+        .secureSignOut(realmServerUrl, secureSession.token)
+        .catch(() => {});
+    }
+  };
 
   // The page can sign in as an account other than the one the user expected —
   // a Google identity whose verified email matches no existing account gets a
@@ -519,11 +558,13 @@ async function addProfileViaBrowser(
   if (ctx.interactive) {
     const proceed = await ctx.prompt('Save this profile? [Y/n]: ');
     if (proceed.toLowerCase() === 'n') {
+      await endUnused();
       console.log('Cancelled.');
       return { status: 'cancelled' };
     }
 
     if (!(await confirmOverwrite(manager, auth.userId, ctx))) {
+      await endUnused();
       return { status: 'cancelled' };
     }
 
@@ -532,12 +573,26 @@ async function addProfileViaBrowser(
     // Undefined for a new profile, which addProfileWithAuth names by default.
     displayName = manager.getProfile(auth.userId)?.displayName;
   }
+  // A secure session the profile already had is replaced, so it is ended
+  // rather than left to run out its week.
+  let replaced = manager.getProfile(auth.userId)?.secureSession;
   await manager.addProfileWithAuth(
     auth.userId,
-    auth,
+    matrixAuth,
     displayName,
     realmServerUrl,
+    secureSession,
   );
+  if (secureSession && replaced && replaced.token !== secureSession.token) {
+    await ctx.secureSignOut(realmServerUrl, replaced.token).catch(() => {});
+  }
+  if (secureSession) {
+    console.log(
+      `${FG_GREEN}✓${RESET} Signed in to manage keys until ${new Date(
+        secureSession.expiresAt,
+      ).toLocaleString()}`,
+    );
+  }
 
   // The browser can hand back a brand-new account: a Google sign-in whose
   // verified email matches nothing gets one minted by Synapse itself, with no
@@ -547,7 +602,7 @@ async function addProfileViaBrowser(
   // and a failure only warns: the profile works without it, and signing in to
   // the web app offers workspace creation.
   try {
-    const result = await ctx.ensurePersonalRealm(auth, realmServerUrl);
+    const result = await ctx.ensurePersonalRealm(matrixAuth, realmServerUrl);
     if (result.outcome === 'created') {
       console.log(
         `${FG_GREEN}✓${RESET} Created your personal workspace: ${FG_CYAN}${result.realmUrl}${RESET}`,
@@ -620,6 +675,9 @@ export async function addProfile(
 ): Promise<void> {
   const ctx: AddProfileContext = {
     browserLogin: deps.browserLogin ?? browserLogin,
+    secureOriginForProfiles:
+      deps.secureOriginForProfiles ?? secureOriginForProfiles,
+    secureSignOut: deps.secureSignOut ?? secureSignOut,
     ensurePersonalRealm: deps.ensurePersonalRealm ?? ensurePersonalRealm,
     prompt: deps.prompt ?? prompt,
     interactive: (deps.isTty ?? (() => Boolean(process.stdin.isTTY)))(),
@@ -642,6 +700,7 @@ export async function addProfile(
         environment.matrixUrl,
         environment.appUrl ?? environment.realmServerUrl,
         environment.realmServerUrl,
+        Boolean(environment.signInOnHostApp),
         ctx,
       )
     : { status: 'usePassword' };

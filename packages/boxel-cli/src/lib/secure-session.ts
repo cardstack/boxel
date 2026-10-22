@@ -98,6 +98,26 @@ export async function fetchSecureOriginUrl(
   return url;
 }
 
+// The secure origin to sign a new profile in on (`boxel profile add`), when
+// the realm server has one whose pages can: it says so with `cliAuth` in
+// `_secure-origin`. Undefined otherwise, including when the realm server has
+// no secure origin, predates it, or can't be reached, and the CLI then signs
+// in on the host app's own page instead.
+export async function secureOriginForProfiles(
+  realmServerUrl: string,
+  fetchFn: typeof fetch = fetch,
+): Promise<string | undefined> {
+  try {
+    let json = await realmServerRequest(realmServerUrl, '_secure-origin', {
+      fetchFn,
+    });
+    let { url, cliAuth } = json?.data?.attributes ?? {};
+    return cliAuth === true && typeof url === 'string' ? url : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 // The secure window's CLI sign-in. The listener is named by port, and the
 // window only ever posts to this machine's loopback address.
 export function buildSecureSignInUrl(

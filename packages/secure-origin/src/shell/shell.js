@@ -10,6 +10,7 @@
 import '../styles/layers.css';
 import { renderComponent } from '@ember/renderer';
 
+import CliAuthPage from './sign-in/cli-auth-page.gts';
 import CliSignInPage from './sign-in/cli-sign-in-page.gts';
 import GoogleCallback from './sign-in/google-callback.gts';
 import SignInPage from './sign-in/sign-in-page.gts';
@@ -28,6 +29,7 @@ function component(page) {
 const modes = {
   'sign-in': component(SignInPage),
   'cli-sign-in': component(CliSignInPage),
+  'cli-auth': component(CliAuthPage),
   register: registerMode,
   'verify-email': verifyEmailMode,
   'forgot-password': forgotPasswordMode,

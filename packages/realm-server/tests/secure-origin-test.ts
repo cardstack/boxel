@@ -563,6 +563,8 @@ module(basename(import.meta.filename), function () {
         'session.js',
         'sign-in-page.gts',
         'cli-sign-in-page.gts',
+        'cli-auth-page.gts',
+        'cli-wait-notice.gts',
         'google-callback.gts',
         'sign-in-form.gts',
         'cli-handoff.js',

@@ -1755,6 +1755,10 @@ module(basename(import.meta.filename), function () {
         'localhost',
         'with the Matrix server its accounts are on',
       );
+      assert.true(
+        response.body.data.attributes.cliAuth,
+        'and that its pages sign a CLI profile in',
+      );
     });
   });
 });

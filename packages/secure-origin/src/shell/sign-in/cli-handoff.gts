@@ -1,13 +1,28 @@
-// Hands a session to the CLI waiting on its loopback port, once, as soon as
+// Hands a sign-in to the CLI waiting on its loopback port, once, as soon as
 // the page is drawn, and says so while the browser navigates there.
+//
+// `boxel keys sign-in` is handed the secure session. A profile sign-in
+// (`boxel profile add`) is handed a single-use Matrix login token, which the
+// CLI redeems for a Matrix device of its own, and the secure session too when
+// the CLI takes one. A CLI that doesn't take one never sees it, so it is ended
+// here rather than left to expire.
 import type Owner from '@ember/owner';
 import Component from '@glimmer/component';
+import { trackedObject } from '@ember/reactive/collections';
 
 import { handToCli } from '../../security/cli-handoff.js';
 import type { CliCallback } from '../../security/cli-handoff.js';
+import { endSession, loginToken, readConfig } from '../../security/session.js';
 import type { Session } from '../../security/session.js';
+import { navigation } from '../navigation.js';
+import { asSentence } from '../sign-in-copy.js';
 
 import MessagePage from './message-page.gts';
+
+// The Matrix server mints a user one login token a minute. A second profile
+// sign-in within the minute waits for it, for as long as the server says,
+// rather than failing; past this, it says so.
+const LOGIN_TOKEN_WAIT_MS = 2 * 60 * 1000;
 
 interface Signature {
   Args: {
@@ -19,11 +34,90 @@ interface Signature {
 
 export default class CliHandoff extends Component<Signature> {
   <template>
-    <MessagePage @heading='Returning to your terminal…' @info='One moment.' />
+    {{#if this.state.error}}
+      <MessagePage @heading='That didn’t work'>
+        <div class='error' role='alert' data-test-secure-error>
+          {{this.state.error}}
+        </div>
+        <p class='info' data-test-secure-cli-handoff-failed>Run
+          <code>boxel profile add</code>
+          in your terminal again.</p>
+      </MessagePage>
+    {{else}}
+      <MessagePage @heading='Returning to your terminal…' @info='One moment.' />
+    {{/if}}
+
+    <style scoped>
+      .error {
+        color: var(--boxel-error-100);
+        padding: 0;
+        font: 500 var(--boxel-font-xs);
+        margin: var(--boxel-sp-2xs) auto 0 auto;
+      }
+      .info {
+        margin: var(--boxel-sp-lg) 0 0;
+        color: var(--foreground);
+        letter-spacing: var(--boxel-lsp);
+        line-height: 20px;
+      }
+      .info code {
+        font-family: var(--boxel-monospace-font-family, monospace);
+      }
+    </style>
   </template>
+
+  private state = trackedObject({ error: undefined as string | undefined });
 
   constructor(owner: Owner, args: Signature['Args']) {
     super(owner, args);
-    handToCli(args.callback, args.session);
+    this.handOver();
+  }
+
+  private async handOver() {
+    let { callback, session } = this.args;
+    if (!callback.profile) {
+      handToCli(callback, { session });
+      return;
+    }
+    let config = readConfig();
+    let token: string;
+    try {
+      token = await this.mintLoginToken(config, session);
+    } catch (e) {
+      this.state.error = asSentence((e as Error).message);
+      return;
+    }
+    if (callback.profile.secureSession) {
+      handToCli(callback, { loginToken: token, session });
+      return;
+    }
+    await endSession(config, session).catch(() => {});
+    handToCli(
+      callback,
+      { loginToken: token },
+      { navigate: (url: string) => navigation.replace(url) },
+    );
+  }
+
+  private async mintLoginToken(
+    config: ReturnType<typeof readConfig>,
+    session: Session,
+  ): Promise<string> {
+    let deadline = Date.now() + LOGIN_TOKEN_WAIT_MS;
+    for (;;) {
+      try {
+        return (await loginToken(config, session)).loginToken;
+      } catch (e) {
+        let { status, retryAfterMs } = e as {
+          status?: number;
+          retryAfterMs?: number;
+        };
+        let wait = retryAfterMs ?? 1000;
+        if (status !== 429 || Date.now() + wait > deadline) {
+          throw e;
+        }
+        await new Promise((resolve) => setTimeout(resolve, wait));
+      }
+    }
   }
 }
