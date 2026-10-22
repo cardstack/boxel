@@ -287,4 +287,31 @@ module(basename(import.meta.filename), function (hooks) {
       'every instance in the realm has rendered HTML',
     );
   });
+
+  test('re-pushing a changed module alongside unchanged instances still renders its dependents', async function (assert) {
+    assert.timeout(600_000);
+
+    await push(instanceOps(0, 20, 'add'));
+    await drain();
+
+    let baseline = await maxJobId();
+    // Every instance matches what is stored, so none of them is written and
+    // no pass after the module flush picks up the dependents it parked. The
+    // commit still owes them, and the module, one render.
+    await push([moduleOp(1), ...instanceOps(0, 20, 'update')]);
+    await drain();
+
+    let jobs = await prerenderJobsSince(baseline);
+    assert.ok(
+      jobs.every((job) => job.status === 'resolved'),
+      `every prerender job resolved (statuses: ${jobs.map((job) => job.status).join(', ')})`,
+    );
+    assert.strictEqual(jobs.length, 1, 'the write spawns one prerender pass');
+    assertRenderedOnce(assert, jobs);
+    assert.strictEqual(
+      jobs[0]?.urls.length,
+      21,
+      'the pass covers the 20 dependents and the module, once each',
+    );
+  });
 });
