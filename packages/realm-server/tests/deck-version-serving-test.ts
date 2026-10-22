@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 
@@ -9,6 +9,7 @@ import {
   publishToStore,
   readTreeFromDir,
   repositoryManifest,
+  writeRepositoryConfig,
 } from '@cardstack/deck/node';
 import type {
   HistoryActor,
@@ -301,6 +302,8 @@ module(basename(import.meta.filename), function (hooks) {
     assert.deepEqual(await allowed?.json(), {
       deckCollaboration: true,
       realmRRI: '@acme/theme/',
+      packageRRI: '@acme/theme/',
+      packages: { '@acme/theme/': 'https://realms.example/acme/theme/' },
       protocol: 'deck-r0',
       sync: 'content-addressed',
       history: 'jj',
@@ -685,12 +688,101 @@ module(basename(import.meta.filename), function (hooks) {
     );
   });
 
+  test('serves each package a realm hosts under its own RRI', async function (assert) {
+    // The realm's own package stays at "."; a second package is authored in
+    // `button/` and named by the Deck Repository manifest.
+    await mkdir(join(realmDir, 'button'));
+    await writeFile(
+      join(realmDir, 'button', 'package.json'),
+      JSON.stringify({ name: '@acme/button', version: '2.0.0' }),
+    );
+    await writeRepositoryConfig(
+      realmDir,
+      repositoryManifest({
+        roots: ['@acme/theme/'],
+        members: { '@acme/theme/': '.', '@acme/button/': 'button' },
+      }),
+    );
+    await publishToStore(
+      join(realmDir, '.deck', 'store'),
+      'acme/button',
+      '2.0.0',
+      pack([
+        {
+          path: 'package.json',
+          bytes: Buffer.from(
+            JSON.stringify({ name: '@acme/button', version: '2.0.0' }),
+          ),
+        },
+        { path: 'index.js', bytes: Buffer.from('export const size = 2;\n') },
+      ]),
+    );
+
+    let response = await serve(
+      new Request('https://realms.example/acme/theme/button@2.0.0/index.js'),
+    );
+    assert.strictEqual(response?.status, 200);
+    assert.strictEqual(await response?.text(), 'export const size = 2;\n');
+    assert.strictEqual(
+      response?.headers.get('x-boxel-version-rri'),
+      '@acme/button@2.0.0/index.js',
+    );
+    assert.strictEqual(
+      response?.headers.get('x-boxel-realm-url'),
+      'https://realms.example/acme/theme/button/',
+    );
+
+    let capability = await serve(
+      new Request(
+        'https://realms.example/acme/theme/button/.deck/capabilities',
+      ),
+    );
+    assert.deepEqual(
+      (await capability?.json()) as Record<string, unknown>,
+      {
+        deckCollaboration: true,
+        realmRRI: '@acme/theme/',
+        packageRRI: '@acme/button/',
+        packages: {
+          '@acme/button/': 'https://realms.example/acme/theme/button/',
+          '@acme/theme/': 'https://realms.example/acme/theme/',
+        },
+        protocol: 'deck-r0',
+        sync: 'content-addressed',
+        history: 'jj',
+      },
+      'the allowlisted realm answers for every package it hosts',
+    );
+
+    let query = await serve(
+      new Request(
+        'https://realms.example/acme/theme/button/.deck/versions?spec=^2',
+      ),
+    );
+    assert.strictEqual(
+      ((await query?.json()) as { versionRRI: string }).versionRRI,
+      '@acme/button@2.0.0/',
+    );
+
+    assert.strictEqual(
+      await serve(
+        new Request('https://realms.example/acme/theme/other@1.0.0/index.js'),
+      ),
+      null,
+      'a path the realm hosts no package at is not a Version',
+    );
+  });
+
   test('cold realms resolve from the official transport path without a preinstalled mapping', async function (assert) {
     virtualNetwork = new VirtualNetwork();
     realm = {
       ...realm,
       url: 'https://realms.example/user/theme/',
     } as Realm;
+    await writeFile(
+      join(realmDir, 'package.json'),
+      JSON.stringify({ name: '@user/theme', version: '1.1.0' }),
+    );
     await publishToStore(
       join(realmDir, '.deck', 'store'),
       'user/theme',

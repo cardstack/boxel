@@ -31,6 +31,7 @@ import {
   openDeckRepositoryProtocol,
 } from './deck-repository-protocol.ts';
 import type { DeckCollaborationPolicy } from './deck-collaboration-policy.ts';
+import { readDeckRealmPackages } from './deck-realm-packages.ts';
 
 export const DECK_BRANCH_UPDATE_SPEC = 'boxel-deck-branch-update-v2';
 
@@ -72,6 +73,39 @@ export class DeckBranchPathConflictError extends DeckBranchContentConflictError 
 
 function isPerFileUpdate(request: DeckBranchUpdateRequest): boolean {
   return request.operations.every((operation) => 'base' in operation);
+}
+
+// Every package the realm hosts advances with the branch, as Deck core's
+// Repository capture packs each member from its authoring path. The realm's
+// own package is the whole tree; each other member is the subtree at its
+// path, so its tree hash is what a Version cut from this head would carry.
+async function memberTrees(options: {
+  realmDir: string;
+  realmRRI: string;
+  realmTreeHash: string;
+  files: Map<string, Buffer>;
+  storeDir: string;
+}): Promise<Record<string, string>> {
+  let packages = await readDeckRealmPackages(options.realmDir);
+  let members: Record<string, string> = {
+    [options.realmRRI]: options.realmTreeHash,
+  };
+  for (let [member, path] of packages?.members ?? []) {
+    if (path === '.') {
+      continue;
+    }
+    let prefix = `${path}/`;
+    let entries = [...options.files]
+      .filter(([file]) => file.startsWith(prefix))
+      .map(([file, bytes]) => ({ path: file.slice(prefix.length), bytes }));
+    if (entries.length === 0) {
+      throw new Error(`Deck package ${member} has no files at ${path}/`);
+    }
+    members[member] = (
+      await storePack(options.storeDir, pack(entries))
+    ).treeHash;
+  }
+  return members;
 }
 
 function sameExpected(
@@ -214,10 +248,13 @@ async function commitLiveTreeLocked(options: {
     options.realmDir,
     repository({
       roots: current.repository.roots,
-      members: {
-        ...current.repository.members,
-        [protocol.realmRRI]: stored.treeHash,
-      },
+      members: await memberTrees({
+        realmDir: options.realmDir,
+        realmRRI: protocol.realmRRI,
+        realmTreeHash: stored.treeHash,
+        files,
+        storeDir,
+      }),
       lockHash,
     }),
   );
@@ -368,10 +405,13 @@ export async function updateDeckBranchContent(options: {
     }
     let nextRepository = repository({
       roots: current.repository.roots,
-      members: {
-        ...current.repository.members,
-        [protocol.realmRRI]: stored.treeHash,
-      },
+      members: await memberTrees({
+        realmDir: options.realmDir,
+        realmRRI: protocol.realmRRI,
+        realmTreeHash: stored.treeHash,
+        files,
+        storeDir,
+      }),
       lockHash,
     });
     let repositoryHash = await storeRepository(

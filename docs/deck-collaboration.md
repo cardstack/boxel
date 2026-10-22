@@ -35,9 +35,39 @@ trust them:
   branch or Review.
 - A Review stays pinned to its immutable base, target and source Checkpoints,
   so a merge preview is reproducible while the target branch keeps moving.
-- `.deck/versions/<version>.json` records, write-once, the exact Checkpoint a
-  published Version came from. It is accepted only when the Version's tree,
+- `.deck/versions/<scope>/<name>/<version>.json` records, write-once, the
+  exact Checkpoint a published Version came from. It is accepted only when the Version's tree,
   index, Repository and lock all agree.
+
+## Packages a realm hosts
+
+A realm is always a package: its root `package.json` names the realm RRI,
+which is the Repository's identity and what the allowlist names. A realm can
+host more packages the way a Deck depot does, with a `.deck/repository.json`
+manifest (Deck core's `deck-repository-manifest-v2`):
+
+```json
+{
+  "schema": "deck-repository-manifest-v2",
+  "roots": ["@acme/kit/"],
+  "members": { "@acme/kit/": ".", "@acme/button/": "button" }
+}
+```
+
+`packages/realm-server/lib/deck-realm-packages.ts` reads it. The realm's own
+package must be the root member at `.`, and each other member's
+`<path>/package.json` must name it. All members advance together on one
+branch: an accepted write stores the realm tree for the realm's package and
+the subtree at each member's path for that member. Each package keeps its own
+Versions in `.deck/store/<scope>/<name>/`.
+
+A hosted package's Versions are served beside its mutable root, so
+`@acme/button@2.0.0/index.js` is at `<realm>/button@2.0.0/index.js`. The server
+takes the identity from the manifest, never from the URL's segments, and names
+it in `X-Boxel-Version-RRI`. `<package root>/.deck/capabilities` answers with
+the realm's RRI, the `packageRRI` at that root, and `packages`: every hosted
+package's mutable root URL. The Host registers that directory, so a lock that
+names a hosted package resolves without guessing its URL.
 
 ## Storage
 
@@ -191,3 +221,11 @@ boxel realm history <realm-url> --branch main --limit 20
 - The conditional-object and prepared-update adapters are complete and tested,
   but the branch writer still moves refs through Deck core's realm-file CAS
   directly.
+- A hosted package's mutable modules are ordinary realm files, served with the
+  realm's `X-Boxel-Realm-Url`. The Host therefore resolves their bare imports
+  through the realm root's `importmap.json`, which is Deck core's one lock per
+  Repository. A member's own `importmap.json` is used for its exact Versions.
+- The Host learns a realm's package directory when it discovers that realm. A
+  lock in another realm that names a hosted package before anything from its
+  realm has loaded still falls back to `/<scope>/<name>/` on the importing
+  realm's origin.

@@ -122,20 +122,30 @@ async function readCanonicalReviewSnapshot(
   return { ref, checkpoint, repository, lock };
 }
 
-function versionOriginPath(
+// The package an exact Version RRI is a Version of, and where its origin is
+// recorded. Every package the Repository holds records its own, so two
+// packages a realm hosts can each have a 1.0.0.
+function versionOriginLocation(
   realmDir: string,
-  expectedRealmRRI: string,
   identifier: string,
-): string {
+): { packageRRI: string; path: string } {
   if (!isExactVersionRRI(identifier)) {
     throw new Error('Version origin requires an exact Version RRI');
   }
   let parsed = parseRRI(identifier);
-  let mutableRealmRRI = `@${parsed.scope}/${parsed.name}/`;
-  if (mutableRealmRRI !== expectedRealmRRI || parsed.path !== '') {
-    throw new Error(`Version ${identifier} does not name ${expectedRealmRRI}`);
+  if (parsed.path !== '') {
+    throw new Error(`Version origin names a package root, not ${identifier}`);
   }
-  return realmDeckPath(realmDir, 'versions', `${parsed.version}.json`);
+  return {
+    packageRRI: `@${parsed.scope}/${parsed.name}/`,
+    path: realmDeckPath(
+      realmDir,
+      'versions',
+      parsed.scope,
+      parsed.name,
+      `${parsed.version}.json`,
+    ),
+  };
 }
 
 async function validateVersionOrigin(
@@ -153,7 +163,7 @@ async function validateVersionOrigin(
   ) {
     integrity('invalid Version origin');
   }
-  versionOriginPath(realmDir, expectedRealmRRI, value.versionRRI);
+  let { packageRRI } = versionOriginLocation(realmDir, value.versionRRI);
   let checkpoint = await readCheckpoint(realmDir, value.checkpointHash);
   if (!checkpoint) integrity(`missing Checkpoint ${value.checkpointHash}`);
   if (
@@ -168,7 +178,7 @@ async function validateVersionOrigin(
     value.repositoryHash,
   );
   if (
-    repository.members[expectedRealmRRI] !== value.treeHash ||
+    repository.members[packageRRI] !== value.treeHash ||
     repository.lockHash !== value.lockHash
   ) {
     integrity(`Version ${value.versionRRI} does not match its Repository`);
@@ -254,11 +264,7 @@ export function openDeckRepositoryProtocol(options: {
     },
 
     async readVersionOrigin(identifier) {
-      let path = versionOriginPath(
-        options.realmDir,
-        canonicalRealmRRI,
-        identifier,
-      );
+      let { path } = versionOriginLocation(options.realmDir, identifier);
       let value: VersionOrigin;
       try {
         value = JSON.parse(await readFile(path, 'utf8')) as VersionOrigin;
@@ -294,11 +300,7 @@ export function openDeckRepositoryProtocol(options: {
         lockHash: repository.lockHash,
       };
       await validateVersionOrigin(options.realmDir, canonicalRealmRRI, value);
-      let path = versionOriginPath(
-        options.realmDir,
-        canonicalRealmRRI,
-        origin.versionRRI,
-      );
+      let { path } = versionOriginLocation(options.realmDir, origin.versionRRI);
       let bytes = canonicalJson(value as unknown as JsonValue);
       await mkdir(dirname(path), { recursive: true });
       try {

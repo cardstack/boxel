@@ -18,11 +18,7 @@ import type {
   HistoryBackend,
 } from '@cardstack/deck-history/backend';
 import type { Realm, ResponseWithNodeStream } from '@cardstack/runtime-common';
-import {
-  SupportedMimeType,
-  inferContentType,
-  parseExactVersionTransportURL,
-} from '@cardstack/runtime-common';
+import { SupportedMimeType, inferContentType } from '@cardstack/runtime-common';
 import { transpileJS } from '@cardstack/runtime-common/transpile';
 
 import {
@@ -52,6 +48,13 @@ import {
   restoreDeckBranchHistory,
   type DeckHistoryRestoreRequest,
 } from '../lib/deck-branch-history.ts';
+import {
+  memberAtPath,
+  memberURL,
+  readDeckRealmPackages,
+  storePackageName,
+  type DeckRealmPackages,
+} from '../lib/deck-realm-packages.ts';
 import type { ServeFromRealmDeps } from './serve-from-realm.ts';
 
 type DeckVersionServingDeps = ServeFromRealmDeps & {
@@ -99,6 +102,85 @@ async function historyActor(
   }
 }
 
+interface DeckPackageTarget {
+  realm: Realm & { dir: string };
+  packages: DeckRealmPackages;
+  packageRRI: string;
+  mutableURL: URL;
+}
+
+function findRealmFor(url: URL, deps: DeckVersionServingDeps) {
+  return deps.resolveRealm
+    ? deps.resolveRealm(url)
+    : findOrMountRealm(url, deps);
+}
+
+// The hosted package whose mutable root is `mutableURL`: the realm that holds
+// the URL, the packages it hosts, and the member authored at that path. The
+// collaboration gate names realms, so it is the realm's identity that must be
+// allowlisted, whichever of its packages is asked for.
+async function resolveDeckPackage(
+  mutableURL: URL,
+  deps: DeckVersionServingDeps,
+): Promise<DeckPackageTarget | undefined> {
+  let realm = await findRealmFor(mutableURL, deps);
+  if (!realm?.dir || !mutableURL.href.startsWith(realm.url)) {
+    return undefined;
+  }
+  let packages = await readDeckRealmPackages(realm.dir);
+  if (
+    !packages ||
+    !hasDeckCollaboration(deps.deckCollaboration, packages.realmRRI)
+  ) {
+    return undefined;
+  }
+  let packageRRI = memberAtPath(
+    packages,
+    mutableURL.href.slice(realm.url.length),
+  );
+  if (!packageRRI) {
+    return undefined;
+  }
+  return {
+    realm: realm as Realm & { dir: string },
+    packages,
+    packageRRI,
+    mutableURL,
+  };
+}
+
+const VERSION_SEGMENT = /^(.+)@(\d[^@/]*)$/;
+
+// Decode `<package root>@<version>/<path>`: the URL a package's exact Version
+// is served at, beside its mutable root. Identity comes from the package the
+// realm hosts at that root, never from the URL's segments, so a package
+// authored at any path in a realm is served under its own RRI.
+async function decodeVersionTransport(
+  transportURL: URL,
+  deps: DeckVersionServingDeps,
+): Promise<{ identifier: string; target: DeckPackageTarget } | undefined> {
+  let segments = transportURL.pathname.split('/');
+  let index = segments.findIndex((segment) => VERSION_SEGMENT.test(segment));
+  if (index < 1) {
+    return undefined;
+  }
+  let [, base, version] = segments[index].match(VERSION_SEGMENT)!;
+  if (!isExactVersionRRI(`@deck/probe@${version}/`)) {
+    return undefined;
+  }
+  let mutableURL = new URL(transportURL);
+  mutableURL.pathname = `${[...segments.slice(0, index), base].join('/')}/`;
+  let target = await resolveDeckPackage(mutableURL, deps);
+  if (!target) {
+    return undefined;
+  }
+  let path = segments.slice(index + 1).join('/');
+  return {
+    identifier: `${target.packageRRI.slice(0, -1)}@${version}/${path}`,
+    target,
+  };
+}
+
 function mutableRealmURLForCapabilities(url: URL): URL | undefined {
   if (!url.pathname.endsWith(CAPABILITIES_PATH)) {
     return undefined;
@@ -124,32 +206,28 @@ async function handleDeckCapabilitiesRequest(
       headers: { allow: 'GET, HEAD' },
     });
   }
-  let realm = await (deps.resolveRealm
-    ? deps.resolveRealm(mutableURL)
-    : findOrMountRealm(mutableURL, deps));
-  if (!realm?.dir) {
+  let target = await resolveDeckPackage(mutableURL, deps);
+  if (!target) {
     return new Response('Not found', { status: 404 });
   }
-  let packageName: unknown;
-  try {
-    packageName = JSON.parse(
-      await readFile(join(realm.dir, 'package.json'), 'utf8'),
-    ).name;
-  } catch {
-    return new Response('Not found', { status: 404 });
-  }
-  let realmRRI =
-    typeof packageName === 'string' ? `${packageName.replace(/\/$/, '')}/` : '';
-  if (!hasDeckCollaboration(deps.deckCollaboration, realmRRI)) {
-    return new Response('Not found', { status: 404 });
-  }
-  let authorization = await authorizeRead(request, realm);
+  let authorization = await authorizeRead(request, target.realm);
   if (authorization.response) {
     return authorization.response;
   }
+  let realmRRI = target.packages.realmRRI;
+  // `packages` is the realm's package directory: where each hosted package's
+  // mutable root is, so a client resolving a lock that names one of them, or
+  // one of its Versions, needs no guess about the URL.
   let body = JSON.stringify({
     deckCollaboration: true,
     realmRRI,
+    packageRRI: target.packageRRI,
+    packages: Object.fromEntries(
+      [...target.packages.members].map(([member, path]) => [
+        member,
+        memberURL(target.realm.url, path).href,
+      ]),
+    ),
     protocol: 'deck-r0',
     sync: 'content-addressed',
     history: 'jj',
@@ -503,17 +581,12 @@ async function handleDeckVersionIndexQuery(
       headers: { allow: 'GET, HEAD' },
     });
   }
-  let realm = await (deps.resolveRealm
-    ? deps.resolveRealm(mutableURL)
-    : findOrMountRealm(mutableURL, deps));
-  let packageName = realm ? await realmPackageName(realm) : undefined;
-  if (
-    !realm?.dir ||
-    !packageName ||
-    !hasDeckCollaboration(deps.deckCollaboration, `@${packageName}/`)
-  ) {
+  let target = await resolveDeckPackage(mutableURL, deps);
+  if (!target) {
     return new Response('Not found', { status: 404 });
   }
+  let { realm } = target;
+  let packageName = storePackageName(target.packageRRI);
   let authorization = await authorizeRead(request, realm);
   if (authorization.response) {
     return authorization.response;
@@ -660,14 +733,27 @@ export async function handleDeckVersionRequest(
   let transportURL = new URL(request.url);
   transportURL.search = '';
   transportURL.hash = '';
-  let identifier: string = deps.virtualNetwork.unresolveURL(transportURL.href);
-  let dynamic = isExactVersionRRI(identifier)
-    ? undefined
-    : parseExactVersionTransportURL(transportURL);
-  if (!isExactVersionRRI(identifier) && !dynamic) {
-    return null;
+  let unresolved = deps.virtualNetwork.unresolveURL(transportURL.href);
+  let identifier: string;
+  let target: DeckPackageTarget | undefined;
+  if (isExactVersionRRI(unresolved)) {
+    let { scope, name } = parseRRI(unresolved);
+    let packageRoot = `@${scope}/${name}/`;
+    target = await resolveDeckPackage(
+      deps.virtualNetwork.toURL(packageRoot),
+      deps,
+    );
+    if (target?.packageRRI !== packageRoot) {
+      return null;
+    }
+    identifier = unresolved;
+  } else {
+    let decoded = await decodeVersionTransport(transportURL, deps);
+    if (!decoded) {
+      return null;
+    }
+    ({ identifier, target } = decoded);
   }
-  identifier = dynamic?.identifier ?? identifier;
 
   if (request.method !== 'GET' && request.method !== 'HEAD') {
     return new Response('Exact Deck Versions are read-only', {
@@ -676,18 +762,10 @@ export async function handleDeckVersionRequest(
     });
   }
 
-  let { scope, name, version, path } = parseRRI(identifier);
-  let mutableIdentifier = `@${scope}/${name}/`;
-  if (!hasDeckCollaboration(deps.deckCollaboration, mutableIdentifier)) {
-    return null;
-  }
-  let mutableURL = dynamic
-    ? dynamic.mutableURL
-    : deps.virtualNetwork.toURL(mutableIdentifier);
-  let realm = await (deps.resolveRealm
-    ? deps.resolveRealm(mutableURL)
-    : findOrMountRealm(mutableURL, deps));
-  if (!realm || !realm.dir || !version || path === '') {
+  let { version, path } = parseRRI(identifier);
+  let { realm, mutableURL } = target;
+  let packageName = storePackageName(target.packageRRI);
+  if (!version || path === '') {
     return notFound(identifier);
   }
 
@@ -699,7 +777,7 @@ export async function handleDeckVersionRequest(
   if (path === '.deck/index') {
     let snapshot = await buildDeckVersionIndex({
       realmDir: realm.dir,
-      packageName: `${scope}/${name}`,
+      packageName,
       version,
     });
     let body = JSON.stringify({
@@ -727,12 +805,7 @@ export async function handleDeckVersionRequest(
   let readVersionFile = deps.readVersionFile ?? readStoredFile;
   let cardProjection = projectsCardDocument(request, path);
   let storedPath = cardProjection ? `${path}.json` : path;
-  let bytes = await readVersionFile(
-    storeDir,
-    `${scope}/${name}`,
-    version,
-    storedPath,
-  );
+  let bytes = await readVersionFile(storeDir, packageName, version, storedPath);
   if (!bytes) {
     return notFound(identifier);
   }

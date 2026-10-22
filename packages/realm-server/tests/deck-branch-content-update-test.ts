@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
 
@@ -7,14 +7,15 @@ import {
   hashBytes,
   repositoryManifest,
   readTreeFromDir,
+  writeRepositoryConfig,
 } from '@cardstack/deck/node';
+import { readTree } from '@cardstack/deck/object-store';
 import type {
   HistoryActor,
   HistoryBackend,
   HistoryEntry,
   RestorePlan,
 } from '@cardstack/deck-history/backend';
-import { readTree } from '@cardstack/deck/object-store';
 import QUnit from 'qunit';
 
 import {
@@ -354,6 +355,52 @@ module(basename(import.meta.filename), function (hooks) {
         request: stale,
       }),
       DeckBranchContentConflictError,
+    );
+  });
+
+  test('advances every package the realm hosts with the branch', async function (assert) {
+    let buttonRRI = '@cardstack/pretui-button/';
+    let buttonPackage = JSON.stringify({
+      name: '@cardstack/pretui-button',
+      version: '1.0.0',
+    });
+    await mkdir(join(realmDir, 'button'));
+    await writeFile(join(realmDir, 'button', 'package.json'), buttonPackage);
+    await writeRepositoryConfig(
+      realmDir,
+      repositoryManifest({
+        roots: [realmRRI],
+        members: { [realmRRI]: '.', [buttonRRI]: 'button' },
+      }),
+    );
+    // The package's files written into the realm are a host save; the sync
+    // that follows names its bases per file.
+    await push([
+      perFile(
+        'index.js',
+        'export const version = 2;\n',
+        hashBytes('export const version = 1;\n'),
+      ),
+      perFile('button/package.json', buttonPackage, null),
+      perFile('button/index.js', 'export const size = 2;\n', null),
+    ]);
+    let after = await openDeckRepositoryProtocol({
+      realmDir,
+      realmRRI,
+      policy,
+    }).readBranch('main');
+    let buttonTree = await readTree(
+      join(realmDir, '.deck', 'store'),
+      after!.repository.members[buttonRRI],
+    );
+    assert.deepEqual(
+      buttonTree?.entries.map(({ path }) => path).sort(),
+      ['index.js', 'package.json'],
+      "the hosted package's tree is the subtree at its authoring path",
+    );
+    assert.notStrictEqual(
+      after!.repository.members[realmRRI],
+      after!.repository.members[buttonRRI],
     );
   });
 

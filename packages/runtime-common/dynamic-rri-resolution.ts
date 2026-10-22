@@ -1,5 +1,6 @@
 import {
   canonicalRRIImportMap,
+  isExactVersionRRI,
   parseRRI,
   realmRRI,
   type RRIImportMap,
@@ -77,6 +78,17 @@ export class DynamicRRIResolution {
     }
 
     let exact = parseExactVersionTransportURL(moduleURL);
+    // The server names the exact Version it served. A package hosted inside
+    // another package's realm is served from `<its root>@<version>/`, whose
+    // URL segments are not its scope and name, so the header is the identity
+    // and the URL only says where the Version's root is.
+    let servedVersion = response.headers.get('X-Boxel-Version-RRI');
+    let exactRootRRI =
+      exact && servedVersion && isExactVersionRRI(servedVersion)
+        ? parseRRI(servedVersion).root
+        : exact
+          ? parseRRI(exact.identifier).root
+          : undefined;
     let transportRootURL =
       exact?.packageURL.href ?? ensureTrailingSlash(realmURL);
     let key = transportRootURL;
@@ -89,7 +101,7 @@ export class DynamicRRIResolution {
     }
 
     let preparation = this.discoverAndInstall({
-      exactRootRRI: exact ? parseRRI(exact.identifier).root : undefined,
+      exactRootRRI,
       mutableRealmURL: ensureTrailingSlash(realmURL),
       transportRootURL,
     }).finally(() => this.pending.delete(key));
@@ -118,7 +130,12 @@ export class DynamicRRIResolution {
     let capabilityResponse = await this.fetch(
       new URL('.deck/capabilities', options.mutableRealmURL),
     );
-    let capability: { deckCollaboration?: unknown; realmRRI?: unknown } = {};
+    let capability: {
+      deckCollaboration?: unknown;
+      realmRRI?: unknown;
+      packageRRI?: unknown;
+      packages?: unknown;
+    } = {};
     if (capabilityResponse.ok) {
       try {
         capability = (await capabilityResponse.json()) as typeof capability;
@@ -130,10 +147,11 @@ export class DynamicRRIResolution {
       !capabilityResponse.ok ||
       capabilityResponse.headers.get('x-boxel-deck-collaboration') !== 'true' ||
       capability.deckCollaboration !== true ||
-      capability.realmRRI !== mutableRootRRI
+      (capability.packageRRI ?? capability.realmRRI) !== mutableRootRRI
     ) {
       return;
     }
+    this.installPackageDirectory(capability.packages, options.mutableRealmURL);
 
     let packageRootRRI = options.exactRootRRI ?? mutableRootRRI;
     let importMapResponse = await this.fetch(
@@ -167,6 +185,32 @@ export class DynamicRRIResolution {
     });
     this.prepared.add(options.transportRootURL);
     this.installCombinedLock();
+  }
+
+  // A realm may host several packages. Its capability lists where each one's
+  // mutable root is, so a lock naming one of them, or one of its Versions,
+  // resolves without guessing the package's URL from its name.
+  private installPackageDirectory(directory: unknown, realmURL: string): void {
+    if (directory === null || typeof directory !== 'object') {
+      return;
+    }
+    let known = new Set<string>(this.routes.knownRealms());
+    for (let [member, url] of Object.entries(directory)) {
+      let root: string;
+      let target: URL;
+      try {
+        root = realmRRI(member);
+        target = new URL(String(url));
+      } catch {
+        continue;
+      }
+      // A realm speaks only for packages it serves from its own origin.
+      if (known.has(root) || target.origin !== new URL(realmURL).origin) {
+        continue;
+      }
+      this.routes.addRealmMapping(root, target.href);
+      known.add(root);
+    }
   }
 
   private installDependencyMappings(
