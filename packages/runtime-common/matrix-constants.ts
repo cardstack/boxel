@@ -159,6 +159,9 @@ export const APP_BOXEL_WORKSPACE_FAVORITES_EVENT_TYPE =
 // The public realms a user has added to the Catalogs section of their
 // dashboard, alongside the operator-chosen catalogs every user sees.
 export const APP_BOXEL_CATALOG_REALMS_EVENT_TYPE = 'app.boxel.catalog-realms';
+// The user's own dashboard state: onboarding and agent setup progress. Its
+// shape is in dashboard-state.ts.
+export const APP_BOXEL_DASHBOARD_EVENT_TYPE = 'app.boxel.dashboard';
 export const APP_BOXEL_SYSTEM_CARD_EVENT_TYPE = 'app.boxel.system-card';
 export const APP_BOXEL_REALM_EVENT_TYPE = 'app.boxel.realm-event';
 export const APP_BOXEL_ACTIVE_LLM = 'app.boxel.active-llm';

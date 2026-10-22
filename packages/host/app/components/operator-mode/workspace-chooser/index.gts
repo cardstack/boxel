@@ -786,11 +786,6 @@ export default class WorkspaceChooser extends Component<Signature> {
         }
       }
       .workspace-chooser {
-        position: absolute;
-        background-color: var(--boxel-800);
-        height: 100%;
-        width: 100%;
-        z-index: var(--host-workspace-chooser-z-index);
         --workspace-chooser-gutter: 5rem;
         --workspace-chooser-card-width: fit-content;
         --workspace-chooser-tile-width: var(--boxel-xxs-container);
