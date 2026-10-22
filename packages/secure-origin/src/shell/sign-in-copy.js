@@ -63,8 +63,17 @@ export function signInFailed(error) {
   if (error?.code === 'rate-limited') {
     return tooManyFailedAttempts(error.retryAfterMs);
   }
-  let message = String(error?.message ?? '').trim();
-  return message
-    ? `Sign-in failed. ${message[0].toUpperCase()}${message.slice(1)}${/[.!?]$/.test(message) ? '' : '.'}`
-    : 'Sign-in failed.';
+  let message = asSentence(error?.message);
+  return message ? `Sign-in failed. ${message}` : 'Sign-in failed.';
+}
+
+// The server words its errors for an API; shown here, each reads as a
+// sentence.
+export function asSentence(message) {
+  let text = String(message ?? '').trim();
+  if (!text) {
+    return '';
+  }
+  text = text[0].toUpperCase() + text.slice(1);
+  return /[.!?]$/.test(text) ? text : `${text}.`;
 }

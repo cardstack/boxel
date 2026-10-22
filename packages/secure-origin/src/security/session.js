@@ -188,10 +188,11 @@ function base64url(bytes) {
     .replace(/=+$/, '');
 }
 
-// Sends this window to Google. The state, nonce and PKCE verifier stay in this
-// origin's session storage; `resume` is whatever the callback needs to carry
-// on with, or to start again from (which client, the CLI's listener, and the
-// username the CLI named).
+// Begins a sign-in with Google, and answers the address at Google to send
+// this window to. The state, nonce and PKCE verifier stay in this origin's
+// session storage; `resume` is whatever the callback needs to carry on with,
+// or to start again from (which client, the CLI's listener, and the username
+// the CLI named).
 export async function beginGoogleSignIn(google, resume) {
   let state = randomToken();
   let nonce = randomToken();
@@ -217,7 +218,7 @@ export async function beginGoogleSignIn(google, resume) {
   url.searchParams.set('nonce', nonce);
   url.searchParams.set('code_challenge', challenge);
   url.searchParams.set('code_challenge_method', 'S256');
-  window.location.assign(url.href);
+  return url.href;
 }
 
 // Finishes a Google sign-in on the callback page: checks that Google answered

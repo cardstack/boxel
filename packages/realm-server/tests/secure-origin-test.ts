@@ -27,12 +27,13 @@ import {
 const realmURL = new URL('http://127.0.0.1:4444/test/');
 const requireFromTest = createRequire(import.meta.url);
 
+const securePackage = dirname(
+  requireFromTest.resolve('@cardstack/secure-origin/package.json'),
+);
+
 // The secure origin's build: each entry document and the files it loads, and
 // the committed record of which modules each file holds.
-const buildDir = join(
-  dirname(requireFromTest.resolve('@cardstack/secure-origin/package.json')),
-  'dist',
-);
+const buildDir = join(securePackage, 'dist');
 const buildManifest: Record<string, string[]> = JSON.parse(
   readFileSync(join(buildDir, 'manifest.json'), 'utf8'),
 ).entries;
@@ -560,7 +561,13 @@ module(basename(import.meta.filename), function () {
       );
       for (let name of [
         'session.js',
-        'sign-in.js',
+        'sign-in-page.gts',
+        'cli-sign-in-page.gts',
+        'google-callback.gts',
+        'sign-in-form.gts',
+        'cli-handoff.js',
+        'urls.js',
+        'plain-pages.js',
         'sign-in-copy.js',
         'register.js',
         'password-reset.js',
@@ -641,10 +648,11 @@ module(basename(import.meta.filename), function () {
     });
 
     test("draws boxel-ui's own icons", async function (assert) {
-      // The pages build the app's logo, Google's "G", the check mark and the
+      // The pages draw the app's logo, Google's "G", the check mark and the
       // loading indicator from boxel-ui's icon components' paths, copied in,
       // since the page's policy loads no markup from elsewhere. Every path
-      // boxel-ui draws them with is in the copy.
+      // boxel-ui draws them with is in each copy: the package's components,
+      // and `dom.js` for the plain pages.
       let icons = join(
         dirname(
           createRequire(import.meta.url).resolve(
@@ -654,22 +662,31 @@ module(basename(import.meta.filename), function () {
         '..',
         'icons',
       );
-      let dom = readFileSync(
-        requireFromTest.resolve('@cardstack/secure-origin/shell/dom.js'),
-        'utf8',
-      );
-      for (let icon of [
-        'boxel-icon.gts',
-        'google-color.gts',
-        'check-mark.gts',
-        'loading-indicator.gts',
-      ]) {
+      let copies: Record<string, string[]> = {
+        'boxel-icon.gts': [
+          'src/shell/dom.js',
+          'src/components/icons/boxel-icon.gts',
+        ],
+        'google-color.gts': ['src/components/icons/google-color.gts'],
+        'check-mark.gts': ['src/shell/dom.js'],
+        'loading-indicator.gts': [
+          'src/shell/dom.js',
+          'src/components/loading-indicator.gts',
+        ],
+      };
+      for (let [icon, files] of Object.entries(copies)) {
         let paths = [
           ...readFileSync(join(icons, icon), 'utf8').matchAll(/\sd='([^']+)'/g),
         ].map(([, d]) => d);
         assert.ok(paths.length > 0, `${icon} has paths`);
-        for (let d of paths) {
-          assert.ok(dom.includes(`'${d}'`), `${icon}: ${d.slice(0, 24)}…`);
+        for (let file of files) {
+          let copy = readFileSync(join(securePackage, file), 'utf8');
+          for (let d of paths) {
+            assert.ok(
+              copy.includes(`'${d}'`),
+              `${icon} in ${file}: ${d.slice(0, 24)}…`,
+            );
+          }
         }
       }
     });
