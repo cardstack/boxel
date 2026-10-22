@@ -4,6 +4,7 @@ date: 2026-10-22
 scope:
   - packages/realm-server/**
   - packages/runtime-common/matrix-client.ts
+  - packages/runtime-common/db-queries/realm-permission-queries.ts
   - packages/host/app/services/matrix-service.ts
   - packages/host/app/services/message-service.ts
   - packages/host/app/services/realm-server.ts
@@ -58,7 +59,12 @@ user's Matrix id to the reader, except as §1.2 and §1.4 allow.
 
 A realm's URL MAY contain the Matrix username of the user who owns it. This
 covers the realm-server path `/<username>/<realm>/` and the published-space
-host `<username>.<domain>`.
+host `<username>.<domain>`. A user learns such a URL only when someone gives it
+to them, so the owner decides who sees it.
+
+Boxel MUST NOT offer a public or queryable list of realm URLs. An endpoint MAY
+return the URLs of the realms a user holds a grant on that names them. It MUST
+NOT return the URLs of other realms, including world-readable ones.
 
 ### 1.5. End users share a room only when they may see each other
 
@@ -135,6 +141,11 @@ events, as proposed in #6906, breaks §1.3 and §1.5.
 
 ## 5. Remediation
 
+- `packages/realm-server/handlers/handle-fetch-public-realms.ts` and
+  `packages/runtime-common/db-queries/realm-permission-queries.ts`
+  (`fetchPublicRealmSummaries`) break §1.4. `GET /_public-realms` returns the
+  URL of every world-readable realm to any signed-in user, and each URL names
+  its owner.
 - `packages/host/app/tools/invite-user-to-room.ts` (`InviteUserToRoomTool`)
   breaks §1.5. It invites any Matrix id to a room, with no check that the
   invitee shares a realm with the room's other end users.
