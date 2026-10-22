@@ -29,6 +29,8 @@ The manifest pins PretUI commit
 ```sh
 cd packages/realm-server
 REALM_DIR="$(mktemp -d /tmp/boxel-pretui-known-date.XXXXXX)"
+export BOXEL_DECK_COLLABORATION_ENABLED=true
+export BOXEL_DECK_COLLABORATION_REALM_RRIS=@cardstack/pretui/
 mise exec -- pnpm fixture:pretui-known-date -- \
   "$REALM_DIR" /Users/chris/Projects/pretui
 ```
@@ -54,6 +56,7 @@ For the pinned input, the stable outputs are:
 Version     @cardstack/pretui@0.4.0/
 tree        6a0355389fc297f052c16f42a9bb2820ca0974c8b659443b18bb448cb06b5f8c
 index       cd2b56bda725f91e6543a399508f3e170381cda5a65183aad63e0628ef4ad2d4
+Checkpoint  ad36bca9ebff6547b37266f9273f7ba796d363de8f390c09db84ecf9d5b5d22c
 catalog     @cardstack/pretui@0.4.0/PretuiComponent/knowndate
 ```
 
