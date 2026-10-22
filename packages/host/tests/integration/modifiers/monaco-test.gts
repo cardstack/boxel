@@ -11,6 +11,7 @@ import { setupRenderingTest } from '../../helpers/setup';
 
 class EditorArgs {
   @tracked content = 'opened';
+  @tracked readOnly = false;
   sent: string[] = [];
   contentChanged = (text: string) => {
     this.sent.push(text);
@@ -31,6 +32,7 @@ module('Integration | modifier | monaco', function (hooks) {
             content=state.content
             contentChanged=state.contentChanged
             language='plaintext'
+            readOnly=state.readOnly
             monacoSDK=monacoSDK
           }}
         ></div>
@@ -69,6 +71,17 @@ module('Integration | modifier | monaco', function (hooks) {
     await settled();
 
     assert.strictEqual(editor.value(), 'changed elsewhere');
+  });
+
+  test('typing is kept when another arg changes before the save comes back', async function (assert) {
+    let args = new EditorArgs();
+    let editor = await renderEditor(args);
+
+    await editor.type('my edit');
+    args.readOnly = true; // re-runs the modifier with the old content arg
+    await settled();
+
+    assert.strictEqual(editor.value(), 'my edit');
   });
 
   test('a save that comes back after newer typing does not replace it', async function (assert) {

@@ -42,6 +42,7 @@ export default class Monaco extends Modifier<Signature> {
   private editor: MonacoSDK.editor.IStandaloneCodeEditor | undefined;
   private lastLanguage: string | undefined;
   private lastContent: string | undefined;
+  private lastContentArg: string | undefined;
   private lastReadOnly: boolean | undefined;
   // Content this editor sent through contentChanged that has not come back as
   // the content arg yet. A save comes back as exactly the text that was sent,
@@ -75,14 +76,18 @@ export default class Monaco extends Modifier<Signature> {
       if (language && language !== this.lastLanguage) {
         monacoSDK.editor.setModelLanguage(this.model, language);
       }
-      let sentIndex = this.sentContent.lastIndexOf(content);
-      if (sentIndex !== -1) {
-        // Saves come back in the order they were sent, so the ones sent before
-        // this one won't come back now.
-        this.sentContent = this.sentContent.slice(sentIndex + 1);
-      } else if (content !== this.model.getValue()) {
-        this.lastContent = content;
-        this.model.setValue(content);
+      // modify also runs when another arg changes. The content arg is then
+      // the same as before, and can be older than what the user has typed.
+      if (content !== this.lastContentArg) {
+        let sentIndex = this.sentContent.lastIndexOf(content);
+        if (sentIndex !== -1) {
+          // Saves come back in the order they were sent, so the ones sent
+          // before this one won't come back now.
+          this.sentContent = this.sentContent.slice(sentIndex + 1);
+        } else if (content !== this.model.getValue()) {
+          this.lastContent = content;
+          this.model.setValue(content);
+        }
       }
       if (readOnly !== this.lastReadOnly) {
         this.editor.updateOptions({ readOnly });
@@ -102,6 +107,7 @@ export default class Monaco extends Modifier<Signature> {
       });
     }
     this.lastLanguage = language;
+    this.lastContentArg = content;
 
     if (initialCursorPosition != null) {
       this.initializeCursorPosition.perform(initialCursorPosition);
